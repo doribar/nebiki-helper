@@ -12,6 +12,10 @@ type AreaJudgeScreenProps = {
     bonusText?: string;
     referenceText: string;
   };
+  pendingBanner?: {
+    remainingCount: number;
+    reason: "manual" | "few";
+  } | null;
   onSelectMany: () => void;
   onSelectNormal: () => void;
   onSelectFew: () => void;
@@ -23,6 +27,7 @@ export function AreaJudgeScreen({
   timeText,
   areaName,
   basisGuide,
+  pendingBanner,
   onSelectMany,
   onSelectNormal,
   onSelectFew,
@@ -35,6 +40,27 @@ export function AreaJudgeScreen({
         timeText={timeText}
         areaName={areaName}
       />
+
+      {pendingBanner ? (
+        <section
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+            background: "#fafafa",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>
+            まだ値引きをしていないエリアが{pendingBanner.remainingCount}個あります。
+          </div>
+          <div>
+            {pendingBanner.reason === "manual"
+              ? "手動でスキップしたエリアから表示しています。"
+              : "少ないため後回しにしたエリアを表示しています。"}
+          </div>
+        </section>
+      ) : null}
 
       <WeekdayBasePanel
         reasonText={basisGuide.reasonText}
@@ -50,7 +76,14 @@ export function AreaJudgeScreen({
           marginBottom: 16,
         }}
       >
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 14, lineHeight: 1.7 }}>
+        <div
+          style={{
+            fontSize: 18,
+            fontWeight: 800,
+            marginBottom: 14,
+            lineHeight: 1.7,
+          }}
+        >
           {basisGuide.referenceText}
           <br />
           このエリア全体の商品数は？
@@ -76,10 +109,10 @@ export function AreaJudgeScreen({
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
-  ・今日が月火水木なら多い方に寄せる
-  <br />
-  ・今日が金土日なら少ない方に寄せる
-</div>
+          ・今日が月火水木なら多い方に寄せる
+          <br />
+          ・今日が金土日なら少ない方に寄せる
+        </div>
       </section>
 
       <button

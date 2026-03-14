@@ -1,4 +1,9 @@
-import type { DiscountTime, SessionDraft } from "../../domain/types";
+import type {
+  DiscountTime,
+  SessionDraft,
+  TempLevel,
+  WindLevel,
+} from "../../domain/types";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -28,6 +33,18 @@ const TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
   { value: "18", label: "18時" },
   { value: "19", label: "19時" },
   { value: "20", label: "20時" },
+];
+
+const WIND_OPTIONS: { value: WindLevel; label: string }[] = [
+  { value: "2orLess", label: "2m以下" },
+  { value: "3to4", label: "3〜4m" },
+  { value: "5orMore", label: "5m以上" },
+];
+
+const TEMP_OPTIONS: { value: TempLevel; label: string }[] = [
+  { value: "10orLess", label: "10度以下" },
+  { value: "11to15", label: "11〜15度" },
+  { value: "16orMore", label: "16度以上" },
 ];
 
 type ToggleProps = {
@@ -71,6 +88,47 @@ function YesNoToggle({ label, value, onChange }: ToggleProps) {
         >
           No
         </button>
+      </div>
+    </div>
+  );
+}
+
+type SegmentedProps<T extends string> = {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (next: T) => void;
+};
+
+function SegmentedSelector<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: SegmentedProps<T>) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>{label}</div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            style={{
+              flex: 1,
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid #ccc",
+              background: value === option.value ? "#e8f0ff" : "#fff",
+              cursor: "pointer",
+              fontWeight: value === option.value ? 700 : 400,
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -150,22 +208,7 @@ export function StartScreen({
 
         {!isFinalTime ? (
           <>
-            <div
-              style={{
-                border: "1px solid #eee",
-                borderRadius: 10,
-                padding: 12,
-                background: "#fafafa",
-                marginBottom: 14,
-                fontSize: 14,
-                lineHeight: 1.6,
-              }}
-            >
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>天候の確認方法</div>
-              <div>雨：{weatherGuideText.rainGuide}</div>
-              <div>風3m以上：{weatherGuideText.windGuide}</div>
-              <div>気温10度以下：{weatherGuideText.tempGuide}</div>
-            </div>
+            
 
             <YesNoToggle
               label={`雨（${weatherGuideText.rainGuide}）`}
@@ -177,25 +220,38 @@ export function StartScreen({
               }
             />
 
-            <YesNoToggle
-              label={`風3m以上（${weatherGuideText.windGuide}）`}
-              value={sessionDraft.weather.isWindOver3m}
+            <SegmentedSelector
+              label={`風速（${weatherGuideText.windGuide}）`}
+              value={sessionDraft.weather.windLevel}
+              options={WIND_OPTIONS}
               onChange={(next) =>
                 onChangeSessionDraft({
-                  weather: { ...sessionDraft.weather, isWindOver3m: next },
+                  weather: { ...sessionDraft.weather, windLevel: next },
                 })
               }
             />
 
-            <YesNoToggle
-              label={`気温10度以下（${weatherGuideText.tempGuide}）`}
-              value={sessionDraft.weather.isTempUnder10}
+            <SegmentedSelector
+              label={`気温（${weatherGuideText.tempGuide}）`}
+              value={sessionDraft.weather.tempLevel}
+              options={TEMP_OPTIONS}
               onChange={(next) =>
                 onChangeSessionDraft({
-                  weather: { ...sessionDraft.weather, isTempUnder10: next },
+                  weather: { ...sessionDraft.weather, tempLevel: next },
                 })
               }
             />
+
+            <div
+              style={{
+                fontSize: 13,
+                lineHeight: 1.7,
+                color: "#555",
+                marginTop: -4,
+              }}
+            >
+              気温が15度以下なら風3m以上、16度以上なら風5m以上で補正します。
+            </div>
           </>
         ) : null}
       </section>

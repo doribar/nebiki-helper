@@ -17,12 +17,13 @@ type RateDisplayScreenProps = {
     bonusText?: string;
     referenceText: string;
   };
+  pendingBanner?: {
+    remainingCount: number;
+    reason: "manual" | "few";
+  } | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
   finalGuide?: FinalGuideData;
-  previousManyProducts: string[];
-  consecutiveManyRate?: number | null;
-  onOpenManyInput: () => void;
   onNextArea: () => void;
   onSkip: () => void;
 };
@@ -33,7 +34,7 @@ function RateRow({
   color,
 }: {
   label: string;
-  line: { main: string; sub?: string };
+  line: { main: string; note?: string };
   color?: string;
 }) {
   return (
@@ -41,9 +42,8 @@ function RateRow({
       <div style={{ fontWeight: 700 }}>
         {label} → {line.main}
       </div>
-
-      {line.sub ? (
-        <div style={{ fontSize: 14, marginTop: 4, color }}>{line.sub}</div>
+      {line.note ? (
+        <div style={{ fontSize: 14, marginTop: 4, color }}>{line.note}</div>
       ) : null}
     </div>
   );
@@ -54,12 +54,10 @@ export function RateDisplayScreen({
   timeText,
   areaName,
   basisGuide,
+  pendingBanner,
   discountTime,
   rateDisplay,
   finalGuide,
-  previousManyProducts,
-  consecutiveManyRate,
-  onOpenManyInput,
   onNextArea,
   onSkip,
 }: RateDisplayScreenProps) {
@@ -76,6 +74,27 @@ export function RateDisplayScreen({
         timeText={timeText}
         areaName={areaName}
       />
+
+      {pendingBanner ? (
+        <section
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+            background: "#fafafa",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>
+            まだ値引きをしていないエリアが{pendingBanner.remainingCount}個あります。
+          </div>
+          <div>
+            {pendingBanner.reason === "manual"
+              ? "手動でスキップしたエリアから表示しています。"
+              : "少ないため後回しにしたエリアを表示しています。"}
+          </div>
+        </section>
+      ) : null}
 
       <WeekdayBasePanel
         reasonText={basisGuide.reasonText}
@@ -94,32 +113,24 @@ export function RateDisplayScreen({
         {!isFinalTime ? (
           <>
             <div style={{ fontWeight: 800, marginBottom: 14, lineHeight: 1.8 }}>
-  {basisGuide.referenceText}
-  <br />
-  各商品の量が「多い・少ない・どちらでもない」のどれかを確認し、
-  <br />
-  完了したら以下の値引率で値引きをしてください。
-</div>
+              {basisGuide.referenceText}
+              <br />
+              各商品の量が「多い・少ない・どちらでもない」のどれかを確認し、
+              <br />
+              完了したら以下の値引率で値引きをしてください。
+            </div>
 
             {rateDisplay ? (
-              <>
-                <RateRow
-                  label="多い"
-                  line={rateDisplay.many}
-                  color={manyColor}
-                />
-                <RateRow
-                  label="少ない"
-                  line={rateDisplay.few}
-                  color={fewColor}
-                />
-                <RateRow
-                  label="どちらでもない"
-                  line={rateDisplay.normal}
-                  color={normalColor}
-                />
-              </>
-            ) : null}
+  <>
+    <RateRow label="多い" line={rateDisplay.many} color={manyColor} />
+    <RateRow
+      label="どちらでもない"
+      line={rateDisplay.normal}
+      color={normalColor}
+    />
+    <RateRow label="少ない" line={rateDisplay.few} color={fewColor} />
+  </>
+) : null}
           </>
         ) : (
           <>
@@ -127,45 +138,16 @@ export function RateDisplayScreen({
               20時は最終値引です。商品数を見て値引してください
             </div>
 
-            <div style={{ marginBottom: 14 }}>
-              確認が完了したら以下の値引率で値引きをしてください
-            </div>
-
             {finalGuide ? (
               <>
                 <RateRow label="1個" line={finalGuide.count1} />
                 <RateRow label="2個" line={finalGuide.count2} />
                 <RateRow label="3個以上" line={finalGuide.count3OrMore} />
-                <RateRow label="少ない" line={finalGuide.few} color={fewColor} />
               </>
             ) : null}
           </>
         )}
       </section>
-
-      {previousManyProducts.length > 0 && consecutiveManyRate ? (
-        <section
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-            background: "#fafafa",
-          }}
-        >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>
-            前回多かった商品が今回も多い場合
-          </div>
-
-          <div style={{ lineHeight: 1.8 }}>
-            {previousManyProducts.map((name) => (
-              <div key={name}>
-                ・{name} → {consecutiveManyRate}%
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       <section
         style={{
@@ -196,30 +178,24 @@ export function RateDisplayScreen({
         <div style={{ lineHeight: 1.8 }}>
           ・商品が大パックと小パックで分かれている場合
           <br />
-          <strong>　大パックだけ値引</strong>
+          <strong>大パックだけ値引</strong>
           <br />
           ・商品が期限が近いものと遠いもので分かれている場合
           <br />
-          <strong>　近いものだけ値引</strong>
+          <strong>近いものだけ値引</strong>
         </div>
 
         <div style={{ fontWeight: 800, marginTop: 14, marginBottom: 8 }}>
           分かれていなければ
         </div>
         <div style={{ lineHeight: 1.8 }}>
-  ・今日が月火水木なら多い方に寄せる
-  <br />
-  ・今日が金土日なら少ない方に寄せる
-</div>
+          ・今日が月火水木なら多い方に寄せる
+          <br />
+          ・今日が金土日なら少ない方に寄せる
+        </div>
       </section>
 
       <div style={{ display: "grid", gap: 10 }}>
-        {!isFinalTime ? (
-          <PrimaryButton onClick={onOpenManyInput}>
-            多い商品を入力
-          </PrimaryButton>
-        ) : null}
-
         <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
 
         <button

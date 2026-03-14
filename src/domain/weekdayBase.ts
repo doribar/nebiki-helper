@@ -1,10 +1,12 @@
 import type {
   BasisGuideDisplay,
   DiscountTime,
+  TempLevel,
   WeatherGuideText,
   WeatherInput,
   WeekdayBaseInfo,
   WeekdayBaseLabel,
+  WindLevel,
 } from "./types";
 
 export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
@@ -25,11 +27,6 @@ export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
   }
 }
 
-/**
- * 曜日基準を1段上げる
- * 日 → 金土 → 火木 → 月水
- * 月水はそれ以上上がらない
- */
 export function raiseWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
   switch (label) {
     case "日":
@@ -43,6 +40,18 @@ export function raiseWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
   }
 }
 
+function isTempUnder10(tempLevel: TempLevel): boolean {
+  return tempLevel === "10orLess";
+}
+
+function isWindThresholdMet(windLevel: WindLevel, tempLevel: TempLevel): boolean {
+  if (tempLevel === "16orMore") {
+    return windLevel === "5orMore";
+  }
+
+  return windLevel === "3to4" || windLevel === "5orMore";
+}
+
 export function getWeekdayBaseInfo(
   weekday: number,
   weather: WeatherInput
@@ -53,13 +62,14 @@ export function getWeekdayBaseInfo(
   let baseRateBonus = 0;
   const baseRateBonusReason: string[] = [];
 
-  const isLowestBase = original === "月水";
-  const onlyWind = weather.isWindOver3m && !weather.isTempUnder10;
-  const onlyCold = !weather.isWindOver3m && weather.isTempUnder10;
-  const windAndCold = weather.isWindOver3m && weather.isTempUnder10;
+  const windMet = isWindThresholdMet(weather.windLevel, weather.tempLevel);
+  const tempUnder10 = isTempUnder10(weather.tempLevel);
 
-  // 風のみ or 低温のみ → 曜日基準を1段上げる
-  // ただし月水はこれ以上上げられないのでベース +10%
+  const isLowestBase = original === "月水";
+  const onlyWind = windMet && !tempUnder10;
+  const onlyCold = !windMet && tempUnder10;
+  const windAndCold = windMet && tempUnder10;
+
   if (onlyWind || onlyCold) {
     if (isLowestBase) {
       baseRateBonus += 10;
@@ -70,13 +80,11 @@ export function getWeekdayBaseInfo(
     }
   }
 
-  // 風 + 低温 → ベース +10%
   if (windAndCold) {
     baseRateBonus += 10;
     baseRateBonusReason.push("悪天候");
   }
 
-  // 雨 → ベース +10%
   if (weather.isRain) {
     baseRateBonus += 10;
     baseRateBonusReason.push("雨");
@@ -114,13 +122,13 @@ export function getBasisGuideDisplay(params: {
   const originalText = toWeekdayGroupText(info.original);
   const adjustedText = toWeekdayGroupText(info.adjusted);
 
+  const windMet = isWindThresholdMet(params.weather.windLevel, params.weather.tempLevel);
+  const tempUnder10 = isTempUnder10(params.weather.tempLevel);
+
   const isLowestBase = info.original === "月水";
-  const onlyWind =
-    params.weather.isWindOver3m && !params.weather.isTempUnder10;
-  const onlyCold =
-    !params.weather.isWindOver3m && params.weather.isTempUnder10;
-  const windAndCold =
-    params.weather.isWindOver3m && params.weather.isTempUnder10;
+  const onlyWind = windMet && !tempUnder10;
+  const onlyCold = !windMet && tempUnder10;
+  const windAndCold = windMet && tempUnder10;
 
   let reasonText: string | undefined;
   let changeText: string | undefined;
@@ -168,7 +176,7 @@ export function getWeatherGuideText(discountTime: DiscountTime): WeatherGuideTex
 
   return {
     rainGuide: `${discountTime}時以降に雨マークがあるか`,
-    windGuide: `${nextHourMap[discountTime]}の風を見て入力`,
-    tempGuide: `${nextHourMap[discountTime]}の気温を見て入力`,
+    windGuide: `${nextHourMap[discountTime]}の風速を選択`,
+    tempGuide: `${nextHourMap[discountTime]}の気温を選択`,
   };
 }

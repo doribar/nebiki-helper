@@ -3,9 +3,11 @@ import type {
   AppState,
   AreaId,
   AreaProgress,
-  ManyProductRecord,
+  PendingBannerInfo,
+  SessionData,
   SessionDraft,
   UseNebikiAppResult,
+  WeatherInput,
 } from "../domain/types";
 import { AREA_MASTERS, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -14,20 +16,17 @@ import {
   getWeekdayBaseInfo,
 } from "../domain/weekdayBase";
 import {
-  getConsecutiveManyRateForNormalTime,
   getFinalTimeGuide,
   getNormalTimeRateDisplay,
 } from "../domain/discount";
 import {
-  appendManyProducts,
   clearCurrentSession,
-  getPreviousManyProducts,
   loadCurrentSession,
   saveCurrentSession,
 } from "../domain/storage";
 import {
   getNextPendingCandidate,
-  getPendingReasonText,
+  getPendingRemainingCount,
 } from "../domain/pending";
 
 function formatLocalDate(date = new Date()): string {
@@ -46,8 +45,8 @@ function createInitialSessionDraft(): SessionDraft {
     discountTime: "17",
     weather: {
       isRain: false,
-      isWindOver3m: false,
-      isTempUnder10: false,
+      windLevel: "2orLess",
+      tempLevel: "11to15",
     },
   };
 }
@@ -72,8 +71,75 @@ function createInitialState(): AppState {
     currentAreaId: null,
     lastReferenceAreaId: null,
     currentFlow: "normal",
-    manyInputDraft: [""],
     pendingDeferredAreaIds: [],
+  };
+}
+
+function normalizeWeatherInput(raw: unknown): WeatherInput {
+  const fallback = createInitialSessionDraft().weather;
+
+  if (!raw || typeof raw !== "object") {
+    return fallback;
+  }
+
+  const source = raw as Record<string, unknown>;
+
+  return {
+    isRain:
+      typeof source.isRain === "boolean" ? source.isRain : fallback.isRain,
+    windLevel:
+      source.windLevel === "2orLess" ||
+      source.windLevel === "3to4" ||
+      source.windLevel === "5orMore"
+        ? source.windLevel
+        : typeof source.isWindThresholdMet === "boolean"
+        ? source.isWindThresholdMet
+          ? "3to4"
+          : "2orLess"
+        : typeof source.isWindOver3m === "boolean"
+        ? source.isWindOver3m
+          ? "3to4"
+          : "2orLess"
+        : fallback.windLevel,
+    tempLevel:
+      source.tempLevel === "10orLess" ||
+      source.tempLevel === "11to15" ||
+      source.tempLevel === "16orMore"
+        ? source.tempLevel
+        : typeof source.isTempUnder10 === "boolean"
+        ? source.isTempUnder10
+          ? "10orLess"
+          : "11to15"
+        : fallback.tempLevel,
+  };
+}
+
+function normalizeSessionDraft(raw?: Partial<SessionDraft> | null): SessionDraft {
+  const fallback = createInitialSessionDraft();
+
+  return {
+    date: typeof raw?.date === "string" ? raw.date : fallback.date,
+    weekday: typeof raw?.weekday === "number" ? raw.weekday : fallback.weekday,
+    discountTime:
+      raw?.discountTime === "17" ||
+      raw?.discountTime === "18" ||
+      raw?.discountTime === "19" ||
+      raw?.discountTime === "20"
+        ? raw.discountTime
+        : fallback.discountTime,
+    weather: normalizeWeatherInput(raw?.weather),
+  };
+}
+
+function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | null {
+  if (!raw) return null;
+
+  const normalizedDraft = normalizeSessionDraft(raw);
+
+  return {
+    ...normalizedDraft,
+    startedAt:
+      typeof raw.startedAt === "string" ? raw.startedAt : new Date().toISOString(),
   };
 }
 
@@ -82,16 +148,13 @@ function normalizeLoadedState(loaded: AppState | null): AppState {
 
   return {
     ...loaded,
-    sessionDraft: loaded.sessionDraft ?? createInitialSessionDraft(),
+    session: normalizeSessionData(loaded.session),
+    sessionDraft: normalizeSessionDraft(loaded.sessionDraft),
     areaProgressMap: loaded.areaProgressMap ?? createInitialAreaProgressMap(),
     currentAreaId: loaded.currentAreaId ?? null,
     lastReferenceAreaId:
       (loaded as Partial<AppState>).lastReferenceAreaId ?? null,
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",
-    manyInputDraft:
-      loaded.manyInputDraft && loaded.manyInputDraft.length > 0
-        ? loaded.manyInputDraft
-        : [""],
     pendingDeferredAreaIds:
       (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [],
   };
@@ -100,23 +163,6 @@ function normalizeLoadedState(loaded: AppState | null): AppState {
 function getWeekdayText(weekday: number): string {
   const map = ["日", "月", "火", "水", "木", "金", "土"];
   return `${map[weekday] ?? ""}曜日`;
-}
-
-function createManyProductRecords(params: {
-  areaId: AreaId;
-  date: string;
-  discountTime: "17" | "18" | "19" | "20";
-  names: string[];
-}): ManyProductRecord[] {
-  return params.names
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .map((productName) => ({
-      areaId: params.areaId,
-      productName,
-      recordedDate: params.date,
-      discountTime: params.discountTime,
-    }));
 }
 
 export function useNebikiApp(): UseNebikiAppResult {
@@ -160,26 +206,10 @@ export function useNebikiApp(): UseNebikiAppResult {
     return state.areaProgressMap[state.currentAreaId];
   }, [state.currentAreaId, state.areaProgressMap]);
 
-  const previousManyProducts = useMemo(() => {
-    if (!state.session || !state.currentAreaId) return [];
-
-    return getPreviousManyProducts({
-      areaId: state.currentAreaId,
-      discountTime: state.session.discountTime,
-      currentDate: state.session.date,
-    });
-  }, [state.session, state.currentAreaId]);
-
   const rateDisplay = useMemo(() => {
     if (!state.session || !currentAreaProgress) return null;
     if (state.session.discountTime === "20") return null;
-
-    if (
-      currentAreaProgress.areaJudge !== "many" &&
-      currentAreaProgress.areaJudge !== "normal"
-    ) {
-      return null;
-    }
+    if (!currentAreaProgress.areaJudge) return null;
 
     return getNormalTimeRateDisplay({
       discountTime: state.session.discountTime,
@@ -193,47 +223,21 @@ export function useNebikiApp(): UseNebikiAppResult {
     return getFinalTimeGuide();
   }, [state.session]);
 
-  const consecutiveManyRate = useMemo(() => {
-    if (!state.session || !state.currentAreaId) return null;
-    if (state.session.discountTime === "20") return null;
-    if (!currentAreaProgress) return null;
+  const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
+    if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
 
-    if (
-      currentAreaProgress.areaJudge !== "many" &&
-      currentAreaProgress.areaJudge !== "normal"
-    ) {
+    const progress = state.areaProgressMap[state.currentAreaId];
+    if (!progress) return null;
+
+    if (progress.status !== "skipped_manual" && progress.status !== "postponed_few") {
       return null;
     }
 
-    return getConsecutiveManyRateForNormalTime({
-      discountTime: state.session.discountTime,
-      weatherBonus: weekdayBaseInfo.baseRateBonus,
-      areaJudge: currentAreaProgress.areaJudge,
-    });
-  }, [
-    state.session,
-    state.currentAreaId,
-    currentAreaProgress,
-    weekdayBaseInfo.baseRateBonus,
-  ]);
-
-  const pendingCandidate = useMemo(() => {
-    if (!state.lastReferenceAreaId) return null;
-
-    return getNextPendingCandidate({
-      areaProgressMap: state.areaProgressMap,
-      referenceAreaId: state.lastReferenceAreaId,
-      deferredAreaIds: state.pendingDeferredAreaIds,
-    });
-  }, [
-    state.areaProgressMap,
-    state.lastReferenceAreaId,
-    state.pendingDeferredAreaIds,
-  ]);
-
-  const pendingReasonText = useMemo(() => {
-    return pendingCandidate ? getPendingReasonText(pendingCandidate.reason) : null;
-  }, [pendingCandidate]);
+    return {
+      remainingCount: getPendingRemainingCount(state.areaProgressMap),
+      reason: progress.status === "skipped_manual" ? "manual" : "few",
+    };
+  }, [state.currentFlow, state.currentAreaId, state.areaProgressMap]);
 
   function updateSessionDraft(patch: Partial<SessionDraft>) {
     setState((prev) => ({
@@ -249,28 +253,62 @@ export function useNebikiApp(): UseNebikiAppResult {
     }));
   }
 
-  function startSession() {
-  const startedAt = new Date().toISOString();
+  function moveToNextPendingOrDone(params: {
+    prev: AppState;
+    updatedMap: Record<AreaId, AreaProgress>;
+    referenceAreaId: AreaId;
+    deferredAreaIds?: AreaId[];
+  }): AppState {
+    const nextCandidate = getNextPendingCandidate({
+      areaProgressMap: params.updatedMap,
+      referenceAreaId: params.referenceAreaId,
+      deferredAreaIds: params.deferredAreaIds ?? [],
+    });
 
-  setState((prev) => {
-    const isFinalTime = prev.sessionDraft.discountTime === "20";
+    if (!nextCandidate) {
+      return {
+        ...params.prev,
+        areaProgressMap: params.updatedMap,
+        currentAreaId: null,
+        lastReferenceAreaId: params.referenceAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        screen: "done",
+      };
+    }
 
     return {
-      ...prev,
-      screen: isFinalTime ? "final_time" : "area_judge",
-      session: {
-        ...prev.sessionDraft,
-        startedAt,
-      },
-      areaProgressMap: createInitialAreaProgressMap(),
-      currentAreaId: isFinalTime ? null : "bento_men",
-      lastReferenceAreaId: isFinalTime ? null : "bento_men",
-      currentFlow: "normal",
-      manyInputDraft: [""],
-      pendingDeferredAreaIds: [],
+      ...params.prev,
+      areaProgressMap: params.updatedMap,
+      currentAreaId: nextCandidate.areaId,
+      lastReferenceAreaId: params.referenceAreaId,
+      currentFlow: "pending",
+      pendingDeferredAreaIds: params.deferredAreaIds ?? [],
+      screen: nextCandidate.reason === "manual" ? "area_judge" : "rate_display",
     };
-  });
-}
+  }
+
+  function startSession() {
+    const startedAt = new Date().toISOString();
+
+    setState((prev) => {
+      const isFinalTime = prev.sessionDraft.discountTime === "20";
+
+      return {
+        ...prev,
+        screen: isFinalTime ? "final_time" : "area_judge",
+        session: {
+          ...prev.sessionDraft,
+          startedAt,
+        },
+        areaProgressMap: createInitialAreaProgressMap(),
+        currentAreaId: isFinalTime ? null : "bento_men",
+        lastReferenceAreaId: isFinalTime ? null : "bento_men",
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+      };
+    });
+  }
 
   function selectAreaMany() {
     setState((prev) => {
@@ -329,32 +367,31 @@ export function useNebikiApp(): UseNebikiAppResult {
       };
 
       if (prev.currentFlow === "pending") {
-        const nextCandidate = getNextPendingCandidate({
-          areaProgressMap: updatedMap,
+        return moveToNextPendingOrDone({
+          prev,
+          updatedMap,
           referenceAreaId: currentAreaId,
-          deferredAreaIds: [],
         });
-
-        return {
-          ...prev,
-          areaProgressMap: updatedMap,
-          screen: nextCandidate ? "pending_guide" : "done",
-          currentAreaId: null,
-          lastReferenceAreaId: currentAreaId,
-          pendingDeferredAreaIds: [],
-        };
       }
 
       const nextAreaId = getNextNormalArea(currentAreaId);
 
-      return {
-        ...prev,
-        areaProgressMap: updatedMap,
-        screen: nextAreaId ? "area_judge" : "pending_guide",
-        currentAreaId: nextAreaId,
-        lastReferenceAreaId: currentAreaId,
-        pendingDeferredAreaIds: [],
-      };
+      if (nextAreaId) {
+        return {
+          ...prev,
+          areaProgressMap: updatedMap,
+          currentAreaId: nextAreaId,
+          lastReferenceAreaId: currentAreaId,
+          pendingDeferredAreaIds: [],
+          screen: "area_judge",
+        };
+      }
+
+      return moveToNextPendingOrDone({
+        prev,
+        updatedMap,
+        referenceAreaId: currentAreaId,
+      });
     });
   }
 
@@ -362,110 +399,49 @@ export function useNebikiApp(): UseNebikiAppResult {
     setState((prev) => {
       if (!prev.currentAreaId) return prev;
       const currentAreaId = prev.currentAreaId;
+      const currentProgress = prev.areaProgressMap[currentAreaId];
+
+      if (prev.currentFlow === "pending") {
+        const nextDeferredAreaIds = prev.pendingDeferredAreaIds.includes(currentAreaId)
+          ? prev.pendingDeferredAreaIds
+          : [...prev.pendingDeferredAreaIds, currentAreaId];
+
+        return moveToNextPendingOrDone({
+          prev,
+          updatedMap: prev.areaProgressMap,
+          referenceAreaId: currentAreaId,
+          deferredAreaIds: nextDeferredAreaIds,
+        });
+      }
 
       const updatedMap = {
         ...prev.areaProgressMap,
         [currentAreaId]: {
-          ...prev.areaProgressMap[currentAreaId],
+          ...currentProgress,
           status: "skipped_manual" as const,
           skipReason: "manual" as const,
         },
       };
 
-      if (prev.currentFlow === "pending") {
-        const nextCandidate = getNextPendingCandidate({
-          areaProgressMap: updatedMap,
-          referenceAreaId: currentAreaId,
-          deferredAreaIds: [],
-        });
-
-        return {
-          ...prev,
-          areaProgressMap: updatedMap,
-          screen: nextCandidate ? "pending_guide" : "done",
-          currentAreaId: null,
-          lastReferenceAreaId: currentAreaId,
-          pendingDeferredAreaIds: [],
-        };
-      }
-
       const nextAreaId = getNextNormalArea(currentAreaId);
 
-      return {
-        ...prev,
-        areaProgressMap: updatedMap,
-        screen: nextAreaId ? "area_judge" : "pending_guide",
-        currentAreaId: nextAreaId,
-        lastReferenceAreaId: currentAreaId,
-        pendingDeferredAreaIds: [],
-      };
-    });
-  }
-
-  function openManyInput() {
-    setState((prev) => ({
-      ...prev,
-      screen: "many_input",
-      manyInputDraft: [""],
-    }));
-  }
-
-  function changeManyDraftValues(next: string[]) {
-    setState((prev) => ({
-      ...prev,
-      manyInputDraft: next,
-    }));
-  }
-
-  function addManyDraftRow() {
-    setState((prev) => ({
-      ...prev,
-      manyInputDraft: [...prev.manyInputDraft, ""],
-    }));
-  }
-
-  function removeManyDraftRow(index: number) {
-    setState((prev) => ({
-      ...prev,
-      manyInputDraft: prev.manyInputDraft.filter((_, i) => i !== index),
-    }));
-  }
-
-  function saveManyDraft() {
-    setState((prev) => {
-      if (!prev.session || !prev.currentAreaId) {
+      if (nextAreaId) {
         return {
           ...prev,
-          screen: "rate_display",
-          manyInputDraft: [""],
+          areaProgressMap: updatedMap,
+          currentAreaId: nextAreaId,
+          lastReferenceAreaId: currentAreaId,
+          pendingDeferredAreaIds: [],
+          screen: "area_judge",
         };
       }
 
-      const records = createManyProductRecords({
-        areaId: prev.currentAreaId,
-        date: prev.session.date,
-        discountTime: prev.session.discountTime,
-        names: prev.manyInputDraft,
+      return moveToNextPendingOrDone({
+        prev,
+        updatedMap,
+        referenceAreaId: currentAreaId,
       });
-
-      if (records.length > 0) {
-        appendManyProducts(records);
-      }
-
-      return {
-        ...prev,
-        screen: "rate_display",
-        manyInputDraft: [""],
-      };
     });
-  }
-
-  function cancelManyDraft() {
-    setState((prev) => ({
-      ...prev,
-      screen: "rate_display",
-      manyInputDraft: [""],
-    }));
   }
 
   function goToNextArea() {
@@ -483,90 +459,31 @@ export function useNebikiApp(): UseNebikiAppResult {
       };
 
       if (prev.currentFlow === "pending") {
-        const nextCandidate = getNextPendingCandidate({
-          areaProgressMap: updatedMap,
+        return moveToNextPendingOrDone({
+          prev,
+          updatedMap,
           referenceAreaId: currentAreaId,
-          deferredAreaIds: [],
         });
-
-        return {
-          ...prev,
-          areaProgressMap: updatedMap,
-          screen: nextCandidate ? "pending_guide" : "done",
-          currentAreaId: null,
-          lastReferenceAreaId: currentAreaId,
-          pendingDeferredAreaIds: [],
-        };
       }
 
       const nextAreaId = getNextNormalArea(currentAreaId);
 
-      return {
-        ...prev,
-        areaProgressMap: updatedMap,
-        screen: nextAreaId ? "area_judge" : "pending_guide",
-        currentAreaId: nextAreaId,
-        lastReferenceAreaId: currentAreaId,
-        pendingDeferredAreaIds: [],
-      };
-    });
-  }
+      if (nextAreaId) {
+        return {
+          ...prev,
+          areaProgressMap: updatedMap,
+          currentAreaId: nextAreaId,
+          lastReferenceAreaId: currentAreaId,
+          pendingDeferredAreaIds: [],
+          screen: "area_judge",
+        };
+      }
 
-  function openPendingArea() {
-    if (!pendingCandidate) return;
-
-    setState((prev) => ({
-      ...prev,
-      currentAreaId: pendingCandidate.areaId,
-      screen: "area_judge",
-      currentFlow: "pending",
-      pendingDeferredAreaIds: [],
-    }));
-  }
-
-  function postponePendingAgain() {
-    if (!pendingCandidate) return;
-
-    setState((prev) => {
-      const exists = prev.pendingDeferredAreaIds.includes(pendingCandidate.areaId);
-
-      return {
-        ...prev,
-        screen: "pending_guide",
-        pendingDeferredAreaIds: exists
-          ? prev.pendingDeferredAreaIds
-          : [...prev.pendingDeferredAreaIds, pendingCandidate.areaId],
-      };
-    });
-  }
-
-  function markPendingCompleted() {
-    if (!pendingCandidate) return;
-
-    setState((prev) => {
-      const updatedMap = {
-        ...prev.areaProgressMap,
-        [pendingCandidate.areaId]: {
-          ...prev.areaProgressMap[pendingCandidate.areaId],
-          status: "completed" as const,
-          completedAt: new Date().toISOString(),
-        },
-      };
-
-      const nextCandidate = getNextPendingCandidate({
-        areaProgressMap: updatedMap,
-        referenceAreaId: pendingCandidate.areaId,
-        deferredAreaIds: [],
+      return moveToNextPendingOrDone({
+        prev,
+        updatedMap,
+        referenceAreaId: currentAreaId,
       });
-
-      return {
-        ...prev,
-        areaProgressMap: updatedMap,
-        currentAreaId: null,
-        lastReferenceAreaId: pendingCandidate.areaId,
-        pendingDeferredAreaIds: [],
-        screen: nextCandidate ? "pending_guide" : "done",
-      };
     });
   }
 
@@ -577,7 +494,7 @@ export function useNebikiApp(): UseNebikiAppResult {
 
   return {
     state,
-        derived: {
+    derived: {
       currentAreaName,
       weekdayText,
       timeText,
@@ -585,33 +502,16 @@ export function useNebikiApp(): UseNebikiAppResult {
       weatherGuideText,
       rateDisplay,
       finalGuide,
-      previousManyProducts,
-      consecutiveManyRate,
-      pendingCandidate,
-      pendingReasonText,
+      pendingBanner,
     },
     actions: {
       updateSessionDraft,
       startSession,
-
       selectAreaMany,
       selectAreaNormal,
       selectAreaFew,
       skipCurrentArea,
-
-      openManyInput,
-      changeManyDraftValues,
-      addManyDraftRow,
-      removeManyDraftRow,
-      saveManyDraft,
-      cancelManyDraft,
-
       goToNextArea,
-
-      openPendingArea,
-      postponePendingAgain,
-      markPendingCompleted,
-
       resetApp,
     },
   };

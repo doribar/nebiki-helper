@@ -20,21 +20,24 @@ export type AreaMaster = {
   order: number;
 };
 
+export type WindLevel = "2orLess" | "3to4" | "5orMore";
+export type TempLevel = "10orLess" | "11to15" | "16orMore";
+
 export type WeatherInput = {
   isRain: boolean;
-  isWindOver3m: boolean;
-  isTempUnder10: boolean;
+  windLevel: WindLevel;
+  tempLevel: TempLevel;
 };
 
 export type SessionDraft = {
-  date: string; // YYYY-MM-DD
-  weekday: number; // 0=日,1=月...6=土
+  date: string;
+  weekday: number;
   discountTime: DiscountTime;
   weather: WeatherInput;
 };
 
 export type SessionData = SessionDraft & {
-  startedAt: string; // ISO文字列
+  startedAt: string;
 };
 
 export type AreaJudge = "many" | "normal" | "few" | null;
@@ -54,19 +57,10 @@ export type AreaProgress = {
   skipReason?: "manual" | "few";
 };
 
-export type ManyProductRecord = {
-  areaId: AreaId;
-  productName: string;
-  recordedDate: string; // YYYY-MM-DD
-  discountTime: DiscountTime;
-};
-
 export type ScreenName =
   | "start"
   | "area_judge"
   | "rate_display"
-  | "many_input"
-  | "pending_guide"
   | "final_time"
   | "done";
 
@@ -78,23 +72,25 @@ export type WeekdayBaseInfo = {
   original: WeekdayBaseLabel;
   adjusted: WeekdayBaseLabel;
   changedByWeather: boolean;
-  baseRateBonus: number; // 0 / 10 / 20
-  baseRateBonusReason: string[]; // 例: ["悪天候"], ["悪天候", "雨"], ["雪"]
+  baseRateBonus: number;
+  baseRateBonusReason: string[];
 };
 
-export type WeekdayBaseDisplay = {
-  weekdayBaseText: string; // 例: "曜日基準：火木 → 月水"
-  bonusText?: string; // 例: "悪天候のためベース +10%"
+export type BasisGuideDisplay = {
+  reasonText?: string;
+  changeText?: string;
+  bonusText?: string;
+  referenceText: string;
 };
 
 export type RateLine = {
-  main: string; // 例: "30%"
-  sub?: string; // 例: "定番・広告 → 20%"
+  main: string;
+  note?: string;
 };
 
 export type RateDisplayData = {
   many: RateLine;
-  few: { main: "引かない" };
+  few: RateLine;
   normal: RateLine;
 };
 
@@ -102,7 +98,6 @@ export type FinalGuideData = {
   count1: RateLine;
   count2: RateLine;
   count3OrMore: RateLine;
-  few: { main: "引かない" };
 };
 
 export type PendingReason = "manual" | "few";
@@ -110,6 +105,11 @@ export type PendingReason = "manual" | "few";
 export type PendingAreaCandidate = {
   areaId: AreaId;
   areaName: string;
+  reason: PendingReason;
+};
+
+export type PendingBannerInfo = {
+  remainingCount: number;
   reason: PendingReason;
 };
 
@@ -127,7 +127,6 @@ export type AppState = {
   currentAreaId: AreaId | null;
   lastReferenceAreaId: AreaId | null;
   currentFlow: FlowMode;
-  manyInputDraft: string[];
   pendingDeferredAreaIds: AreaId[];
 };
 
@@ -139,10 +138,7 @@ export type UseNebikiAppDerived = {
   weatherGuideText: WeatherGuideText;
   rateDisplay: RateDisplayData | null;
   finalGuide: FinalGuideData | null;
-  previousManyProducts: string[];
-  consecutiveManyRate: number | null;
-  pendingCandidate: PendingAreaCandidate | null;
-  pendingReasonText: string | null;
+  pendingBanner: PendingBannerInfo | null;
 };
 
 export type UseNebikiAppActions = {
@@ -154,19 +150,7 @@ export type UseNebikiAppActions = {
   selectAreaFew: () => void;
   skipCurrentArea: () => void;
 
-  openManyInput: () => void;
-  changeManyDraftValues: (next: string[]) => void;
-  addManyDraftRow: () => void;
-  removeManyDraftRow: (index: number) => void;
-  saveManyDraft: () => void;
-  cancelManyDraft: () => void;
-
   goToNextArea: () => void;
-
-  openPendingArea: () => void;
-  postponePendingAgain: () => void;
-  markPendingCompleted: () => void;
-
   resetApp: () => void;
 };
 
@@ -174,11 +158,4 @@ export type UseNebikiAppResult = {
   state: AppState;
   derived: UseNebikiAppDerived;
   actions: UseNebikiAppActions;
-};
-
-export type BasisGuideDisplay = {
-  reasonText?: string;
-  changeText?: string;
-  bonusText?: string;
-  referenceText: string;
 };

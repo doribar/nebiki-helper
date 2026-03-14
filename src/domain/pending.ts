@@ -58,11 +58,10 @@ export function getNextPendingCandidate(params: {
   };
 }
 
-export function getPendingReasonText(reason: PendingReason): string {
-  switch (reason) {
-    case "manual":
-      return "手動スキップ";
-    case "few":
-      return "少ないため後回し";
-  }
+export function getPendingRemainingCount(
+  areaProgressMap: Record<AreaId, AreaProgress>
+): number {
+  return Object.values(areaProgressMap).filter(
+    (p) => p.status === "skipped_manual" || p.status === "postponed_few"
+  ).length;
 }

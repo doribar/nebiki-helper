@@ -24,10 +24,10 @@ export const NORMAL_ROUTE: AreaId[] = [
   "chuka_fish",
   "sekihan_takikomi",
   "onigiri",
-  "sushi",
-  "futomaki_chumaki",
-  "inari",
   "hosomaki",
+  "inari",
+  "futomaki_chumaki",
+  "sushi",
 ];
 
 export function getAreaName(areaId: AreaId): string {
