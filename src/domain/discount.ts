@@ -47,7 +47,7 @@ export function getNormalTimeRateDisplay(params: {
   return {
     many: toRateLine(
       `${manyRate}%`,
-      manyRate === 20 ? "前回も多かった商品は30%（5個以下の商品には適用しない）" : undefined
+      manyRate === 20 ? "前回も多かった商品は30%（5個以下は除く）" : undefined
     ),
     few: toRateLine("引かない"),
     normal:
