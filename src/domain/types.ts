@@ -14,6 +14,12 @@ export type AreaId =
   | "tempura"
   | "bento_men";
 
+  export type NextSessionSkipRecord = {
+  date: string;
+  targetDiscountTime: "18" | "19";
+  areaId: AreaId;
+};
+
 export type AreaMaster = {
   id: AreaId;
   name: string;

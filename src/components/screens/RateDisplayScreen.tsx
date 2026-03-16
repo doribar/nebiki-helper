@@ -201,14 +201,14 @@ export function RateDisplayScreen({
           <strong>近いものだけ値引</strong>
         </div>
 
-        <div style={{ fontWeight: 800, marginTop: 14, marginBottom: 8 }}>
-          分かれていなければ
-        </div>
-        <div style={{ lineHeight: 1.8 }}>
-          ・今日が月火水木なら多い方に寄せる
-          <br />
-          ・今日が金土日なら少ない方に寄せる
-        </div>
+        <div style={{ marginTop: 14, marginBottom: 8 }}>
+  ・分かれていなければ
+</div>
+<div style={{ lineHeight: 1.8 }}>
+  <strong>今日が月火水木なら多い方に寄せる</strong>
+  <br />
+  <strong>今日が金土日なら少ない方に寄せる</strong>
+</div>
       </section>
 
       <div style={{ display: "grid", gap: 10 }}>

@@ -21,7 +21,9 @@ import {
   getNormalTimeRateDisplay,
 } from "../domain/discount";
 import {
+  appendNextSessionSkipRecords,
   clearCurrentSession,
+  consumeNextSessionSkipAreaIds,
   loadCurrentSession,
   saveCurrentSession,
 } from "../domain/storage";
@@ -213,6 +215,47 @@ function getWeekdayText(weekday: number): string {
   return `${map[weekday] ?? ""}曜日`;
 }
 
+function getNextSkipTargetDiscountTime(
+  discountTime: DiscountTime
+): "18" | "19" | null {
+  if (discountTime === "17") return "18";
+  if (discountTime === "18") return "19";
+  return null;
+}
+
+function createAreaProgressMapWithAutoSkippedAreas(
+  skippedAreaIds: AreaId[]
+): Record<AreaId, AreaProgress> {
+  const base = createInitialAreaProgressMap();
+
+  for (const areaId of skippedAreaIds) {
+    base[areaId] = {
+      ...base[areaId],
+      status: "completed",
+      completedAt: new Date().toISOString(),
+    };
+  }
+
+  return base;
+}
+
+function getFirstAvailableAreaId(
+  areaProgressMap: Record<AreaId, AreaProgress>
+): AreaId | null {
+  let current: AreaId | null = "bento_men";
+
+  while (current) {
+    const progress = areaProgressMap[current];
+    if (progress.status === "unstarted") {
+      return current;
+    }
+
+    current = getNextNormalArea(current);
+  }
+
+  return null;
+}
+
 function refreshSessionDiscountTime(session: SessionData | null): {
   nextSession: SessionData | null;
   timeSwitchNotice: string | null;
@@ -220,6 +263,14 @@ function refreshSessionDiscountTime(session: SessionData | null): {
   if (!session) {
     return {
       nextSession: null,
+      timeSwitchNotice: null,
+    };
+  }
+
+  // 手動で時刻を切り替えている場合は、その値を現在時刻として扱う
+  if (session.manualDiscountTimeOverride) {
+    return {
+      nextSession: session,
       timeSwitchNotice: null,
     };
   }
@@ -238,7 +289,8 @@ function refreshSessionDiscountTime(session: SessionData | null): {
       ...session,
       discountTime: nowDiscountTime,
     },
-timeSwitchNotice: buildTimeSwitchNotice(nowDiscountTime),  };
+    timeSwitchNotice: buildTimeSwitchNotice(nowDiscountTime),
+  };
 }
 
 export function useNebikiApp(): UseNebikiAppResult {
@@ -325,44 +377,75 @@ export function useNebikiApp(): UseNebikiAppResult {
     return getWeekdayBaseInfo(sessionSource.weekday, sessionSource.weather);
   }, [sessionSource.weekday, sessionSource.weather]);
 
-  const late18Bonus = useMemo(() => {
-    if (!state.session || state.session.discountTime !== "18") return 0;
+  const lateTimeBonus = useMemo(() => {
+  if (!state.session) return 0;
+  if (state.session.discountTime === "20") return 0;
 
-    const now = new Date(nowMs);
-    const minutes = now.getHours() * 60 + now.getMinutes();
+  // 手動で時刻を切り替えている場合は、実時間による +5% を適用しない
+  if (state.session.manualDiscountTimeOverride) return 0;
 
+  const now = new Date(nowMs);
+  const minutes = now.getHours() * 60 + now.getMinutes();
+
+  // 17時基準の値引中に18時を超えた
+  if (state.session.discountTime === "17") {
+    return minutes >= 18 * 60 ? 5 : 0;
+  }
+
+  // 18時30分基準の値引中に19時を超えた
+  if (state.session.discountTime === "18") {
     return minutes >= 19 * 60 ? 5 : 0;
-  }, [state.session, nowMs]);
+  }
 
-  const late18BonusNotice = useMemo(() => {
-    return late18Bonus > 0
-      ? "19時を過ぎたため値引率を5%上げています。"
-      : null;
-  }, [late18Bonus]);
+  // 19時30分基準の値引中に20時を超えた
+  if (state.session.discountTime === "19") {
+    return minutes >= 20 * 60 ? 5 : 0;
+  }
+
+  return 0;
+}, [state.session, nowMs]);
+
+const lateTimeBonusNotice = useMemo(() => {
+  if (!state.session || lateTimeBonus === 0) return null;
+
+  if (state.session.discountTime === "17") {
+    return "18時を過ぎたため値引率を5%上げています。";
+  }
+
+  if (state.session.discountTime === "18") {
+    return "19時を過ぎたため値引率を5%上げています。";
+  }
+
+  if (state.session.discountTime === "19") {
+    return "20時を過ぎたため値引率を5%上げています。";
+  }
+
+  return null;
+}, [state.session, lateTimeBonus]);
 
   const basisGuide = useMemo(() => {
-    const baseGuide = getBasisGuideDisplay({
-      weekday: sessionSource.weekday,
-      discountTime: sessionSource.discountTime,
-      weather: sessionSource.weather,
-    });
+  const baseGuide = getBasisGuideDisplay({
+    weekday: sessionSource.weekday,
+    discountTime: sessionSource.discountTime,
+    weather: sessionSource.weather,
+  });
 
-    if (!late18BonusNotice) {
-      return baseGuide;
-    }
+  if (!lateTimeBonusNotice) {
+    return baseGuide;
+  }
 
-    return {
-      ...baseGuide,
-      bonusText: baseGuide.bonusText
-        ? `${baseGuide.bonusText} ${late18BonusNotice}`
-        : late18BonusNotice,
-    };
-  }, [
-    sessionSource.weekday,
-    sessionSource.discountTime,
-    sessionSource.weather,
-    late18BonusNotice,
-  ]);
+  return {
+    ...baseGuide,
+    bonusText: baseGuide.bonusText
+      ? `${baseGuide.bonusText} ${lateTimeBonusNotice}`
+      : lateTimeBonusNotice,
+  };
+}, [
+  sessionSource.weekday,
+  sessionSource.discountTime,
+  sessionSource.weather,
+  lateTimeBonusNotice,
+]);
 
   const weatherGuideText = useMemo(() => {
     return getWeatherGuideText();
@@ -379,17 +462,16 @@ export function useNebikiApp(): UseNebikiAppResult {
     if (!currentAreaProgress.areaJudge) return null;
 
     return getNormalTimeRateDisplay({
-      discountTime: state.session.discountTime,
-      weatherBonus: weekdayBaseInfo.baseRateBonus + late18Bonus,
-      areaJudge: currentAreaProgress.areaJudge,
-    });
+  discountTime: state.session.discountTime,
+  weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+  areaJudge: currentAreaProgress.areaJudge,
+});
   }, [
-    state.session,
-    currentAreaProgress,
-    weekdayBaseInfo.baseRateBonus,
-    late18Bonus,
-  ]);
-
+  state.session,
+  currentAreaProgress,
+  weekdayBaseInfo.baseRateBonus,
+  lateTimeBonus,
+]);
   const finalGuide = useMemo(() => {
     if (!state.session || state.session.discountTime !== "20") return null;
     return getFinalTimeGuide();
@@ -500,13 +582,36 @@ function startSession() {
       startedAt,
     };
 
+    let areaProgressMap = createInitialAreaProgressMap();
+
+    if (session.discountTime === "18" || session.discountTime === "19") {
+      const skippedAreaIds = consumeNextSessionSkipAreaIds({
+        date: session.date,
+        targetDiscountTime: session.discountTime,
+      });
+
+      areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
+        skippedAreaIds
+      );
+    }
+
+    const firstAreaId =
+      session.discountTime === "20"
+        ? null
+        : getFirstAvailableAreaId(areaProgressMap);
+
     return {
       ...prev,
-      screen: session.discountTime === "20" ? "final_time" : "area_judge",
+      screen:
+        session.discountTime === "20"
+          ? "final_time"
+          : firstAreaId
+          ? "area_judge"
+          : "done",
       session,
-      areaProgressMap: createInitialAreaProgressMap(),
-      currentAreaId: session.discountTime === "20" ? null : "bento_men",
-      lastReferenceAreaId: session.discountTime === "20" ? null : "bento_men",
+      areaProgressMap,
+      currentAreaId: firstAreaId,
+      lastReferenceAreaId: firstAreaId,
       currentFlow: "normal",
       pendingDeferredAreaIds: [],
       timeSwitchNotice: null,
@@ -693,59 +798,44 @@ function startSession() {
   }
 
   function goToNextArea() {
-    setState((prev) => {
-      if (!prev.currentAreaId) return prev;
-      const currentAreaId = prev.currentAreaId;
-      const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
+  setState((prev) => {
+    if (!prev.currentAreaId) return prev;
+    const currentAreaId = prev.currentAreaId;
+    const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(
+      prev.session
+    );
 
-      const updatedMap = {
-        ...prev.areaProgressMap,
-        [currentAreaId]: {
-          ...prev.areaProgressMap[currentAreaId],
-          status: "completed" as const,
-          completedAt: new Date().toISOString(),
-        },
-      };
+    const updatedMap = {
+      ...prev.areaProgressMap,
+      [currentAreaId]: {
+        ...prev.areaProgressMap[currentAreaId],
+        status: "completed" as const,
+        completedAt: new Date().toISOString(),
+      },
+    };
 
-      if (prev.currentFlow === "pending") {
-        return moveToNextPendingOrDone({
-          prev,
-          updatedMap,
-          referenceAreaId: currentAreaId,
-          nextSession,
-          timeSwitchNotice,
-        });
+    // +5% が発動している状態で完了したエリアだけ、次回スキップ対象として記録
+    if (
+      prev.session &&
+      lateTimeBonus > 0 &&
+      !prev.session.manualDiscountTimeOverride
+    ) {
+      const targetDiscountTime = getNextSkipTargetDiscountTime(
+        prev.session.discountTime
+      );
+
+      if (targetDiscountTime) {
+        appendNextSessionSkipRecords([
+          {
+            date: prev.session.date,
+            targetDiscountTime,
+            areaId: currentAreaId,
+          },
+        ]);
       }
+    }
 
-      if (nextSession?.discountTime === "20") {
-        return {
-          ...prev,
-          session: nextSession,
-          timeSwitchNotice,
-          areaProgressMap: updatedMap,
-          currentAreaId: null,
-          lastReferenceAreaId: currentAreaId,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          screen: "final_time",
-        };
-      }
-
-      const nextAreaId = getNextNormalArea(currentAreaId);
-
-      if (nextAreaId) {
-        return {
-          ...prev,
-          session: nextSession,
-          timeSwitchNotice,
-          areaProgressMap: updatedMap,
-          currentAreaId: nextAreaId,
-          lastReferenceAreaId: currentAreaId,
-          pendingDeferredAreaIds: [],
-          screen: "area_judge",
-        };
-      }
-
+    if (prev.currentFlow === "pending") {
       return moveToNextPendingOrDone({
         prev,
         updatedMap,
@@ -753,8 +843,46 @@ function startSession() {
         nextSession,
         timeSwitchNotice,
       });
+    }
+
+    if (nextSession?.discountTime === "20") {
+      return {
+        ...prev,
+        session: nextSession,
+        timeSwitchNotice,
+        areaProgressMap: updatedMap,
+        currentAreaId: null,
+        lastReferenceAreaId: currentAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        screen: "final_time",
+      };
+    }
+
+    const nextAreaId = getNextNormalArea(currentAreaId);
+
+    if (nextAreaId) {
+      return {
+        ...prev,
+        session: nextSession,
+        timeSwitchNotice,
+        areaProgressMap: updatedMap,
+        currentAreaId: nextAreaId,
+        lastReferenceAreaId: currentAreaId,
+        pendingDeferredAreaIds: [],
+        screen: "area_judge",
+      };
+    }
+
+    return moveToNextPendingOrDone({
+      prev,
+      updatedMap,
+      referenceAreaId: currentAreaId,
+      nextSession,
+      timeSwitchNotice,
     });
-  }
+  });
+}
 
   function resetApp() {
     clearCurrentSession();
