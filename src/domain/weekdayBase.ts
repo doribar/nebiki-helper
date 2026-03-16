@@ -9,6 +9,19 @@ import type {
   WindLevel,
 } from "./types";
 
+function getBasisTimeText(discountTime: DiscountTime): string {
+  switch (discountTime) {
+    case "17":
+      return "17時";
+    case "18":
+      return "18時30分";
+    case "19":
+      return "19時30分";
+    case "20":
+      return "20時30分";
+  }
+}
+
 export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
   switch (weekday) {
     case 0:
@@ -162,21 +175,16 @@ export function getBasisGuideDisplay(params: {
     reasonText,
     changeText,
     bonusText,
-    referenceText: `${referenceBaseText}の${params.discountTime}時を基準に考えて`,
+    referenceText: `${referenceBaseText}の${getBasisTimeText(
+      params.discountTime
+    )}を基準に考えて`,
   };
 }
 
-export function getWeatherGuideText(discountTime: DiscountTime): WeatherGuideText {
-  const nextHourMap: Record<DiscountTime, string> = {
-    "17": "18時",
-    "18": "19時",
-    "19": "20時",
-    "20": "21時",
-  };
-
+export function getWeatherGuideText(): WeatherGuideText {
   return {
-    rainGuide: `${discountTime}時以降に雨マークがあるか`,
-    windGuide: `${nextHourMap[discountTime]}の風速を選択`,
-    tempGuide: `${nextHourMap[discountTime]}の気温を選択`,
+    rainGuide: "現在時刻以降に雨マークがあるか",
+    windGuide: "現在の風速を選択",
+    tempGuide: "現在の気温を選択",
   };
 }

@@ -14,7 +14,7 @@ export function AppRouter({ app }: AppRouterProps) {
 
   switch (state.screen) {
     case "start":
-      return (
+            return (
         <StartScreen
           sessionDraft={state.sessionDraft}
           weatherGuideText={derived.weatherGuideText}
@@ -33,6 +33,7 @@ export function AppRouter({ app }: AppRouterProps) {
           areaName={derived.currentAreaName}
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
+          timeSwitchNotice={derived.timeSwitchNotice}
           onSelectMany={actions.selectAreaMany}
           onSelectNormal={actions.selectAreaNormal}
           onSelectFew={actions.selectAreaFew}
@@ -50,6 +51,7 @@ export function AppRouter({ app }: AppRouterProps) {
           areaName={derived.currentAreaName}
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
+          timeSwitchNotice={derived.timeSwitchNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
           finalGuide={derived.finalGuide ?? undefined}
@@ -63,6 +65,7 @@ export function AppRouter({ app }: AppRouterProps) {
         <FinalTimeScreen
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
+          timeSwitchNotice={derived.timeSwitchNotice}
           onBackToTop={actions.resetApp}
         />
       );

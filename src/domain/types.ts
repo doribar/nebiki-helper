@@ -33,6 +33,8 @@ export type SessionDraft = {
   date: string;
   weekday: number;
   discountTime: DiscountTime;
+  manualWeekdayOverride: boolean;
+  manualDiscountTimeOverride: boolean;
   weather: WeatherInput;
 };
 
@@ -128,6 +130,7 @@ export type AppState = {
   lastReferenceAreaId: AreaId | null;
   currentFlow: FlowMode;
   pendingDeferredAreaIds: AreaId[];
+  timeSwitchNotice: string | null;
 };
 
 export type UseNebikiAppDerived = {
@@ -139,6 +142,7 @@ export type UseNebikiAppDerived = {
   rateDisplay: RateDisplayData | null;
   finalGuide: FinalGuideData | null;
   pendingBanner: PendingBannerInfo | null;
+  timeSwitchNotice: string | null;
 };
 
 export type UseNebikiAppActions = {

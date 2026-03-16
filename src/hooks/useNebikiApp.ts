@@ -3,6 +3,7 @@ import type {
   AppState,
   AreaId,
   AreaProgress,
+  DiscountTime,
   PendingBannerInfo,
   SessionData,
   SessionDraft,
@@ -36,13 +37,49 @@ function formatLocalDate(date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+function resolveDiscountTime(date = new Date()): DiscountTime {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+
+  if (minutes < 18 * 60 + 30) return "17";
+  if (minutes < 19 * 60 + 30) return "18";
+  if (minutes < 20 * 60 + 30) return "19";
+  return "20";
+}
+
+function getBasisTimeText(discountTime: DiscountTime): string {
+  switch (discountTime) {
+    case "17":
+      return "17時";
+    case "18":
+      return "18時30分";
+    case "19":
+      return "19時30分";
+    case "20":
+      return "20時30分";
+  }
+}
+
+function buildTimeSwitchNotice(to: DiscountTime): string {
+  if (to === "20") {
+    return `現在時刻が${getBasisTimeText(
+      to
+    )}を過ぎたため、ここから最終値引ルールで表示します。`;
+  }
+
+  return `現在時刻が${getBasisTimeText(
+    to
+  )}を過ぎたため、ここから${getBasisTimeText(to)}の基準で表示します。`;
+}
+
 function createInitialSessionDraft(): SessionDraft {
   const now = new Date();
 
   return {
     date: formatLocalDate(now),
     weekday: now.getDay(),
-    discountTime: "17",
+    discountTime: resolveDiscountTime(now),
+    manualWeekdayOverride: false,
+    manualDiscountTimeOverride: false,
     weather: {
       isRain: false,
       windLevel: "2orLess",
@@ -72,6 +109,7 @@ function createInitialState(): AppState {
     lastReferenceAreaId: null,
     currentFlow: "normal",
     pendingDeferredAreaIds: [],
+    timeSwitchNotice: null,
   };
 }
 
@@ -127,6 +165,14 @@ function normalizeSessionDraft(raw?: Partial<SessionDraft> | null): SessionDraft
       raw?.discountTime === "20"
         ? raw.discountTime
         : fallback.discountTime,
+    manualWeekdayOverride:
+      typeof raw?.manualWeekdayOverride === "boolean"
+        ? raw.manualWeekdayOverride
+        : false,
+    manualDiscountTimeOverride:
+      typeof raw?.manualDiscountTimeOverride === "boolean"
+        ? raw.manualDiscountTimeOverride
+        : false,
     weather: normalizeWeatherInput(raw?.weather),
   };
 }
@@ -157,6 +203,8 @@ function normalizeLoadedState(loaded: AppState | null): AppState {
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",
     pendingDeferredAreaIds:
       (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [],
+    timeSwitchNotice:
+      (loaded as Partial<AppState>).timeSwitchNotice ?? null,
   };
 }
 
@@ -165,14 +213,102 @@ function getWeekdayText(weekday: number): string {
   return `${map[weekday] ?? ""}曜日`;
 }
 
+function refreshSessionDiscountTime(session: SessionData | null): {
+  nextSession: SessionData | null;
+  timeSwitchNotice: string | null;
+} {
+  if (!session) {
+    return {
+      nextSession: null,
+      timeSwitchNotice: null,
+    };
+  }
+
+  const nowDiscountTime = resolveDiscountTime(new Date());
+
+  if (session.discountTime === nowDiscountTime) {
+    return {
+      nextSession: session,
+      timeSwitchNotice: null,
+    };
+  }
+
+  return {
+    nextSession: {
+      ...session,
+      discountTime: nowDiscountTime,
+    },
+timeSwitchNotice: buildTimeSwitchNotice(nowDiscountTime),  };
+}
+
 export function useNebikiApp(): UseNebikiAppResult {
   const [state, setState] = useState<AppState>(() =>
     normalizeLoadedState(loadCurrentSession())
   );
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     saveCurrentSession(state);
   }, [state]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+  if (state.screen !== "start") return;
+
+  const syncDraftTime = () => {
+    setState((prev) => {
+      if (prev.screen !== "start") return prev;
+
+      const now = new Date();
+      const nowDiscountTime = resolveDiscountTime(now);
+      const nowDate = formatLocalDate(now);
+      const nowWeekday = now.getDay();
+
+      const nextDraft = { ...prev.sessionDraft };
+      let changed = false;
+
+      if (nextDraft.date !== nowDate) {
+        nextDraft.date = nowDate;
+        changed = true;
+      }
+
+      if (
+        !nextDraft.manualWeekdayOverride &&
+        nextDraft.weekday !== nowWeekday
+      ) {
+        nextDraft.weekday = nowWeekday;
+        changed = true;
+      }
+
+      if (
+        !nextDraft.manualDiscountTimeOverride &&
+        nextDraft.discountTime !== nowDiscountTime
+      ) {
+        nextDraft.discountTime = nowDiscountTime;
+        changed = true;
+      }
+
+      if (!changed) return prev;
+
+      return {
+        ...prev,
+        sessionDraft: nextDraft,
+      };
+    });
+  };
+
+  syncDraftTime();
+  const id = window.setInterval(syncDraftTime, 30000);
+
+  return () => window.clearInterval(id);
+}, [state.screen]);
 
   const sessionSource = state.session ?? state.sessionDraft;
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
@@ -182,24 +318,55 @@ export function useNebikiApp(): UseNebikiAppResult {
   }, [sessionSource.weekday]);
 
   const timeText = useMemo(() => {
-    return `${sessionSource.discountTime}時`;
+    return getBasisTimeText(sessionSource.discountTime);
   }, [sessionSource.discountTime]);
 
   const weekdayBaseInfo = useMemo(() => {
     return getWeekdayBaseInfo(sessionSource.weekday, sessionSource.weather);
   }, [sessionSource.weekday, sessionSource.weather]);
 
+  const late18Bonus = useMemo(() => {
+    if (!state.session || state.session.discountTime !== "18") return 0;
+
+    const now = new Date(nowMs);
+    const minutes = now.getHours() * 60 + now.getMinutes();
+
+    return minutes >= 19 * 60 ? 5 : 0;
+  }, [state.session, nowMs]);
+
+  const late18BonusNotice = useMemo(() => {
+    return late18Bonus > 0
+      ? "19時を過ぎたため値引率を5%上げています。"
+      : null;
+  }, [late18Bonus]);
+
   const basisGuide = useMemo(() => {
-    return getBasisGuideDisplay({
+    const baseGuide = getBasisGuideDisplay({
       weekday: sessionSource.weekday,
       discountTime: sessionSource.discountTime,
       weather: sessionSource.weather,
     });
-  }, [sessionSource.weekday, sessionSource.discountTime, sessionSource.weather]);
+
+    if (!late18BonusNotice) {
+      return baseGuide;
+    }
+
+    return {
+      ...baseGuide,
+      bonusText: baseGuide.bonusText
+        ? `${baseGuide.bonusText} ${late18BonusNotice}`
+        : late18BonusNotice,
+    };
+  }, [
+    sessionSource.weekday,
+    sessionSource.discountTime,
+    sessionSource.weather,
+    late18BonusNotice,
+  ]);
 
   const weatherGuideText = useMemo(() => {
-    return getWeatherGuideText(sessionSource.discountTime);
-  }, [sessionSource.discountTime]);
+    return getWeatherGuideText();
+  }, []);
 
   const currentAreaProgress = useMemo(() => {
     if (!state.currentAreaId) return null;
@@ -213,10 +380,15 @@ export function useNebikiApp(): UseNebikiAppResult {
 
     return getNormalTimeRateDisplay({
       discountTime: state.session.discountTime,
-      weatherBonus: weekdayBaseInfo.baseRateBonus,
+      weatherBonus: weekdayBaseInfo.baseRateBonus + late18Bonus,
       areaJudge: currentAreaProgress.areaJudge,
     });
-  }, [state.session, currentAreaProgress, weekdayBaseInfo.baseRateBonus]);
+  }, [
+    state.session,
+    currentAreaProgress,
+    weekdayBaseInfo.baseRateBonus,
+    late18Bonus,
+  ]);
 
   const finalGuide = useMemo(() => {
     if (!state.session || state.session.discountTime !== "20") return null;
@@ -258,7 +430,23 @@ export function useNebikiApp(): UseNebikiAppResult {
     updatedMap: Record<AreaId, AreaProgress>;
     referenceAreaId: AreaId;
     deferredAreaIds?: AreaId[];
+    nextSession: SessionData | null;
+    timeSwitchNotice: string | null;
   }): AppState {
+    if (params.nextSession?.discountTime === "20") {
+      return {
+        ...params.prev,
+        session: params.nextSession,
+        timeSwitchNotice: params.timeSwitchNotice,
+        areaProgressMap: params.updatedMap,
+        currentAreaId: null,
+        lastReferenceAreaId: params.referenceAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        screen: "final_time",
+      };
+    }
+
     const nextCandidate = getNextPendingCandidate({
       areaProgressMap: params.updatedMap,
       referenceAreaId: params.referenceAreaId,
@@ -268,6 +456,8 @@ export function useNebikiApp(): UseNebikiAppResult {
     if (!nextCandidate) {
       return {
         ...params.prev,
+        session: params.nextSession,
+        timeSwitchNotice: params.timeSwitchNotice,
         areaProgressMap: params.updatedMap,
         currentAreaId: null,
         lastReferenceAreaId: params.referenceAreaId,
@@ -279,6 +469,8 @@ export function useNebikiApp(): UseNebikiAppResult {
 
     return {
       ...params.prev,
+      session: params.nextSession,
+      timeSwitchNotice: params.timeSwitchNotice,
       areaProgressMap: params.updatedMap,
       currentAreaId: nextCandidate.areaId,
       lastReferenceAreaId: params.referenceAreaId,
@@ -288,27 +480,39 @@ export function useNebikiApp(): UseNebikiAppResult {
     };
   }
 
-  function startSession() {
-    const startedAt = new Date().toISOString();
+function startSession() {
+  const now = new Date();
+  const startedAt = now.toISOString();
+  const currentDate = formatLocalDate(now);
+  const currentWeekday = now.getDay();
+  const currentDiscountTime = resolveDiscountTime(now);
 
-    setState((prev) => {
-      const isFinalTime = prev.sessionDraft.discountTime === "20";
+  setState((prev) => {
+    const session: SessionData = {
+      ...prev.sessionDraft,
+      date: currentDate,
+      weekday: prev.sessionDraft.manualWeekdayOverride
+        ? prev.sessionDraft.weekday
+        : currentWeekday,
+      discountTime: prev.sessionDraft.manualDiscountTimeOverride
+        ? prev.sessionDraft.discountTime
+        : currentDiscountTime,
+      startedAt,
+    };
 
-      return {
-        ...prev,
-        screen: isFinalTime ? "final_time" : "area_judge",
-        session: {
-          ...prev.sessionDraft,
-          startedAt,
-        },
-        areaProgressMap: createInitialAreaProgressMap(),
-        currentAreaId: isFinalTime ? null : "bento_men",
-        lastReferenceAreaId: isFinalTime ? null : "bento_men",
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-      };
-    });
-  }
+    return {
+      ...prev,
+      screen: session.discountTime === "20" ? "final_time" : "area_judge",
+      session,
+      areaProgressMap: createInitialAreaProgressMap(),
+      currentAreaId: session.discountTime === "20" ? null : "bento_men",
+      lastReferenceAreaId: session.discountTime === "20" ? null : "bento_men",
+      currentFlow: "normal",
+      pendingDeferredAreaIds: [],
+      timeSwitchNotice: null,
+    };
+  });
+}
 
   function selectAreaMany() {
     setState((prev) => {
@@ -318,6 +522,7 @@ export function useNebikiApp(): UseNebikiAppResult {
       return {
         ...prev,
         screen: "rate_display",
+        timeSwitchNotice: null,
         areaProgressMap: {
           ...prev.areaProgressMap,
           [currentAreaId]: {
@@ -338,6 +543,7 @@ export function useNebikiApp(): UseNebikiAppResult {
       return {
         ...prev,
         screen: "rate_display",
+        timeSwitchNotice: null,
         areaProgressMap: {
           ...prev.areaProgressMap,
           [currentAreaId]: {
@@ -354,6 +560,7 @@ export function useNebikiApp(): UseNebikiAppResult {
     setState((prev) => {
       if (!prev.currentAreaId) return prev;
       const currentAreaId = prev.currentAreaId;
+      const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       const updatedMap = {
         ...prev.areaProgressMap,
@@ -371,7 +578,23 @@ export function useNebikiApp(): UseNebikiAppResult {
           prev,
           updatedMap,
           referenceAreaId: currentAreaId,
+          nextSession,
+          timeSwitchNotice,
         });
+      }
+
+      if (nextSession?.discountTime === "20") {
+        return {
+          ...prev,
+          session: nextSession,
+          timeSwitchNotice,
+          areaProgressMap: updatedMap,
+          currentAreaId: null,
+          lastReferenceAreaId: currentAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          screen: "final_time",
+        };
       }
 
       const nextAreaId = getNextNormalArea(currentAreaId);
@@ -379,6 +602,8 @@ export function useNebikiApp(): UseNebikiAppResult {
       if (nextAreaId) {
         return {
           ...prev,
+          session: nextSession,
+          timeSwitchNotice,
           areaProgressMap: updatedMap,
           currentAreaId: nextAreaId,
           lastReferenceAreaId: currentAreaId,
@@ -391,6 +616,8 @@ export function useNebikiApp(): UseNebikiAppResult {
         prev,
         updatedMap,
         referenceAreaId: currentAreaId,
+        nextSession,
+        timeSwitchNotice,
       });
     });
   }
@@ -400,6 +627,7 @@ export function useNebikiApp(): UseNebikiAppResult {
       if (!prev.currentAreaId) return prev;
       const currentAreaId = prev.currentAreaId;
       const currentProgress = prev.areaProgressMap[currentAreaId];
+      const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       if (prev.currentFlow === "pending") {
         const nextDeferredAreaIds = prev.pendingDeferredAreaIds.includes(currentAreaId)
@@ -411,6 +639,8 @@ export function useNebikiApp(): UseNebikiAppResult {
           updatedMap: prev.areaProgressMap,
           referenceAreaId: currentAreaId,
           deferredAreaIds: nextDeferredAreaIds,
+          nextSession,
+          timeSwitchNotice,
         });
       }
 
@@ -423,11 +653,27 @@ export function useNebikiApp(): UseNebikiAppResult {
         },
       };
 
+      if (nextSession?.discountTime === "20") {
+        return {
+          ...prev,
+          session: nextSession,
+          timeSwitchNotice,
+          areaProgressMap: updatedMap,
+          currentAreaId: null,
+          lastReferenceAreaId: currentAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          screen: "final_time",
+        };
+      }
+
       const nextAreaId = getNextNormalArea(currentAreaId);
 
       if (nextAreaId) {
         return {
           ...prev,
+          session: nextSession,
+          timeSwitchNotice,
           areaProgressMap: updatedMap,
           currentAreaId: nextAreaId,
           lastReferenceAreaId: currentAreaId,
@@ -440,6 +686,8 @@ export function useNebikiApp(): UseNebikiAppResult {
         prev,
         updatedMap,
         referenceAreaId: currentAreaId,
+        nextSession,
+        timeSwitchNotice,
       });
     });
   }
@@ -448,6 +696,7 @@ export function useNebikiApp(): UseNebikiAppResult {
     setState((prev) => {
       if (!prev.currentAreaId) return prev;
       const currentAreaId = prev.currentAreaId;
+      const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       const updatedMap = {
         ...prev.areaProgressMap,
@@ -463,7 +712,23 @@ export function useNebikiApp(): UseNebikiAppResult {
           prev,
           updatedMap,
           referenceAreaId: currentAreaId,
+          nextSession,
+          timeSwitchNotice,
         });
+      }
+
+      if (nextSession?.discountTime === "20") {
+        return {
+          ...prev,
+          session: nextSession,
+          timeSwitchNotice,
+          areaProgressMap: updatedMap,
+          currentAreaId: null,
+          lastReferenceAreaId: currentAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          screen: "final_time",
+        };
       }
 
       const nextAreaId = getNextNormalArea(currentAreaId);
@@ -471,6 +736,8 @@ export function useNebikiApp(): UseNebikiAppResult {
       if (nextAreaId) {
         return {
           ...prev,
+          session: nextSession,
+          timeSwitchNotice,
           areaProgressMap: updatedMap,
           currentAreaId: nextAreaId,
           lastReferenceAreaId: currentAreaId,
@@ -483,6 +750,8 @@ export function useNebikiApp(): UseNebikiAppResult {
         prev,
         updatedMap,
         referenceAreaId: currentAreaId,
+        nextSession,
+        timeSwitchNotice,
       });
     });
   }
@@ -503,6 +772,7 @@ export function useNebikiApp(): UseNebikiAppResult {
       rateDisplay,
       finalGuide,
       pendingBanner,
+      timeSwitchNotice: state.timeSwitchNotice,
     },
     actions: {
       updateSessionDraft,

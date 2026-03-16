@@ -5,6 +5,7 @@ import { PrimaryButton } from "../layout/PrimaryButton";
 type FinalTimeScreenProps = {
   weekdayText: string;
   timeText: string;
+  timeSwitchNotice?: string | null;
   onBackToTop: () => void;
 };
 
@@ -13,6 +14,7 @@ type FinalStep = 0 | 1 | 2 | 3;
 export function FinalTimeScreen({
   weekdayText,
   timeText,
+  timeSwitchNotice,
   onBackToTop,
 }: FinalTimeScreenProps) {
   const [step, setStep] = useState<FinalStep>(0);
@@ -31,6 +33,20 @@ export function FinalTimeScreen({
         timeText={timeText}
         areaName={null}
       />
+
+            {timeSwitchNotice ? (
+        <section
+          style={{
+            border: "1px solid #ead28b",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+            background: "#fff8e1",
+          }}
+        >
+          <div>{timeSwitchNotice}</div>
+        </section>
+      ) : null}
 
       <section
         style={{

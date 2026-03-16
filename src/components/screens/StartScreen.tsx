@@ -28,11 +28,11 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: "土曜日" },
 ];
 
-const TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
+const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
   { value: "17", label: "17時" },
-  { value: "18", label: "18時" },
-  { value: "19", label: "19時" },
-  { value: "20", label: "20時" },
+  { value: "18", label: "18時30分" },
+  { value: "19", label: "19時30分" },
+  { value: "20", label: "20時30分" },
 ];
 
 const WIND_OPTIONS: { value: WindLevel; label: string }[] = [
@@ -46,6 +46,37 @@ const TEMP_OPTIONS: { value: TempLevel; label: string }[] = [
   { value: "11to15", label: "11〜15度" },
   { value: "16orMore", label: "16度以上" },
 ];
+
+function formatLocalDate(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = `${date.getMonth() + 1}`.padStart(2, "0");
+  const d = `${date.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function resolveDiscountTime(date = new Date()): DiscountTime {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+
+  if (minutes < 18 * 60 + 30) return "17";
+  if (minutes < 19 * 60 + 30) return "18";
+  if (minutes < 20 * 60 + 30) return "19";
+  return "20";
+}
+
+function getWeekdayLabel(weekday: number): string {
+  const map = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
+  return map[weekday] ?? "";
+}
+
+function getDiscountTimeLabel(discountTime: DiscountTime): string {
+  const map: Record<DiscountTime, string> = {
+    "17": "17時",
+    "18": "18時30分",
+    "19": "19時30分",
+    "20": "20時30分",
+  };
+  return map[discountTime];
+}
 
 type ToggleProps = {
   label: string;
@@ -144,11 +175,7 @@ export function StartScreen({
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
-      <ScreenHeader
-        weekdayText="値引ヘルパー"
-        timeText=""
-        areaName={null}
-      />
+      <ScreenHeader weekdayText="値引ヘルパー" timeText="" areaName={null} />
 
       <section
         style={{
@@ -162,54 +189,147 @@ export function StartScreen({
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>曜日</div>
-          <select
-            value={sessionDraft.weekday}
-            onChange={(e) =>
-              onChangeSessionDraft({ weekday: Number(e.target.value) })
-            }
-            style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-            }}
-          >
-            {WEEKDAY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+            {sessionDraft.manualWeekdayOverride ? (
+              <select
+                value={sessionDraft.weekday}
+                onChange={(e) =>
+                  onChangeSessionDraft({
+                    weekday: Number(e.target.value),
+                    manualWeekdayOverride: true,
+                  })
+                }
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                }}
+              >
+                {WEEKDAY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                  background: "#f7f7f7",
+                  fontWeight: 700,
+                }}
+              >
+                {getWeekdayLabel(sessionDraft.weekday)}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (sessionDraft.manualWeekdayOverride) {
+                  onChangeSessionDraft({
+                    date: formatLocalDate(new Date()),
+                    weekday: new Date().getDay(),
+                    manualWeekdayOverride: false,
+                  });
+                } else {
+                  onChangeSessionDraft({
+                    manualWeekdayOverride: true,
+                  });
+                }
+              }}
+              style={{
+                padding: "0 14px",
+                borderRadius: 10,
+                border: "1px solid #ccc",
+                background: "#fff",
+                cursor: "pointer",
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {sessionDraft.manualWeekdayOverride ? "自動に戻す" : "手動で切り替える"}
+            </button>
+          </div>
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>値引開始時刻</div>
-          <select
-            value={sessionDraft.discountTime}
-            onChange={(e) =>
-              onChangeSessionDraft({
-                discountTime: e.target.value as DiscountTime,
-              })
-            }
-            style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-            }}
-          >
-            {TIME_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>値引基準時刻</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+            {sessionDraft.manualDiscountTimeOverride ? (
+              <select
+                value={sessionDraft.discountTime}
+                onChange={(e) =>
+                  onChangeSessionDraft({
+                    discountTime: e.target.value as DiscountTime,
+                    manualDiscountTimeOverride: true,
+                  })
+                }
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                }}
+              >
+                {DISCOUNT_TIME_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                  background: "#f7f7f7",
+                  fontWeight: 700,
+                }}
+              >
+                {getDiscountTimeLabel(sessionDraft.discountTime)}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (sessionDraft.manualDiscountTimeOverride) {
+                  onChangeSessionDraft({
+                    discountTime: resolveDiscountTime(new Date()),
+                    manualDiscountTimeOverride: false,
+                  });
+                } else {
+                  onChangeSessionDraft({
+                    manualDiscountTimeOverride: true,
+                  });
+                }
+              }}
+              style={{
+                padding: "0 14px",
+                borderRadius: 10,
+                border: "1px solid #ccc",
+                background: "#fff",
+                cursor: "pointer",
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {sessionDraft.manualDiscountTimeOverride
+                ? "自動に戻す"
+                : "手動で切り替える"}
+            </button>
+          </div>
         </div>
 
         {!isFinalTime ? (
           <>
-            
-
             <YesNoToggle
               label={`雨（${weatherGuideText.rainGuide}）`}
               value={sessionDraft.weather.isRain}
@@ -284,7 +404,7 @@ export function StartScreen({
           }}
         >
           <div style={{ fontWeight: 800, marginBottom: 8 }}>
-            20時は最終値引です
+            20時30分以降は最終値引です
           </div>
           <div style={{ lineHeight: 1.7 }}>
             なるべく商品が多いエリアから値引きを始めてください。
@@ -293,7 +413,7 @@ export function StartScreen({
       )}
 
       <PrimaryButton onClick={onStart}>
-        {isFinalTime ? "20時の値引率表示へ進む" : "弁当・麺類から開始"}
+        {isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始"}
       </PrimaryButton>
     </main>
   );

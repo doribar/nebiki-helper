@@ -21,6 +21,7 @@ type RateDisplayScreenProps = {
     remainingCount: number;
     reason: "manual" | "few";
   } | null;
+  timeSwitchNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
   finalGuide?: FinalGuideData;
@@ -55,6 +56,7 @@ export function RateDisplayScreen({
   areaName,
   basisGuide,
   pendingBanner,
+  timeSwitchNotice,
   discountTime,
   rateDisplay,
   finalGuide,
@@ -74,6 +76,20 @@ export function RateDisplayScreen({
         timeText={timeText}
         areaName={areaName}
       />
+
+            {timeSwitchNotice ? (
+        <section
+          style={{
+            border: "1px solid #ead28b",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+            background: "#fff8e1",
+          }}
+        >
+          <div>{timeSwitchNotice}</div>
+        </section>
+      ) : null}
 
       {pendingBanner ? (
         <section

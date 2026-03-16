@@ -16,6 +16,7 @@ type AreaJudgeScreenProps = {
     remainingCount: number;
     reason: "manual" | "few";
   } | null;
+  timeSwitchNotice?: string | null;
   onSelectMany: () => void;
   onSelectNormal: () => void;
   onSelectFew: () => void;
@@ -28,6 +29,7 @@ export function AreaJudgeScreen({
   areaName,
   basisGuide,
   pendingBanner,
+  timeSwitchNotice,
   onSelectMany,
   onSelectNormal,
   onSelectFew,
@@ -40,6 +42,20 @@ export function AreaJudgeScreen({
         timeText={timeText}
         areaName={areaName}
       />
+
+            {timeSwitchNotice ? (
+        <section
+          style={{
+            border: "1px solid #ead28b",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+            background: "#fff8e1",
+          }}
+        >
+          <div>{timeSwitchNotice}</div>
+        </section>
+      ) : null}
 
       {pendingBanner ? (
         <section
