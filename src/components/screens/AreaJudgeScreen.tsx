@@ -35,6 +35,8 @@ export function AreaJudgeScreen({
   onSelectFew,
   onSkip,
 }: AreaJudgeScreenProps) {
+  const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
+
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
@@ -43,7 +45,7 @@ export function AreaJudgeScreen({
         areaName={areaName}
       />
 
-            {timeSwitchNotice ? (
+      {timeSwitchNotice ? (
         <section
           style={{
             border: "1px solid #ead28b",
@@ -95,14 +97,14 @@ export function AreaJudgeScreen({
         <div
           style={{
             fontSize: 18,
-            fontWeight: 800,
             marginBottom: 14,
             lineHeight: 1.7,
           }}
         >
-          {basisGuide.referenceText}
+          <span style={{ fontWeight: 800 }}>{referencePrefix}</span>
+          <span>を基準に考えて</span>
           <br />
-          このエリア全体の商品数は？
+          <span>このエリア全体の商品数は？</span>
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
@@ -125,9 +127,9 @@ export function AreaJudgeScreen({
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
-          ・今日が月火水木なら多い方に寄せる
+          ・今日が月火水木なら多い側に寄せる
           <br />
-          ・今日が金土日なら少ない方に寄せる
+          ・今日が金土日なら少ない側に寄せる
         </div>
       </section>
 

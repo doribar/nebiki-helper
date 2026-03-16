@@ -68,7 +68,7 @@ export function RateDisplayScreen({
   const manyColor = "#d32f2f";
   const fewColor = "#1976d2";
   const normalColor = "#2e7d32";
-
+const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
@@ -128,13 +128,20 @@ export function RateDisplayScreen({
       >
         {!isFinalTime ? (
           <>
-            <div style={{ fontWeight: 800, marginBottom: 14, lineHeight: 1.8 }}>
-              {basisGuide.referenceText}
-              <br />
-              各商品の量が「多い・少ない・どちらでもない」のどれかを確認し、
-              <br />
-              完了したら以下の値引率で値引きをしてください。
-            </div>
+            <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
+  <span style={{ fontWeight: 800 }}>{referencePrefix}</span>
+  <span>を基準に考えて</span>
+  <br />
+  <span>各商品の量が「</span>
+<span style={{ color: "#d32f2f", fontWeight: 700 }}>多い</span>
+<span>・</span>
+<span style={{ color: "#2e7d32", fontWeight: 700 }}>どちらでもない</span>
+<span>・</span>
+<span style={{ color: "#1976d2", fontWeight: 700 }}>少ない</span>
+<span>」のどれかを確認し、</span>
+  <br />
+  <span>完了したら以下の値引率で値引きをしてください。</span>
+</div>
 
             {rateDisplay ? (
   <>
@@ -206,11 +213,11 @@ export function RateDisplayScreen({
   </div>
   <div style={{ lineHeight: 1.8 }}>
     <span style={{ color: "#e65100" }}>
-  今日が月火水木なら多い方に寄せる
+  今日が月火水木なら多い側に寄せる
 </span>
 <br />
 <span style={{ color: "#e65100" }}>
-  今日が金土日なら少ない方に寄せる
+  今日が金土日なら少ない側に寄せる
 </span>
   </div>
 </section>
