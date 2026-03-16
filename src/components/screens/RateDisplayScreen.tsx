@@ -182,34 +182,38 @@ export function RateDisplayScreen({
       </section>
 
       <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
-        <div style={{ lineHeight: 1.8 }}>
-          ・商品が大パックと小パックで分かれている場合
-          <br />
-          <strong>大パックだけ値引</strong>
-          <br />
-          ・商品が期限が近いものと遠いもので分かれている場合
-          <br />
-          <strong>近いものだけ値引</strong>
-        </div>
+  style={{
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    background: "#fafafa",
+  }}
+>
+  <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
+  <div style={{ lineHeight: 1.8 }}>
+    ・商品が大パックと小パックで分かれている場合
+    <br />
+    <span style={{ color: "#7b1fa2" }}>大パックだけ値引</span>
+    <br />
+    ・商品が期限が近いものと遠いもので分かれている場合
+    <br />
+    <span style={{ color: "#7b1fa2" }}>近いものだけ値引</span>
+  </div>
 
-        <div style={{ marginTop: 14, marginBottom: 8 }}>
-  ・分かれていなければ
-</div>
-<div style={{ lineHeight: 1.8 }}>
-  <strong>今日が月火水木なら多い方に寄せる</strong>
-  <br />
-  <strong>今日が金土日なら少ない方に寄せる</strong>
-</div>
-      </section>
+  <div style={{ marginTop: 14, marginBottom: 8 }}>
+    ・分かれていなければ
+  </div>
+  <div style={{ lineHeight: 1.8 }}>
+    <span style={{ color: "#e65100" }}>
+  今日が月火水木なら多い方に寄せる
+</span>
+<br />
+<span style={{ color: "#e65100" }}>
+  今日が金土日なら少ない方に寄せる
+</span>
+  </div>
+</section>
 
       <div style={{ display: "grid", gap: 10 }}>
         <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
