@@ -173,20 +173,22 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
       </section>
 
       <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
-        <div style={{ lineHeight: 1.8 }}>
-          ・2個は多いにしない
-          <br />
-          ・1個は最終値引以外引かない
-        </div>
-      </section>
+  style={{
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  }}
+>
+  <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
+  <div style={{ lineHeight: 1.8 }}>
+    ・2個は多いにしない
+    <br />
+    ・1個は最終値引以外引かない
+    <br />
+    ・必要に応じて定番・広告は値引率を10%下げてもよい
+  </div>
+</section>
 
       <section
   style={{
@@ -199,27 +201,27 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
 >
   <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
   <div style={{ lineHeight: 1.8 }}>
-    ・商品が大パックと小パックで分かれている場合
-    <br />
-    <span style={{ color: "#ab47bc" }}>大パックだけ値引</span>
-    <br />
-    ・商品が期限が近いものと遠いもので分かれている場合
-    <br />
-    <span style={{ color: "#ab47bc" }}>近いものだけ値引</span>
-  </div>
+  ・商品が大パックと小パックで分かれている場合
+  <br />
+  <span style={{ color: "#ab47bc", fontWeight: 700 }}>大パックだけ値引</span>
+  <br />
+  ・商品が期限が近いものと遠いもので分かれている場合
+  <br />
+  <span style={{ color: "#ab47bc", fontWeight: 700 }}>近いものだけ値引</span>
+</div>
 
-  <div style={{ marginTop: 14, marginBottom: 8 }}>
-    ・分かれていなければ
-  </div>
-  <div style={{ lineHeight: 1.8 }}>
-    <span style={{ color: "#e65100" }}>
-  今日が月火水木なら多い側に寄せる
-</span>
-<br />
-<span style={{ color: "#e65100" }}>
-  今日が金土日なら少ない側に寄せる
-</span>
-  </div>
+<div style={{ marginTop: 14, marginBottom: 8 }}>
+  ・分かれていなければ
+</div>
+<div style={{ lineHeight: 1.8 }}>
+  <span style={{ color: "#e65100", fontWeight: 700 }}>
+    今日が月火水木なら多い側に寄せる
+  </span>
+  <br />
+  <span style={{ color: "#e65100", fontWeight: 700 }}>
+    今日が金土日なら少ない側に寄せる
+  </span>
+</div>
 </section>
 
       <div style={{ display: "grid", gap: 10 }}>
