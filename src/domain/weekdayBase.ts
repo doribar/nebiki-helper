@@ -184,7 +184,7 @@ export function getBasisGuideDisplay(params: {
 export function getWeatherGuideText(): WeatherGuideText {
   return {
     rainGuide: "現在時刻以降に雨マークがあるか",
-    windGuide: "現在の風速を選択",
-    tempGuide: "現在の気温を選択",
+    windGuide: "30分〜1時間後の風速を選択",
+    tempGuide: "30分〜1時間後の気温を選択",
   };
 }
