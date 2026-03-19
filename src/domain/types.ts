@@ -27,7 +27,7 @@ export type AreaMaster = {
 };
 
 export type WindLevel = "2orLess" | "3to4" | "5orMore";
-export type TempLevel = "10orLess" | "11to15" | "16orMore";
+export type TempLevel = "10orLess" | "11to15" | "16to25" | "26orMore";
 
 export type WeatherInput = {
   isRain: boolean;

@@ -44,7 +44,8 @@ const WIND_OPTIONS: { value: WindLevel; label: string }[] = [
 const TEMP_OPTIONS: { value: TempLevel; label: string }[] = [
   { value: "10orLess", label: "10度以下" },
   { value: "11to15", label: "11〜15度" },
-  { value: "16orMore", label: "16度以上" },
+  { value: "16to25", label: "16〜25度" },
+  { value: "26orMore", label: "26度以上" },
 ];
 
 function formatLocalDate(date = new Date()): string {
@@ -362,16 +363,7 @@ export function StartScreen({
               }
             />
 
-            <div
-              style={{
-                fontSize: 13,
-                lineHeight: 1.7,
-                color: "#555",
-                marginTop: -4,
-              }}
-            >
-              気温が15度以下なら風3m以上、16度以上なら風5m以上で補正します。
-            </div>
+            
           </>
         ) : null}
       </section>

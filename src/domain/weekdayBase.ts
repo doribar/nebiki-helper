@@ -22,6 +22,19 @@ function getBasisTimeText(discountTime: DiscountTime): string {
   }
 }
 
+function getWeekdayBaseRank(label: WeekdayBaseLabel): number {
+  switch (label) {
+    case "日":
+      return 0;
+    case "金土":
+      return 1;
+    case "火木":
+      return 2;
+    case "月水":
+      return 3;
+  }
+}
+
 export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
   switch (weekday) {
     case 0:
@@ -53,12 +66,29 @@ export function raiseWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
   }
 }
 
+export function relaxWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
+  switch (label) {
+    case "月水":
+      return "火木";
+    case "火木":
+      return "金土";
+    case "金土":
+      return "日";
+    case "日":
+      return "日";
+  }
+}
+
 function isTempUnder10(tempLevel: TempLevel): boolean {
   return tempLevel === "10orLess";
 }
 
+function isTemp16to25(tempLevel: TempLevel): boolean {
+  return tempLevel === "16to25";
+}
+
 function isWindThresholdMet(windLevel: WindLevel, tempLevel: TempLevel): boolean {
-  if (tempLevel === "16orMore") {
+  if (tempLevel === "16to25" || tempLevel === "26orMore") {
     return windLevel === "5orMore";
   }
 
@@ -70,7 +100,11 @@ export function getWeekdayBaseInfo(
   weather: WeatherInput
 ): WeekdayBaseInfo {
   const original = getOriginalWeekdayBase(weekday);
-  let adjusted = original;
+  const warmedBase = isTemp16to25(weather.tempLevel)
+    ? relaxWeekdayBase(original)
+    : original;
+
+  let adjusted = warmedBase;
   let changedByWeather = false;
   let baseRateBonus = 0;
   const baseRateBonusReason: string[] = [];
@@ -78,7 +112,7 @@ export function getWeekdayBaseInfo(
   const windMet = isWindThresholdMet(weather.windLevel, weather.tempLevel);
   const tempUnder10 = isTempUnder10(weather.tempLevel);
 
-  const isLowestBase = original === "月水";
+  const isLowestBase = warmedBase === "月水";
   const onlyWind = windMet && !tempUnder10;
   const onlyCold = !windMet && tempUnder10;
   const windAndCold = windMet && tempUnder10;
@@ -88,8 +122,8 @@ export function getWeekdayBaseInfo(
       baseRateBonus += 10;
       baseRateBonusReason.push("悪天候");
     } else {
-      adjusted = raiseWeekdayBase(original);
-      changedByWeather = adjusted !== original;
+      adjusted = raiseWeekdayBase(warmedBase);
+      changedByWeather = adjusted !== warmedBase;
     }
   }
 
@@ -138,26 +172,32 @@ export function getBasisGuideDisplay(params: {
   const windMet = isWindThresholdMet(params.weather.windLevel, params.weather.tempLevel);
   const tempUnder10 = isTempUnder10(params.weather.tempLevel);
 
-  const isLowestBase = info.original === "月水";
   const onlyWind = windMet && !tempUnder10;
   const onlyCold = !windMet && tempUnder10;
   const windAndCold = windMet && tempUnder10;
+
+  const originalRank = getWeekdayBaseRank(info.original);
+  const adjustedRank = getWeekdayBaseRank(info.adjusted);
 
   let reasonText: string | undefined;
   let changeText: string | undefined;
   let bonusText: string | undefined;
 
-  if (onlyWind && !isLowestBase) {
-    reasonText = "風が強いため";
-    changeText = `${originalText}ではなく${adjustedText}の基準を使用します。`;
-  } else if (onlyCold && !isLowestBase) {
-    reasonText = "気温が低いため";
+  if (originalRank !== adjustedRank) {
+    if (adjustedRank < originalRank) {
+      reasonText = "気温がおだやかなため、";
+    } else if (onlyWind) {
+      reasonText = "風が強いため";
+    } else if (onlyCold) {
+      reasonText = "気温が低いため";
+    }
+
     changeText = `${originalText}ではなく${adjustedText}の基準を使用します。`;
   }
 
-  if (onlyWind && isLowestBase) {
+  if (onlyWind && info.adjusted === info.original && info.original === "月水") {
     bonusText = "風が強いため値引率を10%上げます。";
-  } else if (onlyCold && isLowestBase) {
+  } else if (onlyCold && info.adjusted === info.original && info.original === "月水") {
     bonusText = "気温が低いため値引率を10%上げます。";
   }
 
@@ -169,13 +209,11 @@ export function getBasisGuideDisplay(params: {
     bonusText = "雨のため値引率を10%上げます。";
   }
 
-  const referenceBaseText = toWeekdayGroupText(info.adjusted);
-
   return {
     reasonText,
     changeText,
     bonusText,
-    referenceText: `${referenceBaseText}の${getBasisTimeText(
+    referenceText: `${adjustedText}の${getBasisTimeText(
       params.discountTime
     )}を基準に考えて`,
   };
