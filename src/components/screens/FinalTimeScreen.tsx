@@ -118,10 +118,8 @@ export function FinalTimeScreen({
         {step === 3 ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
-              本日の値引きは以上です。
-              <br />
-              お疲れ様でした。
-            </div>
+  本日の値引きは以上です。
+</div>
 
             <div style={{ marginTop: 20 }}>
               <PrimaryButton onClick={onBackToTop}>
