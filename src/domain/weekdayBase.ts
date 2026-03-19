@@ -185,7 +185,7 @@ export function getBasisGuideDisplay(params: {
 
   if (originalRank !== adjustedRank) {
     if (adjustedRank < originalRank) {
-      reasonText = "気温がおだやかなため、";
+      reasonText = "気候がおだやかなため、";
     } else if (onlyWind) {
       reasonText = "風が強いため";
     } else if (onlyCold) {

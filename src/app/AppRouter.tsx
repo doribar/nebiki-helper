@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { UseNebikiAppResult } from "../domain/types";
 import { StartScreen } from "../components/screens/StartScreen";
 import { AreaJudgeScreen } from "../components/screens/AreaJudgeScreen";
@@ -11,6 +12,10 @@ type AppRouterProps = {
 
 export function AppRouter({ app }: AppRouterProps) {
   const { state, derived, actions } = app;
+
+  useEffect(() => {
+  window.scrollTo({ top: 0, behavior: "auto" });
+}, [state.screen, state.currentAreaId]);
 
   switch (state.screen) {
     case "start":
