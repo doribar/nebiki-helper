@@ -39,11 +39,25 @@ export function getNextPendingCandidate(params: {
   const manual = all.filter((p) => p.status === "skipped_manual");
   const few = all.filter((p) => p.status === "postponed_few");
 
-  const prioritized = manual.length > 0 ? manual : few;
-  if (prioritized.length === 0) return null;
+  let targetList: AreaProgress[] = [];
 
-  const filtered = prioritized.filter((p) => !deferredSet.has(p.areaId));
-  const targetList = filtered.length > 0 ? filtered : prioritized;
+  if (manual.length > 0) {
+    const manualFiltered = manual.filter((p) => !deferredSet.has(p.areaId));
+
+    if (manualFiltered.length > 0) {
+      targetList = manualFiltered;
+    } else if (few.length > 0) {
+      // manual が全部 defer 済みなら、few を先に出す
+      targetList = few;
+    } else {
+      // few も無いなら、manual に戻る
+      targetList = manual;
+    }
+  } else if (few.length > 0) {
+    targetList = few;
+  } else {
+    return null;
+  }
 
   const sorted = sortByDistance(targetList, params.referenceAreaId);
   const picked = sorted[0];
