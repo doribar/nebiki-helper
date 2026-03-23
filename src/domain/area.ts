@@ -7,12 +7,13 @@ export const AREA_MASTERS: AreaMaster[] = [
   { id: "sushi", name: "寿司", order: 4 },
   { id: "onigiri", name: "おにぎり", order: 5 },
   { id: "sekihan_takikomi", name: "赤飯・炊き込みご飯", order: 6 },
-  { id: "chuka_fish", name: "中華・魚惣菜", order: 7 },
-  { id: "yakitori", name: "焼鳥", order: 8 },
-  { id: "fry_chicken", name: "フライ・鶏惣菜", order: 9 },
-  { id: "croquette", name: "コロッケ系", order: 10 },
-  { id: "tempura", name: "天ぷら", order: 11 },
-  { id: "bento_men", name: "弁当・麺類", order: 12 },
+  { id: "balance_bento", name: "バランス弁当", order: 7 },
+  { id: "chuka_fish", name: "中華・魚惣菜", order: 8 },
+  { id: "yakitori", name: "焼鳥", order: 9 },
+  { id: "fry_chicken", name: "フライ・鶏惣菜", order: 10 },
+  { id: "croquette", name: "コロッケ系", order: 11 },
+  { id: "tempura", name: "天ぷら", order: 12 },
+  { id: "bento_men", name: "弁当・麺類", order: 13 },
 ];
 
 export const NORMAL_ROUTE: AreaId[] = [
@@ -22,6 +23,7 @@ export const NORMAL_ROUTE: AreaId[] = [
   "fry_chicken",
   "yakitori",
   "chuka_fish",
+  "balance_bento",
   "sekihan_takikomi",
   "onigiri",
   "hosomaki",
