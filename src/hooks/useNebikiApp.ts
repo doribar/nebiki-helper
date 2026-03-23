@@ -42,7 +42,7 @@ function formatLocalDate(date = new Date()): string {
 function resolveDiscountTime(date = new Date()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
-  if (minutes < 17 * 60) return "15";
+  if (minutes < 16 * 60 + 30) return "15";
   if (minutes < 18 * 60 + 30) return "17";
   if (minutes < 19 * 60 + 30) return "18";
   if (minutes < 20 * 60 + 30) return "19";
@@ -381,8 +381,16 @@ export function useNebikiApp(): UseNebikiAppResult {
   }, [sessionSource.discountTime]);
 
   const weekdayBaseInfo = useMemo(() => {
-    return getWeekdayBaseInfo(sessionSource.weekday, sessionSource.weather);
-  }, [sessionSource.weekday, sessionSource.weather]);
+  return getWeekdayBaseInfo(
+    sessionSource.weekday,
+    sessionSource.discountTime,
+    sessionSource.weather
+  );
+}, [
+  sessionSource.weekday,
+  sessionSource.discountTime,
+  sessionSource.weather,
+]);
 
   const lateTimeBonus = useMemo(() => {
   if (!state.session) return 0;

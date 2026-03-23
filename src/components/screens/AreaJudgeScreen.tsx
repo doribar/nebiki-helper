@@ -7,6 +7,7 @@ type AreaJudgeScreenProps = {
   timeText: string;
   areaName: string;
   basisGuide: {
+    noticeText?: string;
     reasonText?: string;
     changeText?: string;
     bonusText?: string;
@@ -81,10 +82,11 @@ export function AreaJudgeScreen({
       ) : null}
 
       <WeekdayBasePanel
-        reasonText={basisGuide.reasonText}
-        changeText={basisGuide.changeText}
-        bonusText={basisGuide.bonusText}
-      />
+  noticeText={basisGuide.noticeText}
+  reasonText={basisGuide.reasonText}
+  changeText={basisGuide.changeText}
+  bonusText={basisGuide.bonusText}
+/>
 
       <section
         style={{

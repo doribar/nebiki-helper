@@ -85,6 +85,7 @@ export type WeekdayBaseInfo = {
 };
 
 export type BasisGuideDisplay = {
+  noticeText?: string;
   reasonText?: string;
   changeText?: string;
   bonusText?: string;

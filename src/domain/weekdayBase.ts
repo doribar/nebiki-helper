@@ -55,6 +55,17 @@ export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
   }
 }
 
+function getNightAdjustedWeekdayBase(
+  weekday: number,
+  discountTime: DiscountTime
+): WeekdayBaseLabel {
+  if (weekday === 0 && (discountTime === "18" || discountTime === "19")) {
+    return "火木";
+  }
+
+  return getOriginalWeekdayBase(weekday);
+}
+
 export function raiseWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
   switch (label) {
     case "日":
@@ -99,10 +110,16 @@ function isWindThresholdMet(windLevel: WindLevel, tempLevel: TempLevel): boolean
 
 export function getWeekdayBaseInfo(
   weekday: number,
+  discountTime: DiscountTime,
   weather: WeatherInput
 ): WeekdayBaseInfo {
-  const original = getOriginalWeekdayBase(weekday);
-  const warmedBase = isTemp16to25(weather.tempLevel)
+  const original = getNightAdjustedWeekdayBase(weekday, discountTime);
+
+const isSundayNight =
+  weekday === 0 && (discountTime === "18" || discountTime === "19");
+
+const warmedBase =
+  isTemp16to25(weather.tempLevel) && !isSundayNight
     ? relaxWeekdayBase(original)
     : original;
 
@@ -166,7 +183,19 @@ export function getBasisGuideDisplay(params: {
   discountTime: DiscountTime;
   weather: WeatherInput;
 }): BasisGuideDisplay {
-  const info = getWeekdayBaseInfo(params.weekday, params.weather);
+  const info = getWeekdayBaseInfo(
+  params.weekday,
+  params.discountTime,
+  params.weather
+);
+
+const isSundayNight =
+  params.weekday === 0 &&
+  (params.discountTime === "18" || params.discountTime === "19");
+
+const noticeText = isSundayNight
+  ? "日曜日の夜は客足が減るため、火曜・木曜の基準を使います。"
+  : undefined;
 
   const originalText = toWeekdayGroupText(info.original);
   const adjustedText = toWeekdayGroupText(info.adjusted);
@@ -212,13 +241,14 @@ export function getBasisGuideDisplay(params: {
   }
 
   return {
-    reasonText,
-    changeText,
-    bonusText,
-    referenceText: `${adjustedText}の${getBasisTimeText(
-      params.discountTime
-    )}を基準に考えて`,
-  };
+  noticeText,
+  reasonText,
+  changeText,
+  bonusText,
+  referenceText: `${adjustedText}の${getBasisTimeText(
+    params.discountTime
+  )}を基準に考えて`,
+};
 }
 
 export function getWeatherGuideText(): WeatherGuideText {
