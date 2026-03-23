@@ -29,6 +29,7 @@ const WEEKDAY_OPTIONS = [
 ];
 
 const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
+  { value: "15", label: "15時" },
   { value: "17", label: "17時" },
   { value: "18", label: "18時30分" },
   { value: "19", label: "19時30分" },
@@ -58,6 +59,7 @@ function formatLocalDate(date = new Date()): string {
 function resolveDiscountTime(date = new Date()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
+  if (minutes < 17 * 60) return "15";
   if (minutes < 18 * 60 + 30) return "17";
   if (minutes < 19 * 60 + 30) return "18";
   if (minutes < 20 * 60 + 30) return "19";
@@ -71,6 +73,7 @@ function getWeekdayLabel(weekday: number): string {
 
 function getDiscountTimeLabel(discountTime: DiscountTime): string {
   const map: Record<DiscountTime, string> = {
+    "15": "15時",
     "17": "17時",
     "18": "18時30分",
     "19": "19時30分",

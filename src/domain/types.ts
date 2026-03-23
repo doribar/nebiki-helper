@@ -1,4 +1,4 @@
-export type DiscountTime = "17" | "18" | "19" | "20";
+export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 
 export type AreaId =
   | "hosomaki"

@@ -172,6 +172,26 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
         )}
       </section>
 
+      <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+  <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
+
+  <button
+    type="button"
+    onClick={onSkip}
+    style={{
+      width: "100%",
+      padding: "14px 16px",
+      borderRadius: 12,
+      border: "1px solid #ccc",
+      background: "#fff",
+      fontSize: 15,
+      cursor: "pointer",
+    }}
+  >
+    今はスキップ
+  </button>
+</div>
+
       <section
   style={{
     border: "1px solid #ddd",
@@ -224,25 +244,7 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
 </div>
 </section>
 
-      <div style={{ display: "grid", gap: 10 }}>
-        <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
 
-        <button
-          type="button"
-          onClick={onSkip}
-          style={{
-            width: "100%",
-            padding: "14px 16px",
-            borderRadius: 12,
-            border: "1px solid #ccc",
-            background: "#fff",
-            fontSize: 15,
-            cursor: "pointer",
-          }}
-        >
-          今はスキップ
-        </button>
-      </div>
     </main>
   );
 }

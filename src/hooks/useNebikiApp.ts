@@ -42,6 +42,7 @@ function formatLocalDate(date = new Date()): string {
 function resolveDiscountTime(date = new Date()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
+  if (minutes < 17 * 60) return "15";
   if (minutes < 18 * 60 + 30) return "17";
   if (minutes < 19 * 60 + 30) return "18";
   if (minutes < 20 * 60 + 30) return "19";
@@ -50,6 +51,8 @@ function resolveDiscountTime(date = new Date()): DiscountTime {
 
 function getBasisTimeText(discountTime: DiscountTime): string {
   switch (discountTime) {
+    case "15":
+      return "15時";
     case "17":
       return "17時";
     case "18":
@@ -164,12 +167,13 @@ function normalizeSessionDraft(raw?: Partial<SessionDraft> | null): SessionDraft
     date: typeof raw?.date === "string" ? raw.date : fallback.date,
     weekday: typeof raw?.weekday === "number" ? raw.weekday : fallback.weekday,
     discountTime:
-      raw?.discountTime === "17" ||
-      raw?.discountTime === "18" ||
-      raw?.discountTime === "19" ||
-      raw?.discountTime === "20"
-        ? raw.discountTime
-        : fallback.discountTime,
+  raw?.discountTime === "15" ||
+  raw?.discountTime === "17" ||
+  raw?.discountTime === "18" ||
+  raw?.discountTime === "19" ||
+  raw?.discountTime === "20"
+    ? raw.discountTime
+    : fallback.discountTime,
     manualWeekdayOverride:
       typeof raw?.manualWeekdayOverride === "boolean"
         ? raw.manualWeekdayOverride
@@ -382,6 +386,7 @@ export function useNebikiApp(): UseNebikiAppResult {
 
   const lateTimeBonus = useMemo(() => {
   if (!state.session) return 0;
+  if (state.session.discountTime === "15") return 0;
   if (state.session.discountTime === "20") return 0;
 
   // 手動で時刻を切り替えている場合は、実時間による +5% を適用しない

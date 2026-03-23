@@ -8,6 +8,8 @@ import type {
 
 export function getBaseRate(discountTime: DiscountTime): number {
   switch (discountTime) {
+    case "15":
+      return 0;
     case "17":
       return 10;
     case "18":
@@ -47,7 +49,9 @@ export function getNormalTimeRateDisplay(params: {
   return {
     many: toRateLine(
       `${manyRate}%`,
-      manyRate === 20 ? "前回も多かった商品は30%（5個以下は除く）" : undefined
+      manyRate === 20
+        ? "前回も多かった商品は30%（5個以下は除く）"
+        : undefined
     ),
     few: toRateLine("引かない"),
     normal:

@@ -11,6 +11,8 @@ import type {
 
 function getBasisTimeText(discountTime: DiscountTime): string {
   switch (discountTime) {
+    case "15":
+      return "15時";
     case "17":
       return "17時";
     case "18":

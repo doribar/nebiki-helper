@@ -116,6 +116,23 @@ export function AreaJudgeScreen({
         </div>
       </section>
 
+<button
+  type="button"
+  onClick={onSkip}
+  style={{
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: 12,
+    border: "1px solid #ccc",
+    background: "#fff",
+    fontSize: 15,
+    cursor: "pointer",
+    marginBottom: 16,
+  }}
+>
+  今はスキップ
+</button>
+
       <section
         style={{
           border: "1px solid #ddd",
@@ -133,21 +150,7 @@ export function AreaJudgeScreen({
         </div>
       </section>
 
-      <button
-        type="button"
-        onClick={onSkip}
-        style={{
-          width: "100%",
-          padding: "14px 16px",
-          borderRadius: 12,
-          border: "1px solid #ccc",
-          background: "#fff",
-          fontSize: 15,
-          cursor: "pointer",
-        }}
-      >
-        今はスキップ
-      </button>
+      
     </main>
   );
 }
