@@ -59,7 +59,10 @@ function getNightAdjustedWeekdayBase(
   weekday: number,
   discountTime: DiscountTime
 ): WeekdayBaseLabel {
-  if (weekday === 0 && (discountTime === "18" || discountTime === "19")) {
+  if (
+    weekday === 0 &&
+    (discountTime === "17" || discountTime === "18" || discountTime === "19")
+  ) {
     return "火木";
   }
 
@@ -116,7 +119,8 @@ export function getWeekdayBaseInfo(
   const original = getNightAdjustedWeekdayBase(weekday, discountTime);
 
 const isSundayNight =
-  weekday === 0 && (discountTime === "18" || discountTime === "19");
+  weekday === 0 &&
+  (discountTime === "17" || discountTime === "18" || discountTime === "19");
 
 const warmedBase =
   isTemp16to25(weather.tempLevel) && !isSundayNight

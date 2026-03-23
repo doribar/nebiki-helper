@@ -146,10 +146,14 @@ export function AreaJudgeScreen({
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
-          ・今日が月火水木なら多い側に寄せる
-          <br />
-          ・今日が金土日なら少ない側に寄せる
-        </div>
+  <div>今使っている曜日基準が</div>
+  <div style={{ color: "#e65100", fontWeight: 700 }}>
+    月曜・水曜または火曜・木曜なら多い側に寄せる
+  </div>
+  <div style={{ color: "#e65100", fontWeight: 700 }}>
+    金曜・土曜または日曜なら少ない側に寄せる
+  </div>
+</div>
       </section>
 
       

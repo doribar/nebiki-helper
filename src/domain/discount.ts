@@ -48,11 +48,11 @@ export function getNormalTimeRateDisplay(params: {
 
   return {
     many: toRateLine(
-      `${manyRate}%`,
-      manyRate === 20
-        ? "前回も多かった商品は30%（5個以下は除く）"
-        : undefined
-    ),
+  `${manyRate}%`,
+  params.discountTime !== "15" && manyRate === 20
+    ? "前回も多かった商品は30%（5個以下は除く）"
+    : undefined
+),
     few: toRateLine("引かない"),
     normal:
       normalRate > 0 ? toRateLine(`${normalRate}%`) : toRateLine("引かない"),
