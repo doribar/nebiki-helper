@@ -223,23 +223,22 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
 >
   <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
   <div style={{ lineHeight: 1.8 }}>
-  ・商品が大パックと小パックで分かれている場合→
-  <span style={{ color: "#ab47bc", fontWeight: 700 }}>大パックだけ値引</span>
+  ・商品が大パックと小パックで分かれている
+  <span style={{ color: "#ab47bc", fontWeight: 700 }}>➡大パックだけ値引</span>
   <br />
-  ・商品が期限が近いものと遠いもので分かれている場合→
-  <span style={{ color: "#ab47bc", fontWeight: 700 }}>近いものだけ値引</span>
+  ・期限が近いものと遠いもので分かれている
+  <span style={{ color: "#ab47bc", fontWeight: 700 }}>➡近いものだけ値引</span>
 </div>
 
 <div style={{ marginTop: 14, marginBottom: 8 }}>
-  ・分かれていなければ
+  ・分かれていなければ今使っている曜日基準が
 </div>
 <div style={{ lineHeight: 1.8 }}>
-  <div>今使っている曜日基準が</div>
   <div style={{ color: "#e65100", fontWeight: 700 }}>
-    月・水または火・木➡多い側に寄せる
+    ➡月曜・水曜または火曜・木曜なら多い側に寄せる
   </div>
   <div style={{ color: "#e65100", fontWeight: 700 }}>
-    金・土または日➡少ない側に寄せる
+    ➡金曜・土曜または日曜なら少ない側に寄せる
   </div>
 </div>
 </section>
