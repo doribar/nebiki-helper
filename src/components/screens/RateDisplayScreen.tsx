@@ -235,10 +235,10 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
 </div>
 <div style={{ lineHeight: 1.8 }}>
   <div style={{ color: "#e65100", fontWeight: 700 }}>
-    ➡月曜・水曜または火曜・木曜なら多い側に寄せる
+    月・水または火・木➡多い側に寄せる
   </div>
   <div style={{ color: "#e65100", fontWeight: 700 }}>
-    ➡金曜・土曜または日曜なら少ない側に寄せる
+    金・土または日➡少ない側に寄せる
   </div>
 </div>
 </section>
