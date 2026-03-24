@@ -189,7 +189,7 @@ export function StartScreen({
           marginBottom: 16,
         }}
       >
-        <div style={{ fontWeight: 800, marginBottom: 12 }}>今回の条件</div>
+        
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>曜日</div>
@@ -371,41 +371,24 @@ export function StartScreen({
         ) : null}
       </section>
 
-      {!isFinalTime ? (
-        <section
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ lineHeight: 1.7 }}>
-            弁当エリアに向かいながら、売場全体に目を通してください。
-            <br />
-            この段階ではまだ値引しません。
-            <br />
-            全体の数や並びを大まかに頭に入れてください。
-          </div>
-        </section>
-      ) : (
-        <section
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-            background: "#fafafa",
-          }}
-        >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>
-            20時30分以降は最終値引です
-          </div>
-          <div style={{ lineHeight: 1.7 }}>
-            なるべく商品が多いエリアから値引きを始めてください。
-          </div>
-        </section>
-      )}
+      {isFinalTime ? (
+  <section
+    style={{
+      border: "1px solid #ddd",
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      background: "#fafafa",
+    }}
+  >
+    <div style={{ fontWeight: 800, marginBottom: 8 }}>
+      20時30分以降は最終値引です
+    </div>
+    <div style={{ lineHeight: 1.7 }}>
+      なるべく商品が多いエリアから値引きを始めてください。
+    </div>
+  </section>
+) : null}
 
       <PrimaryButton onClick={onStart}>
         {isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始"}
