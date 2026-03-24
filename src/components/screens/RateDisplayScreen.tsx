@@ -223,12 +223,10 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
 >
   <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
   <div style={{ lineHeight: 1.8 }}>
-  ・商品が大パックと小パックで分かれている場合
-  <br />
+  ・商品が大パックと小パックで分かれている場合→
   <span style={{ color: "#ab47bc", fontWeight: 700 }}>大パックだけ値引</span>
   <br />
-  ・商品が期限が近いものと遠いもので分かれている場合
-  <br />
+  ・商品が期限が近いものと遠いもので分かれている場合→
   <span style={{ color: "#ab47bc", fontWeight: 700 }}>近いものだけ値引</span>
 </div>
 
