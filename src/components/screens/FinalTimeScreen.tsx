@@ -58,7 +58,7 @@ export function FinalTimeScreen({
         }}
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>
-          20時は最終値引です
+          20時30分は最終値引です
         </div>
         <div style={{ lineHeight: 1.7 }}>
           なるべく商品が多いエリアから値引きを始めてください。
