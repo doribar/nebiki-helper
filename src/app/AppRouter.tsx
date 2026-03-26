@@ -66,14 +66,17 @@ export function AppRouter({ app }: AppRouterProps) {
       );
 
     case "final_time":
-      return (
-        <FinalTimeScreen
-          weekdayText={derived.weekdayText}
-          timeText={derived.timeText}
-          timeSwitchNotice={derived.timeSwitchNotice}
-          onBackToTop={actions.resetApp}
-        />
-      );
+  if (!derived.finalGuide) return null;
+
+  return (
+    <FinalTimeScreen
+      weekdayText={derived.weekdayText}
+      timeText={derived.timeText}
+      timeSwitchNotice={derived.timeSwitchNotice}
+      finalGuide={derived.finalGuide}
+      onBackToTop={actions.resetApp}
+    />
+  );
 
     case "done":
       return <DoneScreen onReset={actions.resetApp} />;

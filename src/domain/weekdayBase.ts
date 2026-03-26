@@ -195,7 +195,9 @@ export function getBasisGuideDisplay(params: {
 
 const isSundayNight =
   params.weekday === 0 &&
-  (params.discountTime === "18" || params.discountTime === "19");
+  (params.discountTime === "17" ||
+    params.discountTime === "18" ||
+    params.discountTime === "19");
 
 const noticeText = isSundayNight
   ? "日曜日の夜は客足が減るため、火曜・木曜の基準を使います。"

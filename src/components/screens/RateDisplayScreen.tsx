@@ -45,8 +45,17 @@ function RateRow({
         {label} → {line.main}
       </div>
       {line.note ? (
-        <div style={{ fontSize: 14, marginTop: 4, color }}>{line.note}</div>
-      ) : null}
+  <div
+    style={{
+      fontSize: 14,
+      marginTop: 4,
+      color,
+      whiteSpace: "pre-wrap",
+    }}
+  >
+    {line.note}
+  </div>
+) : null}
     </div>
   );
 }

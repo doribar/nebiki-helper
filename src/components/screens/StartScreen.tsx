@@ -337,7 +337,7 @@ export function StartScreen({
           </div>
         </div>
 
-        {!isFinalTime ? (
+        
           <>
             <YesNoToggle
               label={`雨（${weatherGuideText.rainGuide}）`}
@@ -373,7 +373,7 @@ export function StartScreen({
 
             
           </>
-        ) : null}
+        
       </section>
 
       {isFinalTime ? (

@@ -4,6 +4,7 @@ import type {
   RateDisplayData,
   RateLine,
   AreaJudge,
+  WeatherInput,
 } from "./types";
 
 export function getBaseRate(discountTime: DiscountTime): number {
@@ -52,7 +53,10 @@ export function getNormalTimeRateDisplay(params: {
     ? toRateLine(
         `${manyRate}%`,
         params.discountTime !== "15" && manyRate === 20
-          ? "前回も多かった商品は30%（5個以下は除く）"
+          ? `　前回も多かった商品は
+　5個以下 → 20%
+　6〜9個 → 曜日基準が月・水 / 火・木なら30%、金・土なら20%
+　10個以上 → 30%`
           : undefined
       )
     : toRateLine("引かない"),
@@ -62,7 +66,27 @@ export function getNormalTimeRateDisplay(params: {
   };
 }
 
-export function getFinalTimeGuide(): FinalGuideData {
+function shouldLowerFinalTimeRate(weather: WeatherInput): boolean {
+  const isNotRain = !weather.isRain;
+  const isWind4OrLess =
+    weather.windLevel === "2orLess" || weather.windLevel === "3to4";
+  const isTemp16OrMore =
+    weather.tempLevel === "16to25" || weather.tempLevel === "26orMore";
+
+  return isNotRain && isWind4OrLess && isTemp16OrMore;
+}
+
+export function getFinalTimeGuide(weather: WeatherInput): FinalGuideData {
+  const shouldLower = shouldLowerFinalTimeRate(weather);
+
+  if (shouldLower) {
+    return {
+      count1: { main: "20%" },
+      count2: { main: "30%" },
+      count3OrMore: { main: "40%" },
+    };
+  }
+
   return {
     count1: { main: "30%" },
     count2: { main: "40%" },

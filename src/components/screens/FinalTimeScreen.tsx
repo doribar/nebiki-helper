@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { FinalGuideData } from "../../domain/types";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -6,6 +7,7 @@ type FinalTimeScreenProps = {
   weekdayText: string;
   timeText: string;
   timeSwitchNotice?: string | null;
+  finalGuide: FinalGuideData;
   onBackToTop: () => void;
 };
 
@@ -15,6 +17,7 @@ export function FinalTimeScreen({
   weekdayText,
   timeText,
   timeSwitchNotice,
+  finalGuide,
   onBackToTop,
 }: FinalTimeScreenProps) {
   const [step, setStep] = useState<FinalStep>(0);
@@ -34,7 +37,7 @@ export function FinalTimeScreen({
         areaName={null}
       />
 
-            {timeSwitchNotice ? (
+      {timeSwitchNotice ? (
         <section
           style={{
             border: "1px solid #ead28b",
@@ -78,7 +81,7 @@ export function FinalTimeScreen({
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
               3個以上ある商品を
               <br />
-              50％値引きしてください。
+              {finalGuide.count3OrMore.main}値引きしてください。
             </div>
 
             <div style={{ marginTop: 20 }}>
@@ -92,7 +95,7 @@ export function FinalTimeScreen({
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
               2個ある商品を
               <br />
-              40％値引きしてください。
+              {finalGuide.count2.main}値引きしてください。
             </div>
 
             <div style={{ marginTop: 20 }}>
@@ -106,7 +109,7 @@ export function FinalTimeScreen({
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
               1個の商品を
               <br />
-              30％値引きしてください。
+              {finalGuide.count1.main}値引きしてください。
             </div>
 
             <div style={{ marginTop: 20 }}>
@@ -118,8 +121,8 @@ export function FinalTimeScreen({
         {step === 3 ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
-  本日の値引きは以上です。
-</div>
+              本日の値引きは以上です。
+            </div>
 
             <div style={{ marginTop: 20 }}>
               <PrimaryButton onClick={onBackToTop}>

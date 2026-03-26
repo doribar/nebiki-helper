@@ -490,9 +490,9 @@ const lateTimeBonusNotice = useMemo(() => {
   lateTimeBonus,
 ]);
   const finalGuide = useMemo(() => {
-    if (!state.session || state.session.discountTime !== "20") return null;
-    return getFinalTimeGuide();
-  }, [state.session]);
+  if (!state.session || state.session.discountTime !== "20") return null;
+  return getFinalTimeGuide(state.session.weather);
+}, [state.session]);
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
