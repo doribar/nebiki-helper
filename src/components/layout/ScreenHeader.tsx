@@ -3,17 +3,19 @@
 type ScreenHeaderProps = {
   weekdayText: string;
   timeText: string;
-  areaName?: string | null;
+  areaName: string | null;
+  titleFontSize?: number;
 };
 
 export function ScreenHeader({
   weekdayText,
   timeText,
   areaName,
+  titleFontSize,
 }: ScreenHeaderProps) {
   return (
     <header style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 18, fontWeight: 700 }}>
+      <div style={{ fontSize: titleFontSize ?? 28, fontWeight: 700 }}>
         {weekdayText} {timeText}
       </div>
 

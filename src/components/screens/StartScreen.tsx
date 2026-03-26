@@ -179,7 +179,12 @@ export function StartScreen({
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
-      <ScreenHeader weekdayText="値引ヘルパー" timeText="" areaName={null} />
+      <ScreenHeader
+  weekdayText="値引ヘルパー"
+  timeText=""
+  areaName={null}
+  titleFontSize={16}
+/>
 
       <section
         style={{
