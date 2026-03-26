@@ -183,7 +183,7 @@ export function StartScreen({
   weekdayText="値引ヘルパー"
   timeText=""
   areaName={null}
-  titleFontSize={14}
+  titleFontSize={12}
 />
 
       <section
