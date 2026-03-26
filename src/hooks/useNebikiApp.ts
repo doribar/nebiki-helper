@@ -5,6 +5,7 @@ import type {
   AreaProgress,
   DiscountTime,
   PendingBannerInfo,
+  PendingReason,
   SessionData,
   SessionDraft,
   UseNebikiAppResult,
@@ -524,59 +525,64 @@ const lateTimeBonusNotice = useMemo(() => {
   }
 
   function moveToNextPendingOrDone(params: {
-    prev: AppState;
-    updatedMap: Record<AreaId, AreaProgress>;
-    referenceAreaId: AreaId;
-    deferredAreaIds?: AreaId[];
-    nextSession: SessionData | null;
-    timeSwitchNotice: string | null;
-  }): AppState {
-    if (params.nextSession?.discountTime === "20") {
-      return {
-        ...params.prev,
-        session: params.nextSession,
-        timeSwitchNotice: params.timeSwitchNotice,
-        areaProgressMap: params.updatedMap,
-        currentAreaId: null,
-        lastReferenceAreaId: params.referenceAreaId,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        screen: "final_time",
-      };
-    }
+  prev: AppState;
+  updatedMap: Record<AreaId, AreaProgress>;
+  referenceAreaId: AreaId;
+  deferredAreaIds?: AreaId[];
+  preferredNextReason?: PendingReason | null;
+  nextSession: SessionData | null;
+  timeSwitchNotice: string | null;
+}): AppState {
+  const effectiveDeferredAreaIds =
+    params.deferredAreaIds ?? params.prev.pendingDeferredAreaIds;
 
-    const nextCandidate = getNextPendingCandidate({
-      areaProgressMap: params.updatedMap,
-      referenceAreaId: params.referenceAreaId,
-      deferredAreaIds: params.deferredAreaIds ?? [],
-    });
-
-    if (!nextCandidate) {
-      return {
-        ...params.prev,
-        session: params.nextSession,
-        timeSwitchNotice: params.timeSwitchNotice,
-        areaProgressMap: params.updatedMap,
-        currentAreaId: null,
-        lastReferenceAreaId: params.referenceAreaId,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        screen: "done",
-      };
-    }
-
+  if (params.nextSession?.discountTime === "20") {
     return {
       ...params.prev,
       session: params.nextSession,
       timeSwitchNotice: params.timeSwitchNotice,
       areaProgressMap: params.updatedMap,
-      currentAreaId: nextCandidate.areaId,
+      currentAreaId: null,
       lastReferenceAreaId: params.referenceAreaId,
-      currentFlow: "pending",
-      pendingDeferredAreaIds: params.deferredAreaIds ?? [],
-      screen: nextCandidate.reason === "manual" ? "area_judge" : "rate_display",
+      currentFlow: "normal",
+      pendingDeferredAreaIds: [],
+      screen: "final_time",
     };
   }
+
+  const nextCandidate = getNextPendingCandidate({
+    areaProgressMap: params.updatedMap,
+    referenceAreaId: params.referenceAreaId,
+    deferredAreaIds: effectiveDeferredAreaIds,
+    preferredReason: params.preferredNextReason ?? null,
+  });
+
+  if (!nextCandidate) {
+    return {
+      ...params.prev,
+      session: params.nextSession,
+      timeSwitchNotice: params.timeSwitchNotice,
+      areaProgressMap: params.updatedMap,
+      currentAreaId: null,
+      lastReferenceAreaId: params.referenceAreaId,
+      currentFlow: "normal",
+      pendingDeferredAreaIds: [],
+      screen: "done",
+    };
+  }
+
+  return {
+    ...params.prev,
+    session: params.nextSession,
+    timeSwitchNotice: params.timeSwitchNotice,
+    areaProgressMap: params.updatedMap,
+    currentAreaId: nextCandidate.areaId,
+    lastReferenceAreaId: params.referenceAreaId,
+    currentFlow: "pending",
+    pendingDeferredAreaIds: effectiveDeferredAreaIds,
+    screen: nextCandidate.reason === "manual" ? "area_judge" : "rate_display",
+  };
+}
 
 function startSession() {
   const now = new Date();
@@ -695,14 +701,18 @@ function startSession() {
       };
 
       if (prev.currentFlow === "pending") {
-        return moveToNextPendingOrDone({
-          prev,
-          updatedMap,
-          referenceAreaId: currentAreaId,
-          nextSession,
-          timeSwitchNotice,
-        });
-      }
+  const isCurrentFew = prev.areaProgressMap[currentAreaId].status === "postponed_few";
+
+  return moveToNextPendingOrDone({
+    prev,
+    updatedMap,
+    referenceAreaId: currentAreaId,
+    deferredAreaIds: isCurrentFew ? [] : undefined,
+    preferredNextReason: isCurrentFew ? "manual" : null,
+    nextSession,
+    timeSwitchNotice,
+  });
+}
 
       if (nextSession?.discountTime === "20") {
         return {
@@ -751,29 +761,39 @@ function startSession() {
     const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
     if (prev.currentFlow === "pending") {
-      // 同じ manual skip エリアがもう一度出てきた状態で再スキップしたら、
-      // few を先に回すために manual を全部 defer 扱いにする
-      const isSecondConsecutiveSameManualSkip =
-        currentProgress.status === "skipped_manual" &&
-        prev.pendingDeferredAreaIds.includes(currentAreaId);
+  const alreadyDeferred = prev.pendingDeferredAreaIds.includes(currentAreaId);
 
-      const nextDeferredAreaIds = isSecondConsecutiveSameManualSkip
-        ? Object.values(prev.areaProgressMap)
-            .filter((p) => p.status === "skipped_manual")
-            .map((p) => p.areaId)
-        : prev.pendingDeferredAreaIds.includes(currentAreaId)
-        ? prev.pendingDeferredAreaIds
-        : [...prev.pendingDeferredAreaIds, currentAreaId];
+  // 同じ manual skip エリアで2回目のスキップなら、次だけ few を優先
+  const shouldPreferFewNext =
+    currentProgress.status === "skipped_manual" && alreadyDeferred;
 
-      return moveToNextPendingOrDone({
-        prev,
-        updatedMap: prev.areaProgressMap,
-        referenceAreaId: currentAreaId,
-        deferredAreaIds: nextDeferredAreaIds,
-        nextSession,
-        timeSwitchNotice,
-      });
-    }
+  // few をスキップしたら、次は manual に戻す
+  if (currentProgress.status === "postponed_few") {
+    return moveToNextPendingOrDone({
+      prev,
+      updatedMap: prev.areaProgressMap,
+      referenceAreaId: currentAreaId,
+      deferredAreaIds: [currentAreaId],
+      preferredNextReason: "manual",
+      nextSession,
+      timeSwitchNotice,
+    });
+  }
+
+  const nextDeferredAreaIds = alreadyDeferred
+    ? prev.pendingDeferredAreaIds
+    : [...prev.pendingDeferredAreaIds, currentAreaId];
+
+  return moveToNextPendingOrDone({
+    prev,
+    updatedMap: prev.areaProgressMap,
+    referenceAreaId: currentAreaId,
+    deferredAreaIds: nextDeferredAreaIds,
+    preferredNextReason: shouldPreferFewNext ? "few" : null,
+    nextSession,
+    timeSwitchNotice,
+  });
+}
 
     const updatedMap = {
       ...prev.areaProgressMap,
