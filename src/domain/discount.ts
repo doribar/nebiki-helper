@@ -38,10 +38,10 @@ export function getNormalTimeRateDisplay(params: {
 
   let areaAdjustedBase = base;
   if (params.areaJudge === "many") {
-    areaAdjustedBase = base + 10;
-  } else if (params.areaJudge === "few") {
-    areaAdjustedBase = base - 10;
-  }
+  areaAdjustedBase = base + 10;
+} else if (params.areaJudge === "few") {
+  areaAdjustedBase = base - 5;
+}
 
   const manyRate = capNormalDiscountRate(areaAdjustedBase + 10);
   const normalRate = capNormalDiscountRate(areaAdjustedBase);
