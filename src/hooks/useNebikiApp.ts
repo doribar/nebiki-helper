@@ -87,10 +87,12 @@ function createInitialSessionDraft(): SessionDraft {
     manualWeekdayOverride: false,
     manualDiscountTimeOverride: false,
     weather: {
-      isRain: false,
-      windLevel: "2orLess",
-      tempLevel: "11to15",
-    },
+  nearTermWeather: "other",
+  hasLaterPrecip: false,
+  laterPrecipType: null,
+  windLevel: "2orLess",
+  tempLevel: "11to15",
+},
   };
 }
 
@@ -128,9 +130,47 @@ function normalizeWeatherInput(raw: unknown): WeatherInput {
 
   const source = raw as Record<string, unknown>;
 
+  const nearTermWeather =
+    source.nearTermWeather === "other" ||
+    source.nearTermWeather === "rain" ||
+    source.nearTermWeather === "snow"
+      ? source.nearTermWeather
+      : typeof source.isRain === "boolean"
+      ? source.isRain
+        ? "rain"
+        : "other"
+      : fallback.nearTermWeather;
+
+  let hasLaterPrecip =
+    typeof source.hasLaterPrecip === "boolean"
+      ? source.hasLaterPrecip
+      : nearTermWeather === "rain" || nearTermWeather === "snow"
+      ? true
+      : typeof source.isRain === "boolean"
+      ? source.isRain
+      : fallback.hasLaterPrecip;
+
+  let laterPrecipType =
+    nearTermWeather === "rain" || nearTermWeather === "snow"
+      ? nearTermWeather
+      : source.laterPrecipType === "rain" || source.laterPrecipType === "snow"
+      ? source.laterPrecipType
+      : typeof source.isRain === "boolean" && source.isRain
+      ? "rain"
+      : null;
+
+  if (!hasLaterPrecip && nearTermWeather === "other") {
+    laterPrecipType = null;
+  }
+
+  if (hasLaterPrecip && laterPrecipType === null) {
+    laterPrecipType = "rain";
+  }
+
   return {
-    isRain:
-      typeof source.isRain === "boolean" ? source.isRain : fallback.isRain,
+    nearTermWeather,
+    hasLaterPrecip,
+    laterPrecipType,
     windLevel:
       source.windLevel === "2orLess" ||
       source.windLevel === "3to4" ||
@@ -146,18 +186,18 @@ function normalizeWeatherInput(raw: unknown): WeatherInput {
           : "2orLess"
         : fallback.windLevel,
     tempLevel:
-  source.tempLevel === "10orLess" ||
-  source.tempLevel === "11to15" ||
-  source.tempLevel === "16to25" ||
-  source.tempLevel === "26orMore"
-    ? source.tempLevel
-    : source.tempLevel === "16orMore"
-    ? "16to25"
-    : typeof source.isTempUnder10 === "boolean"
-    ? source.isTempUnder10
-      ? "10orLess"
-      : "11to15"
-    : fallback.tempLevel,
+      source.tempLevel === "10orLess" ||
+      source.tempLevel === "11to15" ||
+      source.tempLevel === "16to25" ||
+      source.tempLevel === "26orMore"
+        ? source.tempLevel
+        : source.tempLevel === "16orMore"
+        ? "16to25"
+        : typeof source.isTempUnder10 === "boolean"
+        ? source.isTempUnder10
+          ? "10orLess"
+          : "11to15"
+        : fallback.tempLevel,
   };
 }
 

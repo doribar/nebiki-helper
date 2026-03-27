@@ -31,7 +31,9 @@ export type WindLevel = "2orLess" | "3to4" | "5orMore";
 export type TempLevel = "10orLess" | "11to15" | "16to25" | "26orMore";
 
 export type WeatherInput = {
-  isRain: boolean;
+  nearTermWeather: NearTermWeather;
+  hasLaterPrecip: boolean;
+  laterPrecipType: LaterPrecipType;
   windLevel: WindLevel;
   tempLevel: TempLevel;
 };
@@ -124,7 +126,9 @@ export type PendingBannerInfo = {
 };
 
 export type WeatherGuideText = {
-  rainGuide: string;
+  nearTermWeatherGuide: string;
+  laterPrecipGuide: string;
+  laterPrecipTypeGuide: string;
   windGuide: string;
   tempGuide: string;
 };
@@ -171,3 +175,6 @@ export type UseNebikiAppResult = {
   derived: UseNebikiAppDerived;
   actions: UseNebikiAppActions;
 };
+
+export type NearTermWeather = "other" | "rain" | "snow";
+export type LaterPrecipType = "rain" | "snow" | null;

@@ -67,13 +67,13 @@ export function getNormalTimeRateDisplay(params: {
 }
 
 function shouldLowerFinalTimeRate(weather: WeatherInput): boolean {
-  const isNotRain = !weather.isRain;
+  const isNearTermOther = weather.nearTermWeather === "other";
   const isWind4OrLess =
     weather.windLevel === "2orLess" || weather.windLevel === "3to4";
   const isTemp16OrMore =
     weather.tempLevel === "16to25" || weather.tempLevel === "26orMore";
 
-  return isNotRain && isWind4OrLess && isTemp16OrMore;
+  return isNearTermOther && isWind4OrLess && isTemp16OrMore;
 }
 
 export function getFinalTimeGuide(weather: WeatherInput): FinalGuideData {

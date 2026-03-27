@@ -37,6 +37,21 @@ function getWeekdayBaseRank(label: WeekdayBaseLabel): number {
   }
 }
 
+function rankToWeekdayBase(rank: number): WeekdayBaseLabel {
+  switch (Math.max(0, Math.min(rank, 3))) {
+    case 0:
+      return "日";
+    case 1:
+      return "金土";
+    case 2:
+      return "火木";
+    case 3:
+      return "月水";
+    default:
+      return "火木";
+  }
+}
+
 export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
   switch (weekday) {
     case 0:
@@ -69,30 +84,15 @@ function getNightAdjustedWeekdayBase(
   return getOriginalWeekdayBase(weekday);
 }
 
-export function raiseWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
-  switch (label) {
-    case "日":
-      return "金土";
-    case "金土":
-      return "火木";
-    case "火木":
-      return "月水";
-    case "月水":
-      return "月水";
-  }
+function raiseWeekdayBaseBySteps(
+  label: WeekdayBaseLabel,
+  steps: number
+): WeekdayBaseLabel {
+  return rankToWeekdayBase(getWeekdayBaseRank(label) + steps);
 }
 
-export function relaxWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
-  switch (label) {
-    case "月水":
-      return "火木";
-    case "火木":
-      return "金土";
-    case "金土":
-      return "日";
-    case "日":
-      return "日";
-  }
+function relaxWeekdayBase(label: WeekdayBaseLabel): WeekdayBaseLabel {
+  return rankToWeekdayBase(getWeekdayBaseRank(label) - 1);
 }
 
 function isTempUnder10(tempLevel: TempLevel): boolean {
@@ -111,64 +111,6 @@ function isWindThresholdMet(windLevel: WindLevel, tempLevel: TempLevel): boolean
   return windLevel === "3to4" || windLevel === "5orMore";
 }
 
-export function getWeekdayBaseInfo(
-  weekday: number,
-  discountTime: DiscountTime,
-  weather: WeatherInput
-): WeekdayBaseInfo {
-  const original = getNightAdjustedWeekdayBase(weekday, discountTime);
-
-const isSundayNight =
-  weekday === 0 &&
-  (discountTime === "17" || discountTime === "18" || discountTime === "19");
-
-const warmedBase =
-  isTemp16to25(weather.tempLevel) && !isSundayNight
-    ? relaxWeekdayBase(original)
-    : original;
-
-  let adjusted = warmedBase;
-  let changedByWeather = false;
-  let baseRateBonus = 0;
-  const baseRateBonusReason: string[] = [];
-
-  const windMet = isWindThresholdMet(weather.windLevel, weather.tempLevel);
-  const tempUnder10 = isTempUnder10(weather.tempLevel);
-
-  const isLowestBase = warmedBase === "月水";
-  const onlyWind = windMet && !tempUnder10;
-  const onlyCold = !windMet && tempUnder10;
-  const windAndCold = windMet && tempUnder10;
-
-  if (onlyWind || onlyCold) {
-    if (isLowestBase) {
-      baseRateBonus += 10;
-      baseRateBonusReason.push("悪天候");
-    } else {
-      adjusted = raiseWeekdayBase(warmedBase);
-      changedByWeather = adjusted !== warmedBase;
-    }
-  }
-
-  if (windAndCold) {
-    baseRateBonus += 10;
-    baseRateBonusReason.push("悪天候");
-  }
-
-  if (weather.isRain) {
-    baseRateBonus += 10;
-    baseRateBonusReason.push("雨");
-  }
-
-  return {
-    original,
-    adjusted,
-    changedByWeather,
-    baseRateBonus,
-    baseRateBonusReason,
-  };
-}
-
 function toWeekdayGroupText(label: WeekdayBaseLabel): string {
   switch (label) {
     case "日":
@@ -182,84 +124,229 @@ function toWeekdayGroupText(label: WeekdayBaseLabel): string {
   }
 }
 
+function buildRainNearReason(windMet: boolean, coldMet: boolean): string | undefined {
+  if (windMet && !coldMet) {
+    return "30分〜1時間後に雨予報があり、風が強いため、";
+  }
+  if (!windMet && coldMet) {
+    return "30分〜1時間後に雨予報があり、気温が低いため、";
+  }
+  return undefined;
+}
+
+function buildRainLaterReason(windMet: boolean, coldMet: boolean): string {
+  if (windMet && !coldMet) {
+    return "1時間30分後以降に雨予報があり、風が強いため、";
+  }
+  if (!windMet && coldMet) {
+    return "1時間30分後以降に雨予報があり、気温が低いため、";
+  }
+  return "1時間30分後以降に雨予報があるため、";
+}
+
+function resolveWeatherEffect(params: {
+  weekday: number;
+  discountTime: DiscountTime;
+  weather: WeatherInput;
+}) {
+  const original = getNightAdjustedWeekdayBase(
+    params.weekday,
+    params.discountTime
+  );
+
+  const isSundayNight =
+    params.weekday === 0 &&
+    (params.discountTime === "17" ||
+      params.discountTime === "18" ||
+      params.discountTime === "19");
+
+  const noticeText = isSundayNight
+    ? "日曜日の夜は客足が減るため、火曜・木曜の基準を使います。"
+    : undefined;
+
+  const windMet = isWindThresholdMet(
+    params.weather.windLevel,
+    params.weather.tempLevel
+  );
+  const coldMet = isTempUnder10(params.weather.tempLevel);
+
+  let adjusted = original;
+  let baseRateBonus = 0;
+  let reasonText: string | undefined;
+  let bonusText: string | undefined;
+
+  const nearTermWeather = params.weather.nearTermWeather;
+  const laterPrecipType =
+    nearTermWeather === "rain" || nearTermWeather === "snow"
+      ? nearTermWeather
+      : params.weather.hasLaterPrecip
+      ? params.weather.laterPrecipType
+      : null;
+
+  // 30分〜1時間後に雨
+  if (nearTermWeather === "rain") {
+    if (windMet && coldMet) {
+      baseRateBonus = 20;
+      bonusText =
+        "30分〜1時間後に雨予報があり、風が強く気温が低いため値引率を20%上げます。";
+    } else if (windMet || coldMet) {
+      adjusted = raiseWeekdayBaseBySteps(original, 1);
+      baseRateBonus = 10;
+      reasonText = buildRainNearReason(windMet, coldMet);
+      bonusText = "値引率を10%上げます。";
+    } else {
+      baseRateBonus = 10;
+      bonusText = "30分〜1時間後に雨予報があるため値引率を10%上げます。";
+    }
+  }
+  // 30分〜1時間後に雪
+  else if (nearTermWeather === "snow") {
+  const raiseSteps = windMet && coldMet ? 2 : windMet || coldMet ? 1 : 0;
+  adjusted = raiseWeekdayBaseBySteps(original, raiseSteps);
+  baseRateBonus = 20;
+
+  if (windMet && coldMet) {
+    bonusText =
+      "30分〜1時間後に雪予報があり、風が強く気温が低いため値引率を20%上げます。";
+  } else if (windMet) {
+    reasonText = "30分〜1時間後に雪予報があり、風が強いため、";
+    bonusText = "値引率を20%上げます。";
+  } else if (coldMet) {
+    reasonText = "30分〜1時間後に雪予報があり、気温が低いため、";
+    bonusText = "値引率を20%上げます。";
+  } else {
+    bonusText = "30分〜1時間後に雪予報があるため値引率を20%上げます。";
+  }
+}
+  // その日のうちに雨
+  else if (laterPrecipType === "rain") {
+    if (windMet && coldMet) {
+      baseRateBonus = 10;
+      bonusText =
+        "1時間30分後以降に雨予報があり、風が強く気温が低いため値引率を10%上げます。";
+    } else if (windMet || coldMet) {
+      adjusted = raiseWeekdayBaseBySteps(original, 3);
+      reasonText = buildRainLaterReason(windMet, coldMet);
+    } else {
+      adjusted = raiseWeekdayBaseBySteps(original, 2);
+      reasonText = buildRainLaterReason(false, false);
+    }
+  }
+  // その日のうちに雪
+  else if (laterPrecipType === "snow") {
+  const raiseSteps = windMet && coldMet ? 2 : windMet || coldMet ? 1 : 0;
+  adjusted = raiseWeekdayBaseBySteps(original, raiseSteps);
+  baseRateBonus = 10;
+
+  if (windMet && coldMet) {
+    reasonText = "1時間30分後以降に雪予報があり、風が強く気温が低いため、";
+    bonusText = "値引率を10%上げます。";
+  } else if (windMet) {
+    reasonText = "1時間30分後以降に雪予報があり、風が強いため、";
+    bonusText = "値引率を10%上げます。";
+  } else if (coldMet) {
+    reasonText = "1時間30分後以降に雪予報があり、気温が低いため、";
+    bonusText = "値引率を10%上げます。";
+  } else {
+    bonusText = "1時間30分後以降に雪予報があるため値引率を10%上げます。";
+  }
+}
+  // 降水なし → 従来の風・低気温・16〜25度処理
+  else {
+    const warmedBase =
+      isTemp16to25(params.weather.tempLevel) && !isSundayNight
+        ? relaxWeekdayBase(original)
+        : original;
+
+    adjusted = warmedBase;
+
+    if (warmedBase !== original) {
+      reasonText = "気候がおだやかなため、";
+    }
+
+    const onlyWind = windMet && !coldMet;
+    const onlyCold = !windMet && coldMet;
+    const windAndCold = windMet && coldMet;
+
+    if (onlyWind || onlyCold) {
+      if (adjusted === "月水") {
+        baseRateBonus += 10;
+        bonusText = onlyWind
+          ? "風が強いため値引率を10%上げます。"
+          : "気温が低いため値引率を10%上げます。";
+      } else {
+        adjusted = raiseWeekdayBaseBySteps(adjusted, 1);
+        reasonText = onlyWind ? "風が強いため、" : "気温が低いため、";
+      }
+    }
+
+    if (windAndCold) {
+      baseRateBonus += 10;
+      bonusText = "風が強く、気温が低いため値引率を10%上げます。";
+    }
+  }
+
+  const changeText =
+    adjusted !== original
+      ? `${toWeekdayGroupText(original)}ではなく${toWeekdayGroupText(
+          adjusted
+        )}の基準を使用します。`
+      : undefined;
+
+  return {
+    original,
+    adjusted,
+    noticeText,
+    reasonText,
+    changeText,
+    bonusText,
+    baseRateBonus,
+  };
+}
+
+export function getWeekdayBaseInfo(
+  weekday: number,
+  discountTime: DiscountTime,
+  weather: WeatherInput
+): WeekdayBaseInfo {
+  const resolved = resolveWeatherEffect({
+    weekday,
+    discountTime,
+    weather,
+  });
+
+  return {
+    original: resolved.original,
+    adjusted: resolved.adjusted,
+    changedByWeather: resolved.adjusted !== resolved.original,
+    baseRateBonus: resolved.baseRateBonus,
+    baseRateBonusReason: resolved.bonusText ? [resolved.bonusText] : [],
+  };
+}
+
 export function getBasisGuideDisplay(params: {
   weekday: number;
   discountTime: DiscountTime;
   weather: WeatherInput;
 }): BasisGuideDisplay {
-  const info = getWeekdayBaseInfo(
-  params.weekday,
-  params.discountTime,
-  params.weather
-);
-
-const isSundayNight =
-  params.weekday === 0 &&
-  (params.discountTime === "17" ||
-    params.discountTime === "18" ||
-    params.discountTime === "19");
-
-const noticeText = isSundayNight
-  ? "日曜日の夜は客足が減るため、火曜・木曜の基準を使います。"
-  : undefined;
-
-  const originalText = toWeekdayGroupText(info.original);
-  const adjustedText = toWeekdayGroupText(info.adjusted);
-
-  const windMet = isWindThresholdMet(params.weather.windLevel, params.weather.tempLevel);
-  const tempUnder10 = isTempUnder10(params.weather.tempLevel);
-
-  const onlyWind = windMet && !tempUnder10;
-  const onlyCold = !windMet && tempUnder10;
-  const windAndCold = windMet && tempUnder10;
-
-  const originalRank = getWeekdayBaseRank(info.original);
-  const adjustedRank = getWeekdayBaseRank(info.adjusted);
-
-  let reasonText: string | undefined;
-  let changeText: string | undefined;
-  let bonusText: string | undefined;
-
-  if (originalRank !== adjustedRank) {
-    if (adjustedRank < originalRank) {
-      reasonText = "気候がおだやかなため、";
-    } else if (onlyWind) {
-      reasonText = "風が強いため";
-    } else if (onlyCold) {
-      reasonText = "気温が低いため";
-    }
-
-    changeText = `${originalText}ではなく${adjustedText}の基準を使用します。`;
-  }
-
-  if (onlyWind && info.adjusted === info.original && info.original === "月水") {
-    bonusText = "風が強いため値引率を10%上げます。";
-  } else if (onlyCold && info.adjusted === info.original && info.original === "月水") {
-    bonusText = "気温が低いため値引率を10%上げます。";
-  }
-
-  if (windAndCold && params.weather.isRain) {
-    bonusText = "風が強く、気温が低く、雨のため値引率を20%上げます。";
-  } else if (windAndCold) {
-    bonusText = "風が強く、気温が低いため値引率を10%上げます。";
-  } else if (params.weather.isRain) {
-    bonusText = "雨のため値引率を10%上げます。";
-  }
+  const resolved = resolveWeatherEffect(params);
 
   return {
-  noticeText,
-  reasonText,
-  changeText,
-  bonusText,
-  referenceText: `${adjustedText}の${getBasisTimeText(
-    params.discountTime
-  )}を基準に考えて`,
-};
+    noticeText: resolved.noticeText,
+    reasonText: resolved.reasonText,
+    changeText: resolved.changeText,
+    bonusText: resolved.bonusText,
+    referenceText: `${toWeekdayGroupText(resolved.adjusted)}の${getBasisTimeText(
+      params.discountTime
+    )}を基準に考えて`,
+  };
 }
 
 export function getWeatherGuideText(): WeatherGuideText {
   return {
-    rainGuide: "現在時刻以降に雨マークがあるか",
+    nearTermWeatherGuide: "30分〜1時間後の天気を選択",
+    laterPrecipGuide: "1時間30分後以降で雨or雪マークがあるか",
+    laterPrecipTypeGuide: "1時間30分後以降の雨or雪マークの種類を選択",
     windGuide: "30分〜1時間後の風速を選択",
     tempGuide: "30分〜1時間後の気温を選択",
   };
