@@ -151,6 +151,7 @@ type SegmentedProps<T extends string> = {
   value: T;
   options: { value: T; label: string }[];
   onChange: (next: T) => void;
+  columns?: number;
 };
 
 function SegmentedSelector<T extends string>({
@@ -158,20 +159,26 @@ function SegmentedSelector<T extends string>({
   value,
   options,
   onChange,
+  columns = options.length,
 }: SegmentedProps<T>) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>{label}</div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          gap: 8,
+        }}
+      >
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
             onClick={() => onChange(option.value)}
             style={{
-              flex: 1,
-              minWidth: 90,
+              width: "100%",
               padding: 12,
               borderRadius: 10,
               border: "1px solid #ccc",
@@ -348,32 +355,32 @@ export function StartScreen({
       </div>
 
       <SegmentedSelector
-        label={weatherGuideText.nearTermWeatherGuide}
-        value={sessionDraft.weather.nearTermWeather}
-        options={NEAR_TERM_WEATHER_OPTIONS}
-        onChange={(next) => {
-          if (next === "other") {
-            onChangeSessionDraft({
-              weather: {
-                ...sessionDraft.weather,
-                nearTermWeather: "other",
-                hasLaterPrecip: false,
-                laterPrecipType: null,
-              },
-            });
-            return;
-          }
+  label={weatherGuideText.nearTermWeatherGuide}
+  value={sessionDraft.weather.nearTermWeather}
+  options={NEAR_TERM_WEATHER_OPTIONS}
+  onChange={(next) => {
+    if (next === "other") {
+      onChangeSessionDraft({
+        weather: {
+          ...sessionDraft.weather,
+          nearTermWeather: "other",
+          hasLaterPrecip: false,
+          laterPrecipType: null,
+        },
+      });
+      return;
+    }
 
-          onChangeSessionDraft({
-            weather: {
-              ...sessionDraft.weather,
-              nearTermWeather: next,
-              hasLaterPrecip: true,
-              laterPrecipType: next,
-            },
-          });
-        }}
-      />
+    onChangeSessionDraft({
+      weather: {
+        ...sessionDraft.weather,
+        nearTermWeather: next,
+        hasLaterPrecip: true,
+        laterPrecipType: next,
+      },
+    });
+  }}
+/>
 
       {sessionDraft.weather.nearTermWeather === "other" ? (
         <>
@@ -423,15 +430,16 @@ export function StartScreen({
       />
 
       <SegmentedSelector
-        label={weatherGuideText.tempGuide}
-        value={sessionDraft.weather.tempLevel}
-        options={TEMP_OPTIONS}
-        onChange={(next) =>
-          onChangeSessionDraft({
-            weather: { ...sessionDraft.weather, tempLevel: next },
-          })
-        }
-      />
+  label={weatherGuideText.tempGuide}
+  value={sessionDraft.weather.tempLevel}
+  options={TEMP_OPTIONS}
+  columns={2}
+  onChange={(next) =>
+    onChangeSessionDraft({
+      weather: { ...sessionDraft.weather, tempLevel: next },
+    })
+  }
+/>
 
       {isFinalTime ? (
         <section
