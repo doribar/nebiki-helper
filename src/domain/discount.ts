@@ -53,9 +53,10 @@ export function getNormalTimeRateDisplay(params: {
     ? toRateLine(
         `${manyRate}%`,
         params.discountTime !== "15" && manyRate === 20
-  ? `前回も多かった商品は　5個以下 → 20%
-　　　　　　　　　   6〜9個 → 25%
-　　　　　　　　　  10個以上 → 30%`
+  ? `前回も多かった商品は
+5個以下 → 20%
+6〜9個 → 25%
+10個以上 → 30%`
   : undefined
       )
     : toRateLine("引かない"),
