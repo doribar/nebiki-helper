@@ -155,14 +155,20 @@ function resolveWeatherEffect(params: {
   );
 
   const isSundayNight =
-    params.weekday === 0 &&
-    (params.discountTime === "17" ||
-      params.discountTime === "18" ||
-      params.discountTime === "19");
+  params.weekday === 0 &&
+  (params.discountTime === "17" ||
+    params.discountTime === "18" ||
+    params.discountTime === "19");
 
-  const noticeText = isSundayNight
-    ? "日曜日の夜は客足が減るため、火曜・木曜の基準を使います。"
-    : undefined;
+const isFridaySaturdayNight =
+  (params.weekday === 5 || params.weekday === 6) &&
+  (params.discountTime === "17" ||
+    params.discountTime === "18" ||
+    params.discountTime === "19");
+
+const noticeText = isSundayNight
+  ? "日曜日の夜は客足が減るため、火曜・木曜の基準を使います。"
+  : undefined;
 
   const windMet = isWindThresholdMet(
     params.weather.windLevel,
@@ -201,13 +207,13 @@ function resolveWeatherEffect(params: {
   }
   // 30分〜1時間後に雪
   else if (nearTermWeather === "snow") {
-  const raiseSteps = windMet && coldMet ? 2 : windMet || coldMet ? 1 : 0;
+  const raiseSteps = windMet && coldMet ? 0 : windMet || coldMet ? 1 : 0;
   adjusted = raiseWeekdayBaseBySteps(original, raiseSteps);
-  baseRateBonus = 20;
+  baseRateBonus = windMet && coldMet ? 30 : 20;
 
   if (windMet && coldMet) {
     bonusText =
-      "30分〜1時間後に雪予報があり、風が強く気温が低いため値引率を20%上げます。";
+      "30分〜1時間後に雪予報があり、風が強く気温が低いため値引率を30%上げます。";
   } else if (windMet) {
     reasonText = "30分〜1時間後に雪予報があり、風が強いため、";
     bonusText = "値引率を20%上げます。";
@@ -234,13 +240,13 @@ function resolveWeatherEffect(params: {
   }
   // その日のうちに雪
   else if (laterPrecipType === "snow") {
-  const raiseSteps = windMet && coldMet ? 2 : windMet || coldMet ? 1 : 0;
+  const raiseSteps = windMet && coldMet ? 0 : windMet || coldMet ? 1 : 0;
   adjusted = raiseWeekdayBaseBySteps(original, raiseSteps);
-  baseRateBonus = 10;
+  baseRateBonus = windMet && coldMet ? 20 : 10;
 
   if (windMet && coldMet) {
-    reasonText = "1時間30分後以降に雪予報があり、風が強く気温が低いため、";
-    bonusText = "値引率を10%上げます。";
+    bonusText =
+      "1時間30分後以降に雪予報があり、風が強く気温が低いため値引率を20%上げます。";
   } else if (windMet) {
     reasonText = "1時間30分後以降に雪予報があり、風が強いため、";
     bonusText = "値引率を10%上げます。";
@@ -254,9 +260,11 @@ function resolveWeatherEffect(params: {
   // 降水なし → 従来の風・低気温・16〜25度処理
   else {
     const warmedBase =
-      isTemp16to25(params.weather.tempLevel) && !isSundayNight
-        ? relaxWeekdayBase(original)
-        : original;
+  isTemp16to25(params.weather.tempLevel) &&
+  !isSundayNight &&
+  !isFridaySaturdayNight
+    ? relaxWeekdayBase(original)
+    : original;
 
     adjusted = warmedBase;
 
@@ -344,9 +352,9 @@ export function getBasisGuideDisplay(params: {
 
 export function getWeatherGuideText(): WeatherGuideText {
   return {
-    nearTermWeatherGuide: "30分〜1時間後の天気を選択",
-    laterPrecipGuide: "1時間30分後以降で雨or雪マークがあるか",
-    laterPrecipTypeGuide: "1時間30分後以降の雨or雪マークの種類を選択",
+    nearTermWeatherGuide: "30分〜1時間後に雨マークがあるか",
+    laterPrecipGuide: "1時間30分後以降で雨マークがあるか",
+    laterPrecipTypeGuide: "ある場合それは雨と雪のどちらか",
     windGuide: "30分〜1時間後の風速を選択",
     tempGuide: "30分〜1時間後の気温を選択",
   };

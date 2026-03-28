@@ -1,6 +1,5 @@
 import type {
   DiscountTime,
-  LaterPrecipType,
   NearTermWeather,
   SessionDraft,
   TempLevel,
@@ -41,16 +40,17 @@ const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
 ];
 
 const NEAR_TERM_WEATHER_OPTIONS: { value: NearTermWeather; label: string }[] = [
-  { value: "other", label: "晴れ・くもり" },
-  { value: "rain", label: "雨" },
+  { value: "rain", label: "ある" },
+  { value: "other", label: "ない" },
   { value: "snow", label: "雪" },
 ];
 
-const LATER_PRECIP_TYPE_OPTIONS: {
-  value: Exclude<LaterPrecipType, null>;
+const LATER_PRECIP_OPTIONS: {
+  value: "rain" | "none" | "snow";
   label: string;
 }[] = [
-  { value: "rain", label: "雨" },
+  { value: "rain", label: "ある" },
+  { value: "none", label: "ない" },
   { value: "snow", label: "雪" },
 ];
 
@@ -98,52 +98,6 @@ function getDiscountTimeLabel(discountTime: DiscountTime): string {
     "20": "20時30分",
   };
   return map[discountTime];
-}
-
-type ToggleProps = {
-  label: string;
-  value: boolean;
-  onChange: (next: boolean) => void;
-};
-
-function YesNoToggle({ label, value, onChange }: ToggleProps) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>{label}</div>
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          type="button"
-          onClick={() => onChange(true)}
-          style={{
-            flex: 1,
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            background: value ? "#e8f0ff" : "#fff",
-            cursor: "pointer",
-          }}
-        >
-          ある
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onChange(false)}
-          style={{
-            flex: 1,
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            background: !value ? "#e8f0ff" : "#fff",
-            cursor: "pointer",
-          }}
-        >
-          ない
-        </button>
-      </div>
-    </div>
-  );
 }
 
 type SegmentedProps<T extends string> = {
@@ -202,7 +156,6 @@ export function StartScreen({
   onStart,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
-  const laterPrecipTypeValue = sessionDraft.weather.laterPrecipType ?? "rain";
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
@@ -383,40 +336,27 @@ export function StartScreen({
 />
 
       {sessionDraft.weather.nearTermWeather === "other" ? (
-        <>
-          <YesNoToggle
-            label={weatherGuideText.laterPrecipGuide}
-            value={sessionDraft.weather.hasLaterPrecip}
-            onChange={(next) =>
-              onChangeSessionDraft({
-                weather: {
-                  ...sessionDraft.weather,
-                  hasLaterPrecip: next,
-                  laterPrecipType: next
-                    ? sessionDraft.weather.laterPrecipType ?? "rain"
-                    : null,
-                },
-              })
-            }
-          />
-
-          {sessionDraft.weather.hasLaterPrecip ? (
-            <SegmentedSelector
-              label={weatherGuideText.laterPrecipTypeGuide}
-              value={laterPrecipTypeValue}
-              options={LATER_PRECIP_TYPE_OPTIONS}
-              onChange={(next) =>
-                onChangeSessionDraft({
-                  weather: {
-                    ...sessionDraft.weather,
-                    laterPrecipType: next,
-                  },
-                })
-              }
-            />
-          ) : null}
-        </>
-      ) : null}
+  <SegmentedSelector
+    label={weatherGuideText.laterPrecipGuide}
+    value={
+      sessionDraft.weather.hasLaterPrecip
+        ? sessionDraft.weather.laterPrecipType === "snow"
+          ? "snow"
+          : "rain"
+        : "none"
+    }
+    options={LATER_PRECIP_OPTIONS}
+    onChange={(next) =>
+      onChangeSessionDraft({
+        weather: {
+          ...sessionDraft.weather,
+          hasLaterPrecip: next !== "none",
+          laterPrecipType: next === "none" ? null : next,
+        },
+      })
+    }
+  />
+) : null}
 
       <SegmentedSelector
         label={weatherGuideText.windGuide}
