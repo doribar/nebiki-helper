@@ -51,16 +51,12 @@ export function getNextPendingCandidate(params: {
   } else if (params.preferredReason === "manual" && manualFiltered.length > 0) {
     targetList = manualFiltered;
   } else if (manual.length > 0) {
-    if (manualFiltered.length > 0) {
-      targetList = manualFiltered;
-    } else if (fewFiltered.length > 0) {
-      targetList = fewFiltered;
-    } else if (few.length > 0) {
-      targetList = few;
-    } else {
-      targetList = manual;
-    }
-  } else if (few.length > 0) {
+  if (manualFiltered.length > 0) {
+    targetList = manualFiltered;
+  } else {
+    targetList = manual;
+  }
+} else if (few.length > 0) {
     if (fewFiltered.length > 0) {
       targetList = fewFiltered;
     } else {

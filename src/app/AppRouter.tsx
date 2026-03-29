@@ -51,18 +51,19 @@ export function AppRouter({ app }: AppRouterProps) {
 
       return (
         <RateDisplayScreen
-          weekdayText={derived.weekdayText}
-          timeText={derived.timeText}
-          areaName={derived.currentAreaName}
-          basisGuide={derived.basisGuide}
-          pendingBanner={derived.pendingBanner}
-          timeSwitchNotice={derived.timeSwitchNotice}
-          discountTime={state.session.discountTime}
-          rateDisplay={derived.rateDisplay}
-          finalGuide={derived.finalGuide ?? undefined}
-          onNextArea={actions.goToNextArea}
-          onSkip={actions.skipCurrentArea}
-        />
+  weekdayText={derived.weekdayText}
+  timeText={derived.timeText}
+  areaName={derived.currentAreaName}
+  basisGuide={derived.basisGuide}
+  pendingBanner={derived.pendingBanner}
+  timeSwitchNotice={derived.timeSwitchNotice}
+  lateSkipNotice={derived.lateSkipNotice}
+  discountTime={state.session.discountTime}
+  rateDisplay={derived.rateDisplay}
+  finalGuide={derived.finalGuide ?? undefined}
+  onNextArea={actions.goToNextArea}
+  onSkip={actions.skipCurrentArea}
+/>
       );
 
     case "final_time":

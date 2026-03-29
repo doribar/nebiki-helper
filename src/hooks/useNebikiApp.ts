@@ -480,6 +480,13 @@ const lateTimeBonusNotice = useMemo(() => {
   return null;
 }, [state.session, lateTimeBonus]);
 
+const lateSkipNotice = useMemo(() => {
+  if (!state.session || lateTimeBonus === 0) return null;
+
+  return `次の基準時刻に近づいているため、今回は5%強めて値引します。
+このエリアは次回の値引でスキップします。`;
+}, [state.session, lateTimeBonus]);
+
   const basisGuide = useMemo(() => {
   const baseGuide = getBasisGuideDisplay({
     weekday: sessionSource.weekday,
@@ -741,14 +748,14 @@ function startSession() {
       };
 
       if (prev.currentFlow === "pending") {
-  const isCurrentFew = prev.areaProgressMap[currentAreaId].status === "postponed_few";
+  const wasFew = prev.areaProgressMap[currentAreaId].status === "postponed_few";
 
   return moveToNextPendingOrDone({
     prev,
     updatedMap,
     referenceAreaId: currentAreaId,
-    deferredAreaIds: isCurrentFew ? [] : undefined,
-    preferredNextReason: isCurrentFew ? "manual" : null,
+    deferredAreaIds: wasFew ? [] : undefined,
+    preferredNextReason: wasFew ? "manual" : null,
     nextSession,
     timeSwitchNotice,
   });
@@ -978,16 +985,17 @@ function startSession() {
   return {
     state,
     derived: {
-      currentAreaName,
-      weekdayText,
-      timeText,
-      basisGuide,
-      weatherGuideText,
-      rateDisplay,
-      finalGuide,
-      pendingBanner,
-      timeSwitchNotice: state.timeSwitchNotice,
-    },
+  currentAreaName,
+  weekdayText,
+  timeText,
+  basisGuide,
+  weatherGuideText,
+  rateDisplay,
+  finalGuide,
+  pendingBanner,
+  timeSwitchNotice: state.timeSwitchNotice,
+  lateSkipNotice,
+},
     actions: {
       updateSessionDraft,
       startSession,

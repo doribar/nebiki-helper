@@ -30,6 +30,48 @@ function toRateLine(main: string, note?: string): RateLine {
   return note ? { main, note } : { main };
 }
 
+function getRepeatManyNote(params: {
+  discountTime: Exclude<DiscountTime, "20">;
+  areaJudge: Exclude<AreaJudge, null>;
+  manyRate: number;
+}): string | undefined {
+  const { discountTime, areaJudge, manyRate } = params;
+
+  if (discountTime === "15") return undefined;
+
+  if (areaJudge === "few") {
+    if (discountTime === "17" && manyRate === 15) {
+      return `前回も多かった商品は
+　5個以下 → 15%
+　6〜9個 → 20%
+　10個以上 → 25%`;
+    }
+
+    if (discountTime === "18" && manyRate === 25) {
+      return `前回も多かった商品は
+　5個以下 → 25%
+　6〜9個 → 30%
+　10個以上 → 30%`;
+    }
+  }
+
+  if (manyRate === 20) {
+    return `前回も多かった商品は
+　5個以下 → 20%
+　6〜9個 → 25%
+　10個以上 → 30%`;
+  }
+
+  if (manyRate === 25) {
+    return `前回も多かった商品は
+　5個以下 → 25%
+　6〜9個 → 25%
+　10個以上 → 30%`;
+  }
+
+  return undefined;
+}
+
 export function getNormalTimeRateDisplay(params: {
   discountTime: Exclude<DiscountTime, "20">;
   weatherBonus: number;
@@ -52,12 +94,11 @@ export function getNormalTimeRateDisplay(params: {
   manyRate > 0
     ? toRateLine(
         `${manyRate}%`,
-        params.discountTime !== "15" && manyRate === 20
-  ? `前回も多かった商品は
-5個以下 → 20%
-6〜9個 → 25%
-10個以上 → 30%`
-  : undefined
+        getRepeatManyNote({
+          discountTime: params.discountTime,
+          areaJudge: params.areaJudge,
+          manyRate,
+        })
       )
     : toRateLine("引かない"),
     few: toRateLine("引かない"),
@@ -67,13 +108,14 @@ export function getNormalTimeRateDisplay(params: {
 }
 
 function shouldLowerFinalTimeRate(weather: WeatherInput): boolean {
-  const isNearTermOther = weather.nearTermWeather === "other";
+  const isNearTermDry = weather.nearTermWeather === "other";
+  const isLaterDry = !weather.hasLaterPrecip;
   const isWind4OrLess =
     weather.windLevel === "2orLess" || weather.windLevel === "3to4";
   const isTemp16OrMore =
     weather.tempLevel === "16to25" || weather.tempLevel === "26orMore";
 
-  return isNearTermOther && isWind4OrLess && isTemp16OrMore;
+  return isNearTermDry && isLaterDry && isWind4OrLess && isTemp16OrMore;
 }
 
 export function getFinalTimeGuide(weather: WeatherInput): FinalGuideData {

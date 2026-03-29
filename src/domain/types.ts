@@ -155,6 +155,7 @@ export type UseNebikiAppDerived = {
   finalGuide: FinalGuideData | null;
   pendingBanner: PendingBannerInfo | null;
   timeSwitchNotice: string | null;
+  lateSkipNotice: string | null;
 };
 
 export type UseNebikiAppActions = {

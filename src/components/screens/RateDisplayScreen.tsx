@@ -23,6 +23,7 @@ type RateDisplayScreenProps = {
     reason: "manual" | "few";
   } | null;
   timeSwitchNotice?: string | null;
+  lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
   finalGuide?: FinalGuideData;
@@ -67,6 +68,7 @@ export function RateDisplayScreen({
   basisGuide,
   pendingBanner,
   timeSwitchNotice,
+  lateSkipNotice,
   discountTime,
   rateDisplay,
   finalGuide,
@@ -128,6 +130,23 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
   changeText={basisGuide.changeText}
   bonusText={basisGuide.bonusText}
 />
+
+{lateSkipNotice ? (
+  <section
+    style={{
+      border: "1px solid #ead28b",
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 16,
+      background: "#fff8e1",
+      whiteSpace: "pre-wrap",
+      lineHeight: 1.7,
+      fontWeight: 700,
+    }}
+  >
+    {lateSkipNotice}
+  </section>
+) : null}
 
       <section
         style={{

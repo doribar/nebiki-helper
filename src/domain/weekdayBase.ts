@@ -272,26 +272,83 @@ const noticeText = isSundayNight
       reasonText = "気候がおだやかなため、";
     }
 
+      // 降水なし → 風・低気温・16〜25度処理
+  else {
+    const warmedBase =
+      isTemp16to25(params.weather.tempLevel) &&
+      !isSundayNight &&
+      !isFridaySaturdayNight
+        ? relaxWeekdayBase(original)
+        : original;
+
+    adjusted = warmedBase;
+
+    if (warmedBase !== original) {
+      reasonText = "気候がおだやかなため、";
+    }
+
     const onlyWind = windMet && !coldMet;
     const onlyCold = !windMet && coldMet;
     const windAndCold = windMet && coldMet;
 
+    const is15 = params.discountTime === "15";
+    const is17to19 =
+      params.discountTime === "17" ||
+      params.discountTime === "18" ||
+      params.discountTime === "19";
+
     if (onlyWind || onlyCold) {
-      if (adjusted === "月水") {
-        baseRateBonus += 10;
-        bonusText = onlyWind
-          ? "風が強いため値引率を10%上げます。"
-          : "気温が低いため値引率を10%上げます。";
+      if (is15) {
+        if (adjusted === "月水") {
+          baseRateBonus += 5;
+          bonusText = onlyWind
+            ? "風が強いため値引率を5%上げます。"
+            : "気温が低いため値引率を5%上げます。";
+        } else {
+          adjusted = raiseWeekdayBaseBySteps(adjusted, 1);
+          reasonText = onlyWind ? "風が強いため、" : "気温が低いため、";
+          bonusText = undefined;
+        }
       } else {
-        adjusted = raiseWeekdayBaseBySteps(adjusted, 1);
-        reasonText = onlyWind ? "風が強いため、" : "気温が低いため、";
+        if (adjusted === "月水") {
+          baseRateBonus += 10;
+          bonusText = onlyWind
+            ? "風が強いため値引率を10%上げます。"
+            : "気温が低いため値引率を10%上げます。";
+        } else {
+          adjusted = raiseWeekdayBaseBySteps(adjusted, 1);
+          reasonText = onlyWind ? "風が強いため、" : "気温が低いため、";
+          bonusText = undefined;
+        }
       }
     }
 
     if (windAndCold) {
-      baseRateBonus += 10;
-      bonusText = "風が強く、気温が低いため値引率を10%上げます。";
+      if (is15) {
+        if (adjusted === "月水") {
+          baseRateBonus += 10;
+          bonusText = "風が強く、気温が低いため値引率を10%上げます。";
+          reasonText = undefined;
+        } else if (adjusted === "火木") {
+          baseRateBonus += 5;
+          bonusText = "風が強く、気温が低いため値引率を5%上げます。";
+          reasonText = undefined;
+        } else {
+          adjusted = raiseWeekdayBaseBySteps(adjusted, 2);
+          reasonText = "風が強く、気温が低いため、";
+          bonusText = undefined;
+        }
+      } else if (is17to19) {
+        baseRateBonus += 10;
+        bonusText = "風が強く、気温が低いため値引率を10%上げます。";
+        reasonText = undefined;
+      } else {
+        baseRateBonus += 10;
+        bonusText = "風が強く、気温が低いため値引率を10%上げます。";
+        reasonText = undefined;
+      }
     }
+  }
   }
 
   const changeText =
