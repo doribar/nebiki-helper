@@ -237,7 +237,7 @@ export function StartScreen({
       </div>
 
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>値引基準時刻</div>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>時刻</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
           {sessionDraft.manualDiscountTimeOverride ? (
             <select
