@@ -99,12 +99,16 @@ function isTempUnder10(tempLevel: TempLevel): boolean {
   return tempLevel === "10orLess";
 }
 
-function isTemp16to25(tempLevel: TempLevel): boolean {
-  return tempLevel === "16to25";
+function isTempWarm(tempLevel: TempLevel): boolean {
+  return tempLevel === "16to20" || tempLevel === "21to25";
 }
 
 function isWindThresholdMet(windLevel: WindLevel, tempLevel: TempLevel): boolean {
-  if (tempLevel === "16to25" || tempLevel === "26orMore") {
+  if (
+    tempLevel === "16to20" ||
+    tempLevel === "21to25" ||
+    tempLevel === "26orMore"
+  ) {
     return windLevel === "5orMore";
   }
 
@@ -262,9 +266,9 @@ const noticeText = isSundayNight
       // 降水なし → 風・低気温・16〜25度処理
 else {
   const canWarmRelax =
-    isTemp16to25(params.weather.tempLevel) &&
-    !isSundayNight &&
-    !isFridaySaturdayNight;
+  isTempWarm(params.weather.tempLevel) &&
+  !isSundayNight &&
+  !isFridaySaturdayNight;
 
   const warmedBase = canWarmRelax ? relaxWeekdayBase(original) : original;
 

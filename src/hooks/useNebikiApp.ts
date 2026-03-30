@@ -186,18 +186,17 @@ function normalizeWeatherInput(raw: unknown): WeatherInput {
           : "2orLess"
         : fallback.windLevel,
     tempLevel:
-      source.tempLevel === "10orLess" ||
-      source.tempLevel === "11to15" ||
-      source.tempLevel === "16to25" ||
-      source.tempLevel === "26orMore"
-        ? source.tempLevel
-        : source.tempLevel === "16orMore"
-        ? "16to25"
-        : typeof source.isTempUnder10 === "boolean"
-        ? source.isTempUnder10
-          ? "10orLess"
-          : "11to15"
-        : fallback.tempLevel,
+  source.tempLevel === "10orLess" ||
+  source.tempLevel === "11to15" ||
+  source.tempLevel === "16to20" ||
+  source.tempLevel === "21to25" ||
+  source.tempLevel === "26orMore"
+    ? source.tempLevel
+    : source.isTempUnder10 === "boolean"
+    ? source.isTempUnder10
+      ? "10orLess"
+      : "11to15"
+    : fallback.tempLevel,
   };
 }
 

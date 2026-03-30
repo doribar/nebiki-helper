@@ -63,7 +63,8 @@ const WIND_OPTIONS: { value: WindLevel; label: string }[] = [
 const TEMP_OPTIONS: { value: TempLevel; label: string }[] = [
   { value: "10orLess", label: "10度以下" },
   { value: "11to15", label: "11〜15度" },
-  { value: "16to25", label: "16〜25度" },
+  { value: "16to20", label: "16〜20度" },
+  { value: "21to25", label: "21〜25度" },
   { value: "26orMore", label: "26度以上" },
 ];
 

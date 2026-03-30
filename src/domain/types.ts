@@ -28,7 +28,12 @@ export type AreaMaster = {
 };
 
 export type WindLevel = "2orLess" | "3to4" | "5orMore";
-export type TempLevel = "10orLess" | "11to15" | "16to25" | "26orMore";
+export type TempLevel =
+  | "10orLess"
+  | "11to15"
+  | "16to20"
+  | "21to25"
+  | "26orMore";
 
 export type WeatherInput = {
   nearTermWeather: NearTermWeather;

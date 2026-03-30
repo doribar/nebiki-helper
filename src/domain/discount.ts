@@ -113,7 +113,9 @@ function shouldLowerFinalTimeRate(weather: WeatherInput): boolean {
   const isWind4OrLess =
     weather.windLevel === "2orLess" || weather.windLevel === "3to4";
   const isTemp16OrMore =
-    weather.tempLevel === "16to25" || weather.tempLevel === "26orMore";
+  weather.tempLevel === "16to20" ||
+  weather.tempLevel === "21to25" ||
+  weather.tempLevel === "26orMore";
 
   return isNearTermDry && isLaterDry && isWind4OrLess && isTemp16OrMore;
 }
