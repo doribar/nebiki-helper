@@ -1,0 +1,25 @@
+
+> nebiki-helper@0.0.0 check:logic
+> node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-logic.ts
+
+(node:7962) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS: 乾いた日・基準変化なし
+PASS: 低気温 + 風速3m以上は2段強める
+PASS: 超低気温で上限に当たった乾いた日は +5%
+PASS: 近い時間の雨は +10% を残しつつ頭打ち +5% を入れない
+PASS: 16〜20度は1段弱める
+PASS: 16〜20度と風速5m以上は相殺される
+PASS: 21〜25度で17時以降の下限に当たる乾いた日は -5%
+PASS: 日曜17時以降は火木基準から始まり下限は金土
+PASS: 1時間30分後〜23時の雨で上限に当たったら +5% はかかる
+PASS: 1時間30分後〜23時の雪は曜日基準を2段強める
+PASS: 26〜30度は補正なし
+PASS: 31〜35度は1段強める
+PASS: 36度以上は2段強める
+PASS: 近い時間の雪は +20%
+PASS: 近い雨がある日は下限に当たっても -5% を入れない
+PASS: 値引率補正の内訳と合計0%を表示
+
+16 / 16 checks passed.
+PASS: 最終値引き点数ロジック
