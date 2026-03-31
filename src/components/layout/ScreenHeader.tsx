@@ -15,12 +15,12 @@ export function ScreenHeader({
 }: ScreenHeaderProps) {
   return (
     <header style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: titleFontSize ?? 28, fontWeight: 700 }}>
+      <div style={{ fontSize: titleFontSize ?? 24, fontWeight: 700 }}>
         {weekdayText} {timeText}
       </div>
 
       {areaName ? (
-        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>
+        <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>
           {areaName}
         </div>
       ) : null}
