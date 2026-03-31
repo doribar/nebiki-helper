@@ -4,7 +4,6 @@ import type {
   RateDisplayData,
   RateLine,
   AreaJudge,
-  WeatherInput,
 } from "./types";
 
 export function getBaseRate(discountTime: DiscountTime): number {
@@ -107,27 +106,32 @@ export function getNormalTimeRateDisplay(params: {
   };
 }
 
-function shouldLowerFinalTimeRate(weather: WeatherInput): boolean {
-  const isNearTermDry = weather.nearTermWeather === "other";
-  const isLaterDry = !weather.hasLaterPrecip;
-  const isWind4OrLess =
-    weather.windLevel === "2orLess" || weather.windLevel === "3to4";
-  const isTemp16OrMore =
-  weather.tempLevel === "16to20" ||
-  weather.tempLevel === "21to25" ||
-  weather.tempLevel === "26orMore";
+const FINAL_RATE_LOWER_THRESHOLD = 0;
 
-  return isNearTermDry && isLaterDry && isWind4OrLess && isTemp16OrMore;
+function toRatePoints(rateBonus: number): number {
+  return Math.trunc(rateBonus / 5);
 }
 
-export function getFinalTimeGuide(weather: WeatherInput): FinalGuideData {
-  const shouldLower = shouldLowerFinalTimeRate(weather);
+export function getFinalTimeGuide(params: {
+  weekdayShift: number;
+  rateBonus: number;
+}): FinalGuideData {
+  const weekdayShiftPoints = params.weekdayShift;
+  const rateBonusPoints = toRatePoints(params.rateBonus);
+  const score = weekdayShiftPoints + rateBonusPoints;
+  const shouldLower = score <= FINAL_RATE_LOWER_THRESHOLD;
 
   if (shouldLower) {
     return {
       count1: { main: "20%" },
       count2: { main: "30%" },
       count3OrMore: { main: "40%" },
+      score,
+      scoreThreshold: FINAL_RATE_LOWER_THRESHOLD,
+      scoreBreakdown: {
+        weekdayShiftPoints,
+        rateBonusPoints,
+      },
     };
   }
 
@@ -135,5 +139,11 @@ export function getFinalTimeGuide(weather: WeatherInput): FinalGuideData {
     count1: { main: "30%" },
     count2: { main: "40%" },
     count3OrMore: { main: "50%" },
+    score,
+    scoreThreshold: FINAL_RATE_LOWER_THRESHOLD,
+    scoreBreakdown: {
+      weekdayShiftPoints,
+      rateBonusPoints,
+    },
   };
 }

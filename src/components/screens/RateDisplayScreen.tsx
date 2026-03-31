@@ -13,9 +13,10 @@ type RateDisplayScreenProps = {
   areaName: string;
   basisGuide: {
     noticeText?: string;
-    reasonText?: string;
-    changeText?: string;
-    bonusText?: string;
+    weekdaySummaryText?: string;
+    weekdayDetailLines?: string[];
+    bonusSummaryText?: string;
+    bonusDetailLines?: string[];
     referenceText: string;
   };
   pendingBanner?: {
@@ -125,11 +126,12 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
       ) : null}
 
       <WeekdayBasePanel
-  noticeText={basisGuide.noticeText}
-  reasonText={basisGuide.reasonText}
-  changeText={basisGuide.changeText}
-  bonusText={basisGuide.bonusText}
-/>
+        noticeText={basisGuide.noticeText}
+        weekdaySummaryText={basisGuide.weekdaySummaryText}
+        weekdayDetailLines={basisGuide.weekdayDetailLines}
+        bonusSummaryText={basisGuide.bonusSummaryText}
+        bonusDetailLines={basisGuide.bonusDetailLines}
+      />
 
 {lateSkipNotice ? (
   <section

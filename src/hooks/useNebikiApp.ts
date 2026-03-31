@@ -16,6 +16,7 @@ import {
   getBasisGuideDisplay,
   getWeatherGuideText,
   getWeekdayBaseInfo,
+  buildMergedBonusDisplay,
 } from "../domain/weekdayBase";
 import {
   getFinalTimeGuide,
@@ -144,22 +145,20 @@ function normalizeWeatherInput(raw: unknown): WeatherInput {
   let hasLaterPrecip =
     typeof source.hasLaterPrecip === "boolean"
       ? source.hasLaterPrecip
-      : nearTermWeather === "rain" || nearTermWeather === "snow"
+      : source.laterPrecipType === "rain" || source.laterPrecipType === "snow"
       ? true
       : typeof source.isRain === "boolean"
       ? source.isRain
       : fallback.hasLaterPrecip;
 
-  let laterPrecipType =
-    nearTermWeather === "rain" || nearTermWeather === "snow"
-      ? nearTermWeather
-      : source.laterPrecipType === "rain" || source.laterPrecipType === "snow"
+  let laterPrecipType: WeatherInput["laterPrecipType"] =
+    source.laterPrecipType === "rain" || source.laterPrecipType === "snow"
       ? source.laterPrecipType
       : typeof source.isRain === "boolean" && source.isRain
       ? "rain"
       : null;
 
-  if (!hasLaterPrecip && nearTermWeather === "other") {
+  if (!hasLaterPrecip) {
     laterPrecipType = null;
   }
 
@@ -186,17 +185,30 @@ function normalizeWeatherInput(raw: unknown): WeatherInput {
           : "2orLess"
         : fallback.windLevel,
     tempLevel:
-  source.tempLevel === "10orLess" ||
-  source.tempLevel === "11to15" ||
-  source.tempLevel === "16to20" ||
-  source.tempLevel === "21to25" ||
-  source.tempLevel === "26orMore"
-    ? source.tempLevel
-    : source.isTempUnder10 === "boolean"
-    ? source.isTempUnder10
-      ? "10orLess"
-      : "11to15"
-    : fallback.tempLevel,
+      source.tempLevel === "5orLess" ||
+      source.tempLevel === "6to10" ||
+      source.tempLevel === "11to15" ||
+      source.tempLevel === "16to20" ||
+      source.tempLevel === "21to25" ||
+      source.tempLevel === "26to30" ||
+      source.tempLevel === "31to35" ||
+      source.tempLevel === "36orMore"
+        ? source.tempLevel
+        : source.tempLevel === "10orLess"
+        ? "6to10"
+        : source.tempLevel === "26to29"
+        ? "26to30"
+        : source.tempLevel === "30to34"
+        ? "31to35"
+        : source.tempLevel === "35orMore"
+        ? "36orMore"
+        : source.tempLevel === "26orMore"
+        ? "26to30"
+        : source.isTempUnder10 === "boolean"
+        ? source.isTempUnder10
+          ? "6to10"
+          : "11to15"
+        : fallback.tempLevel,
   };
 }
 
@@ -499,9 +511,11 @@ const lateSkipNotice = useMemo(() => {
 
   return {
     ...baseGuide,
-    bonusText: baseGuide.bonusText
-      ? `${baseGuide.bonusText} ${lateTimeBonusNotice}`
-      : lateTimeBonusNotice,
+    ...buildMergedBonusDisplay({
+      baseBonusParts: baseGuide.bonusCalcParts,
+      baseRateBonus: weekdayBaseInfo.baseRateBonus,
+      lateTimeBonus,
+    }),
   };
 }, [
   sessionSource.weekday,
@@ -537,8 +551,12 @@ const lateSkipNotice = useMemo(() => {
 ]);
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
-  return getFinalTimeGuide(state.session.weather);
-}, [state.session]);
+
+  return getFinalTimeGuide({
+    weekdayShift: weekdayBaseInfo.weekdayShift,
+    rateBonus: weekdayBaseInfo.baseRateBonus,
+  });
+}, [state.session, weekdayBaseInfo.weekdayShift, weekdayBaseInfo.baseRateBonus]);
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;

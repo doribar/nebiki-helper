@@ -8,9 +8,10 @@ type AreaJudgeScreenProps = {
   areaName: string;
   basisGuide: {
     noticeText?: string;
-    reasonText?: string;
-    changeText?: string;
-    bonusText?: string;
+    weekdaySummaryText?: string;
+    weekdayDetailLines?: string[];
+    bonusSummaryText?: string;
+    bonusDetailLines?: string[];
     referenceText: string;
   };
   pendingBanner?: {
@@ -82,11 +83,12 @@ export function AreaJudgeScreen({
       ) : null}
 
       <WeekdayBasePanel
-  noticeText={basisGuide.noticeText}
-  reasonText={basisGuide.reasonText}
-  changeText={basisGuide.changeText}
-  bonusText={basisGuide.bonusText}
-/>
+        noticeText={basisGuide.noticeText}
+        weekdaySummaryText={basisGuide.weekdaySummaryText}
+        weekdayDetailLines={basisGuide.weekdayDetailLines}
+        bonusSummaryText={basisGuide.bonusSummaryText}
+        bonusDetailLines={basisGuide.bonusDetailLines}
+      />
 
       <section
         style={{
@@ -118,22 +120,22 @@ export function AreaJudgeScreen({
         </div>
       </section>
 
-<button
-  type="button"
-  onClick={onSkip}
-  style={{
-    width: "100%",
-    padding: "14px 16px",
-    borderRadius: 12,
-    border: "1px solid #ccc",
-    background: "#fff",
-    fontSize: 15,
-    cursor: "pointer",
-    marginBottom: 16,
-  }}
->
-  今はスキップ
-</button>
+      <button
+        type="button"
+        onClick={onSkip}
+        style={{
+          width: "100%",
+          padding: "14px 16px",
+          borderRadius: 12,
+          border: "1px solid #ccc",
+          background: "#fff",
+          fontSize: 15,
+          cursor: "pointer",
+          marginBottom: 16,
+        }}
+      >
+        今はスキップ
+      </button>
 
       <section
         style={{
@@ -146,17 +148,15 @@ export function AreaJudgeScreen({
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
-  <div>今使っている曜日基準が</div>
-  <div style={{ color: "#e65100", fontWeight: 700 }}>
-    月・水または火・木➡多い側に寄せる
-  </div>
-  <div style={{ color: "#e65100", fontWeight: 700 }}>
-    金・土または日➡少ない側に寄せる
-  </div>
-</div>
+          <div>今使っている曜日基準が</div>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            月・水または火・木➡多い側に寄せる
+          </div>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            金・土または日➡少ない側に寄せる
+          </div>
+        </div>
       </section>
-
-      
     </main>
   );
 }

@@ -29,11 +29,14 @@ export type AreaMaster = {
 
 export type WindLevel = "2orLess" | "3to4" | "5orMore";
 export type TempLevel =
-  | "10orLess"
+  | "5orLess"
+  | "6to10"
   | "11to15"
   | "16to20"
   | "21to25"
-  | "26orMore";
+  | "26to30"
+  | "31to35"
+  | "36orMore";
 
 export type WeatherInput = {
   nearTermWeather: NearTermWeather;
@@ -88,15 +91,23 @@ export type WeekdayBaseInfo = {
   original: WeekdayBaseLabel;
   adjusted: WeekdayBaseLabel;
   changedByWeather: boolean;
+  weekdayShift: number;
   baseRateBonus: number;
   baseRateBonusReason: string[];
 };
 
 export type BasisGuideDisplay = {
   noticeText?: string;
-  reasonText?: string;
-  changeText?: string;
-  bonusText?: string;
+  weekdaySummaryText?: string;
+  weekdayDetailLines?: string[];
+  bonusSummaryText?: string;
+  bonusDetailLines?: string[];
+  weekdayCalcText?: string;
+  weekdayResultText?: string;
+  bonusCalcText?: string;
+  bonusResultText?: string;
+  bonusCalcParts?: string[];
+  bonusTotal?: number;
   referenceText: string;
 };
 
@@ -115,6 +126,12 @@ export type FinalGuideData = {
   count1: RateLine;
   count2: RateLine;
   count3OrMore: RateLine;
+  score: number;
+  scoreThreshold: number;
+  scoreBreakdown: {
+    weekdayShiftPoints: number;
+    rateBonusPoints: number;
+  };
 };
 
 export type PendingReason = "manual" | "few";

@@ -61,11 +61,14 @@ const WIND_OPTIONS: { value: WindLevel; label: string }[] = [
 ];
 
 const TEMP_OPTIONS: { value: TempLevel; label: string }[] = [
-  { value: "10orLess", label: "10度以下" },
+  { value: "5orLess", label: "5度以下" },
+  { value: "6to10", label: "6〜10度" },
   { value: "11to15", label: "11〜15度" },
   { value: "16to20", label: "16〜20度" },
   { value: "21to25", label: "21〜25度" },
-  { value: "26orMore", label: "26度以上" },
+  { value: "26to30", label: "26〜30度" },
+  { value: "31to35", label: "31〜35度" },
+  { value: "36orMore", label: "36度以上" },
 ];
 
 function formatLocalDate(date = new Date()): string {
@@ -99,6 +102,14 @@ function getDiscountTimeLabel(discountTime: DiscountTime): string {
     "20": "20時30分",
   };
   return map[discountTime];
+}
+
+function cycleIndex(length: number, currentIndex: number, delta: number): number {
+  return (currentIndex + delta + length) % length;
+}
+
+function getWheelStep(deltaY: number): 1 | -1 {
+  return deltaY > 0 ? 1 : -1;
 }
 
 type SegmentedProps<T extends string> = {
@@ -158,6 +169,34 @@ export function StartScreen({
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
 
+  const handleWeekdayWheel = (deltaY: number) => {
+    const step = getWheelStep(deltaY);
+    const currentIndex = WEEKDAY_OPTIONS.findIndex(
+      (option) => option.value === sessionDraft.weekday
+    );
+    const nextIndex = cycleIndex(WEEKDAY_OPTIONS.length, currentIndex, step);
+    const nextWeekday = WEEKDAY_OPTIONS[nextIndex].value;
+
+    onChangeSessionDraft({
+      weekday: nextWeekday,
+      manualWeekdayOverride: true,
+    });
+  };
+
+  const handleDiscountTimeWheel = (deltaY: number) => {
+    const step = getWheelStep(deltaY);
+    const currentIndex = DISCOUNT_TIME_OPTIONS.findIndex(
+      (option) => option.value === sessionDraft.discountTime
+    );
+    const nextIndex = cycleIndex(DISCOUNT_TIME_OPTIONS.length, currentIndex, step);
+    const nextDiscountTime = DISCOUNT_TIME_OPTIONS[nextIndex].value;
+
+    onChangeSessionDraft({
+      discountTime: nextDiscountTime,
+      manualDiscountTimeOverride: true,
+    });
+  };
+
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
@@ -170,42 +209,50 @@ export function StartScreen({
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>曜日</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
-          {sessionDraft.manualWeekdayOverride ? (
-            <select
-              value={sessionDraft.weekday}
-              onChange={(e) =>
-                onChangeSessionDraft({
-                  weekday: Number(e.target.value),
-                  manualWeekdayOverride: true,
-                })
-              }
-              style={{
-                width: "100%",
-                padding: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-              }}
-            >
-              {WEEKDAY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                padding: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-                background: "#f7f7f7",
-                fontWeight: 700,
-              }}
-            >
-              {getWeekdayLabel(sessionDraft.weekday)}
-            </div>
-          )}
+          <div
+            onWheel={(e) => {
+              e.preventDefault();
+              handleWeekdayWheel(e.deltaY);
+            }}
+            style={{ minWidth: 0 }}
+          >
+            {sessionDraft.manualWeekdayOverride ? (
+              <select
+                value={sessionDraft.weekday}
+                onChange={(e) =>
+                  onChangeSessionDraft({
+                    weekday: Number(e.target.value),
+                    manualWeekdayOverride: true,
+                  })
+                }
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                }}
+              >
+                {WEEKDAY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                  background: "#f7f7f7",
+                  fontWeight: 700,
+                }}
+              >
+                {getWeekdayLabel(sessionDraft.weekday)}
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
@@ -240,42 +287,50 @@ export function StartScreen({
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>時刻</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
-          {sessionDraft.manualDiscountTimeOverride ? (
-            <select
-              value={sessionDraft.discountTime}
-              onChange={(e) =>
-                onChangeSessionDraft({
-                  discountTime: e.target.value as DiscountTime,
-                  manualDiscountTimeOverride: true,
-                })
-              }
-              style={{
-                width: "100%",
-                padding: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-              }}
-            >
-              {DISCOUNT_TIME_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                padding: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-                background: "#f7f7f7",
-                fontWeight: 700,
-              }}
-            >
-              {getDiscountTimeLabel(sessionDraft.discountTime)}
-            </div>
-          )}
+          <div
+            onWheel={(e) => {
+              e.preventDefault();
+              handleDiscountTimeWheel(e.deltaY);
+            }}
+            style={{ minWidth: 0 }}
+          >
+            {sessionDraft.manualDiscountTimeOverride ? (
+              <select
+                value={sessionDraft.discountTime}
+                onChange={(e) =>
+                  onChangeSessionDraft({
+                    discountTime: e.target.value as DiscountTime,
+                    manualDiscountTimeOverride: true,
+                  })
+                }
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                }}
+              >
+                {DISCOUNT_TIME_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                  background: "#f7f7f7",
+                  fontWeight: 700,
+                }}
+              >
+                {getDiscountTimeLabel(sessionDraft.discountTime)}
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
@@ -309,55 +364,39 @@ export function StartScreen({
       </div>
 
       <SegmentedSelector
-  label={weatherGuideText.nearTermWeatherGuide}
-  value={sessionDraft.weather.nearTermWeather}
-  options={NEAR_TERM_WEATHER_OPTIONS}
-  onChange={(next) => {
-    if (next === "other") {
-      onChangeSessionDraft({
-        weather: {
-          ...sessionDraft.weather,
-          nearTermWeather: "other",
-          hasLaterPrecip: false,
-          laterPrecipType: null,
-        },
-      });
-      return;
-    }
+        label={weatherGuideText.nearTermWeatherGuide}
+        value={sessionDraft.weather.nearTermWeather}
+        options={NEAR_TERM_WEATHER_OPTIONS}
+        onChange={(next) =>
+          onChangeSessionDraft({
+            weather: {
+              ...sessionDraft.weather,
+              nearTermWeather: next,
+            },
+          })
+        }
+      />
 
-    onChangeSessionDraft({
-      weather: {
-        ...sessionDraft.weather,
-        nearTermWeather: next,
-        hasLaterPrecip: true,
-        laterPrecipType: next,
-      },
-    });
-  }}
-/>
-
-      {sessionDraft.weather.nearTermWeather === "other" ? (
-  <SegmentedSelector
-    label={weatherGuideText.laterPrecipGuide}
-    value={
-      sessionDraft.weather.hasLaterPrecip
-        ? sessionDraft.weather.laterPrecipType === "snow"
-          ? "snow"
-          : "rain"
-        : "none"
-    }
-    options={LATER_PRECIP_OPTIONS}
-    onChange={(next) =>
-      onChangeSessionDraft({
-        weather: {
-          ...sessionDraft.weather,
-          hasLaterPrecip: next !== "none",
-          laterPrecipType: next === "none" ? null : next,
-        },
-      })
-    }
-  />
-) : null}
+      <SegmentedSelector
+        label={weatherGuideText.laterPrecipGuide}
+        value={
+          sessionDraft.weather.hasLaterPrecip
+            ? sessionDraft.weather.laterPrecipType === "snow"
+              ? "snow"
+              : "rain"
+            : "none"
+        }
+        options={LATER_PRECIP_OPTIONS}
+        onChange={(next) =>
+          onChangeSessionDraft({
+            weather: {
+              ...sessionDraft.weather,
+              hasLaterPrecip: next !== "none",
+              laterPrecipType: next === "none" ? null : next,
+            },
+          })
+        }
+      />
 
       <SegmentedSelector
         label={weatherGuideText.windGuide}
@@ -371,16 +410,16 @@ export function StartScreen({
       />
 
       <SegmentedSelector
-  label={weatherGuideText.tempGuide}
-  value={sessionDraft.weather.tempLevel}
-  options={TEMP_OPTIONS}
-  columns={2}
-  onChange={(next) =>
-    onChangeSessionDraft({
-      weather: { ...sessionDraft.weather, tempLevel: next },
-    })
-  }
-/>
+        label={weatherGuideText.tempGuide}
+        value={sessionDraft.weather.tempLevel}
+        options={TEMP_OPTIONS}
+        columns={4}
+        onChange={(next) =>
+          onChangeSessionDraft({
+            weather: { ...sessionDraft.weather, tempLevel: next },
+          })
+        }
+      />
 
       {isFinalTime ? (
         <section

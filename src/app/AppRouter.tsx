@@ -33,17 +33,17 @@ export function AppRouter({ app }: AppRouterProps) {
 
       return (
         <AreaJudgeScreen
-          weekdayText={derived.weekdayText}
-          timeText={derived.timeText}
-          areaName={derived.currentAreaName}
-          basisGuide={derived.basisGuide}
-          pendingBanner={derived.pendingBanner}
-          timeSwitchNotice={derived.timeSwitchNotice}
-          onSelectMany={actions.selectAreaMany}
-          onSelectNormal={actions.selectAreaNormal}
-          onSelectFew={actions.selectAreaFew}
-          onSkip={actions.skipCurrentArea}
-        />
+  weekdayText={derived.weekdayText}
+  timeText={derived.timeText}
+  areaName={derived.currentAreaName}
+  basisGuide={derived.basisGuide}
+  pendingBanner={derived.pendingBanner}
+  timeSwitchNotice={derived.timeSwitchNotice}
+  onSelectMany={actions.selectAreaMany}
+  onSelectNormal={actions.selectAreaNormal}
+  onSelectFew={actions.selectAreaFew}
+  onSkip={actions.skipCurrentArea}
+/>
       );
 
     case "rate_display":

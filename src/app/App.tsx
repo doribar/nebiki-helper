@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
 
@@ -12,6 +13,25 @@ export default function App() {
 
     app.actions.resetApp();
   }
+
+  function handleEscapeToTop() {
+    app.actions.resetApp();
+  }
+
+  useEffect(() => {
+    if (app.state.screen === "start") return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (event.repeat) return;
+
+      event.preventDefault();
+      handleEscapeToTop();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [app.state.screen]);
 
   return (
     <>
