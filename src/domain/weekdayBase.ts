@@ -338,14 +338,14 @@ function getOverflowBonusTerm(params: {
 
   if (params.overflowDirection === "up") {
     return {
-      label: "頭打ち（上限）",
+      label: "曜日基準で補正しきれない分",
       value: 5,
     };
   }
 
   if (params.overflowDirection === "down") {
     return {
-      label: "頭打ち（下限）",
+      label: "曜日基準で補正しきれない分",
       value: -5,
     };
   }
