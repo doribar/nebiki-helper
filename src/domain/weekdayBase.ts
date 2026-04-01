@@ -239,6 +239,18 @@ function getWindShiftTerm(
   };
 }
 
+function getAfterRainRecoveryShift(weather: WeatherInput): number {
+  return weather.afterRainSky === "sunny" ? -1 : 0;
+}
+
+function getAfterRainRecoveryShiftTerm(weather: WeatherInput): ShiftTerm | undefined {
+  if (weather.afterRainSky !== "sunny") {
+    return undefined;
+  }
+
+  return { label: "雨上がり後 晴れ", value: -1 };
+}
+
 function getLaterPrecipShift(weather: WeatherInput): number {
   if (!weather.hasLaterPrecip) {
     return 0;
@@ -469,12 +481,14 @@ function resolveWeatherEffect(params: {
     getTempShiftTerm(params.weather.tempLevel),
     getWindShiftTerm(params.weather.tempLevel, params.weather.windLevel),
     getLaterPrecipShiftTerm(params.weather),
+    getAfterRainRecoveryShiftTerm(params.weather),
   ].filter((value): value is ShiftTerm => Boolean(value));
 
   const totalShift =
     getTempShift(params.weather.tempLevel) +
     getWindShift(params.weather.tempLevel, params.weather.windLevel) +
-    getLaterPrecipShift(params.weather);
+    getLaterPrecipShift(params.weather) +
+    getAfterRainRecoveryShift(params.weather);
 
   const shifted = applyWeekdayShift({
     base: original,

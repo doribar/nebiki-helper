@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppState,
   AreaId,
@@ -10,6 +10,8 @@ import type {
   SessionDraft,
   UseNebikiAppResult,
   WeatherInput,
+  AreaJudge,
+  ScreenName,
 } from "../domain/types";
 import { AREA_MASTERS, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -28,11 +30,17 @@ import {
   consumeNextSessionSkipAreaIds,
   loadCurrentSession,
   saveCurrentSession,
+  loadLastSessionWeather,
+  saveLastSessionWeather,
 } from "../domain/storage";
 import {
   getNextPendingCandidate,
   getPendingRemainingCount,
 } from "../domain/pending";
+import {
+  applyAfterRainSelectionDefaults,
+  shouldOfferAfterRainRecovery,
+} from "../domain/afterRain";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -88,12 +96,13 @@ function createInitialSessionDraft(): SessionDraft {
     manualWeekdayOverride: false,
     manualDiscountTimeOverride: false,
     weather: {
-  nearTermWeather: "other",
-  hasLaterPrecip: false,
-  laterPrecipType: null,
-  windLevel: "2orLess",
-  tempLevel: "11to15",
-},
+      nearTermWeather: "other",
+      hasLaterPrecip: false,
+      laterPrecipType: null,
+      windLevel: "2orLess",
+      tempLevel: "11to15",
+      afterRainSky: null,
+    },
   };
 }
 
@@ -119,7 +128,20 @@ function createInitialState(): AppState {
     currentFlow: "normal",
     pendingDeferredAreaIds: [],
     timeSwitchNotice: null,
+    finalTimeStep: 0,
   };
+}
+
+function cloneAppState(state: AppState): AppState {
+  return JSON.parse(JSON.stringify(state)) as AppState;
+}
+
+function hasNavigationStateChanged(prev: AppState, next: AppState): boolean {
+  return (
+    prev.screen !== next.screen ||
+    prev.currentAreaId !== next.currentAreaId ||
+    prev.finalTimeStep !== next.finalTimeStep
+  );
 }
 
 function normalizeWeatherInput(raw: unknown): WeatherInput {
@@ -209,6 +231,10 @@ function normalizeWeatherInput(raw: unknown): WeatherInput {
           ? "6to10"
           : "11to15"
         : fallback.tempLevel,
+    afterRainSky:
+      source.afterRainSky === "cloudy" || source.afterRainSky === "sunny"
+        ? source.afterRainSky
+        : fallback.afterRainSky,
   };
 }
 
@@ -250,6 +276,16 @@ function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | 
   };
 }
 
+function syncAfterRainSelection(
+  sessionDraft: SessionDraft,
+  lastSessionWeather: ReturnType<typeof loadLastSessionWeather>
+): SessionDraft {
+  return applyAfterRainSelectionDefaults({
+    sessionDraft,
+    lastSessionWeather,
+  });
+}
+
 function normalizeLoadedState(loaded: AppState | null): AppState {
   if (!loaded) return createInitialState();
 
@@ -266,6 +302,10 @@ function normalizeLoadedState(loaded: AppState | null): AppState {
       (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [],
     timeSwitchNotice:
       (loaded as Partial<AppState>).timeSwitchNotice ?? null,
+    finalTimeStep:
+      typeof (loaded as Partial<AppState>).finalTimeStep === "number"
+        ? ((loaded as Partial<AppState>).finalTimeStep as AppState["finalTimeStep"])
+        : 0,
   };
 }
 
@@ -357,10 +397,94 @@ export function useNebikiApp(): UseNebikiAppResult {
     normalizeLoadedState(loadCurrentSession())
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [lastSessionWeather, setLastSessionWeather] = useState(() =>
+    loadLastSessionWeather()
+  );
+
+  const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(null);
+  const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(null);
+  const [undoSnapshot, setUndoSnapshot] = useState<
+    | { state: AppState; areaJudgeSelection: AreaJudge; resumeTargetScreen: ScreenName | null }
+    | null
+  >(null);
+  const [undoNotice, setUndoNotice] = useState<string | null>(null);
+  const screenHistoryRef = useRef<
+    { state: AppState; areaJudgeSelection: AreaJudge; resumeTargetScreen: ScreenName | null }[]
+  >([]);
+  const previousRenderRef = useRef<
+    | { state: AppState; areaJudgeSelection: AreaJudge; resumeTargetScreen: ScreenName | null }
+    | null
+  >(null);
+  const suppressHistoryPushRef = useRef(false);
 
   useEffect(() => {
     saveCurrentSession(state);
   }, [state]);
+
+  useEffect(() => {
+    const previousRender = previousRenderRef.current;
+
+    if (previousRender && hasNavigationStateChanged(previousRender.state, state)) {
+      if (suppressHistoryPushRef.current) {
+        suppressHistoryPushRef.current = false;
+      } else {
+        screenHistoryRef.current = [
+          ...screenHistoryRef.current,
+          {
+            state: cloneAppState(previousRender.state),
+            areaJudgeSelection: previousRender.areaJudgeSelection,
+            resumeTargetScreen: previousRender.resumeTargetScreen,
+          },
+        ];
+      }
+    }
+
+    previousRenderRef.current = {
+      state: cloneAppState(state),
+      areaJudgeSelection,
+      resumeTargetScreen,
+    };
+  }, [state, areaJudgeSelection, resumeTargetScreen]);
+
+  useEffect(() => {
+    if (!undoNotice) return;
+
+    const id = window.setTimeout(() => {
+      setUndoNotice(null);
+    }, 2500);
+
+    return () => window.clearTimeout(id);
+  }, [undoNotice]);
+
+  useEffect(() => {
+    if (state.screen !== "area_judge" || !state.currentAreaId) return;
+
+    const nextSelection = state.areaProgressMap[state.currentAreaId]?.areaJudge ?? null;
+    setAreaJudgeSelection(nextSelection);
+  }, [state.screen, state.currentAreaId, state.areaProgressMap]);
+
+  useEffect(() => {
+    if (!state.session) return;
+
+    const nextRecord = {
+      date: state.session.date,
+      discountTime: state.session.discountTime,
+      nearTermWeather: state.session.weather.nearTermWeather,
+    } as const;
+
+    saveLastSessionWeather(nextRecord);
+    setLastSessionWeather((current) => {
+      if (
+        current?.date === nextRecord.date &&
+        current?.discountTime === nextRecord.discountTime &&
+        current?.nearTermWeather === nextRecord.nearTermWeather
+      ) {
+        return current;
+      }
+
+      return nextRecord;
+    });
+  }, [state.session?.startedAt]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -421,8 +545,48 @@ export function useNebikiApp(): UseNebikiAppResult {
   return () => window.clearInterval(id);
 }, [state.screen]);
 
+  useEffect(() => {
+    if (state.screen !== "start") return;
+
+    setState((prev) => {
+      if (prev.screen !== "start") return prev;
+
+      const nextDraft = syncAfterRainSelection(prev.sessionDraft, lastSessionWeather);
+
+      if (nextDraft === prev.sessionDraft) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        sessionDraft: nextDraft,
+      };
+    });
+  }, [
+    lastSessionWeather,
+    state.screen,
+    state.sessionDraft.date,
+    state.sessionDraft.discountTime,
+    state.sessionDraft.weather.nearTermWeather,
+    state.sessionDraft.weather.afterRainSky,
+  ]);
+
   const sessionSource = state.session ?? state.sessionDraft;
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
+
+  const showAfterRainRecoverySelector = useMemo(() => {
+    return shouldOfferAfterRainRecovery({
+      sessionDate: state.sessionDraft.date,
+      sessionDiscountTime: state.sessionDraft.discountTime,
+      nearTermWeather: state.sessionDraft.weather.nearTermWeather,
+      lastSessionWeather,
+    });
+  }, [
+    state.sessionDraft.date,
+    state.sessionDraft.discountTime,
+    state.sessionDraft.weather.nearTermWeather,
+    lastSessionWeather,
+  ]);
 
   const weekdayText = useMemo(() => {
     return getWeekdayText(sessionSource.weekday);
@@ -574,209 +738,418 @@ const lateSkipNotice = useMemo(() => {
     };
   }, [state.currentFlow, state.currentAreaId, state.areaProgressMap]);
 
+  function moveToNextPendingOrDone(params: {
+    prev: AppState;
+    updatedMap: Record<AreaId, AreaProgress>;
+    referenceAreaId: AreaId;
+    deferredAreaIds?: AreaId[];
+    preferredNextReason?: PendingReason | null;
+    nextSession: SessionData | null;
+    timeSwitchNotice: string | null;
+  }): AppState {
+    const effectiveDeferredAreaIds =
+      params.deferredAreaIds ?? params.prev.pendingDeferredAreaIds;
+
+    if (params.nextSession?.discountTime === "20") {
+      return {
+        ...params.prev,
+        session: params.nextSession,
+        timeSwitchNotice: params.timeSwitchNotice,
+        areaProgressMap: params.updatedMap,
+        currentAreaId: null,
+        lastReferenceAreaId: params.referenceAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        finalTimeStep: 0,
+        screen: "final_time",
+      };
+    }
+
+    const nextCandidate = getNextPendingCandidate({
+      areaProgressMap: params.updatedMap,
+      referenceAreaId: params.referenceAreaId,
+      deferredAreaIds: effectiveDeferredAreaIds,
+      preferredReason: params.preferredNextReason ?? null,
+    });
+
+    if (!nextCandidate) {
+      return {
+        ...params.prev,
+        session: params.nextSession,
+        timeSwitchNotice: params.timeSwitchNotice,
+        areaProgressMap: params.updatedMap,
+        currentAreaId: null,
+        lastReferenceAreaId: params.referenceAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        finalTimeStep: 0,
+        screen: "done",
+      };
+    }
+
+    return {
+      ...params.prev,
+      session: params.nextSession,
+      timeSwitchNotice: params.timeSwitchNotice,
+      areaProgressMap: params.updatedMap,
+      currentAreaId: nextCandidate.areaId,
+      lastReferenceAreaId: params.referenceAreaId,
+      currentFlow: "pending",
+      pendingDeferredAreaIds: effectiveDeferredAreaIds,
+      finalTimeStep: 0,
+      screen: nextCandidate.reason === "manual" ? "area_judge" : "rate_display",
+    };
+  }
+
   function updateSessionDraft(patch: Partial<SessionDraft>) {
-    setState((prev) => ({
-      ...prev,
-      sessionDraft: {
+    setState((prev) => {
+      const mergedDraft: SessionDraft = {
         ...prev.sessionDraft,
         ...patch,
         weather: {
           ...prev.sessionDraft.weather,
           ...(patch.weather ?? {}),
         },
+      };
+
+      return {
+        ...prev,
+        sessionDraft: syncAfterRainSelection(mergedDraft, lastSessionWeather),
+      };
+    });
+  }
+
+  function buildDraftFromSource(source: SessionData | SessionDraft): SessionDraft {
+    return syncAfterRainSelection(normalizeSessionDraft(source), lastSessionWeather);
+  }
+
+  function createUndoSnapshot(baseState: AppState = state) {
+    return {
+      state: cloneAppState(baseState),
+      areaJudgeSelection,
+      resumeTargetScreen,
+    } as const;
+  }
+
+  function resolveResumeState(prev: AppState, nextSession: SessionData, requestedScreen: ScreenName) {
+    if (nextSession.discountTime === "20") {
+      return {
+        screen: "final_time" as const,
+        currentAreaId: null,
+        lastReferenceAreaId: prev.lastReferenceAreaId,
+        finalTimeStep: prev.finalTimeStep,
+      };
+    }
+
+    const fallbackAreaId =
+      prev.currentAreaId ??
+      prev.lastReferenceAreaId ??
+      getFirstAvailableAreaId(prev.areaProgressMap);
+
+    if (!fallbackAreaId) {
+      return {
+        screen: "done" as const,
+        currentAreaId: null,
+        lastReferenceAreaId: prev.lastReferenceAreaId,
+        finalTimeStep: 0 as const,
+      };
+    }
+
+    const progress = prev.areaProgressMap[fallbackAreaId];
+
+    if (requestedScreen === "done") {
+      return {
+        screen: "done" as const,
+        currentAreaId: null,
+        lastReferenceAreaId: fallbackAreaId,
+        finalTimeStep: 0 as const,
+      };
+    }
+
+    if (requestedScreen === "rate_display" && progress.areaJudge) {
+      return {
+        screen: "rate_display" as const,
+        currentAreaId: fallbackAreaId,
+        lastReferenceAreaId: fallbackAreaId,
+        finalTimeStep: 0 as const,
+      };
+    }
+
+    if (requestedScreen === "area_judge" || !progress.areaJudge) {
+      return {
+        screen: "area_judge" as const,
+        currentAreaId: fallbackAreaId,
+        lastReferenceAreaId: fallbackAreaId,
+        finalTimeStep: 0 as const,
+      };
+    }
+
+    return {
+      screen: "rate_display" as const,
+      currentAreaId: fallbackAreaId,
+      lastReferenceAreaId: fallbackAreaId,
+      finalTimeStep: 0 as const,
+    };
+  }
+
+  function applyAreaJudgeSelection(prev: AppState, selection: Exclude<AreaJudge, null>): AppState {
+    if (!prev.currentAreaId) return prev;
+    const currentAreaId = prev.currentAreaId;
+
+    if (selection === "many" || selection === "normal") {
+      return {
+        ...prev,
+        screen: "rate_display",
+        timeSwitchNotice: null,
+        finalTimeStep: 0,
+        areaProgressMap: {
+          ...prev.areaProgressMap,
+          [currentAreaId]: {
+            ...prev.areaProgressMap[currentAreaId],
+            areaJudge: selection,
+            visitedAt: new Date().toISOString(),
+          },
+        },
+      };
+    }
+
+    const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
+
+    const updatedMap = {
+      ...prev.areaProgressMap,
+      [currentAreaId]: {
+        ...prev.areaProgressMap[currentAreaId],
+        areaJudge: "few" as const,
+        status: "postponed_few" as const,
+        skipReason: "few" as const,
+        visitedAt: new Date().toISOString(),
       },
+    };
+
+    if (prev.currentFlow === "pending") {
+      const wasFew = prev.areaProgressMap[currentAreaId].status === "postponed_few";
+
+      return moveToNextPendingOrDone({
+        prev,
+        updatedMap,
+        referenceAreaId: currentAreaId,
+        deferredAreaIds: wasFew ? [] : undefined,
+        preferredNextReason: wasFew ? "manual" : null,
+        nextSession,
+        timeSwitchNotice,
+      });
+    }
+
+    if (nextSession?.discountTime === "20") {
+      return {
+        ...prev,
+        session: nextSession,
+        timeSwitchNotice,
+        areaProgressMap: updatedMap,
+        currentAreaId: null,
+        lastReferenceAreaId: currentAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        finalTimeStep: 0,
+        screen: "final_time",
+      };
+    }
+
+    const nextAreaId = getNextNormalArea(currentAreaId);
+
+    if (nextAreaId) {
+      return {
+        ...prev,
+        session: nextSession,
+        timeSwitchNotice,
+        areaProgressMap: updatedMap,
+        currentAreaId: nextAreaId,
+        lastReferenceAreaId: currentAreaId,
+        pendingDeferredAreaIds: [],
+        finalTimeStep: 0,
+        screen: "area_judge",
+      };
+    }
+
+    return moveToNextPendingOrDone({
+      prev,
+      updatedMap,
+      referenceAreaId: currentAreaId,
+      nextSession,
+      timeSwitchNotice,
+    });
+  }
+
+  function startSession() {
+    const now = new Date();
+    const startedAt = now.toISOString();
+    const currentDate = formatLocalDate(now);
+    const currentWeekday = now.getDay();
+    const currentDiscountTime = resolveDiscountTime(now);
+
+    setState((prev) => {
+      const nextSession: SessionData = {
+        ...prev.sessionDraft,
+        date: currentDate,
+        weekday: prev.sessionDraft.manualWeekdayOverride
+          ? prev.sessionDraft.weekday
+          : currentWeekday,
+        discountTime: prev.sessionDraft.manualDiscountTimeOverride
+          ? prev.sessionDraft.discountTime
+          : currentDiscountTime,
+        startedAt: prev.session?.startedAt ?? startedAt,
+      };
+
+      if (prev.session) {
+        const requestedScreen =
+          resumeTargetScreen ??
+          (prev.session.discountTime === "20" ? "final_time" : "area_judge");
+
+        const resumeState = resolveResumeState(prev, nextSession, requestedScreen);
+
+        return {
+          ...prev,
+          session: nextSession,
+          screen: resumeState.screen,
+          currentAreaId: resumeState.currentAreaId,
+          lastReferenceAreaId: resumeState.lastReferenceAreaId,
+          timeSwitchNotice: null,
+          finalTimeStep: resumeState.finalTimeStep,
+        };
+      }
+
+      let areaProgressMap = createInitialAreaProgressMap();
+
+      if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
+        const skippedAreaIds = consumeNextSessionSkipAreaIds({
+          date: nextSession.date,
+          targetDiscountTime: nextSession.discountTime,
+        });
+
+        areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(skippedAreaIds);
+      }
+
+      const firstAreaId =
+        nextSession.discountTime === "20"
+          ? null
+          : getFirstAvailableAreaId(areaProgressMap);
+
+      return {
+        ...prev,
+        screen:
+          nextSession.discountTime === "20"
+            ? "final_time"
+            : firstAreaId
+            ? "area_judge"
+            : "done",
+        session: nextSession,
+        areaProgressMap,
+        currentAreaId: firstAreaId,
+        lastReferenceAreaId: firstAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: null,
+        finalTimeStep: 0,
+      };
+    });
+
+    setResumeTargetScreen(null);
+    setUndoSnapshot(null);
+    setUndoNotice(null);
+  }
+
+  function judgeCurrentArea(judge: Exclude<AreaJudge, null>) {
+    setAreaJudgeSelection(judge);
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
+
+    setState((prev) => applyAreaJudgeSelection(prev, judge));
+  }
+
+  function goBackOneScreen() {
+    const previousScreen = screenHistoryRef.current.at(-1);
+    if (!previousScreen) return;
+
+    screenHistoryRef.current = screenHistoryRef.current.slice(0, -1);
+    suppressHistoryPushRef.current = true;
+    setState(cloneAppState(previousScreen.state));
+    setAreaJudgeSelection(previousScreen.areaJudgeSelection);
+    setResumeTargetScreen(previousScreen.resumeTargetScreen);
+    setUndoNotice(null);
+  }
+
+  function startEditingConditions() {
+    if (state.screen === "start") return;
+
+    setResumeTargetScreen(state.screen);
+    setState((prev) => ({
+      ...prev,
+      screen: "start",
+      sessionDraft: buildDraftFromSource(prev.session ?? prev.sessionDraft),
+      timeSwitchNotice: null,
     }));
   }
 
-  function moveToNextPendingOrDone(params: {
-  prev: AppState;
-  updatedMap: Record<AreaId, AreaProgress>;
-  referenceAreaId: AreaId;
-  deferredAreaIds?: AreaId[];
-  preferredNextReason?: PendingReason | null;
-  nextSession: SessionData | null;
-  timeSwitchNotice: string | null;
-}): AppState {
-  const effectiveDeferredAreaIds =
-    params.deferredAreaIds ?? params.prev.pendingDeferredAreaIds;
+  function undoLastAction() {
+    if (!undoSnapshot) return;
 
-  if (params.nextSession?.discountTime === "20") {
-    return {
-      ...params.prev,
-      session: params.nextSession,
-      timeSwitchNotice: params.timeSwitchNotice,
-      areaProgressMap: params.updatedMap,
-      currentAreaId: null,
-      lastReferenceAreaId: params.referenceAreaId,
-      currentFlow: "normal",
-      pendingDeferredAreaIds: [],
-      screen: "final_time",
-    };
+    setState(cloneAppState(undoSnapshot.state));
+    setAreaJudgeSelection(undoSnapshot.areaJudgeSelection);
+    setResumeTargetScreen(undoSnapshot.resumeTargetScreen);
+    setUndoSnapshot(null);
+    setUndoNotice("直前の操作を取り消しました");
   }
 
-  const nextCandidate = getNextPendingCandidate({
-    areaProgressMap: params.updatedMap,
-    referenceAreaId: params.referenceAreaId,
-    deferredAreaIds: effectiveDeferredAreaIds,
-    preferredReason: params.preferredNextReason ?? null,
-  });
+  function skipCurrentArea() {
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
 
-  if (!nextCandidate) {
-    return {
-      ...params.prev,
-      session: params.nextSession,
-      timeSwitchNotice: params.timeSwitchNotice,
-      areaProgressMap: params.updatedMap,
-      currentAreaId: null,
-      lastReferenceAreaId: params.referenceAreaId,
-      currentFlow: "normal",
-      pendingDeferredAreaIds: [],
-      screen: "done",
-    };
-  }
-
-  return {
-    ...params.prev,
-    session: params.nextSession,
-    timeSwitchNotice: params.timeSwitchNotice,
-    areaProgressMap: params.updatedMap,
-    currentAreaId: nextCandidate.areaId,
-    lastReferenceAreaId: params.referenceAreaId,
-    currentFlow: "pending",
-    pendingDeferredAreaIds: effectiveDeferredAreaIds,
-    screen: nextCandidate.reason === "manual" ? "area_judge" : "rate_display",
-  };
-}
-
-function startSession() {
-  const now = new Date();
-  const startedAt = now.toISOString();
-  const currentDate = formatLocalDate(now);
-  const currentWeekday = now.getDay();
-  const currentDiscountTime = resolveDiscountTime(now);
-
-  setState((prev) => {
-    const session: SessionData = {
-      ...prev.sessionDraft,
-      date: currentDate,
-      weekday: prev.sessionDraft.manualWeekdayOverride
-        ? prev.sessionDraft.weekday
-        : currentWeekday,
-      discountTime: prev.sessionDraft.manualDiscountTimeOverride
-        ? prev.sessionDraft.discountTime
-        : currentDiscountTime,
-      startedAt,
-    };
-
-    let areaProgressMap = createInitialAreaProgressMap();
-
-    if (session.discountTime === "18" || session.discountTime === "19") {
-      const skippedAreaIds = consumeNextSessionSkipAreaIds({
-        date: session.date,
-        targetDiscountTime: session.discountTime,
-      });
-
-      areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-        skippedAreaIds
-      );
-    }
-
-    const firstAreaId =
-      session.discountTime === "20"
-        ? null
-        : getFirstAvailableAreaId(areaProgressMap);
-
-    return {
-      ...prev,
-      screen:
-        session.discountTime === "20"
-          ? "final_time"
-          : firstAreaId
-          ? "area_judge"
-          : "done",
-      session,
-      areaProgressMap,
-      currentAreaId: firstAreaId,
-      lastReferenceAreaId: firstAreaId,
-      currentFlow: "normal",
-      pendingDeferredAreaIds: [],
-      timeSwitchNotice: null,
-    };
-  });
-}
-
-  function selectAreaMany() {
     setState((prev) => {
       if (!prev.currentAreaId) return prev;
       const currentAreaId = prev.currentAreaId;
-
-      return {
-        ...prev,
-        screen: "rate_display",
-        timeSwitchNotice: null,
-        areaProgressMap: {
-          ...prev.areaProgressMap,
-          [currentAreaId]: {
-            ...prev.areaProgressMap[currentAreaId],
-            areaJudge: "many",
-            visitedAt: new Date().toISOString(),
-          },
-        },
-      };
-    });
-  }
-
-  function selectAreaNormal() {
-    setState((prev) => {
-      if (!prev.currentAreaId) return prev;
-      const currentAreaId = prev.currentAreaId;
-
-      return {
-        ...prev,
-        screen: "rate_display",
-        timeSwitchNotice: null,
-        areaProgressMap: {
-          ...prev.areaProgressMap,
-          [currentAreaId]: {
-            ...prev.areaProgressMap[currentAreaId],
-            areaJudge: "normal",
-            visitedAt: new Date().toISOString(),
-          },
-        },
-      };
-    });
-  }
-
-  function selectAreaFew() {
-    setState((prev) => {
-      if (!prev.currentAreaId) return prev;
-      const currentAreaId = prev.currentAreaId;
+      const currentProgress = prev.areaProgressMap[currentAreaId];
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
+
+      if (prev.currentFlow === "pending") {
+        const alreadyDeferred = prev.pendingDeferredAreaIds.includes(currentAreaId);
+        const shouldPreferFewNext =
+          currentProgress.status === "skipped_manual" && alreadyDeferred;
+
+        if (currentProgress.status === "postponed_few") {
+          return moveToNextPendingOrDone({
+            prev,
+            updatedMap: prev.areaProgressMap,
+            referenceAreaId: currentAreaId,
+            deferredAreaIds: [currentAreaId],
+            preferredNextReason: "manual",
+            nextSession,
+            timeSwitchNotice,
+          });
+        }
+
+        const nextDeferredAreaIds = alreadyDeferred
+          ? prev.pendingDeferredAreaIds
+          : [...prev.pendingDeferredAreaIds, currentAreaId];
+
+        return moveToNextPendingOrDone({
+          prev,
+          updatedMap: prev.areaProgressMap,
+          referenceAreaId: currentAreaId,
+          deferredAreaIds: nextDeferredAreaIds,
+          preferredNextReason: shouldPreferFewNext ? "few" : null,
+          nextSession,
+          timeSwitchNotice,
+        });
+      }
 
       const updatedMap = {
         ...prev.areaProgressMap,
         [currentAreaId]: {
-          ...prev.areaProgressMap[currentAreaId],
-          areaJudge: "few" as const,
-          status: "postponed_few" as const,
-          skipReason: "few" as const,
-          visitedAt: new Date().toISOString(),
+          ...currentProgress,
+          status: "skipped_manual" as const,
+          skipReason: "manual" as const,
         },
       };
-
-      if (prev.currentFlow === "pending") {
-  const wasFew = prev.areaProgressMap[currentAreaId].status === "postponed_few";
-
-  return moveToNextPendingOrDone({
-    prev,
-    updatedMap,
-    referenceAreaId: currentAreaId,
-    deferredAreaIds: wasFew ? [] : undefined,
-    preferredNextReason: wasFew ? "manual" : null,
-    nextSession,
-    timeSwitchNotice,
-  });
-}
 
       if (nextSession?.discountTime === "20") {
         return {
@@ -788,6 +1161,7 @@ function startSession() {
           lastReferenceAreaId: currentAreaId,
           currentFlow: "normal",
           pendingDeferredAreaIds: [],
+          finalTimeStep: 0,
           screen: "final_time",
         };
       }
@@ -803,6 +1177,7 @@ function startSession() {
           currentAreaId: nextAreaId,
           lastReferenceAreaId: currentAreaId,
           pendingDeferredAreaIds: [],
+          finalTimeStep: 0,
           screen: "area_judge",
         };
       }
@@ -817,135 +1192,83 @@ function startSession() {
     });
   }
 
-  function skipCurrentArea() {
-  setState((prev) => {
-    if (!prev.currentAreaId) return prev;
-    const currentAreaId = prev.currentAreaId;
-    const currentProgress = prev.areaProgressMap[currentAreaId];
-    const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
-
-    if (prev.currentFlow === "pending") {
-  const alreadyDeferred = prev.pendingDeferredAreaIds.includes(currentAreaId);
-
-  // 同じ manual skip エリアで2回目のスキップなら、次だけ few を優先
-  const shouldPreferFewNext =
-    currentProgress.status === "skipped_manual" && alreadyDeferred;
-
-  // few をスキップしたら、次は manual に戻す
-  if (currentProgress.status === "postponed_few") {
-    return moveToNextPendingOrDone({
-      prev,
-      updatedMap: prev.areaProgressMap,
-      referenceAreaId: currentAreaId,
-      deferredAreaIds: [currentAreaId],
-      preferredNextReason: "manual",
-      nextSession,
-      timeSwitchNotice,
-    });
-  }
-
-  const nextDeferredAreaIds = alreadyDeferred
-    ? prev.pendingDeferredAreaIds
-    : [...prev.pendingDeferredAreaIds, currentAreaId];
-
-  return moveToNextPendingOrDone({
-    prev,
-    updatedMap: prev.areaProgressMap,
-    referenceAreaId: currentAreaId,
-    deferredAreaIds: nextDeferredAreaIds,
-    preferredNextReason: shouldPreferFewNext ? "few" : null,
-    nextSession,
-    timeSwitchNotice,
-  });
-}
-
-    const updatedMap = {
-      ...prev.areaProgressMap,
-      [currentAreaId]: {
-        ...currentProgress,
-        status: "skipped_manual" as const,
-        skipReason: "manual" as const,
-      },
-    };
-
-    if (nextSession?.discountTime === "20") {
-      return {
-        ...prev,
-        session: nextSession,
-        timeSwitchNotice,
-        areaProgressMap: updatedMap,
-        currentAreaId: null,
-        lastReferenceAreaId: currentAreaId,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        screen: "final_time",
-      };
-    }
-
-    const nextAreaId = getNextNormalArea(currentAreaId);
-
-    if (nextAreaId) {
-      return {
-        ...prev,
-        session: nextSession,
-        timeSwitchNotice,
-        areaProgressMap: updatedMap,
-        currentAreaId: nextAreaId,
-        lastReferenceAreaId: currentAreaId,
-        pendingDeferredAreaIds: [],
-        screen: "area_judge",
-      };
-    }
-
-    return moveToNextPendingOrDone({
-      prev,
-      updatedMap,
-      referenceAreaId: currentAreaId,
-      nextSession,
-      timeSwitchNotice,
-    });
-  });
-}
-
   function goToNextArea() {
-  setState((prev) => {
-    if (!prev.currentAreaId) return prev;
-    const currentAreaId = prev.currentAreaId;
-    const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(
-      prev.session
-    );
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
 
-    const updatedMap = {
-      ...prev.areaProgressMap,
-      [currentAreaId]: {
-        ...prev.areaProgressMap[currentAreaId],
-        status: "completed" as const,
-        completedAt: new Date().toISOString(),
-      },
-    };
+    setState((prev) => {
+      if (!prev.currentAreaId) return prev;
+      const currentAreaId = prev.currentAreaId;
+      const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
-    // +5% が発動している状態で完了したエリアだけ、次回スキップ対象として記録
-    if (
-      prev.session &&
-      lateTimeBonus > 0 &&
-      !prev.session.manualDiscountTimeOverride
-    ) {
-      const targetDiscountTime = getNextSkipTargetDiscountTime(
-        prev.session.discountTime
-      );
+      const updatedMap = {
+        ...prev.areaProgressMap,
+        [currentAreaId]: {
+          ...prev.areaProgressMap[currentAreaId],
+          status: "completed" as const,
+          completedAt: new Date().toISOString(),
+        },
+      };
 
-      if (targetDiscountTime) {
-        appendNextSessionSkipRecords([
-          {
-            date: prev.session.date,
-            targetDiscountTime,
-            areaId: currentAreaId,
-          },
-        ]);
+      if (
+        prev.session &&
+        lateTimeBonus > 0 &&
+        !prev.session.manualDiscountTimeOverride
+      ) {
+        const targetDiscountTime = getNextSkipTargetDiscountTime(prev.session.discountTime);
+
+        if (targetDiscountTime) {
+          appendNextSessionSkipRecords([
+            {
+              date: prev.session.date,
+              targetDiscountTime,
+              areaId: currentAreaId,
+            },
+          ]);
+        }
       }
-    }
 
-    if (prev.currentFlow === "pending") {
+      if (prev.currentFlow === "pending") {
+        return moveToNextPendingOrDone({
+          prev,
+          updatedMap,
+          referenceAreaId: currentAreaId,
+          nextSession,
+          timeSwitchNotice,
+        });
+      }
+
+      if (nextSession?.discountTime === "20") {
+        return {
+          ...prev,
+          session: nextSession,
+          timeSwitchNotice,
+          areaProgressMap: updatedMap,
+          currentAreaId: null,
+          lastReferenceAreaId: currentAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          finalTimeStep: 0,
+          screen: "final_time",
+        };
+      }
+
+      const nextAreaId = getNextNormalArea(currentAreaId);
+
+      if (nextAreaId) {
+        return {
+          ...prev,
+          session: nextSession,
+          timeSwitchNotice,
+          areaProgressMap: updatedMap,
+          currentAreaId: nextAreaId,
+          lastReferenceAreaId: currentAreaId,
+          pendingDeferredAreaIds: [],
+          finalTimeStep: 0,
+          screen: "area_judge",
+        };
+      }
+
       return moveToNextPendingOrDone({
         prev,
         updatedMap,
@@ -953,50 +1276,30 @@ function startSession() {
         nextSession,
         timeSwitchNotice,
       });
-    }
-
-    if (nextSession?.discountTime === "20") {
-      return {
-        ...prev,
-        session: nextSession,
-        timeSwitchNotice,
-        areaProgressMap: updatedMap,
-        currentAreaId: null,
-        lastReferenceAreaId: currentAreaId,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        screen: "final_time",
-      };
-    }
-
-    const nextAreaId = getNextNormalArea(currentAreaId);
-
-    if (nextAreaId) {
-      return {
-        ...prev,
-        session: nextSession,
-        timeSwitchNotice,
-        areaProgressMap: updatedMap,
-        currentAreaId: nextAreaId,
-        lastReferenceAreaId: currentAreaId,
-        pendingDeferredAreaIds: [],
-        screen: "area_judge",
-      };
-    }
-
-    return moveToNextPendingOrDone({
-      prev,
-      updatedMap,
-      referenceAreaId: currentAreaId,
-      nextSession,
-      timeSwitchNotice,
     });
-  });
-}
+  }
+
+  function advanceFinalTimeStep() {
+    if (state.screen !== "final_time") return;
+
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
+    setState((prev) => ({
+      ...prev,
+      finalTimeStep: Math.min(3, prev.finalTimeStep + 1) as AppState["finalTimeStep"],
+    }));
+  }
 
   function resetApp() {
     clearCurrentSession();
+    screenHistoryRef.current = [];
+    previousRenderRef.current = null;
+    suppressHistoryPushRef.current = false;
     setState(createInitialState());
+    setAreaJudgeSelection(null);
+    setResumeTargetScreen(null);
+    setUndoSnapshot(null);
+    setUndoNotice(null);
   }
 
   return {
@@ -1012,15 +1315,22 @@ function startSession() {
   pendingBanner,
   timeSwitchNotice: state.timeSwitchNotice,
   lateSkipNotice,
+  showAfterRainRecoverySelector,
+  areaJudgeSelection,
+  isResuming: resumeTargetScreen !== null,
+  canUndo: undoSnapshot !== null,
+  undoNotice,
 },
     actions: {
       updateSessionDraft,
       startSession,
-      selectAreaMany,
-      selectAreaNormal,
-      selectAreaFew,
+      goBackOneScreen,
+      startEditingConditions,
+      undoLastAction,
+      judgeCurrentArea,
       skipCurrentArea,
       goToNextArea,
+      advanceFinalTimeStep,
       resetApp,
     },
   };

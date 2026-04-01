@@ -1,8 +1,14 @@
-import type { AppState, AreaId, NextSessionSkipRecord } from "./types";
+import type {
+  AppState,
+  AreaId,
+  LastSessionWeatherRecord,
+  NextSessionSkipRecord,
+} from "./types";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
   nextSessionSkipRecords: "nebiki-helper/next-session-skip-records",
+  lastSessionWeather: "nebiki-helper/last-session-weather",
 } as const;
 
 function safeParseJSON<T>(value: string | null, fallback: T): T {
@@ -87,4 +93,13 @@ export function consumeNextSessionSkipAreaIds(params: {
   saveNextSessionSkipRecords(remaining);
 
   return matched.map((r) => r.areaId);
+}
+
+export function loadLastSessionWeather(): LastSessionWeatherRecord | null {
+  const raw = localStorage.getItem(STORAGE_KEYS.lastSessionWeather);
+  return safeParseJSON<LastSessionWeatherRecord | null>(raw, null);
+}
+
+export function saveLastSessionWeather(record: LastSessionWeatherRecord): void {
+  localStorage.setItem(STORAGE_KEYS.lastSessionWeather, JSON.stringify(record));
 }

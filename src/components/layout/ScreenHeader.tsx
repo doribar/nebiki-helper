@@ -1,10 +1,11 @@
-
+import type { ReactNode } from "react";
 
 type ScreenHeaderProps = {
   weekdayText: string;
   timeText: string;
   areaName: string | null;
   titleFontSize?: number;
+  rightAction?: ReactNode;
 };
 
 export function ScreenHeader({
@@ -12,18 +13,34 @@ export function ScreenHeader({
   timeText,
   areaName,
   titleFontSize,
+  rightAction,
 }: ScreenHeaderProps) {
+  const titleText = [weekdayText, timeText].filter(Boolean).join(" ");
+
   return (
     <header style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: titleFontSize ?? 24, fontWeight: 700 }}>
-        {weekdayText} {timeText}
-      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: titleFontSize ?? 24, fontWeight: 700 }}>
+            {titleText}
+          </div>
 
-      {areaName ? (
-        <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>
-          {areaName}
+          {areaName ? (
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>
+              {areaName}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+
+        {rightAction ? <div style={{ flexShrink: 0 }}>{rightAction}</div> : null}
+      </div>
     </header>
   );
 }

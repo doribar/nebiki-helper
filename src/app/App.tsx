@@ -38,26 +38,24 @@ export default function App() {
       <AppRouter app={app} />
 
       {app.state.screen !== "start" ? (
-        <button
-          type="button"
-          onClick={handleGoTop}
-          style={{
-            position: "fixed",
-            right: 12,
-            top: "calc(env(safe-area-inset-top, 0px) + 12px)",
-            padding: "10px 14px",
-            borderRadius: 9999,
-            border: "1px solid #ccc",
-            background: "#fff",
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: "pointer",
-            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-            zIndex: 1000,
-          }}
-        >
-          トップに戻る
-        </button>
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px 24px" }}>
+          <button
+            type="button"
+            onClick={handleGoTop}
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid #ccc",
+              background: "#fff",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            トップに戻る
+          </button>
+        </div>
       ) : null}
     </>
   );

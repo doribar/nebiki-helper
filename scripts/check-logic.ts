@@ -5,6 +5,7 @@ import {
   getWeekdayBaseInfo,
 } from '../src/domain/weekdayBase.ts';
 import { getFinalTimeGuide } from '../src/domain/discount.ts';
+import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import type { DiscountTime, WeatherInput } from '../src/domain/types.ts';
 
 type Case = {
@@ -30,6 +31,7 @@ function weather(partial: Partial<WeatherInput>): WeatherInput {
     laterPrecipType: null,
     windLevel: '2orLess',
     tempLevel: '11to15',
+    afterRainSky: null,
     ...partial,
   };
 }
@@ -67,7 +69,7 @@ const cases: Case[] = [
       adjusted: '月水',
       baseRateBonus: 5,
       weekdayResultIncludes: ['上限に当たるため月曜・水曜の基準を使用します'],
-      bonusCalcIncludes: ['頭打ち（上限） +5%'],
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
       bonusResultIncludes: ['値引率補正は+5%'],
     },
   },
@@ -115,7 +117,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '金土',
       baseRateBonus: -5,
-      bonusCalcIncludes: ['頭打ち（下限） -5%'],
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 -5%'],
       bonusResultIncludes: ['値引率補正は-5%'],
     },
   },
@@ -139,7 +141,7 @@ const cases: Case[] = [
       adjusted: '月水',
       baseRateBonus: 5,
       weekdayCalcIncludes: ['1時間30分後〜23時 雨 +1段'],
-      bonusCalcIncludes: ['頭打ち（上限） +5%'],
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
     },
   },
   {
@@ -185,7 +187,7 @@ const cases: Case[] = [
       adjusted: '月水',
       baseRateBonus: 5,
       weekdayCalcIncludes: ['36度以上 +2段'],
-      bonusCalcIncludes: ['頭打ち（上限） +5%'],
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
     },
   },
   {
@@ -210,6 +212,29 @@ const cases: Case[] = [
       baseRateBonus: 10,
       bonusCalcIncludes: ['30分〜1時間後 雨 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
+    },
+  },
+  {
+    name: '雨上がり後の晴れは1段弱める',
+    weekday: 2,
+    discountTime: '17',
+    weather: weather({ afterRainSky: 'sunny' }),
+    expected: {
+      adjusted: '金土',
+      baseRateBonus: 0,
+      weekdayCalcIncludes: ['雨上がり後 晴れ -1段'],
+      weekdayResultIncludes: ['曜日基準補正は-1段'],
+    },
+  },
+  {
+    name: '雨上がり後のくもりは補正なし',
+    weekday: 2,
+    discountTime: '17',
+    weather: weather({ afterRainSky: 'cloudy' }),
+    expected: {
+      adjusted: '火木',
+      baseRateBonus: 0,
+      bonusCalcAbsent: true,
     },
   },
 ];
@@ -266,11 +291,11 @@ for (const testCase of cases) {
 
 try {
   const merged = buildMergedBonusDisplay({
-    baseBonusParts: ['頭打ち（下限） -5%'],
+    baseBonusParts: ['曜日基準で補正しきれない分 -5%'],
     baseRateBonus: -5,
     lateTimeBonus: 5,
   });
-  assert.ok(merged.bonusCalcText?.includes('頭打ち（下限） -5%'));
+  assert.ok(merged.bonusCalcText?.includes('曜日基準で補正しきれない分 -5%'));
   assert.ok(merged.bonusCalcText?.includes('次の基準時刻が近い +5%'));
   assert.ok(merged.bonusResultText?.includes('値引率補正は0%'));
   console.log('PASS: 値引率補正の内訳と合計0%を表示');
@@ -281,8 +306,55 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + 1} checks passed.`);
+try {
+  assert.equal(
+    shouldOfferAfterRainRecovery({
+      sessionDate: '2026-04-01',
+      sessionDiscountTime: '17',
+      nearTermWeather: 'other',
+      lastSessionWeather: {
+        date: '2026-04-01',
+        discountTime: '15',
+        nearTermWeather: 'rain',
+      },
+    }),
+    true
+  );
+  assert.equal(
+    shouldOfferAfterRainRecovery({
+      sessionDate: '2026-04-01',
+      sessionDiscountTime: '17',
+      nearTermWeather: 'other',
+      lastSessionWeather: {
+        date: '2026-04-01',
+        discountTime: '15',
+        nearTermWeather: 'snow',
+      },
+    }),
+    false
+  );
+  assert.equal(
+    shouldOfferAfterRainRecovery({
+      sessionDate: '2026-04-01',
+      sessionDiscountTime: '15',
+      nearTermWeather: 'other',
+      lastSessionWeather: {
+        date: '2026-04-01',
+        discountTime: '17',
+        nearTermWeather: 'rain',
+      },
+    }),
+    false
+  );
+  console.log('PASS: 雨上がり後入力の表示条件');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 雨上がり後入力の表示条件');
+  console.error(error);
+  process.exitCode = 1;
+}
 
+console.log(`\n${passed} / ${cases.length + 2} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

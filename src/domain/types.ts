@@ -44,6 +44,7 @@ export type WeatherInput = {
   laterPrecipType: LaterPrecipType;
   windLevel: WindLevel;
   tempLevel: TempLevel;
+  afterRainSky: AfterRainSky;
 };
 
 export type SessionDraft = {
@@ -155,6 +156,14 @@ export type WeatherGuideText = {
   tempGuide: string;
 };
 
+export type LastSessionWeatherRecord = {
+  date: string;
+  discountTime: DiscountTime;
+  nearTermWeather: NearTermWeather;
+};
+
+export type FinalTimeStep = 0 | 1 | 2 | 3;
+
 export type AppState = {
   screen: ScreenName;
   session: SessionData | null;
@@ -165,6 +174,7 @@ export type AppState = {
   currentFlow: FlowMode;
   pendingDeferredAreaIds: AreaId[];
   timeSwitchNotice: string | null;
+  finalTimeStep: FinalTimeStep;
 };
 
 export type UseNebikiAppDerived = {
@@ -178,18 +188,25 @@ export type UseNebikiAppDerived = {
   pendingBanner: PendingBannerInfo | null;
   timeSwitchNotice: string | null;
   lateSkipNotice: string | null;
+  showAfterRainRecoverySelector: boolean;
+  areaJudgeSelection: AreaJudge;
+  isResuming: boolean;
+  canUndo: boolean;
+  undoNotice: string | null;
 };
 
 export type UseNebikiAppActions = {
   updateSessionDraft: (patch: Partial<SessionDraft>) => void;
   startSession: () => void;
+  goBackOneScreen: () => void;
+  startEditingConditions: () => void;
+  undoLastAction: () => void;
 
-  selectAreaMany: () => void;
-  selectAreaNormal: () => void;
-  selectAreaFew: () => void;
+  judgeCurrentArea: (judge: Exclude<AreaJudge, null>) => void;
   skipCurrentArea: () => void;
 
   goToNextArea: () => void;
+  advanceFinalTimeStep: () => void;
   resetApp: () => void;
 };
 
@@ -201,3 +218,4 @@ export type UseNebikiAppResult = {
 
 export type NearTermWeather = "other" | "rain" | "snow";
 export type LaterPrecipType = "rain" | "snow" | null;
+export type AfterRainSky = "cloudy" | "sunny" | null;

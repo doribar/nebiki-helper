@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type {
   DiscountTime,
   FinalGuideData,
@@ -30,6 +31,18 @@ type RateDisplayScreenProps = {
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
   onSkip: () => void;
+  onGoBack: () => void;
+};
+
+const subActionButtonStyle: CSSProperties = {
+  minWidth: 88,
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid #ccc",
+  background: "#fff",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
 function RateRow({
@@ -47,17 +60,17 @@ function RateRow({
         {label} → {line.main}
       </div>
       {line.note ? (
-  <div
-    style={{
-      fontSize: 14,
-      marginTop: 4,
-      color,
-      whiteSpace: "pre-wrap",
-    }}
-  >
-    {line.note}
-  </div>
-) : null}
+        <div
+          style={{
+            fontSize: 14,
+            marginTop: 4,
+            color,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {line.note}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -75,22 +88,30 @@ export function RateDisplayScreen({
   finalGuide,
   onNextArea,
   onSkip,
+  onGoBack,
 }: RateDisplayScreenProps) {
   const isFinalTime = discountTime === "20";
 
   const manyColor = "#d32f2f";
   const fewColor = "#1976d2";
   const normalColor = "#2e7d32";
-const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
+  const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
+
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
         weekdayText={weekdayText}
         timeText={timeText}
         areaName={areaName}
+        rightAction={
+          <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+            戻る
+          </button>
+        }
       />
 
-            {timeSwitchNotice ? (
+
+      {timeSwitchNotice ? (
         <section
           style={{
             border: "1px solid #ead28b",
@@ -133,22 +154,22 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
         bonusDetailLines={basisGuide.bonusDetailLines}
       />
 
-{lateSkipNotice ? (
-  <section
-    style={{
-      border: "1px solid #ead28b",
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 16,
-      background: "#fff8e1",
-      whiteSpace: "pre-wrap",
-      lineHeight: 1.7,
-      fontWeight: 700,
-    }}
-  >
-    {lateSkipNotice}
-  </section>
-) : null}
+      {lateSkipNotice ? (
+        <section
+          style={{
+            border: "1px solid #ead28b",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+            background: "#fff8e1",
+            whiteSpace: "pre-wrap",
+            lineHeight: 1.7,
+            fontWeight: 700,
+          }}
+        >
+          {lateSkipNotice}
+        </section>
+      ) : null}
 
       <section
         style={{
@@ -161,31 +182,31 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
         {!isFinalTime ? (
           <>
             <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
-  <span style={{ fontWeight: 800 }}>{referencePrefix}</span>
-  <span>を基準に考えて</span>
-  <br />
-  <span>各商品の量が「</span>
-<span style={{ color: "#d32f2f", fontWeight: 700 }}>多い</span>
-<span>・</span>
-<span style={{ color: "#2e7d32", fontWeight: 700 }}>どちらでもない</span>
-<span>・</span>
-<span style={{ color: "#1976d2", fontWeight: 700 }}>少ない</span>
-<span>」のどれかを確認し、</span>
-  <br />
-  <span>完了したら以下の値引率で値引きをしてください。</span>
-</div>
+              <span style={{ fontWeight: 800 }}>{referencePrefix}</span>
+              <span>を基準に考えて</span>
+              <br />
+              <span>各商品の量が「</span>
+              <span style={{ color: "#d32f2f", fontWeight: 700 }}>多い</span>
+              <span>・</span>
+              <span style={{ color: "#2e7d32", fontWeight: 700 }}>どちらでもない</span>
+              <span>・</span>
+              <span style={{ color: "#1976d2", fontWeight: 700 }}>少ない</span>
+              <span>」のどれかを確認し、</span>
+              <br />
+              <span>完了したら以下の値引率で値引きをしてください。</span>
+            </div>
 
             {rateDisplay ? (
-  <>
-    <RateRow label="多い" line={rateDisplay.many} color={manyColor} />
-    <RateRow
-      label="どちらでもない"
-      line={rateDisplay.normal}
-      color={normalColor}
-    />
-    <RateRow label="少ない" line={rateDisplay.few} color={fewColor} />
-  </>
-) : null}
+              <>
+                <RateRow label="多い" line={rateDisplay.many} color={manyColor} />
+                <RateRow
+                  label="どちらでもない"
+                  line={rateDisplay.normal}
+                  color={normalColor}
+                />
+                <RateRow label="少ない" line={rateDisplay.few} color={fewColor} />
+              </>
+            ) : null}
           </>
         ) : (
           <>
@@ -205,77 +226,64 @@ const referencePrefix = basisGuide.referenceText.replace("を基準に考えて"
       </section>
 
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
-  <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
+        <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
 
-  <button
-    type="button"
-    onClick={onSkip}
-    style={{
-      width: "100%",
-      padding: "14px 16px",
-      borderRadius: 12,
-      border: "1px solid #ccc",
-      background: "#fff",
-      fontSize: 15,
-      cursor: "pointer",
-    }}
-  >
-    今はスキップ
-  </button>
-</div>
+        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
+          今はスキップ
+        </button>
+      </div>
+
 
       <section
-  style={{
-    border: "1px solid #ddd",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  }}
->
-  <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
-  <div style={{ lineHeight: 1.8 }}>
-    ・2個は多いにしない
-    <br />
-    ・1個は最終値引以外引かない
-    <br />
-    ・多い商品に限り、不人気だと感じる商品は表示値引率に10%上乗せしてよい
-    <br />
-    ・その日の売れ方が順調なときは、定番・広告の値引率を10%下げてもよい
-  </div>
-</section>
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
+        <div style={{ lineHeight: 1.8 }}>
+          ・2個は多いにしない
+          <br />
+          ・1個は最終値引以外引かない
+          <br />
+          ・多い商品に限り、不人気だと感じる商品は表示値引率に10%上乗せしてよい
+          <br />
+          ・その日の売れ方が順調なときは、定番・広告の値引率を10%下げてもよい
+        </div>
+      </section>
 
       <section
-  style={{
-    border: "1px solid #ddd",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    background: "#fafafa",
-  }}
->
-  <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
-  <div style={{ lineHeight: 1.8 }}>
-  ・商品が大パックと小パックで分かれている
-  <span style={{ color: "#ab47bc", fontWeight: 700 }}>➡大パックだけ値引</span>
-  <br />
-  ・期限が近いものと遠いもので分かれている
-  <span style={{ color: "#ab47bc", fontWeight: 700 }}>➡近いものだけ値引</span>
-</div>
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 16,
+          background: "#fafafa",
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
+        <div style={{ lineHeight: 1.8 }}>
+          ・商品が大パックと小パックで分かれている
+          <span style={{ color: "#ab47bc", fontWeight: 700 }}>➡大パックだけ値引</span>
+          <br />
+          ・期限が近いものと遠いもので分かれている
+          <span style={{ color: "#ab47bc", fontWeight: 700 }}>➡近いものだけ値引</span>
+        </div>
 
-<div style={{ marginTop: 14, marginBottom: 8 }}>
-  ・分かれていなければ今使っている曜日基準が
-</div>
-<div style={{ lineHeight: 1.8 }}>
-  <div style={{ color: "#e65100", fontWeight: 700 }}>
-    月・水または火・木➡多い側に寄せる
-  </div>
-  <div style={{ color: "#e65100", fontWeight: 700 }}>
-    金・土または日➡少ない側に寄せる
-  </div>
-</div>
-</section>
-
-
+        <div style={{ marginTop: 14, marginBottom: 8 }}>
+          ・分かれていなければ今使っている曜日基準が
+        </div>
+        <div style={{ lineHeight: 1.8 }}>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            月・水または火・木➡多い側に寄せる
+          </div>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            金・土または日➡少ない側に寄せる
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

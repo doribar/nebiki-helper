@@ -14,17 +14,19 @@ export function AppRouter({ app }: AppRouterProps) {
   const { state, derived, actions } = app;
 
   useEffect(() => {
-  window.scrollTo({ top: 0, behavior: "auto" });
-}, [state.screen, state.currentAreaId]);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [state.screen, state.currentAreaId, state.finalTimeStep]);
 
   switch (state.screen) {
     case "start":
-            return (
+      return (
         <StartScreen
           sessionDraft={state.sessionDraft}
           weatherGuideText={derived.weatherGuideText}
+          showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startSession}
+          startButtonLabel={derived.isResuming ? "再開" : undefined}
         />
       );
 
@@ -33,17 +35,16 @@ export function AppRouter({ app }: AppRouterProps) {
 
       return (
         <AreaJudgeScreen
-  weekdayText={derived.weekdayText}
-  timeText={derived.timeText}
-  areaName={derived.currentAreaName}
-  basisGuide={derived.basisGuide}
-  pendingBanner={derived.pendingBanner}
-  timeSwitchNotice={derived.timeSwitchNotice}
-  onSelectMany={actions.selectAreaMany}
-  onSelectNormal={actions.selectAreaNormal}
-  onSelectFew={actions.selectAreaFew}
-  onSkip={actions.skipCurrentArea}
-/>
+          weekdayText={derived.weekdayText}
+          timeText={derived.timeText}
+          areaName={derived.currentAreaName}
+          basisGuide={derived.basisGuide}
+          pendingBanner={derived.pendingBanner}
+          timeSwitchNotice={derived.timeSwitchNotice}
+          onJudge={actions.judgeCurrentArea}
+          onSkip={actions.skipCurrentArea}
+          onGoBack={actions.goBackOneScreen}
+        />
       );
 
     case "rate_display":
@@ -51,36 +52,45 @@ export function AppRouter({ app }: AppRouterProps) {
 
       return (
         <RateDisplayScreen
-  weekdayText={derived.weekdayText}
-  timeText={derived.timeText}
-  areaName={derived.currentAreaName}
-  basisGuide={derived.basisGuide}
-  pendingBanner={derived.pendingBanner}
-  timeSwitchNotice={derived.timeSwitchNotice}
-  lateSkipNotice={derived.lateSkipNotice}
-  discountTime={state.session.discountTime}
-  rateDisplay={derived.rateDisplay}
-  finalGuide={derived.finalGuide ?? undefined}
-  onNextArea={actions.goToNextArea}
-  onSkip={actions.skipCurrentArea}
-/>
+          weekdayText={derived.weekdayText}
+          timeText={derived.timeText}
+          areaName={derived.currentAreaName}
+          basisGuide={derived.basisGuide}
+          pendingBanner={derived.pendingBanner}
+          timeSwitchNotice={derived.timeSwitchNotice}
+          lateSkipNotice={derived.lateSkipNotice}
+          discountTime={state.session.discountTime}
+          rateDisplay={derived.rateDisplay}
+          finalGuide={derived.finalGuide ?? undefined}
+          onNextArea={actions.goToNextArea}
+          onSkip={actions.skipCurrentArea}
+          onGoBack={actions.goBackOneScreen}
+        />
       );
 
     case "final_time":
-  if (!derived.finalGuide) return null;
+      if (!derived.finalGuide) return null;
 
-  return (
-    <FinalTimeScreen
-      weekdayText={derived.weekdayText}
-      timeText={derived.timeText}
-      timeSwitchNotice={derived.timeSwitchNotice}
-      finalGuide={derived.finalGuide}
-      onBackToTop={actions.resetApp}
-    />
-  );
+      return (
+        <FinalTimeScreen
+          weekdayText={derived.weekdayText}
+          timeText={derived.timeText}
+          timeSwitchNotice={derived.timeSwitchNotice}
+          finalGuide={derived.finalGuide}
+          finalStep={state.finalTimeStep}
+          onAdvance={actions.advanceFinalTimeStep}
+          onBack={actions.goBackOneScreen}
+          onBackToTop={actions.resetApp}
+        />
+      );
 
     case "done":
-      return <DoneScreen onReset={actions.resetApp} />;
+      return (
+        <DoneScreen
+          onReset={actions.resetApp}
+          onGoBack={actions.goBackOneScreen}
+        />
+      );
 
     default:
       return null;

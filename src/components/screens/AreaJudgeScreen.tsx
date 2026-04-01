@@ -1,6 +1,7 @@
+import type { CSSProperties } from "react";
+import type { AreaJudge } from "../../domain/types";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
-import { PrimaryButton } from "../layout/PrimaryButton";
 
 type AreaJudgeScreenProps = {
   weekdayText: string;
@@ -19,11 +20,58 @@ type AreaJudgeScreenProps = {
     reason: "manual" | "few";
   } | null;
   timeSwitchNotice?: string | null;
-  onSelectMany: () => void;
-  onSelectNormal: () => void;
-  onSelectFew: () => void;
+  onJudge: (judge: Exclude<AreaJudge, null>) => void;
   onSkip: () => void;
+  onGoBack: () => void;
 };
+
+const subActionButtonStyle: CSSProperties = {
+  minWidth: 88,
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid #ccc",
+  background: "#fff",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+function JudgeOptionButton({
+  label,
+  subLabel,
+  selected,
+  onClick,
+}: {
+  label: string;
+  subLabel?: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        padding: "14px 16px",
+        borderRadius: 12,
+        border: selected ? "2px solid #2f5ef5" : "1px solid #ccc",
+        background: selected ? "#e8f0ff" : "#fff",
+        textAlign: "left",
+        cursor: "pointer",
+      }}
+    >
+      <div style={{ fontSize: 16, fontWeight: 800 }}>
+        {label}
+        {subLabel ? (
+          <span style={{ fontSize: 13, color: "#555", fontWeight: 600, marginLeft: 6 }}>
+            ({subLabel})
+          </span>
+        ) : null}
+      </div>
+    </button>
+  );
+}
 
 export function AreaJudgeScreen({
   weekdayText,
@@ -32,10 +80,9 @@ export function AreaJudgeScreen({
   basisGuide,
   pendingBanner,
   timeSwitchNotice,
-  onSelectMany,
-  onSelectNormal,
-  onSelectFew,
+  onJudge,
   onSkip,
+  onGoBack,
 }: AreaJudgeScreenProps) {
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
 
@@ -45,6 +92,11 @@ export function AreaJudgeScreen({
         weekdayText={weekdayText}
         timeText={timeText}
         areaName={areaName}
+        rightAction={
+          <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+            戻る
+          </button>
+        }
       />
 
       {timeSwitchNotice ? (
@@ -112,30 +164,30 @@ export function AreaJudgeScreen({
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
-          <PrimaryButton onClick={onSelectMany}>多い</PrimaryButton>
-          <PrimaryButton onClick={onSelectNormal}>どちらでもない</PrimaryButton>
-          <PrimaryButton onClick={onSelectFew}>
-            少ない（後回しします）
-          </PrimaryButton>
+          <JudgeOptionButton
+            label="多い"
+            selected={false}
+            onClick={() => onJudge("many")}
+          />
+          <JudgeOptionButton
+            label="どちらでもない"
+            selected={false}
+            onClick={() => onJudge("normal")}
+          />
+          <JudgeOptionButton
+            label="少ない"
+            subLabel="後回しします"
+            selected={false}
+            onClick={() => onJudge("few")}
+          />
         </div>
       </section>
 
-      <button
-        type="button"
-        onClick={onSkip}
-        style={{
-          width: "100%",
-          padding: "14px 16px",
-          borderRadius: 12,
-          border: "1px solid #ccc",
-          background: "#fff",
-          fontSize: 15,
-          cursor: "pointer",
-          marginBottom: 16,
-        }}
-      >
-        今はスキップ
-      </button>
+      <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
+          今はスキップ
+        </button>
+      </div>
 
       <section
         style={{

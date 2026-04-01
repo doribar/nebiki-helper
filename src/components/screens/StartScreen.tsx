@@ -17,8 +17,10 @@ type StartScreenProps = {
     windGuide: string;
     tempGuide: string;
   };
+  showAfterRainRecoverySelector: boolean;
   onChangeSessionDraft: (patch: Partial<SessionDraft>) => void;
   onStart: () => void;
+  startButtonLabel?: string;
 };
 
 const WEEKDAY_OPTIONS = [
@@ -71,6 +73,11 @@ const TEMP_OPTIONS: { value: TempLevel; label: string }[] = [
   { value: "36orMore", label: "36度以上" },
 ];
 
+const AFTER_RAIN_OPTIONS = [
+  { value: "cloudy", label: "くもり" },
+  { value: "sunny", label: "晴れ" },
+] as const;
+
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
   const m = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -118,6 +125,7 @@ type SegmentedProps<T extends string> = {
   options: { value: T; label: string }[];
   onChange: (next: T) => void;
   columns?: number;
+  helperText?: string;
 };
 
 function SegmentedSelector<T extends string>({
@@ -126,10 +134,14 @@ function SegmentedSelector<T extends string>({
   options,
   onChange,
   columns = options.length,
+  helperText,
 }: SegmentedProps<T>) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>{label}</div>
+      {helperText ? (
+        <div style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>{helperText}</div>
+      ) : null}
 
       <div
         style={{
@@ -164,8 +176,10 @@ function SegmentedSelector<T extends string>({
 export function StartScreen({
   sessionDraft,
   weatherGuideText,
+  showAfterRainRecoverySelector,
   onChangeSessionDraft,
   onStart,
+  startButtonLabel,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
 
@@ -377,6 +391,24 @@ export function StartScreen({
         }
       />
 
+      {showAfterRainRecoverySelector ? (
+        <SegmentedSelector
+          label="雨上がり後"
+          helperText="前回は近い雨あり、今回は近い雨なしのため選択"
+          value={sessionDraft.weather.afterRainSky ?? "cloudy"}
+          options={[...AFTER_RAIN_OPTIONS]}
+          onChange={(next) =>
+            onChangeSessionDraft({
+              weather: {
+                ...sessionDraft.weather,
+                afterRainSky: next,
+              },
+            })
+          }
+          columns={2}
+        />
+      ) : null}
+
       <SegmentedSelector
         label={weatherGuideText.laterPrecipGuide}
         value={
@@ -440,8 +472,14 @@ export function StartScreen({
         </section>
       ) : null}
 
+      {startButtonLabel === "再開" ? (
+        <div style={{ fontSize: 13, color: "#666", marginBottom: 10 }}>
+          条件を見直した内容で元の流れに戻ります。
+        </div>
+      ) : null}
+
       <PrimaryButton onClick={onStart}>
-        {isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始"}
+        {startButtonLabel ?? (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
       </PrimaryButton>
     </main>
   );

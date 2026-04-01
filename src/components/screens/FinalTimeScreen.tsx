@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { FinalGuideData } from "../../domain/types";
+import type { CSSProperties } from "react";
+import type { FinalGuideData, FinalTimeStep } from "../../domain/types";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -8,34 +8,46 @@ type FinalTimeScreenProps = {
   timeText: string;
   timeSwitchNotice?: string | null;
   finalGuide: FinalGuideData;
+  finalStep: FinalTimeStep;
+  onAdvance: () => void;
+  onBack: () => void;
   onBackToTop: () => void;
 };
 
-type FinalStep = 0 | 1 | 2 | 3;
+const subActionButtonStyle: CSSProperties = {
+  minWidth: 88,
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid #ccc",
+  background: "#fff",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+};
 
 export function FinalTimeScreen({
   weekdayText,
   timeText,
   timeSwitchNotice,
   finalGuide,
+  finalStep,
+  onAdvance,
+  onBack,
   onBackToTop,
 }: FinalTimeScreenProps) {
-  const [step, setStep] = useState<FinalStep>(0);
-
-  function goNext() {
-    setStep((prev) => {
-      if (prev >= 3) return 3;
-      return (prev + 1) as FinalStep;
-    });
-  }
-
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
         weekdayText={weekdayText}
         timeText={timeText}
         areaName={null}
+        rightAction={
+          <button type="button" onClick={onBack} style={subActionButtonStyle}>
+            戻る
+          </button>
+        }
       />
+
 
       {timeSwitchNotice ? (
         <section
@@ -76,7 +88,7 @@ export function FinalTimeScreen({
           marginBottom: 16,
         }}
       >
-        {step === 0 ? (
+        {finalStep === 0 ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
               3個以上ある商品を
@@ -85,12 +97,12 @@ export function FinalTimeScreen({
             </div>
 
             <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={goNext}>終わった</PrimaryButton>
+              <PrimaryButton onClick={onAdvance}>終わった</PrimaryButton>
             </div>
           </>
         ) : null}
 
-        {step === 1 ? (
+        {finalStep === 1 ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
               2個ある商品を
@@ -99,12 +111,12 @@ export function FinalTimeScreen({
             </div>
 
             <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={goNext}>終わった</PrimaryButton>
+              <PrimaryButton onClick={onAdvance}>終わった</PrimaryButton>
             </div>
           </>
         ) : null}
 
-        {step === 2 ? (
+        {finalStep === 2 ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
               1個の商品を
@@ -113,25 +125,24 @@ export function FinalTimeScreen({
             </div>
 
             <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={goNext}>終わった</PrimaryButton>
+              <PrimaryButton onClick={onAdvance}>終わった</PrimaryButton>
             </div>
           </>
         ) : null}
 
-        {step === 3 ? (
+        {finalStep === 3 ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
               本日の値引きは以上です。
             </div>
 
             <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={onBackToTop}>
-                トップに戻る
-              </PrimaryButton>
+              <PrimaryButton onClick={onBackToTop}>トップに戻る</PrimaryButton>
             </div>
           </>
         ) : null}
       </section>
+
     </main>
   );
 }
