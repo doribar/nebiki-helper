@@ -214,10 +214,18 @@ export function StartScreen({
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
-        weekdayText="値引ヘルパー(アプリ「ウェザーニュース」を見て入力)"
+        weekdayText=""
         timeText=""
         areaName={null}
         titleFontSize={16}
+        titleContent={
+          <>
+            <span style={{ fontWeight: 700 }}>値引ヘルパー</span>
+            <span style={{ fontSize: 13, fontWeight: 400 }}>
+              (アプリ「ウェザーニュース」を見て入力)
+            </span>
+          </>
+        }
       />
 
       <div style={{ marginBottom: 14 }}>

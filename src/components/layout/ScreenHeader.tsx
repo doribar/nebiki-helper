@@ -6,6 +6,7 @@ type ScreenHeaderProps = {
   areaName: string | null;
   titleFontSize?: number;
   rightAction?: ReactNode;
+  titleContent?: ReactNode;
 };
 
 export function ScreenHeader({
@@ -14,6 +15,7 @@ export function ScreenHeader({
   areaName,
   titleFontSize,
   rightAction,
+  titleContent,
 }: ScreenHeaderProps) {
   const titleText = [weekdayText, timeText].filter(Boolean).join(" ");
 
@@ -29,7 +31,7 @@ export function ScreenHeader({
       >
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: titleFontSize ?? 24, fontWeight: 700 }}>
-            {titleText}
+            {titleContent ?? titleText}
           </div>
 
           {areaName ? (
