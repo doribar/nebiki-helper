@@ -37,7 +37,7 @@ export default function App() {
     <>
       <AppRouter app={app} />
 
-      {app.state.screen !== "start" ? (
+      {app.state.screen !== "start" && app.state.screen !== "done" ? (
         <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px 24px" }}>
           <button
             type="button"
