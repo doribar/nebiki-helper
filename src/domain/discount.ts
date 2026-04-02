@@ -38,20 +38,25 @@ function getRepeatManyNote(params: {
 
   if (discountTime === "15") return undefined;
 
-  if (areaJudge === "few") {
-    if (discountTime === "17" && manyRate === 15) {
-      return `前回も多かった商品は
-　5個以下 → 15%
-　6〜9個 → 20%
-　10個以上 → 25%`;
-    }
-
-    if (discountTime === "18" && manyRate === 25) {
-      return `前回も多かった商品は
+  if (areaJudge === "few" && discountTime === "18" && manyRate === 25) {
+    return `前回も多かった商品は
 　5個以下 → 25%
 　6〜9個 → 30%
 　10個以上 → 30%`;
-    }
+  }
+
+  if (manyRate === 10) {
+    return `前回も多かった商品は
+　5個以下 → 10%
+　6〜9個 → 15%
+　10個以上 → 20%`;
+  }
+
+  if (manyRate === 15) {
+    return `前回も多かった商品は
+　5個以下 → 15%
+　6〜9個 → 20%
+　10個以上 → 25%`;
   }
 
   if (manyRate === 20) {

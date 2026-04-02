@@ -4,7 +4,7 @@ import {
   getBasisGuideDisplay,
   getWeekdayBaseInfo,
 } from '../src/domain/weekdayBase.ts';
-import { getFinalTimeGuide } from '../src/domain/discount.ts';
+import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import {
   appendNavigationHistory,
@@ -401,6 +401,29 @@ const scenarioCases: ScenarioCase[] = [
   },
 ];
 
+
+type RepeatManyNoteCase = {
+  name: string;
+  discountTime: Exclude<DiscountTime, '20'>;
+  weatherBonus: number;
+  expectedNoteIncludes: string[];
+};
+
+const repeatManyNoteCases: RepeatManyNoteCase[] = [
+  {
+    name: '多い 10% でも前回多い商品の目安を表示する',
+    discountTime: '17',
+    weatherBonus: -10,
+    expectedNoteIncludes: ['5個以下 → 10%', '6〜9個 → 15%', '10個以上 → 20%'],
+  },
+  {
+    name: '多い 15% でも前回多い商品の目安を表示する',
+    discountTime: '17',
+    weatherBonus: -5,
+    expectedNoteIncludes: ['5個以下 → 15%', '6〜9個 → 20%', '10個以上 → 25%'],
+  },
+];
+
 let passed = 0;
 
 for (const testCase of cases) {
@@ -712,7 +735,30 @@ for (const scenarioCase of scenarioCases) {
   }
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + 9} checks passed.`);
+
+for (const repeatManyCase of repeatManyNoteCases) {
+  const display = getNormalTimeRateDisplay({
+    discountTime: repeatManyCase.discountTime,
+    weatherBonus: repeatManyCase.weatherBonus,
+    areaJudge: 'normal',
+  });
+
+  try {
+    assert.ok(display.many.note, 'many.note should exist');
+    for (const expected of repeatManyCase.expectedNoteIncludes) {
+      assert.ok(display.many.note?.includes(expected), `missing expected note text: ${expected}`);
+    }
+
+    console.log(`PASS: ${repeatManyCase.name}`);
+    passed += 1;
+  } catch (error) {
+    console.error(`FAIL: ${repeatManyCase.name}`);
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + repeatManyNoteCases.length + 9} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
