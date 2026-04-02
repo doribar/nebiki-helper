@@ -214,7 +214,7 @@ export function StartScreen({
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
-        weekdayText="値引ヘルパー"
+        weekdayText="値引ヘルパー(アプリ「ウェザーニュース」を見て入力)"
         timeText=""
         areaName={null}
         titleFontSize={16}
@@ -431,17 +431,6 @@ export function StartScreen({
       />
 
       <SegmentedSelector
-        label={weatherGuideText.windGuide}
-        value={sessionDraft.weather.windLevel}
-        options={WIND_OPTIONS}
-        onChange={(next) =>
-          onChangeSessionDraft({
-            weather: { ...sessionDraft.weather, windLevel: next },
-          })
-        }
-      />
-
-      <SegmentedSelector
         label={weatherGuideText.tempGuide}
         value={sessionDraft.weather.tempLevel}
         options={TEMP_OPTIONS}
@@ -449,6 +438,17 @@ export function StartScreen({
         onChange={(next) =>
           onChangeSessionDraft({
             weather: { ...sessionDraft.weather, tempLevel: next },
+          })
+        }
+      />
+
+      <SegmentedSelector
+        label={weatherGuideText.windGuide}
+        value={sessionDraft.weather.windLevel}
+        options={WIND_OPTIONS}
+        onChange={(next) =>
+          onChangeSessionDraft({
+            weather: { ...sessionDraft.weather, windLevel: next },
           })
         }
       />
