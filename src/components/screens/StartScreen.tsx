@@ -220,10 +220,10 @@ export function StartScreen({
         titleFontSize={16}
         titleContent={
           <>
-            <span style={{ fontWeight: 700 }}>値引ヘルパー</span>
-            <span style={{ fontSize: 13, fontWeight: 400 }}>
-              (アプリ「ウェザーニュース」を見て入力)
-            </span>
+            <div style={{ fontWeight: 700 }}>値引ヘルパー</div>
+            <div style={{ fontSize: 13, fontWeight: 400 }}>
+              （アプリ「ウェザーニュース」を見て入力）
+            </div>
           </>
         }
       />
