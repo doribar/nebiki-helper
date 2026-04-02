@@ -12,6 +12,8 @@ import type {
   WeatherInput,
   AreaJudge,
   ScreenName,
+  LastSessionWeatherRecord,
+  NextSessionSkipRecord,
 } from "../domain/types";
 import { AREA_MASTERS, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -25,14 +27,21 @@ import {
   getNormalTimeRateDisplay,
 } from "../domain/discount";
 import {
-  appendNextSessionSkipRecords,
-  clearCurrentSession,
-  consumeNextSessionSkipAreaIds,
-  loadCurrentSession,
-  saveCurrentSession,
-  loadLastSessionWeather,
-  saveLastSessionWeather,
+  appendSkipRecordsInMemory,
+  consumeSkipRecordsInMemory,
+  loadPersistedNebikiState,
+  savePersistedNebikiState,
 } from "../domain/storage";
+import {
+  appendNavigationHistory,
+  cloneAppState,
+  cloneLastSessionWeatherRecord,
+  cloneNavigationSnapshot,
+  cloneSkipRecords,
+  createNavigationSnapshot,
+  popNavigationHistory,
+} from "../domain/navigationHistory";
+import type { NavigationSnapshot } from "../domain/navigationHistory";
 import {
   getNextPendingCandidate,
   getPendingRemainingCount,
@@ -117,11 +126,11 @@ function createInitialAreaProgressMap(): Record<AreaId, AreaProgress> {
   }, {} as Record<AreaId, AreaProgress>);
 }
 
-function createInitialState(): AppState {
+function createInitialState(initialSessionDraft: SessionDraft = createInitialSessionDraft()): AppState {
   return {
     screen: "start",
     session: null,
-    sessionDraft: createInitialSessionDraft(),
+    sessionDraft: initialSessionDraft,
     areaProgressMap: createInitialAreaProgressMap(),
     currentAreaId: null,
     lastReferenceAreaId: null,
@@ -132,17 +141,20 @@ function createInitialState(): AppState {
   };
 }
 
-function cloneAppState(state: AppState): AppState {
-  return JSON.parse(JSON.stringify(state)) as AppState;
+function clonePersistedNebikiStateSnapshot(params: {
+  currentSession: AppState;
+  nextSessionSkipRecords: NextSessionSkipRecord[];
+  lastSessionWeather: LastSessionWeatherRecord | null;
+  lastUsedSessionDraft: SessionDraft;
+}) {
+  return {
+    currentSession: cloneAppState(params.currentSession),
+    nextSessionSkipRecords: cloneSkipRecords(params.nextSessionSkipRecords),
+    lastSessionWeather: cloneLastSessionWeatherRecord(params.lastSessionWeather),
+    lastUsedSessionDraft: normalizeSessionDraft(params.lastUsedSessionDraft),
+  };
 }
 
-function hasNavigationStateChanged(prev: AppState, next: AppState): boolean {
-  return (
-    prev.screen !== next.screen ||
-    prev.currentAreaId !== next.currentAreaId ||
-    prev.finalTimeStep !== next.finalTimeStep
-  );
-}
 
 function normalizeWeatherInput(raw: unknown): WeatherInput {
   const fallback = createInitialSessionDraft().weather;
@@ -263,6 +275,25 @@ function normalizeSessionDraft(raw?: Partial<SessionDraft> | null): SessionDraft
     weather: normalizeWeatherInput(raw?.weather),
   };
 }
+function buildStartDefaultDraft(raw?: Partial<SessionDraft> | null): SessionDraft {
+  const currentDefault = createInitialSessionDraft();
+
+  if (!raw) {
+    return currentDefault;
+  }
+
+  const normalized = normalizeSessionDraft(raw);
+
+  return {
+    ...normalized,
+    date: currentDefault.date,
+    weekday: normalized.manualWeekdayOverride ? normalized.weekday : currentDefault.weekday,
+    discountTime: normalized.manualDiscountTimeOverride
+      ? normalized.discountTime
+      : currentDefault.discountTime,
+  };
+}
+
 
 function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | null {
   if (!raw) return null;
@@ -278,7 +309,7 @@ function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | 
 
 function syncAfterRainSelection(
   sessionDraft: SessionDraft,
-  lastSessionWeather: ReturnType<typeof loadLastSessionWeather>
+  lastSessionWeather: LastSessionWeatherRecord | null
 ): SessionDraft {
   return applyAfterRainSelectionDefaults({
     sessionDraft,
@@ -286,8 +317,11 @@ function syncAfterRainSelection(
   });
 }
 
-function normalizeLoadedState(loaded: AppState | null): AppState {
-  if (!loaded) return createInitialState();
+function normalizeLoadedState(
+  loaded: AppState | null,
+  initialSessionDraft: SessionDraft
+): AppState {
+  if (!loaded) return createInitialState(initialSessionDraft);
 
   return {
     ...loaded,
@@ -393,58 +427,92 @@ function refreshSessionDiscountTime(session: SessionData | null): {
 }
 
 export function useNebikiApp(): UseNebikiAppResult {
+  const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
+
+  if (!initialPersistenceRef.current) {
+    initialPersistenceRef.current = loadPersistedNebikiState();
+  }
+
+  const initialLastUsedSessionDraft = buildStartDefaultDraft(
+    initialPersistenceRef.current?.lastUsedSessionDraft ?? null
+  );
+
   const [state, setState] = useState<AppState>(() =>
-    normalizeLoadedState(loadCurrentSession())
+    normalizeLoadedState(
+      initialPersistenceRef.current?.currentSession ?? null,
+      initialLastUsedSessionDraft
+    )
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
+    cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
+  );
   const [lastSessionWeather, setLastSessionWeather] = useState(() =>
-    loadLastSessionWeather()
+    cloneLastSessionWeatherRecord(initialPersistenceRef.current?.lastSessionWeather ?? null)
+  );
+  const [lastUsedSessionDraft, setLastUsedSessionDraft] = useState<SessionDraft>(() =>
+    normalizeSessionDraft(initialPersistenceRef.current?.lastUsedSessionDraft ?? null)
   );
 
   const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(null);
   const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(null);
-  const [undoSnapshot, setUndoSnapshot] = useState<
-    | { state: AppState; areaJudgeSelection: AreaJudge; resumeTargetScreen: ScreenName | null }
-    | null
-  >(null);
+  const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(null);
   const [undoNotice, setUndoNotice] = useState<string | null>(null);
-  const screenHistoryRef = useRef<
-    { state: AppState; areaJudgeSelection: AreaJudge; resumeTargetScreen: ScreenName | null }[]
-  >([]);
-  const previousRenderRef = useRef<
-    | { state: AppState; areaJudgeSelection: AreaJudge; resumeTargetScreen: ScreenName | null }
-    | null
-  >(null);
+  const screenHistoryRef = useRef<NavigationSnapshot[]>([]);
+
+  function buildNavigationSnapshot(baseState: AppState = state) {
+    return createNavigationSnapshot({
+      state: baseState,
+      areaJudgeSelection,
+      resumeTargetScreen,
+      nextSessionSkipRecords,
+      lastSessionWeather,
+    });
+  }
+
+  function restoreNavigationSnapshot(snapshot: NavigationSnapshot): void {
+    setNextSessionSkipRecords(cloneSkipRecords(snapshot.nextSessionSkipRecords));
+    setLastSessionWeather(cloneLastSessionWeatherRecord(snapshot.lastSessionWeather));
+    setState(cloneAppState(snapshot.state));
+    setAreaJudgeSelection(snapshot.areaJudgeSelection);
+    setResumeTargetScreen(snapshot.resumeTargetScreen);
+  }
+  const previousRenderRef = useRef<NavigationSnapshot | null>(null);
   const suppressHistoryPushRef = useRef(false);
 
   useEffect(() => {
-    saveCurrentSession(state);
-  }, [state]);
+    savePersistedNebikiState(
+      clonePersistedNebikiStateSnapshot({
+        currentSession: state,
+        nextSessionSkipRecords,
+        lastSessionWeather,
+        lastUsedSessionDraft,
+      })
+    );
+  }, [state, nextSessionSkipRecords, lastSessionWeather, lastUsedSessionDraft]);
 
   useEffect(() => {
-    const previousRender = previousRenderRef.current;
+    const historyResult = appendNavigationHistory({
+      history: screenHistoryRef.current,
+      previousSnapshot: previousRenderRef.current,
+      nextState: state,
+      suppressHistoryPush: suppressHistoryPushRef.current,
+    });
 
-    if (previousRender && hasNavigationStateChanged(previousRender.state, state)) {
-      if (suppressHistoryPushRef.current) {
-        suppressHistoryPushRef.current = false;
-      } else {
-        screenHistoryRef.current = [
-          ...screenHistoryRef.current,
-          {
-            state: cloneAppState(previousRender.state),
-            areaJudgeSelection: previousRender.areaJudgeSelection,
-            resumeTargetScreen: previousRender.resumeTargetScreen,
-          },
-        ];
-      }
-    }
+    screenHistoryRef.current = historyResult.history;
+    suppressHistoryPushRef.current = historyResult.suppressHistoryPush;
+    previousRenderRef.current = buildNavigationSnapshot(state);
+  }, [state, areaJudgeSelection, resumeTargetScreen, nextSessionSkipRecords, lastSessionWeather]);
 
-    previousRenderRef.current = {
-      state: cloneAppState(state),
-      areaJudgeSelection,
-      resumeTargetScreen,
-    };
-  }, [state, areaJudgeSelection, resumeTargetScreen]);
+  useEffect(() => {
+    if (!previousRenderRef.current) return;
+
+    previousRenderRef.current = cloneNavigationSnapshot({
+      ...previousRenderRef.current,
+      nextSessionSkipRecords: cloneSkipRecords(nextSessionSkipRecords),
+      lastSessionWeather: cloneLastSessionWeatherRecord(lastSessionWeather),
+    });
+  }, [nextSessionSkipRecords, lastSessionWeather]);
 
   useEffect(() => {
     if (!undoNotice) return;
@@ -472,7 +540,6 @@ export function useNebikiApp(): UseNebikiAppResult {
       nearTermWeather: state.session.weather.nearTermWeather,
     } as const;
 
-    saveLastSessionWeather(nextRecord);
     setLastSessionWeather((current) => {
       if (
         current?.date === nextRecord.date &&
@@ -570,6 +637,18 @@ export function useNebikiApp(): UseNebikiAppResult {
     state.sessionDraft.weather.nearTermWeather,
     state.sessionDraft.weather.afterRainSky,
   ]);
+
+  useEffect(() => {
+    setLastUsedSessionDraft((current) => {
+      const normalizedDraft = normalizeSessionDraft(state.sessionDraft);
+
+      if (JSON.stringify(current) === JSON.stringify(normalizedDraft)) {
+        return current;
+      }
+
+      return normalizedDraft;
+    });
+  }, [state.sessionDraft]);
 
   const sessionSource = state.session ?? state.sessionDraft;
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
@@ -824,11 +903,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function createUndoSnapshot(baseState: AppState = state) {
-    return {
-      state: cloneAppState(baseState),
-      areaJudgeSelection,
-      resumeTargetScreen,
-    } as const;
+    return buildNavigationSnapshot(baseState);
   }
 
   function resolveResumeState(prev: AppState, nextSession: SessionData, requestedScreen: ScreenName) {
@@ -987,6 +1062,8 @@ const lateSkipNotice = useMemo(() => {
     const currentWeekday = now.getDay();
     const currentDiscountTime = resolveDiscountTime(now);
 
+    let nextSkipRecords = nextSessionSkipRecords;
+
     setState((prev) => {
       const nextSession: SessionData = {
         ...prev.sessionDraft,
@@ -1021,12 +1098,16 @@ const lateSkipNotice = useMemo(() => {
       let areaProgressMap = createInitialAreaProgressMap();
 
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
-        const skippedAreaIds = consumeNextSessionSkipAreaIds({
+        const consumed = consumeSkipRecordsInMemory({
+          currentRecords: nextSessionSkipRecords,
           date: nextSession.date,
           targetDiscountTime: nextSession.discountTime,
         });
 
-        areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(skippedAreaIds);
+        nextSkipRecords = consumed.remainingRecords;
+        areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
+          consumed.skippedAreaIds
+        );
       }
 
       const firstAreaId =
@@ -1053,6 +1134,7 @@ const lateSkipNotice = useMemo(() => {
       };
     });
 
+    setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
     setResumeTargetScreen(null);
     setUndoSnapshot(null);
     setUndoNotice(null);
@@ -1067,14 +1149,12 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function goBackOneScreen() {
-    const previousScreen = screenHistoryRef.current.at(-1);
-    if (!previousScreen) return;
+    const historyResult = popNavigationHistory(screenHistoryRef.current);
+    if (!historyResult.previousSnapshot) return;
 
-    screenHistoryRef.current = screenHistoryRef.current.slice(0, -1);
+    screenHistoryRef.current = historyResult.history;
     suppressHistoryPushRef.current = true;
-    setState(cloneAppState(previousScreen.state));
-    setAreaJudgeSelection(previousScreen.areaJudgeSelection);
-    setResumeTargetScreen(previousScreen.resumeTargetScreen);
+    restoreNavigationSnapshot(historyResult.previousSnapshot);
     setUndoNotice(null);
   }
 
@@ -1093,9 +1173,8 @@ const lateSkipNotice = useMemo(() => {
   function undoLastAction() {
     if (!undoSnapshot) return;
 
-    setState(cloneAppState(undoSnapshot.state));
-    setAreaJudgeSelection(undoSnapshot.areaJudgeSelection);
-    setResumeTargetScreen(undoSnapshot.resumeTargetScreen);
+    suppressHistoryPushRef.current = true;
+    restoreNavigationSnapshot(undoSnapshot);
     setUndoSnapshot(null);
     setUndoNotice("直前の操作を取り消しました");
   }
@@ -1196,6 +1275,8 @@ const lateSkipNotice = useMemo(() => {
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
+    let nextSkipRecords = nextSessionSkipRecords;
+
     setState((prev) => {
       if (!prev.currentAreaId) return prev;
       const currentAreaId = prev.currentAreaId;
@@ -1218,13 +1299,16 @@ const lateSkipNotice = useMemo(() => {
         const targetDiscountTime = getNextSkipTargetDiscountTime(prev.session.discountTime);
 
         if (targetDiscountTime) {
-          appendNextSessionSkipRecords([
-            {
-              date: prev.session.date,
-              targetDiscountTime,
-              areaId: currentAreaId,
-            },
-          ]);
+          nextSkipRecords = appendSkipRecordsInMemory({
+            currentRecords: nextSkipRecords,
+            recordsToAdd: [
+              {
+                date: prev.session.date,
+                targetDiscountTime,
+                areaId: currentAreaId,
+              },
+            ],
+          });
         }
       }
 
@@ -1277,6 +1361,8 @@ const lateSkipNotice = useMemo(() => {
         timeSwitchNotice,
       });
     });
+
+    setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
   }
 
   function advanceFinalTimeStep() {
@@ -1291,11 +1377,10 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function resetApp() {
-    clearCurrentSession();
     screenHistoryRef.current = [];
     previousRenderRef.current = null;
     suppressHistoryPushRef.current = false;
-    setState(createInitialState());
+    setState(createInitialState(buildStartDefaultDraft(lastUsedSessionDraft)));
     setAreaJudgeSelection(null);
     setResumeTargetScreen(null);
     setUndoSnapshot(null);

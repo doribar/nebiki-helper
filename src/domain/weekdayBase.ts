@@ -160,10 +160,18 @@ function formatSignedPercentCompact(value: number): string {
 }
 
 function buildWeekdaySummaryText(original: WeekdayBaseLabel, adjusted: WeekdayBaseLabel): string {
+  if (original === adjusted) {
+    return "曜日基準補正：なし";
+  }
+
   return `曜日基準補正：${original}→${adjusted}`;
 }
 
 function buildBonusSummaryText(totalBonus: number): string {
+  if (totalBonus === 0) {
+    return "値引率補正：なし";
+  }
+
   return `値引率補正：${formatSignedPercentCompact(totalBonus)}`;
 }
 
@@ -191,17 +199,17 @@ function getTempShift(tempLevel: TempLevel): number {
 function getTempShiftTerm(tempLevel: TempLevel): ShiftTerm | undefined {
   switch (tempLevel) {
     case "5orLess":
-      return { label: "5度以下", value: 2 };
+      return { label: "気温 5度以下", value: 2 };
     case "6to10":
-      return { label: "6〜10度", value: 1 };
+      return { label: "気温 6〜10度", value: 1 };
     case "16to20":
-      return { label: "16〜20度", value: -1 };
+      return { label: "気温 16〜20度", value: -1 };
     case "21to25":
-      return { label: "21〜25度", value: -2 };
+      return { label: "気温 21〜25度", value: -2 };
     case "31to35":
-      return { label: "31〜35度", value: 1 };
+      return { label: "気温 31〜35度", value: 1 };
     case "36orMore":
-      return { label: "36度以上", value: 2 };
+      return { label: "気温 36度以上", value: 2 };
     default:
       return undefined;
   }
@@ -234,7 +242,7 @@ function getWindShiftTerm(
     tempLevel === "5orLess" || tempLevel === "6to10" || tempLevel === "11to15";
 
   return {
-    label: is15OrLess ? "風速3m以上（15度以下）" : "風速5m以上",
+    label: is15OrLess ? "風 3m以上（15度以下）" : "風 5m以上",
     value: 1,
   };
 }
@@ -273,9 +281,9 @@ function getLaterPrecipShiftTerm(weather: WeatherInput): ShiftTerm | undefined {
 
   switch (weather.laterPrecipType) {
     case "rain":
-      return { label: "1時間30分後〜23時 雨", value: 1 };
+      return { label: "後の雨", value: 1 };
     case "snow":
-      return { label: "1時間30分後〜23時 雪", value: 2 };
+      return { label: "後の雪", value: 2 };
     default:
       return undefined;
   }
@@ -295,9 +303,9 @@ function getNearTermPercentBonus(weather: WeatherInput): number {
 function getNearTermPercentTerm(weather: WeatherInput): PercentTerm | undefined {
   switch (weather.nearTermWeather) {
     case "rain":
-      return { label: "30分〜1時間後 雨", value: 10 };
+      return { label: "近い雨", value: 10 };
     case "snow":
-      return { label: "30分〜1時間後 雪", value: 20 };
+      return { label: "近い雪", value: 20 };
     default:
       return undefined;
   }
@@ -310,16 +318,19 @@ function applyWeekdayShift(params: {
 }): {
   adjusted: WeekdayBaseLabel;
   overflowDirection: "up" | "down" | null;
+  overflowSteps: number;
 } {
   const currentRank = getWeekdayBaseRank(params.base);
 
   if (params.shift > 0) {
     const targetRank = currentRank + params.shift;
-    const adjustedRank = Math.min(targetRank, getWeekdayBaseRank("月水"));
+    const ceilingRank = getWeekdayBaseRank("月水");
+    const adjustedRank = Math.min(targetRank, ceilingRank);
 
     return {
       adjusted: rankToWeekdayBase(adjustedRank),
       overflowDirection: targetRank > adjustedRank ? "up" : null,
+      overflowSteps: Math.max(0, targetRank - ceilingRank),
     };
   }
 
@@ -331,38 +342,60 @@ function applyWeekdayShift(params: {
     return {
       adjusted: rankToWeekdayBase(adjustedRank),
       overflowDirection: targetRank < adjustedRank ? "down" : null,
+      overflowSteps: Math.max(0, floorRank - targetRank),
     };
   }
 
   return {
     adjusted: params.base,
     overflowDirection: null,
+    overflowSteps: 0,
   };
 }
 
-function getOverflowBonusTerm(params: {
+function getOverflowBonusValue(params: {
+  discountTime: DiscountTime;
   overflowDirection: "up" | "down" | null;
+  overflowSteps: number;
+}): number {
+  if (params.overflowDirection === null || params.overflowSteps <= 0) {
+    return 0;
+  }
+
+  if (params.overflowDirection === "up") {
+    if (params.discountTime === "15") {
+      return 5;
+    }
+
+    return params.overflowSteps >= 2 ? 10 : 5;
+  }
+
+  if (params.discountTime === "15") {
+    return params.overflowSteps >= 2 ? -10 : -5;
+  }
+
+  return -5;
+}
+
+function getOverflowBonusTerm(params: {
+  discountTime: DiscountTime;
+  overflowDirection: "up" | "down" | null;
+  overflowSteps: number;
   hasNearTermPercentBonus: boolean;
 }): PercentTerm | undefined {
   if (params.hasNearTermPercentBonus) {
     return undefined;
   }
 
-  if (params.overflowDirection === "up") {
-    return {
-      label: "曜日基準で補正しきれない分",
-      value: 5,
-    };
+  const value = getOverflowBonusValue(params);
+  if (value === 0) {
+    return undefined;
   }
 
-  if (params.overflowDirection === "down") {
-    return {
-      label: "曜日基準で補正しきれない分",
-      value: -5,
-    };
-  }
-
-  return undefined;
+  return {
+    label: "曜日基準で補正しきれない分",
+    value,
+  };
 }
 
 function toShiftCalcPart(term: ShiftTerm): string {
@@ -499,7 +532,9 @@ function resolveWeatherEffect(params: {
   const percentTerms = [
     getNearTermPercentTerm(params.weather),
     getOverflowBonusTerm({
+      discountTime: params.discountTime,
       overflowDirection: shifted.overflowDirection,
+      overflowSteps: shifted.overflowSteps,
       hasNearTermPercentBonus: getNearTermPercentBonus(params.weather) > 0,
     }),
   ].filter((value): value is PercentTerm => Boolean(value));

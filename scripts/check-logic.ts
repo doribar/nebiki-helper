@@ -6,7 +6,19 @@ import {
 } from '../src/domain/weekdayBase.ts';
 import { getFinalTimeGuide } from '../src/domain/discount.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
-import type { DiscountTime, WeatherInput } from '../src/domain/types.ts';
+import {
+  appendNavigationHistory,
+  cloneNavigationSnapshot,
+  createNavigationSnapshot,
+  popNavigationHistory,
+} from '../src/domain/navigationHistory.ts';
+import type {
+  AppState,
+  DiscountTime,
+  LastSessionWeatherRecord,
+  NextSessionSkipRecord,
+  WeatherInput,
+} from '../src/domain/types.ts';
 
 type Case = {
   name: string;
@@ -56,7 +68,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['6〜10度 +1段', '風速3m以上（15度以下） +1段'],
+      weekdayCalcIncludes: ['気温 6〜10度 +1段', '風 3m以上（15度以下） +1段'],
       weekdayResultIncludes: ['曜日基準補正は+2段', '月曜・水曜の基準を使用します'],
     },
   },
@@ -81,7 +93,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 10,
-      bonusCalcIncludes: ['30分〜1時間後 雨 +10%'],
+      bonusCalcIncludes: ['近い雨 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
@@ -93,7 +105,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '金土',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['16〜20度 -1段'],
+      weekdayCalcIncludes: ['気温 16〜20度 -1段'],
       weekdayResultIncludes: ['曜日基準補正は-1段', '金曜・土曜の基準を使用します'],
     },
   },
@@ -105,7 +117,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['16〜20度 -1段', '風速5m以上 +1段'],
+      weekdayCalcIncludes: ['気温 16〜20度 -1段', '風 5m以上 +1段'],
       weekdayResultIncludes: ['曜日基準補正は0段', '火曜・木曜の基準のままです'],
     },
   },
@@ -140,7 +152,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
-      weekdayCalcIncludes: ['1時間30分後〜23時 雨 +1段'],
+      weekdayCalcIncludes: ['後の雨 +1段'],
       bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
     },
   },
@@ -152,8 +164,33 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['1時間30分後〜23時 雪 +2段'],
+      weekdayCalcIncludes: ['後の雪 +2段'],
       weekdayResultIncludes: ['曜日基準補正は+2段'],
+    },
+  },
+  {
+    name: '17時以降の上方向2段あふれは +10%',
+    weekday: 1,
+    discountTime: '17',
+    weather: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
+    expected: {
+      adjusted: '月水',
+      baseRateBonus: 10,
+      weekdayCalcIncludes: ['気温 36度以上 +2段', '風 5m以上 +1段'],
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 +10%'],
+      bonusResultIncludes: ['値引率補正は+10%'],
+    },
+  },
+  {
+    name: '15時の下方向2段あふれは -10%',
+    weekday: 0,
+    discountTime: '15',
+    weather: weather({ tempLevel: '21to25' }),
+    expected: {
+      adjusted: '日',
+      baseRateBonus: -10,
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 -10%'],
+      bonusResultIncludes: ['値引率補正は-10%'],
     },
   },
   {
@@ -175,7 +212,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['31〜35度 +1段'],
+      weekdayCalcIncludes: ['気温 31〜35度 +1段'],
     },
   },
   {
@@ -186,7 +223,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
-      weekdayCalcIncludes: ['36度以上 +2段'],
+      weekdayCalcIncludes: ['気温 36度以上 +2段'],
       bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
     },
   },
@@ -198,7 +235,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '火木',
       baseRateBonus: 20,
-      bonusCalcIncludes: ['30分〜1時間後 雪 +20%'],
+      bonusCalcIncludes: ['近い雪 +20%'],
       bonusResultIncludes: ['値引率補正は+20%'],
     },
   },
@@ -210,7 +247,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '金土',
       baseRateBonus: 10,
-      bonusCalcIncludes: ['30分〜1時間後 雨 +10%'],
+      bonusCalcIncludes: ['近い雨 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
@@ -235,6 +272,131 @@ const cases: Case[] = [
       adjusted: '火木',
       baseRateBonus: 0,
       bonusCalcAbsent: true,
+    },
+  },
+];
+
+
+
+function makeState(partial: Partial<AppState>): AppState {
+  return {
+    screen: 'start',
+    session: null,
+    sessionDraft: {
+      date: '2026-04-01',
+      weekday: 3,
+      discountTime: '15',
+      manualWeekdayOverride: false,
+      manualDiscountTimeOverride: false,
+      weather: weather({}),
+    },
+    areaProgressMap: {
+      bento_men: { areaId: 'bento_men', status: 'unstarted', areaJudge: null },
+      hosomaki: { areaId: 'hosomaki', status: 'unstarted', areaJudge: null },
+      inari: { areaId: 'inari', status: 'unstarted', areaJudge: null },
+      futomaki_chumaki: { areaId: 'futomaki_chumaki', status: 'unstarted', areaJudge: null },
+      sushi: { areaId: 'sushi', status: 'unstarted', areaJudge: null },
+      onigiri: { areaId: 'onigiri', status: 'unstarted', areaJudge: null },
+      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'unstarted', areaJudge: null },
+      balance_bento: { areaId: 'balance_bento', status: 'unstarted', areaJudge: null },
+      chuka_fish: { areaId: 'chuka_fish', status: 'unstarted', areaJudge: null },
+      yakitori: { areaId: 'yakitori', status: 'unstarted', areaJudge: null },
+      fry_chicken: { areaId: 'fry_chicken', status: 'unstarted', areaJudge: null },
+      croquette: { areaId: 'croquette', status: 'unstarted', areaJudge: null },
+      tempura: { areaId: 'tempura', status: 'unstarted', areaJudge: null },
+    },
+    currentAreaId: null,
+    lastReferenceAreaId: null,
+    currentFlow: 'normal',
+    pendingDeferredAreaIds: [],
+    timeSwitchNotice: null,
+    finalTimeStep: 0,
+    ...partial,
+  };
+}
+
+function makeNavigationSnapshot(params: {
+  state: AppState;
+  nextSessionSkipRecords?: NextSessionSkipRecord[];
+  lastSessionWeather?: LastSessionWeatherRecord | null;
+}) {
+  return createNavigationSnapshot({
+    state: params.state,
+    areaJudgeSelection: params.state.currentAreaId ? 'normal' : null,
+    resumeTargetScreen: null,
+    nextSessionSkipRecords: params.nextSessionSkipRecords ?? [],
+    lastSessionWeather: params.lastSessionWeather ?? null,
+  });
+}
+
+type ScenarioCase = {
+  name: string;
+  weekday: number;
+  discountTime: DiscountTime;
+  weather: WeatherInput;
+  lateTimeBonus?: number;
+  expected: {
+    weekdaySummary: string;
+    bonusSummary: string;
+    finalRates?: { count3OrMore: string; count2: string; count1: string };
+  };
+};
+
+const scenarioCases: ScenarioCase[] = [
+  {
+    name: '運用シナリオ: 水曜日17時・近い雨あり',
+    weekday: 3,
+    discountTime: '17',
+    weather: weather({ nearTermWeather: 'rain' }),
+    expected: {
+      weekdaySummary: '曜日基準補正：なし',
+      bonusSummary: '値引率補正：+10％',
+      finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
+    },
+  },
+  {
+    name: '運用シナリオ: 日曜日15時・暑めで客足やや戻る',
+    weekday: 0,
+    discountTime: '15',
+    weather: weather({ tempLevel: '21to25' }),
+    expected: {
+      weekdaySummary: '曜日基準補正：なし',
+      bonusSummary: '値引率補正：-10％',
+      finalRates: { count3OrMore: '40%', count2: '30%', count1: '20%' },
+    },
+  },
+  {
+    name: '運用シナリオ: 金曜日19時30分・猛暑で風も強い',
+    weekday: 5,
+    discountTime: '19',
+    weather: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
+    expected: {
+      weekdaySummary: '曜日基準補正：金土→月水',
+      bonusSummary: '値引率補正：+5％',
+      finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
+    },
+  },
+  {
+    name: '運用シナリオ: 火曜日17時・雨上がり後に晴れ',
+    weekday: 2,
+    discountTime: '17',
+    weather: weather({ afterRainSky: 'sunny' }),
+    expected: {
+      weekdaySummary: '曜日基準補正：火木→金土',
+      bonusSummary: '値引率補正：なし',
+      finalRates: { count3OrMore: '40%', count2: '30%', count1: '20%' },
+    },
+  },
+  {
+    name: '運用シナリオ: 月曜日17時・近い雨と時刻接近が重なる',
+    weekday: 1,
+    discountTime: '17',
+    weather: weather({ nearTermWeather: 'rain' }),
+    lateTimeBonus: 5,
+    expected: {
+      weekdaySummary: '曜日基準補正：なし',
+      bonusSummary: '値引率補正：+15％',
+      finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },
 ];
@@ -354,7 +516,203 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + 2} checks passed.`);
+try {
+  const previous = makeNavigationSnapshot({
+    state: makeState({ screen: 'rate_display', currentAreaId: 'bento_men' }),
+  });
+  const result = appendNavigationHistory({
+    history: [],
+    previousSnapshot: previous,
+    nextState: makeState({ screen: 'area_judge', currentAreaId: 'hosomaki' }),
+    suppressHistoryPush: false,
+  });
+  assert.equal(result.history.length, 1);
+  assert.equal(result.history[0].state.screen, 'rate_display');
+  console.log('PASS: 戻る履歴は画面遷移で積まれる');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻る履歴は画面遷移で積まれる');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const previous = makeNavigationSnapshot({
+    state: makeState({ screen: 'area_judge', currentAreaId: 'bento_men' }),
+  });
+  const result = appendNavigationHistory({
+    history: [],
+    previousSnapshot: previous,
+    nextState: makeState({ screen: 'area_judge', currentAreaId: 'hosomaki' }),
+    suppressHistoryPush: false,
+  });
+  assert.equal(result.history.length, 1);
+  assert.equal(result.history[0].state.currentAreaId, 'bento_men');
+  console.log('PASS: 戻る履歴は同じ画面でもエリア変更で積まれる');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻る履歴は同じ画面でもエリア変更で積まれる');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const previous = makeNavigationSnapshot({
+    state: makeState({ screen: 'final_time', finalTimeStep: 1 }),
+  });
+  const result = appendNavigationHistory({
+    history: [],
+    previousSnapshot: previous,
+    nextState: makeState({ screen: 'final_time', finalTimeStep: 2 }),
+    suppressHistoryPush: false,
+  });
+  assert.equal(result.history.length, 1);
+  assert.equal(result.history[0].state.finalTimeStep, 1);
+  console.log('PASS: 戻る履歴は最終値引ステップ変更で積まれる');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻る履歴は最終値引ステップ変更で積まれる');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const previous = makeNavigationSnapshot({
+    state: makeState({ screen: 'rate_display', currentAreaId: 'bento_men' }),
+  });
+  const result = appendNavigationHistory({
+    history: [],
+    previousSnapshot: previous,
+    nextState: makeState({ screen: 'rate_display', currentAreaId: 'bento_men' }),
+    suppressHistoryPush: false,
+  });
+  assert.equal(result.history.length, 0);
+  console.log('PASS: 戻る履歴は同じ画面・同じエリアでは増えない');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻る履歴は同じ画面・同じエリアでは増えない');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const previous = makeNavigationSnapshot({
+    state: makeState({ screen: 'rate_display', currentAreaId: 'bento_men' }),
+  });
+  const result = appendNavigationHistory({
+    history: [previous],
+    previousSnapshot: previous,
+    nextState: makeState({ screen: 'area_judge', currentAreaId: 'hosomaki' }),
+    suppressHistoryPush: true,
+  });
+  assert.equal(result.history.length, 1);
+  assert.equal(result.suppressHistoryPush, false);
+  console.log('PASS: 戻る直後は履歴を積まず suppress を解除する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻る直後は履歴を積まず suppress を解除する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const snapshot1 = makeNavigationSnapshot({
+    state: makeState({ screen: 'area_judge', currentAreaId: 'bento_men' }),
+  });
+  const snapshot2 = makeNavigationSnapshot({
+    state: makeState({ screen: 'rate_display', currentAreaId: 'bento_men' }),
+    nextSessionSkipRecords: [
+      { date: '2026-04-01', targetDiscountTime: '18', areaId: 'bento_men' },
+    ],
+    lastSessionWeather: {
+      date: '2026-04-01',
+      discountTime: '17',
+      nearTermWeather: 'rain',
+    },
+  });
+  const popped = popNavigationHistory([snapshot1, snapshot2]);
+  assert.equal(popped.history.length, 1);
+  assert.equal(popped.previousSnapshot?.state.screen, 'rate_display');
+  assert.deepEqual(popped.previousSnapshot?.nextSessionSkipRecords, snapshot2.nextSessionSkipRecords);
+  assert.deepEqual(popped.previousSnapshot?.lastSessionWeather, snapshot2.lastSessionWeather);
+  console.log('PASS: 戻る復元スナップショットは次回スキップと前回天気も含む');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻る復元スナップショットは次回スキップと前回天気も含む');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const original = makeNavigationSnapshot({
+    state: makeState({ screen: 'done', currentAreaId: null }),
+    nextSessionSkipRecords: [
+      { date: '2026-04-01', targetDiscountTime: '19', areaId: 'hosomaki' },
+    ],
+    lastSessionWeather: {
+      date: '2026-04-01',
+      discountTime: '18',
+      nearTermWeather: 'rain',
+    },
+  });
+  const cloned = cloneNavigationSnapshot(original);
+  original.state.screen = 'start';
+  original.nextSessionSkipRecords[0].areaId = 'bento_men';
+  if (original.lastSessionWeather) {
+    original.lastSessionWeather.nearTermWeather = 'other';
+  }
+  assert.equal(cloned.state.screen, 'done');
+  assert.equal(cloned.nextSessionSkipRecords[0].areaId, 'hosomaki');
+  assert.equal(cloned.lastSessionWeather?.nearTermWeather, 'rain');
+  console.log('PASS: 戻るスナップショットはディープコピーされる');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻るスナップショットはディープコピーされる');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+for (const scenarioCase of scenarioCases) {
+  try {
+    const basisGuide = getBasisGuideDisplay({
+      weekday: scenarioCase.weekday,
+      discountTime: scenarioCase.discountTime,
+      weather: scenarioCase.weather,
+    });
+    const weekdayInfo = getWeekdayBaseInfo(
+      scenarioCase.weekday,
+      scenarioCase.discountTime,
+      scenarioCase.weather
+    );
+    const mergedBonus = buildMergedBonusDisplay({
+      baseBonusParts: basisGuide.bonusCalcParts,
+      baseRateBonus: weekdayInfo.baseRateBonus,
+      lateTimeBonus: scenarioCase.lateTimeBonus ?? 0,
+    });
+
+    assert.equal(basisGuide.weekdaySummaryText, scenarioCase.expected.weekdaySummary);
+    assert.equal(mergedBonus.bonusSummaryText, scenarioCase.expected.bonusSummary);
+
+    if (scenarioCase.expected.finalRates) {
+      const finalGuide = getFinalTimeGuide({
+        weekdayShift: weekdayInfo.weekdayShift,
+        rateBonus: mergedBonus.bonusTotal,
+      });
+      assert.equal(finalGuide.count3OrMore.main, scenarioCase.expected.finalRates.count3OrMore);
+      assert.equal(finalGuide.count2.main, scenarioCase.expected.finalRates.count2);
+      assert.equal(finalGuide.count1.main, scenarioCase.expected.finalRates.count1);
+    }
+
+    console.log(`PASS: ${scenarioCase.name}`);
+    passed += 1;
+  } catch (error) {
+    console.error(`FAIL: ${scenarioCase.name}`);
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + 9} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
@@ -380,5 +738,12 @@ const finalBonusRaised = getFinalTimeGuide({
 });
 assert.equal(finalBonusRaised.count3OrMore.main, '50%');
 assert.equal(finalBonusRaised.scoreBreakdown.rateBonusPoints, 2);
+
+const finalBonusLowered = getFinalTimeGuide({
+  weekdayShift: 0,
+  rateBonus: -10,
+});
+assert.equal(finalBonusLowered.count3OrMore.main, '40%');
+assert.equal(finalBonusLowered.scoreBreakdown.rateBonusPoints, -2);
 
 console.log('PASS: 最終値引き点数ロジック');
