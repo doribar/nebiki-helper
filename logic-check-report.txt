@@ -2,6 +2,8 @@
 > nebiki-helper@0.0.0 check:logic
 > node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-logic.ts
 
+(node:2417) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
 PASS: 乾いた日・基準変化なし
 PASS: 低気温 + 風速3m以上は2段強める
 PASS: 超低気温で上限に当たった乾いた日は +5%
@@ -35,6 +37,8 @@ PASS: 運用シナリオ: 日曜日15時・暑めで客足やや戻る
 PASS: 運用シナリオ: 金曜日19時30分・猛暑で風も強い
 PASS: 運用シナリオ: 火曜日17時・雨上がり後に晴れ
 PASS: 運用シナリオ: 月曜日17時・近い雨と時刻接近が重なる
+PASS: 多い 10% でも前回多い商品の目安を表示する
+PASS: 多い 15% でも前回多い商品の目安を表示する
 
-33 / 33 checks passed.
+35 / 35 checks passed.
 PASS: 最終値引き点数ロジック

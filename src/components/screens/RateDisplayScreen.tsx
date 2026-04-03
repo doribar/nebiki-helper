@@ -276,11 +276,13 @@ export function RateDisplayScreen({
           ・分かれていなければ今使っている曜日基準が
         </div>
         <div style={{ lineHeight: 1.8 }}>
-          <div style={{ color: "#e65100", fontWeight: 700 }}>
-            月・水または火・木➡多い側に寄せる
+          <div>
+            月・水または火・木
+            <span style={{ color: "#e65100", fontWeight: 700 }}>➡多い側に寄せる</span>
           </div>
-          <div style={{ color: "#e65100", fontWeight: 700 }}>
-            金・土または日➡少ない側に寄せる
+          <div>
+            金・土または日
+            <span style={{ color: "#e65100", fontWeight: 700 }}>➡少ない側に寄せる</span>
           </div>
         </div>
       </section>
