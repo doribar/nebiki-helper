@@ -92,7 +92,8 @@ export function getNormalTimeRateDisplay(params: {
 }
 
   const manyRate = capNormalDiscountRate(areaAdjustedBase + 10);
-  const slightlyManyRate = params.isSunday
+  const showSundaySlightlyMany = params.isSunday && params.discountTime === "15";
+  const slightlyManyRate = showSundaySlightlyMany
     ? capNormalDiscountRate(areaAdjustedBase + 5)
     : null;
   const normalRate = capNormalDiscountRate(areaAdjustedBase);
@@ -110,7 +111,7 @@ export function getNormalTimeRateDisplay(params: {
           )
         : toRateLine("引かない"),
     slightlyMany:
-      params.isSunday && slightlyManyRate !== null
+      showSundaySlightlyMany && slightlyManyRate !== null
         ? slightlyManyRate > 0
           ? toRateLine(`${slightlyManyRate}%`)
           : toRateLine("引かない")
