@@ -28,6 +28,7 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
+  showSlightlyManyOption?: boolean;
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
   onSkip: () => void;
@@ -85,6 +86,7 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
+  showSlightlyManyOption,
   finalGuide,
   onNextArea,
   onSkip,
@@ -93,6 +95,7 @@ export function RateDisplayScreen({
   const isFinalTime = discountTime === "20";
 
   const manyColor = "#d32f2f";
+  const slightlyManyColor = "#ef6c00";
   const fewColor = "#1976d2";
   const normalColor = "#2e7d32";
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
@@ -187,6 +190,12 @@ export function RateDisplayScreen({
               <br />
               <span>各商品の量が「</span>
               <span style={{ color: "#d32f2f", fontWeight: 700 }}>多い</span>
+              {showSlightlyManyOption ? (
+                <>
+                  <span>・</span>
+                  <span style={{ color: "#ef6c00", fontWeight: 700 }}>やや多い</span>
+                </>
+              ) : null}
               <span>・</span>
               <span style={{ color: "#2e7d32", fontWeight: 700 }}>どちらでもない</span>
               <span>・</span>
@@ -199,6 +208,13 @@ export function RateDisplayScreen({
             {rateDisplay ? (
               <>
                 <RateRow label="多い" line={rateDisplay.many} color={manyColor} />
+                {showSlightlyManyOption && rateDisplay.slightlyMany ? (
+                  <RateRow
+                    label="やや多い"
+                    line={rateDisplay.slightlyMany}
+                    color={slightlyManyColor}
+                  />
+                ) : null}
                 <RateRow
                   label="どちらでもない"
                   line={rateDisplay.normal}
@@ -276,13 +292,11 @@ export function RateDisplayScreen({
           ・分かれていなければ今使っている曜日基準が
         </div>
         <div style={{ lineHeight: 1.8 }}>
-          <div>
-            月・水または火・木
-            <span style={{ color: "#e65100", fontWeight: 700 }}>➡多い側に寄せる</span>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            月・水または火・木➡多い側に寄せる
           </div>
-          <div>
-            金・土または日
-            <span style={{ color: "#e65100", fontWeight: 700 }}>➡少ない側に寄せる</span>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            金・土または日➡少ない側に寄せる
           </div>
         </div>
       </section>

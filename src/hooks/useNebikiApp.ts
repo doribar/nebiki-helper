@@ -782,10 +782,11 @@ const lateSkipNotice = useMemo(() => {
     if (!currentAreaProgress.areaJudge) return null;
 
     return getNormalTimeRateDisplay({
-  discountTime: state.session.discountTime,
-  weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
-  areaJudge: currentAreaProgress.areaJudge,
-});
+      discountTime: state.session.discountTime,
+      weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+      areaJudge: currentAreaProgress.areaJudge,
+      isSunday: state.session.weekday === 0 && state.session.discountTime === "15",
+    });
   }, [
   state.session,
   currentAreaProgress,

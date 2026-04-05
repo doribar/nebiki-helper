@@ -119,6 +119,7 @@ export type RateLine = {
 
 export type RateDisplayData = {
   many: RateLine;
+  slightlyMany?: RateLine;
   few: RateLine;
   normal: RateLine;
 };

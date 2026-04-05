@@ -793,3 +793,32 @@ assert.equal(finalBonusLowered.count3OrMore.main, '40%');
 assert.equal(finalBonusLowered.scoreBreakdown.rateBonusPoints, -2);
 
 console.log('PASS: 最終値引き点数ロジック');
+
+
+const sundayRateDisplay = getNormalTimeRateDisplay({
+  discountTime: '15',
+  weatherBonus: 0,
+  areaJudge: 'normal',
+  isSunday: true,
+});
+assert.equal(sundayRateDisplay.slightlyMany?.main, '5%');
+
+const nonSundayRateDisplay = getNormalTimeRateDisplay({
+  discountTime: '15',
+  weatherBonus: 0,
+  areaJudge: 'normal',
+  isSunday: false,
+});
+assert.equal(nonSundayRateDisplay.slightlyMany, undefined);
+
+const sundayEveningRateDisplay = getNormalTimeRateDisplay({
+  discountTime: '17',
+  weatherBonus: 0,
+  areaJudge: 'normal',
+  isSunday: true,
+});
+assert.equal(sundayEveningRateDisplay.normal.main, '10%');
+assert.equal(sundayEveningRateDisplay.slightlyMany, undefined);
+assert.equal(sundayEveningRateDisplay.many.main, '20%');
+
+console.log('PASS: 日曜15時だけ やや多い を表示する');

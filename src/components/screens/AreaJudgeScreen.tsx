@@ -201,13 +201,11 @@ export function AreaJudgeScreen({
         <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
           <div>今使っている曜日基準が</div>
-          <div>
-            月・水または火・木
-            <span style={{ color: "#e65100", fontWeight: 700 }}>➡多い側に寄せる</span>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            月・水または火・木➡多い側に寄せる
           </div>
-          <div>
-            金・土または日
-            <span style={{ color: "#e65100", fontWeight: 700 }}>➡少ない側に寄せる</span>
+          <div style={{ color: "#e65100", fontWeight: 700 }}>
+            金・土または日➡少ない側に寄せる
           </div>
         </div>
       </section>

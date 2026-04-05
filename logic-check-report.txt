@@ -2,7 +2,7 @@
 > nebiki-helper@0.0.0 check:logic
 > node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-logic.ts
 
-(node:2417) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(node:3286) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
 PASS: 乾いた日・基準変化なし
 PASS: 低気温 + 風速3m以上は2段強める
@@ -42,3 +42,27 @@ PASS: 多い 15% でも前回多い商品の目安を表示する
 
 35 / 35 checks passed.
 PASS: 最終値引き点数ロジック
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ {
++   main: '15%'
++ }
+- undefined
+
+    at file:///mnt/data/work31/scripts/check-logic.ts:821:8
+    at ModuleJob.run (node:internal/modules/esm/module_job:274:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:644:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: { main: '15%' },
+  expected: undefined,
+  operator: 'strictEqual'
+}
+
+Node.js v22.16.0

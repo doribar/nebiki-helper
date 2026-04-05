@@ -61,6 +61,7 @@ export function AppRouter({ app }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
+          showSlightlyManyOption={state.session.weekday === 0 && state.session.discountTime === "15"}
           finalGuide={derived.finalGuide ?? undefined}
           onNextArea={actions.goToNextArea}
           onSkip={actions.skipCurrentArea}

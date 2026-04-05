@@ -80,6 +80,7 @@ export function getNormalTimeRateDisplay(params: {
   discountTime: Exclude<DiscountTime, "20">;
   weatherBonus: number;
   areaJudge: Exclude<AreaJudge, null>;
+  isSunday?: boolean;
 }): RateDisplayData {
   const base = getBaseRate(params.discountTime) + params.weatherBonus;
 
@@ -91,20 +92,29 @@ export function getNormalTimeRateDisplay(params: {
 }
 
   const manyRate = capNormalDiscountRate(areaAdjustedBase + 10);
+  const slightlyManyRate = params.isSunday
+    ? capNormalDiscountRate(areaAdjustedBase + 5)
+    : null;
   const normalRate = capNormalDiscountRate(areaAdjustedBase);
 
   return {
     many:
-  manyRate > 0
-    ? toRateLine(
-        `${manyRate}%`,
-        getRepeatManyNote({
-          discountTime: params.discountTime,
-          areaJudge: params.areaJudge,
-          manyRate,
-        })
-      )
-    : toRateLine("引かない"),
+      manyRate > 0
+        ? toRateLine(
+            `${manyRate}%`,
+            getRepeatManyNote({
+              discountTime: params.discountTime,
+              areaJudge: params.areaJudge,
+              manyRate,
+            })
+          )
+        : toRateLine("引かない"),
+    slightlyMany:
+      params.isSunday && slightlyManyRate !== null
+        ? slightlyManyRate > 0
+          ? toRateLine(`${slightlyManyRate}%`)
+          : toRateLine("引かない")
+        : undefined,
     few: toRateLine("引かない"),
     normal:
       normalRate > 0 ? toRateLine(`${normalRate}%`) : toRateLine("引かない"),
