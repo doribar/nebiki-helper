@@ -2,6 +2,8 @@
 > nebiki-helper@0.0.0 check:logic
 > node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-logic.ts
 
+(node:2952) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
 PASS: 乾いた日・基準変化なし
 PASS: 低気温 + 風速3m以上は2段強める
 PASS: 超低気温で上限に当たった乾いた日は +5%

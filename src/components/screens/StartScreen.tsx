@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   DiscountTime,
   ForecastHourKey,
@@ -196,6 +196,8 @@ function ForecastNumberStepper(props: {
   options: number[];
   unit: string;
   onChange: (next: number) => void;
+  onConfirmCurrent?: () => void;
+  isUnconfirmed?: boolean;
   disabled?: boolean;
 }) {
   const currentIndex = props.options.indexOf(props.value);
@@ -233,11 +235,17 @@ function ForecastNumberStepper(props: {
         +1
       </button>
 
-      <div
+      <button
+        type="button"
+        onClick={() => {
+          if (props.disabled || !props.isUnconfirmed || !props.onConfirmCurrent) return;
+          props.onConfirmCurrent();
+        }}
+        disabled={props.disabled}
         style={{
           minHeight: 34,
           borderRadius: 8,
-          border: "1px solid #ccc",
+          border: props.isUnconfirmed ? "2px dashed #aaa" : "1px solid #ccc",
           background: props.disabled ? "#f0f0f0" : "#fff",
           color: props.disabled ? "#999" : "#000",
           fontWeight: 700,
@@ -245,10 +253,11 @@ function ForecastNumberStepper(props: {
           alignItems: "center",
           justifyContent: "center",
           padding: "4px",
+          cursor: props.disabled ? "not-allowed" : props.isUnconfirmed ? "pointer" : "default",
         }}
       >
         {props.value}{props.unit}
-      </div>
+      </button>
 
       <button
         type="button"
@@ -314,12 +323,29 @@ function ForecastWeatherButton(props: {
 
 
 
-function cloneForecastEntry(entry: SessionDraft["weather"]["hourlyForecasts"][ForecastHourKey]) {
-  return { ...entry };
+
+const INPUT_FIELDS = ["weather", "temp", "wind"] as const;
+type InputField = (typeof INPUT_FIELDS)[number];
+type ForecastConfirmationMap = Record<ForecastHourKey, Record<InputField, boolean>>;
+
+function createEmptyConfirmationMap(): ForecastConfirmationMap {
+  return FORECAST_HOUR_KEYS.reduce((acc, hour) => {
+    acc[hour] = {
+      weather: false,
+      temp: false,
+      wind: false,
+    };
+    return acc;
+  }, {} as ForecastConfirmationMap);
 }
 
-function isHourlyUnlockReady(touched: { weather: boolean; temp: boolean; wind: boolean }) {
-  return touched.weather && touched.temp && touched.wind;
+function isHourAtOrAfter(hour: ForecastHourKey, startHour: ForecastHourKey) {
+  return Number(hour) >= Number(startHour);
+}
+
+function createFieldOrder(startHour: ForecastHourKey) {
+  const activeHours = DISPLAY_FORECAST_HOURS.filter((hour) => isHourAtOrAfter(hour, startHour));
+  return INPUT_FIELDS.flatMap((field) => activeHours.map((hour) => ({ hour, field })));
 }
 
 export function StartScreen({
@@ -331,46 +357,82 @@ export function StartScreen({
   startButtonLabel,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
-  const isFifteenInput = sessionDraft.discountTime === "15";
-  const [touchedFifteen, setTouchedFifteen] = useState({
-    weather: false,
-    temp: false,
-    wind: false,
-  });
-  const [blankFifteen, setBlankFifteen] = useState({
-    weather: false,
-    temp: false,
-    wind: false,
-  });
-  const hasAppliedFifteenDefaultsRef = useRef(false);
+  const startForecastHour = sessionDraft.discountTime as ForecastHourKey;
+  const activeHours = useMemo(
+    () => DISPLAY_FORECAST_HOURS.filter((hour) => isHourAtOrAfter(hour, startForecastHour)),
+    [startForecastHour]
+  );
+  const fieldOrder = useMemo(() => createFieldOrder(startForecastHour), [startForecastHour]);
+  const [confirmedInputs, setConfirmedInputs] = useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
+  const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
-    if (!isFifteenInput) {
-      setTouchedFifteen({ weather: false, temp: false, wind: false });
-      setBlankFifteen({ weather: false, temp: false, wind: false });
-      hasAppliedFifteenDefaultsRef.current = false;
-      return;
-    }
-
-    hasAppliedFifteenDefaultsRef.current = false;
-    setTouchedFifteen({ weather: false, temp: false, wind: false });
-    setBlankFifteen({ weather: true, temp: true, wind: true });
+    setConfirmedInputs(createEmptyConfirmationMap());
   }, [sessionDraft.discountTime, sessionDraft.date]);
 
+  const currentUnlockIndex = fieldOrder.findIndex(({ hour, field }: { hour: ForecastHourKey; field: InputField }) => !confirmedInputs[hour][field]);
+  const currentUnlockTarget = currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
+  const allRequiredInputsConfirmed = currentUnlockIndex === -1;
+
+
   useEffect(() => {
-    if (!isFifteenInput) return;
-    if (hasAppliedFifteenDefaultsRef.current) return;
-    if (!isHourlyUnlockReady(touchedFifteen)) return;
+    if (!currentUnlockTarget) return;
 
+    const key = `${currentUnlockTarget.field}-${currentUnlockTarget.hour}`;
+    const target = hourlyFieldRefs.current[key];
+    if (!target) return;
+
+    const timer = window.setTimeout(() => {
+      target.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "center",
+      });
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [currentUnlockTarget]);
+
+  const isFieldEnabled = (hour: ForecastHourKey, field: InputField) => {
+    if (!isHourAtOrAfter(hour, startForecastHour)) return false;
+    const index = fieldOrder.findIndex((item: { hour: ForecastHourKey; field: InputField }) => item.hour === hour && item.field === field);
+    if (index === -1) return false;
+    return currentUnlockIndex === -1 || index <= currentUnlockIndex;
+  };
+
+  const applyHourlyChange = (
+    hour: ForecastHourKey,
+    field: InputField,
+    patch: Partial<SessionDraft["weather"]["hourlyForecasts"][ForecastHourKey]>,
+    shouldConfirm = true,
+  ) => {
     const nextHourlyForecasts = cloneHourlyForecasts(sessionDraft.weather.hourlyForecasts);
-    const baseForecast = cloneForecastEntry(nextHourlyForecasts["15"]);
+    nextHourlyForecasts[hour] = {
+      ...nextHourlyForecasts[hour],
+      ...patch,
+    };
 
-    for (const hour of DISPLAY_FORECAST_HOURS) {
-      if (hour === "15") continue;
-      nextHourlyForecasts[hour] = cloneForecastEntry(baseForecast);
+    const activeIndex = activeHours.indexOf(hour);
+    const nextHour = activeIndex >= 0 ? activeHours[activeIndex + 1] : undefined;
+    if (nextHour && !confirmedInputs[nextHour][field]) {
+      const currentEntry = nextHourlyForecasts[hour];
+      nextHourlyForecasts[nextHour as ForecastHourKey] = {
+        ...nextHourlyForecasts[nextHour as ForecastHourKey],
+        ...(field === "weather" ? { weather: currentEntry.weather } : {}),
+        ...(field === "temp" ? { tempC: currentEntry.tempC } : {}),
+        ...(field === "wind" ? { windMs: currentEntry.windMs } : {}),
+      };
     }
 
-    hasAppliedFifteenDefaultsRef.current = true;
+    if (shouldConfirm) {
+      setConfirmedInputs((current) => ({
+        ...current,
+        [hour]: {
+          ...current[hour],
+          [field]: true,
+        },
+      }));
+    }
 
     onChangeSessionDraft({
       weather: {
@@ -378,7 +440,11 @@ export function StartScreen({
         hourlyForecasts: nextHourlyForecasts,
       },
     });
-  }, [isFifteenInput, onChangeSessionDraft, sessionDraft.weather, touchedFifteen]);
+  };
+
+  const confirmCurrentDefault = (hour: ForecastHourKey, field: InputField) => {
+    applyHourlyChange(hour, field, {}, true);
+  };
 
   const handleWeekdayWheel = (deltaY: number) => {
     const step = getWheelStep(deltaY);
@@ -403,38 +469,6 @@ export function StartScreen({
       manualDiscountTimeOverride: true,
     });
   };
-
-  const updateHourlyCell = (
-    hour: ForecastHourKey,
-    patch: Partial<SessionDraft["weather"]["hourlyForecasts"][ForecastHourKey]>,
-    source?: "weather" | "temp" | "wind",
-  ) => {
-    const nextHourlyForecasts = cloneHourlyForecasts(sessionDraft.weather.hourlyForecasts);
-    nextHourlyForecasts[hour] = {
-      ...nextHourlyForecasts[hour],
-      ...patch,
-    };
-
-    if (isFifteenInput && hour === "15" && source) {
-      setTouchedFifteen((current) => ({
-        ...current,
-        [source]: true,
-      }));
-      setBlankFifteen((current) => ({
-        ...current,
-        [source]: false,
-      }));
-    }
-
-    onChangeSessionDraft({
-      weather: {
-        ...sessionDraft.weather,
-        hourlyForecasts: nextHourlyForecasts,
-      },
-    });
-  };
-
-  const hourlyInputsUnlocked = !isFifteenInput || isHourlyUnlockReady(touchedFifteen);
 
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
@@ -594,6 +628,7 @@ export function StartScreen({
         </div>
       </div>
 
+      <div style={{ fontWeight: 800, marginBottom: 8 }}>天候</div>
       <section
         style={{
           border: "1px solid #ddd",
@@ -603,68 +638,71 @@ export function StartScreen({
           background: "#fafafa",
         }}
       >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>時間別お天気入力</div>
-        <div style={{ fontSize: 13, color: "#666", marginBottom: 12, lineHeight: 1.6 }}>
-          15〜21時の予報を、ウェザーニュースの1時間ごと表示に合わせて入力します。15時のときは、最初に15時の天気・気温・風を選ぶと、その内容が16〜21時の初期値に入ります。
-        </div>
-
-        {isFifteenInput && !hourlyInputsUnlocked ? (
-          <div style={{ fontSize: 12, color: "#666", marginBottom: 10 }}>
-            まず15時の「天気・気温・風」を選ぶと、16〜21時も入力できるようになります。
-          </div>
-        ) : null}
-
         <div style={{ overflowX: "auto", paddingBottom: 4 }}>
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: `72px repeat(${DISPLAY_FORECAST_HOURS.length}, minmax(72px, 1fr))`,
+              gridTemplateColumns: `repeat(${DISPLAY_FORECAST_HOURS.length}, minmax(72px, 1fr))`,
               gap: 8,
-              minWidth: 72 + DISPLAY_FORECAST_HOURS.length * 78,
+              minWidth: DISPLAY_FORECAST_HOURS.length * 78,
               alignItems: "center",
             }}
           >
-            <div />
             {DISPLAY_FORECAST_HOURS.map((hour) => (
               <div key={`head-${hour}`} style={{ textAlign: "center", fontWeight: 800 }}>
                 {hour}時
               </div>
             ))}
 
-            <div style={{ fontWeight: 700 }}>天気</div>
             {DISPLAY_FORECAST_HOURS.map((hour) => {
               const forecast = sessionDraft.weather.hourlyForecasts[hour];
+              const enabled = isFieldEnabled(hour, "weather");
+              const isStartHour = hour === startForecastHour;
+              const isConfirmed = confirmedInputs[hour].weather;
+              const isBlank = isStartHour && !isConfirmed;
               return (
-                <ForecastWeatherButton
-                  key={`weather-${hour}`}
+                <div key={`weather-wrap-${hour}`} ref={(node) => { hourlyFieldRefs.current[`weather-${hour}`] = node; }}>
+                  <ForecastWeatherButton
+                    key={`weather-${hour}`}
                   weather={forecast.weather}
-                  isBlank={isFifteenInput && hour === "15" && blankFifteen.weather}
-                  disabled={isFifteenInput && hour !== "15" && !hourlyInputsUnlocked}
+                  isBlank={isBlank}
+                  disabled={!enabled}
                   onClick={() => {
-                    const nextWeather = isFifteenInput && hour === "15" && blankFifteen.weather
-                      ? "sunny"
-                      : cycleForecastWeather(forecast.weather);
-                    updateHourlyCell(hour, { weather: nextWeather }, "weather");
+                    if (!enabled) return;
+                    if (!isConfirmed) {
+                      const nextWeather = isStartHour ? "sunny" : forecast.weather;
+                      applyHourlyChange(hour, "weather", { weather: nextWeather }, true);
+                      return;
+                    }
+
+                    applyHourlyChange(hour, "weather", { weather: cycleForecastWeather(forecast.weather) }, false);
                   }}
-                />
+                  />
+                </div>
               );
             })}
 
-            <div style={{ fontWeight: 700 }}>気温</div>
             {DISPLAY_FORECAST_HOURS.map((hour) => {
               const forecast = sessionDraft.weather.hourlyForecasts[hour];
-              const locked = isFifteenInput && hour !== "15" && !hourlyInputsUnlocked;
+              const enabled = isFieldEnabled(hour, "temp");
+              const isStartHour = hour === startForecastHour;
+              const isConfirmed = confirmedInputs[hour].temp;
               return (
-                <div key={`temp-wrap-${hour}`}>
-                  {hour === "15" ? (
+                <div
+                    key={`temp-wrap-${hour}`}
+                    ref={(node) => {
+                      hourlyFieldRefs.current[`temp-${hour}`] = node;
+                    }}
+                  >
+                  {isStartHour ? (
                     <ForecastNumberSelect
                       key={`temp-${hour}`}
                       value={forecast.tempC}
                       options={TEMP_NUMBER_OPTIONS}
                       unit="℃"
-                      isBlank={isFifteenInput && hour === "15" && blankFifteen.temp}
-                      disabled={locked}
-                      onChange={(next) => updateHourlyCell(hour, { tempC: next }, "temp")}
+                      isBlank={!isConfirmed}
+                      disabled={!enabled}
+                      onChange={(next) => applyHourlyChange(hour, "temp", { tempC: next }, true)}
                     />
                   ) : (
                     <ForecastNumberStepper
@@ -672,29 +710,37 @@ export function StartScreen({
                       value={forecast.tempC}
                       options={TEMP_NUMBER_OPTIONS}
                       unit="℃"
-                      disabled={locked}
-                      onChange={(next) => updateHourlyCell(hour, { tempC: next }, "temp")}
+                      disabled={!enabled}
+                      isUnconfirmed={!isConfirmed}
+                      onConfirmCurrent={() => confirmCurrentDefault(hour, "temp")}
+                      onChange={(next) => applyHourlyChange(hour, "temp", { tempC: next }, true)}
                     />
                   )}
                 </div>
               );
             })}
 
-            <div style={{ fontWeight: 700 }}>風</div>
             {DISPLAY_FORECAST_HOURS.map((hour) => {
               const forecast = sessionDraft.weather.hourlyForecasts[hour];
-              const locked = isFifteenInput && hour !== "15" && !hourlyInputsUnlocked;
+              const enabled = isFieldEnabled(hour, "wind");
+              const isStartHour = hour === startForecastHour;
+              const isConfirmed = confirmedInputs[hour].wind;
               return (
-                <div key={`wind-wrap-${hour}`}>
-                  {hour === "15" ? (
+                <div
+                    key={`wind-wrap-${hour}`}
+                    ref={(node) => {
+                      hourlyFieldRefs.current[`wind-${hour}`] = node;
+                    }}
+                  >
+                  {isStartHour ? (
                     <ForecastNumberSelect
                       key={`wind-${hour}`}
                       value={forecast.windMs}
                       options={WIND_NUMBER_OPTIONS}
                       unit="m"
-                      isBlank={isFifteenInput && hour === "15" && blankFifteen.wind}
-                      disabled={locked}
-                      onChange={(next) => updateHourlyCell(hour, { windMs: next }, "wind")}
+                      isBlank={!isConfirmed}
+                      disabled={!enabled}
+                      onChange={(next) => applyHourlyChange(hour, "wind", { windMs: next }, true)}
                     />
                   ) : (
                     <ForecastNumberStepper
@@ -702,8 +748,10 @@ export function StartScreen({
                       value={forecast.windMs}
                       options={WIND_NUMBER_OPTIONS}
                       unit="m"
-                      disabled={locked}
-                      onChange={(next) => updateHourlyCell(hour, { windMs: next }, "wind")}
+                      disabled={!enabled}
+                      isUnconfirmed={!isConfirmed}
+                      onConfirmCurrent={() => confirmCurrentDefault(hour, "wind")}
+                      onChange={(next) => applyHourlyChange(hour, "wind", { windMs: next }, true)}
                     />
                   )}
                 </div>
@@ -752,7 +800,7 @@ export function StartScreen({
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onStart}>
+      <PrimaryButton onClick={onStart} disabled={!allRequiredInputsConfirmed}>
         {startButtonLabel ?? (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
       </PrimaryButton>
     </main>

@@ -1,10 +1,10 @@
-import { getAreaName, getAreaOrder } from "./area";
+import { getAreaName, getAreaOrder } from "./area.ts";
 import type {
   AreaId,
   AreaProgress,
   PendingAreaCandidate,
   PendingReason,
-} from "./types";
+} from "./types.ts";
 
 function toPendingReason(progress: AreaProgress): PendingReason | null {
   if (progress.status === "skipped_manual") return "manual";
@@ -77,6 +77,15 @@ export function getNextPendingCandidate(params: {
     areaName: getAreaName(picked.areaId),
     reason,
   };
+}
+
+
+export function getPendingResumeScreen(progress: AreaProgress): "area_judge" | "rate_display" {
+  if (progress.status === "skipped_manual" && progress.areaJudge) {
+    return "rate_display";
+  }
+
+  return "area_judge";
 }
 
 export function getPendingRemainingCount(

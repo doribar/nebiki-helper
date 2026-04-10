@@ -6,6 +6,7 @@ import {
 } from '../src/domain/weekdayBase.ts';
 import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
+import { getPendingResumeScreen } from '../src/domain/pending.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
@@ -892,3 +893,30 @@ assert.equal(sundayEveningRateDisplay.slightlyMany, undefined);
 assert.equal(sundayEveningRateDisplay.many.main, '20%');
 
 console.log('PASS: 日曜15時だけ やや多い を表示する');
+
+
+try {
+  assert.equal(
+    getPendingResumeScreen({ areaId: 'bento_men', status: 'skipped_manual', areaJudge: 'many' }),
+    'rate_display'
+  );
+  console.log('PASS: 手動スキップ済みでも判定済みエリアは値引率表示から再開する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 手動スキップ済みでも判定済みエリアは値引率表示から再開する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  assert.equal(
+    getPendingResumeScreen({ areaId: 'bento_men', status: 'skipped_manual', areaJudge: null }),
+    'area_judge'
+  );
+  console.log('PASS: 手動スキップで未判定エリアはエリアジャッジから再開する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 手動スキップで未判定エリアはエリアジャッジから再開する');
+  console.error(error);
+  process.exitCode = 1;
+}

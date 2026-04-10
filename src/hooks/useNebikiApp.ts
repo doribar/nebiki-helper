@@ -45,6 +45,7 @@ import type { NavigationSnapshot } from "../domain/navigationHistory";
 import {
   getNextPendingCandidate,
   getPendingRemainingCount,
+  getPendingResumeScreen,
 } from "../domain/pending";
 import {
   applyAfterRainSelectionDefaults,
@@ -850,6 +851,12 @@ const lateSkipNotice = useMemo(() => {
       };
     }
 
+    const nextProgress = params.updatedMap[nextCandidate.areaId];
+    const nextScreen =
+      nextCandidate.reason === "manual"
+        ? getPendingResumeScreen(nextProgress)
+        : "rate_display";
+
     return {
       ...params.prev,
       session: params.nextSession,
@@ -860,7 +867,7 @@ const lateSkipNotice = useMemo(() => {
       currentFlow: "pending",
       pendingDeferredAreaIds: effectiveDeferredAreaIds,
       finalTimeStep: 0,
-      screen: nextCandidate.reason === "manual" ? "area_judge" : "rate_display",
+      screen: nextScreen,
     };
   }
 
