@@ -5,6 +5,7 @@ import type {
   NearTermWeather,
   SessionDraft,
 } from './types';
+import { getNearTermWeatherForDiscount } from './hourlyWeather.ts';
 
 function getDiscountTimeOrder(discountTime: DiscountTime): number {
   switch (discountTime) {
@@ -58,7 +59,10 @@ export function applyAfterRainSelectionDefaults(params: {
   const shouldOffer = shouldOfferAfterRainRecovery({
     sessionDate: params.sessionDraft.date,
     sessionDiscountTime: params.sessionDraft.discountTime,
-    nearTermWeather: params.sessionDraft.weather.nearTermWeather,
+    nearTermWeather: getNearTermWeatherForDiscount(
+      params.sessionDraft.weather,
+      params.sessionDraft.discountTime,
+    ),
     lastSessionWeather: params.lastSessionWeather,
   });
 

@@ -1,10 +1,17 @@
+import { useEffect, useRef, useState } from "react";
 import type {
   DiscountTime,
-  NearTermWeather,
+  ForecastHourKey,
+  ForecastWeatherKind,
   SessionDraft,
-  TempLevel,
-  WindLevel,
 } from "../../domain/types";
+import {
+  cloneHourlyForecasts,
+  cycleForecastWeather,
+  FORECAST_HOUR_KEYS,
+  getForecastWeatherLabel,
+  getForecastWeatherSymbol,
+} from "../../domain/hourlyWeather";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -41,42 +48,14 @@ const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
   { value: "20", label: "20時30分" },
 ];
 
-const NEAR_TERM_WEATHER_OPTIONS: { value: NearTermWeather; label: string }[] = [
-  { value: "rain", label: "ある" },
-  { value: "other", label: "ない" },
-  { value: "snow", label: "雪" },
-];
-
-const LATER_PRECIP_OPTIONS: {
-  value: "rain" | "none" | "snow";
-  label: string;
-}[] = [
-  { value: "rain", label: "ある" },
-  { value: "none", label: "ない" },
-  { value: "snow", label: "雪" },
-];
-
-const WIND_OPTIONS: { value: WindLevel; label: string }[] = [
-  { value: "2orLess", label: "2m以下" },
-  { value: "3to4", label: "3〜4m" },
-  { value: "5orMore", label: "5m以上" },
-];
-
-const TEMP_OPTIONS: { value: TempLevel; label: string }[] = [
-  { value: "5orLess", label: "5度以下" },
-  { value: "6to10", label: "6〜10度" },
-  { value: "11to15", label: "11〜15度" },
-  { value: "16to20", label: "16〜20度" },
-  { value: "21to25", label: "21〜25度" },
-  { value: "26to30", label: "26〜30度" },
-  { value: "31to35", label: "31〜35度" },
-  { value: "36orMore", label: "36度以上" },
-];
-
 const AFTER_RAIN_OPTIONS = [
   { value: "cloudy", label: "くもり" },
   { value: "sunny", label: "晴れ" },
 ] as const;
+
+const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
+const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
+const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS;
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -140,9 +119,8 @@ function SegmentedSelector<T extends string>({
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>{label}</div>
       {helperText ? (
-        <div style={{ fontSize: 13, color: "#666", marginBottom: 8 }}>{helperText}</div>
+        <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>{helperText}</div>
       ) : null}
-
       <div
         style={{
           display: "grid",
@@ -150,44 +128,261 @@ function SegmentedSelector<T extends string>({
           gap: 8,
         }}
       >
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              background: value === option.value ? "#e8f0ff" : "#fff",
-              cursor: "pointer",
-              fontWeight: value === option.value ? 700 : 400,
-            }}
-          >
-            {option.label}
-          </button>
-        ))}
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              style={{
+                padding: "12px 10px",
+                borderRadius: 12,
+                border: active ? "2px solid #1976d2" : "1px solid #ccc",
+                background: active ? "#e3f2fd" : "#fff",
+                fontWeight: active ? 800 : 600,
+                cursor: "pointer",
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
+function ForecastNumberSelect(props: {
+  value: number;
+  options: number[];
+  unit: string;
+  onChange: (next: number) => void;
+  disabled?: boolean;
+  isBlank?: boolean;
+}) {
+  return (
+    <select
+      value={props.isBlank ? "" : String(props.value)}
+      onChange={(e) => props.onChange(Number(e.target.value))}
+      disabled={props.disabled}
+      style={{
+        width: "100%",
+        padding: "8px 6px",
+        borderRadius: 8,
+        border: "1px solid #ccc",
+        background: props.disabled ? "#f0f0f0" : "#fff",
+        color: props.disabled ? "#999" : "#000",
+        fontWeight: 700,
+        cursor: props.disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {props.isBlank ? (
+        <option value="" disabled>
+          未入力
+        </option>
+      ) : null}
+      {props.options.map((option) => (
+        <option key={option} value={String(option)}>
+          {option}{props.unit}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function ForecastNumberStepper(props: {
+  value: number;
+  options: number[];
+  unit: string;
+  onChange: (next: number) => void;
+  disabled?: boolean;
+}) {
+  const currentIndex = props.options.indexOf(props.value);
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+  const canDecrease = !props.disabled && safeIndex > 0;
+  const canIncrease = !props.disabled && safeIndex < props.options.length - 1;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateRows: "30px 1fr 30px",
+        gap: 4,
+        alignItems: "center",
+        justifyItems: "stretch",
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (!canIncrease) return;
+          props.onChange(props.options[safeIndex + 1]);
+        }}
+        disabled={!canIncrease}
+        style={{
+          height: 30,
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          background: canIncrease ? "#c62828" : "#f0f0f0",
+          color: canIncrease ? "#fff" : "#999",
+          fontWeight: 800,
+          cursor: canIncrease ? "pointer" : "not-allowed",
+        }}
+      >
+        +1
+      </button>
+
+      <div
+        style={{
+          minHeight: 34,
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          background: props.disabled ? "#f0f0f0" : "#fff",
+          color: props.disabled ? "#999" : "#000",
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "4px",
+        }}
+      >
+        {props.value}{props.unit}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          if (!canDecrease) return;
+          props.onChange(props.options[safeIndex - 1]);
+        }}
+        disabled={!canDecrease}
+        style={{
+          height: 30,
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          background: canDecrease ? "#1565c0" : "#f0f0f0",
+          color: canDecrease ? "#fff" : "#999",
+          fontWeight: 800,
+          cursor: canDecrease ? "pointer" : "not-allowed",
+        }}
+      >
+        -1
+      </button>
+    </div>
+  );
+}
+
+function ForecastWeatherButton(props: {
+  weather: ForecastWeatherKind;
+  onClick: () => void;
+  disabled?: boolean;
+  isBlank?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      style={{
+        width: "100%",
+        padding: "8px 6px",
+        borderRadius: 10,
+        border: "1px solid #ccc",
+        background: props.disabled ? "#f0f0f0" : "#fff",
+        color: props.disabled ? "#999" : "#000",
+        cursor: props.disabled ? "not-allowed" : "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        fontWeight: 700,
+      }}
+      title="タップで 晴れ→雨→雪 を切り替え"
+    >
+      {props.isBlank ? (
+        <span style={{ fontSize: 12 }}>未入力</span>
+      ) : (
+        <>
+          <span style={{ fontSize: 18, lineHeight: 1 }}>{getForecastWeatherSymbol(props.weather)}</span>
+          <span style={{ fontSize: 12 }}>{getForecastWeatherLabel(props.weather)}</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+
+
+function cloneForecastEntry(entry: SessionDraft["weather"]["hourlyForecasts"][ForecastHourKey]) {
+  return { ...entry };
+}
+
+function isHourlyUnlockReady(touched: { weather: boolean; temp: boolean; wind: boolean }) {
+  return touched.weather && touched.temp && touched.wind;
+}
+
 export function StartScreen({
   sessionDraft,
-  weatherGuideText,
+  weatherGuideText: _weatherGuideText,
   showAfterRainRecoverySelector,
   onChangeSessionDraft,
   onStart,
   startButtonLabel,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
+  const isFifteenInput = sessionDraft.discountTime === "15";
+  const [touchedFifteen, setTouchedFifteen] = useState({
+    weather: false,
+    temp: false,
+    wind: false,
+  });
+  const [blankFifteen, setBlankFifteen] = useState({
+    weather: false,
+    temp: false,
+    wind: false,
+  });
+  const hasAppliedFifteenDefaultsRef = useRef(false);
+
+  useEffect(() => {
+    if (!isFifteenInput) {
+      setTouchedFifteen({ weather: false, temp: false, wind: false });
+      setBlankFifteen({ weather: false, temp: false, wind: false });
+      hasAppliedFifteenDefaultsRef.current = false;
+      return;
+    }
+
+    hasAppliedFifteenDefaultsRef.current = false;
+    setTouchedFifteen({ weather: false, temp: false, wind: false });
+    setBlankFifteen({ weather: true, temp: true, wind: true });
+  }, [sessionDraft.discountTime, sessionDraft.date]);
+
+  useEffect(() => {
+    if (!isFifteenInput) return;
+    if (hasAppliedFifteenDefaultsRef.current) return;
+    if (!isHourlyUnlockReady(touchedFifteen)) return;
+
+    const nextHourlyForecasts = cloneHourlyForecasts(sessionDraft.weather.hourlyForecasts);
+    const baseForecast = cloneForecastEntry(nextHourlyForecasts["15"]);
+
+    for (const hour of DISPLAY_FORECAST_HOURS) {
+      if (hour === "15") continue;
+      nextHourlyForecasts[hour] = cloneForecastEntry(baseForecast);
+    }
+
+    hasAppliedFifteenDefaultsRef.current = true;
+
+    onChangeSessionDraft({
+      weather: {
+        ...sessionDraft.weather,
+        hourlyForecasts: nextHourlyForecasts,
+      },
+    });
+  }, [isFifteenInput, onChangeSessionDraft, sessionDraft.weather, touchedFifteen]);
 
   const handleWeekdayWheel = (deltaY: number) => {
     const step = getWheelStep(deltaY);
-    const currentIndex = WEEKDAY_OPTIONS.findIndex(
-      (option) => option.value === sessionDraft.weekday
-    );
+    const currentIndex = WEEKDAY_OPTIONS.findIndex((option) => option.value === sessionDraft.weekday);
     const nextIndex = cycleIndex(WEEKDAY_OPTIONS.length, currentIndex, step);
     const nextWeekday = WEEKDAY_OPTIONS[nextIndex].value;
 
@@ -199,9 +394,7 @@ export function StartScreen({
 
   const handleDiscountTimeWheel = (deltaY: number) => {
     const step = getWheelStep(deltaY);
-    const currentIndex = DISCOUNT_TIME_OPTIONS.findIndex(
-      (option) => option.value === sessionDraft.discountTime
-    );
+    const currentIndex = DISCOUNT_TIME_OPTIONS.findIndex((option) => option.value === sessionDraft.discountTime);
     const nextIndex = cycleIndex(DISCOUNT_TIME_OPTIONS.length, currentIndex, step);
     const nextDiscountTime = DISCOUNT_TIME_OPTIONS[nextIndex].value;
 
@@ -211,8 +404,40 @@ export function StartScreen({
     });
   };
 
+  const updateHourlyCell = (
+    hour: ForecastHourKey,
+    patch: Partial<SessionDraft["weather"]["hourlyForecasts"][ForecastHourKey]>,
+    source?: "weather" | "temp" | "wind",
+  ) => {
+    const nextHourlyForecasts = cloneHourlyForecasts(sessionDraft.weather.hourlyForecasts);
+    nextHourlyForecasts[hour] = {
+      ...nextHourlyForecasts[hour],
+      ...patch,
+    };
+
+    if (isFifteenInput && hour === "15" && source) {
+      setTouchedFifteen((current) => ({
+        ...current,
+        [source]: true,
+      }));
+      setBlankFifteen((current) => ({
+        ...current,
+        [source]: false,
+      }));
+    }
+
+    onChangeSessionDraft({
+      weather: {
+        ...sessionDraft.weather,
+        hourlyForecasts: nextHourlyForecasts,
+      },
+    });
+  };
+
+  const hourlyInputsUnlocked = !isFifteenInput || isHourlyUnlockReady(touchedFifteen);
+
   return (
-    <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
+    <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <ScreenHeader
         weekdayText=""
         timeText=""
@@ -247,12 +472,7 @@ export function StartScreen({
                     manualWeekdayOverride: true,
                   })
                 }
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                }}
+                style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid #ccc" }}
               >
                 {WEEKDAY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -286,9 +506,7 @@ export function StartScreen({
                   manualWeekdayOverride: false,
                 });
               } else {
-                onChangeSessionDraft({
-                  manualWeekdayOverride: true,
-                });
+                onChangeSessionDraft({ manualWeekdayOverride: true });
               }
             }}
             style={{
@@ -325,12 +543,7 @@ export function StartScreen({
                     manualDiscountTimeOverride: true,
                   })
                 }
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                }}
+                style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid #ccc" }}
               >
                 {DISCOUNT_TIME_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -363,9 +576,7 @@ export function StartScreen({
                   manualDiscountTimeOverride: false,
                 });
               } else {
-                onChangeSessionDraft({
-                  manualDiscountTimeOverride: true,
-                });
+                onChangeSessionDraft({ manualDiscountTimeOverride: true });
               }
             }}
             style={{
@@ -378,26 +589,129 @@ export function StartScreen({
               whiteSpace: "nowrap",
             }}
           >
-            {sessionDraft.manualDiscountTimeOverride
-              ? "自動に戻す"
-              : "手動で切り替える"}
+            {sessionDraft.manualDiscountTimeOverride ? "自動に戻す" : "手動で切り替える"}
           </button>
         </div>
       </div>
 
-      <SegmentedSelector
-        label={weatherGuideText.nearTermWeatherGuide}
-        value={sessionDraft.weather.nearTermWeather}
-        options={NEAR_TERM_WEATHER_OPTIONS}
-        onChange={(next) =>
-          onChangeSessionDraft({
-            weather: {
-              ...sessionDraft.weather,
-              nearTermWeather: next,
-            },
-          })
-        }
-      />
+      <section
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 12,
+          padding: 14,
+          marginBottom: 16,
+          background: "#fafafa",
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>時間別お天気入力</div>
+        <div style={{ fontSize: 13, color: "#666", marginBottom: 12, lineHeight: 1.6 }}>
+          15〜21時の予報を、ウェザーニュースの1時間ごと表示に合わせて入力します。15時のときは、最初に15時の天気・気温・風を選ぶと、その内容が16〜21時の初期値に入ります。
+        </div>
+
+        {isFifteenInput && !hourlyInputsUnlocked ? (
+          <div style={{ fontSize: 12, color: "#666", marginBottom: 10 }}>
+            まず15時の「天気・気温・風」を選ぶと、16〜21時も入力できるようになります。
+          </div>
+        ) : null}
+
+        <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `72px repeat(${DISPLAY_FORECAST_HOURS.length}, minmax(72px, 1fr))`,
+              gap: 8,
+              minWidth: 72 + DISPLAY_FORECAST_HOURS.length * 78,
+              alignItems: "center",
+            }}
+          >
+            <div />
+            {DISPLAY_FORECAST_HOURS.map((hour) => (
+              <div key={`head-${hour}`} style={{ textAlign: "center", fontWeight: 800 }}>
+                {hour}時
+              </div>
+            ))}
+
+            <div style={{ fontWeight: 700 }}>天気</div>
+            {DISPLAY_FORECAST_HOURS.map((hour) => {
+              const forecast = sessionDraft.weather.hourlyForecasts[hour];
+              return (
+                <ForecastWeatherButton
+                  key={`weather-${hour}`}
+                  weather={forecast.weather}
+                  isBlank={isFifteenInput && hour === "15" && blankFifteen.weather}
+                  disabled={isFifteenInput && hour !== "15" && !hourlyInputsUnlocked}
+                  onClick={() => {
+                    const nextWeather = isFifteenInput && hour === "15" && blankFifteen.weather
+                      ? "sunny"
+                      : cycleForecastWeather(forecast.weather);
+                    updateHourlyCell(hour, { weather: nextWeather }, "weather");
+                  }}
+                />
+              );
+            })}
+
+            <div style={{ fontWeight: 700 }}>気温</div>
+            {DISPLAY_FORECAST_HOURS.map((hour) => {
+              const forecast = sessionDraft.weather.hourlyForecasts[hour];
+              const locked = isFifteenInput && hour !== "15" && !hourlyInputsUnlocked;
+              return (
+                <div key={`temp-wrap-${hour}`}>
+                  {hour === "15" ? (
+                    <ForecastNumberSelect
+                      key={`temp-${hour}`}
+                      value={forecast.tempC}
+                      options={TEMP_NUMBER_OPTIONS}
+                      unit="℃"
+                      isBlank={isFifteenInput && hour === "15" && blankFifteen.temp}
+                      disabled={locked}
+                      onChange={(next) => updateHourlyCell(hour, { tempC: next }, "temp")}
+                    />
+                  ) : (
+                    <ForecastNumberStepper
+                      key={`temp-${hour}`}
+                      value={forecast.tempC}
+                      options={TEMP_NUMBER_OPTIONS}
+                      unit="℃"
+                      disabled={locked}
+                      onChange={(next) => updateHourlyCell(hour, { tempC: next }, "temp")}
+                    />
+                  )}
+                </div>
+              );
+            })}
+
+            <div style={{ fontWeight: 700 }}>風</div>
+            {DISPLAY_FORECAST_HOURS.map((hour) => {
+              const forecast = sessionDraft.weather.hourlyForecasts[hour];
+              const locked = isFifteenInput && hour !== "15" && !hourlyInputsUnlocked;
+              return (
+                <div key={`wind-wrap-${hour}`}>
+                  {hour === "15" ? (
+                    <ForecastNumberSelect
+                      key={`wind-${hour}`}
+                      value={forecast.windMs}
+                      options={WIND_NUMBER_OPTIONS}
+                      unit="m"
+                      isBlank={isFifteenInput && hour === "15" && blankFifteen.wind}
+                      disabled={locked}
+                      onChange={(next) => updateHourlyCell(hour, { windMs: next }, "wind")}
+                    />
+                  ) : (
+                    <ForecastNumberStepper
+                      key={`wind-${hour}`}
+                      value={forecast.windMs}
+                      options={WIND_NUMBER_OPTIONS}
+                      unit="m"
+                      disabled={locked}
+                      onChange={(next) => updateHourlyCell(hour, { windMs: next }, "wind")}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       {showAfterRainRecoverySelector ? (
         <SegmentedSelector
@@ -417,50 +731,6 @@ export function StartScreen({
         />
       ) : null}
 
-      <SegmentedSelector
-        label={weatherGuideText.laterPrecipGuide}
-        value={
-          sessionDraft.weather.hasLaterPrecip
-            ? sessionDraft.weather.laterPrecipType === "snow"
-              ? "snow"
-              : "rain"
-            : "none"
-        }
-        options={LATER_PRECIP_OPTIONS}
-        onChange={(next) =>
-          onChangeSessionDraft({
-            weather: {
-              ...sessionDraft.weather,
-              hasLaterPrecip: next !== "none",
-              laterPrecipType: next === "none" ? null : next,
-            },
-          })
-        }
-      />
-
-      <SegmentedSelector
-        label={weatherGuideText.tempGuide}
-        value={sessionDraft.weather.tempLevel}
-        options={TEMP_OPTIONS}
-        columns={4}
-        onChange={(next) =>
-          onChangeSessionDraft({
-            weather: { ...sessionDraft.weather, tempLevel: next },
-          })
-        }
-      />
-
-      <SegmentedSelector
-        label={weatherGuideText.windGuide}
-        value={sessionDraft.weather.windLevel}
-        options={WIND_OPTIONS}
-        onChange={(next) =>
-          onChangeSessionDraft({
-            weather: { ...sessionDraft.weather, windLevel: next },
-          })
-        }
-      />
-
       {isFinalTime ? (
         <section
           style={{
@@ -471,12 +741,8 @@ export function StartScreen({
             background: "#fafafa",
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>
-            20時30分以降は最終値引です
-          </div>
-          <div style={{ lineHeight: 1.7 }}>
-            なるべく商品が多いエリアから値引きを始めてください。
-          </div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>20時30分以降は最終値引です</div>
+          <div style={{ lineHeight: 1.7 }}>なるべく商品が多いエリアから値引きを始めてください。</div>
         </section>
       ) : null}
 

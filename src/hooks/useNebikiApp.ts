@@ -50,6 +50,13 @@ import {
   applyAfterRainSelectionDefaults,
   shouldOfferAfterRainRecovery,
 } from "../domain/afterRain";
+import {
+  buildHourlyForecastsFromLegacy,
+  cloneHourlyForecasts,
+  createDefaultHourlyForecasts,
+  getNearTermWeatherForDiscount,
+  resolveWeatherInputForDiscount,
+} from "../domain/hourlyWeather.ts";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -105,11 +112,7 @@ function createInitialSessionDraft(): SessionDraft {
     manualWeekdayOverride: false,
     manualDiscountTimeOverride: false,
     weather: {
-      nearTermWeather: "other",
-      hasLaterPrecip: false,
-      laterPrecipType: null,
-      windLevel: "2orLess",
-      tempLevel: "11to15",
+      hourlyForecasts: createDefaultHourlyForecasts(),
       afterRainSky: null,
     },
   };
@@ -156,93 +159,54 @@ function clonePersistedNebikiStateSnapshot(params: {
 }
 
 
-function normalizeWeatherInput(raw: unknown): WeatherInput {
+function normalizeWeatherInput(raw: unknown, discountTime: DiscountTime): WeatherInput {
   const fallback = createInitialSessionDraft().weather;
 
   if (!raw || typeof raw !== "object") {
-    return fallback;
+    return {
+      hourlyForecasts: cloneHourlyForecasts(fallback.hourlyForecasts),
+      afterRainSky: fallback.afterRainSky,
+    };
   }
 
   const source = raw as Record<string, unknown>;
+  const rawHourlyForecasts = source.hourlyForecasts;
 
-  const nearTermWeather =
-    source.nearTermWeather === "other" ||
-    source.nearTermWeather === "rain" ||
-    source.nearTermWeather === "snow"
-      ? source.nearTermWeather
-      : typeof source.isRain === "boolean"
-      ? source.isRain
-        ? "rain"
-        : "other"
-      : fallback.nearTermWeather;
+  const hourlyForecasts =
+    rawHourlyForecasts && typeof rawHourlyForecasts === "object"
+      ? (Object.keys(fallback.hourlyForecasts) as Array<keyof typeof fallback.hourlyForecasts>).reduce((acc, hour) => {
+          const rawMap = rawHourlyForecasts as Record<string, unknown>;
+          const rawEntry = rawMap[hour];
 
-  let hasLaterPrecip =
-    typeof source.hasLaterPrecip === "boolean"
-      ? source.hasLaterPrecip
-      : source.laterPrecipType === "rain" || source.laterPrecipType === "snow"
-      ? true
-      : typeof source.isRain === "boolean"
-      ? source.isRain
-      : fallback.hasLaterPrecip;
+          if (!rawEntry || typeof rawEntry !== "object") {
+            acc[hour] = { ...fallback.hourlyForecasts[hour] };
+            return acc;
+          }
 
-  let laterPrecipType: WeatherInput["laterPrecipType"] =
-    source.laterPrecipType === "rain" || source.laterPrecipType === "snow"
-      ? source.laterPrecipType
-      : typeof source.isRain === "boolean" && source.isRain
-      ? "rain"
-      : null;
-
-  if (!hasLaterPrecip) {
-    laterPrecipType = null;
-  }
-
-  if (hasLaterPrecip && laterPrecipType === null) {
-    laterPrecipType = "rain";
-  }
+          const entry = rawEntry as Record<string, unknown>;
+          acc[hour] = {
+            weather:
+              entry.weather === "sunny" || entry.weather === "rain" || entry.weather === "snow"
+                ? entry.weather
+                : fallback.hourlyForecasts[hour].weather,
+            tempC:
+              typeof entry.tempC === "number"
+                ? Math.max(-20, Math.min(45, Math.round(entry.tempC)))
+                : fallback.hourlyForecasts[hour].tempC,
+            windMs:
+              typeof entry.windMs === "number"
+                ? Math.max(0, Math.min(20, Math.round(entry.windMs)))
+                : fallback.hourlyForecasts[hour].windMs,
+          };
+          return acc;
+        }, {} as WeatherInput["hourlyForecasts"])
+      : buildHourlyForecastsFromLegacy({
+          legacyWeather: source,
+          discountTime,
+        });
 
   return {
-    nearTermWeather,
-    hasLaterPrecip,
-    laterPrecipType,
-    windLevel:
-      source.windLevel === "2orLess" ||
-      source.windLevel === "3to4" ||
-      source.windLevel === "5orMore"
-        ? source.windLevel
-        : typeof source.isWindThresholdMet === "boolean"
-        ? source.isWindThresholdMet
-          ? "3to4"
-          : "2orLess"
-        : typeof source.isWindOver3m === "boolean"
-        ? source.isWindOver3m
-          ? "3to4"
-          : "2orLess"
-        : fallback.windLevel,
-    tempLevel:
-      source.tempLevel === "5orLess" ||
-      source.tempLevel === "6to10" ||
-      source.tempLevel === "11to15" ||
-      source.tempLevel === "16to20" ||
-      source.tempLevel === "21to25" ||
-      source.tempLevel === "26to30" ||
-      source.tempLevel === "31to35" ||
-      source.tempLevel === "36orMore"
-        ? source.tempLevel
-        : source.tempLevel === "10orLess"
-        ? "6to10"
-        : source.tempLevel === "26to29"
-        ? "26to30"
-        : source.tempLevel === "30to34"
-        ? "31to35"
-        : source.tempLevel === "35orMore"
-        ? "36orMore"
-        : source.tempLevel === "26orMore"
-        ? "26to30"
-        : source.isTempUnder10 === "boolean"
-        ? source.isTempUnder10
-          ? "6to10"
-          : "11to15"
-        : fallback.tempLevel,
+    hourlyForecasts,
     afterRainSky:
       source.afterRainSky === "cloudy" || source.afterRainSky === "sunny"
         ? source.afterRainSky
@@ -253,17 +217,19 @@ function normalizeWeatherInput(raw: unknown): WeatherInput {
 function normalizeSessionDraft(raw?: Partial<SessionDraft> | null): SessionDraft {
   const fallback = createInitialSessionDraft();
 
+  const discountTime =
+    raw?.discountTime === "15" ||
+    raw?.discountTime === "17" ||
+    raw?.discountTime === "18" ||
+    raw?.discountTime === "19" ||
+    raw?.discountTime === "20"
+      ? raw.discountTime
+      : fallback.discountTime;
+
   return {
     date: typeof raw?.date === "string" ? raw.date : fallback.date,
     weekday: typeof raw?.weekday === "number" ? raw.weekday : fallback.weekday,
-    discountTime:
-  raw?.discountTime === "15" ||
-  raw?.discountTime === "17" ||
-  raw?.discountTime === "18" ||
-  raw?.discountTime === "19" ||
-  raw?.discountTime === "20"
-    ? raw.discountTime
-    : fallback.discountTime,
+    discountTime,
     manualWeekdayOverride:
       typeof raw?.manualWeekdayOverride === "boolean"
         ? raw.manualWeekdayOverride
@@ -272,9 +238,10 @@ function normalizeSessionDraft(raw?: Partial<SessionDraft> | null): SessionDraft
       typeof raw?.manualDiscountTimeOverride === "boolean"
         ? raw.manualDiscountTimeOverride
         : false,
-    weather: normalizeWeatherInput(raw?.weather),
+    weather: normalizeWeatherInput(raw?.weather, discountTime),
   };
 }
+
 function buildStartDefaultDraft(raw?: Partial<SessionDraft> | null): SessionDraft {
   const currentDefault = createInitialSessionDraft();
 
@@ -284,13 +251,19 @@ function buildStartDefaultDraft(raw?: Partial<SessionDraft> | null): SessionDraf
 
   const normalized = normalizeSessionDraft(raw);
 
+  const resolvedDiscountTime = normalized.manualDiscountTimeOverride
+    ? normalized.discountTime
+    : currentDefault.discountTime;
+
   return {
     ...normalized,
     date: currentDefault.date,
     weekday: normalized.manualWeekdayOverride ? normalized.weekday : currentDefault.weekday,
-    discountTime: normalized.manualDiscountTimeOverride
-      ? normalized.discountTime
-      : currentDefault.discountTime,
+    discountTime: resolvedDiscountTime,
+    weather: {
+      ...normalized.weather,
+      hourlyForecasts: cloneHourlyForecasts(normalized.weather.hourlyForecasts),
+    },
   };
 }
 
@@ -421,6 +394,10 @@ function refreshSessionDiscountTime(session: SessionData | null): {
     nextSession: {
       ...session,
       discountTime: nowDiscountTime,
+      weather: {
+        ...session.weather,
+        hourlyForecasts: cloneHourlyForecasts(session.weather.hourlyForecasts),
+      },
     },
     timeSwitchNotice: buildTimeSwitchNotice(nowDiscountTime),
   };
@@ -537,7 +514,7 @@ export function useNebikiApp(): UseNebikiAppResult {
     const nextRecord = {
       date: state.session.date,
       discountTime: state.session.discountTime,
-      nearTermWeather: state.session.weather.nearTermWeather,
+      nearTermWeather: getNearTermWeatherForDiscount(state.session.weather, state.session.discountTime),
     } as const;
 
     setLastSessionWeather((current) => {
@@ -634,7 +611,7 @@ export function useNebikiApp(): UseNebikiAppResult {
     state.screen,
     state.sessionDraft.date,
     state.sessionDraft.discountTime,
-    state.sessionDraft.weather.nearTermWeather,
+    state.sessionDraft.weather.hourlyForecasts,
     state.sessionDraft.weather.afterRainSky,
   ]);
 
@@ -651,19 +628,25 @@ export function useNebikiApp(): UseNebikiAppResult {
   }, [state.sessionDraft]);
 
   const sessionSource = state.session ?? state.sessionDraft;
+  const sessionSourceResolvedWeather = useMemo(() => {
+    return resolveWeatherInputForDiscount(sessionSource.weather, sessionSource.discountTime);
+  }, [sessionSource.weather, sessionSource.discountTime]);
+  const startDraftNearTermWeather = useMemo(() => {
+    return getNearTermWeatherForDiscount(state.sessionDraft.weather, state.sessionDraft.discountTime);
+  }, [state.sessionDraft.weather, state.sessionDraft.discountTime]);
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
 
   const showAfterRainRecoverySelector = useMemo(() => {
     return shouldOfferAfterRainRecovery({
       sessionDate: state.sessionDraft.date,
       sessionDiscountTime: state.sessionDraft.discountTime,
-      nearTermWeather: state.sessionDraft.weather.nearTermWeather,
+      nearTermWeather: startDraftNearTermWeather,
       lastSessionWeather,
     });
   }, [
     state.sessionDraft.date,
     state.sessionDraft.discountTime,
-    state.sessionDraft.weather.nearTermWeather,
+    startDraftNearTermWeather,
     lastSessionWeather,
   ]);
 
@@ -679,12 +662,12 @@ export function useNebikiApp(): UseNebikiAppResult {
   return getWeekdayBaseInfo(
     sessionSource.weekday,
     sessionSource.discountTime,
-    sessionSource.weather
+    sessionSourceResolvedWeather
   );
 }, [
   sessionSource.weekday,
   sessionSource.discountTime,
-  sessionSource.weather,
+  sessionSourceResolvedWeather,
 ]);
 
   const lateTimeBonus = useMemo(() => {
@@ -745,7 +728,7 @@ const lateSkipNotice = useMemo(() => {
   const baseGuide = getBasisGuideDisplay({
     weekday: sessionSource.weekday,
     discountTime: sessionSource.discountTime,
-    weather: sessionSource.weather,
+    weather: sessionSourceResolvedWeather,
   });
 
   if (!lateTimeBonusNotice) {
@@ -763,7 +746,7 @@ const lateSkipNotice = useMemo(() => {
 }, [
   sessionSource.weekday,
   sessionSource.discountTime,
-  sessionSource.weather,
+  sessionSourceResolvedWeather,
   lateTimeBonusNotice,
 ]);
 
@@ -1066,15 +1049,21 @@ const lateSkipNotice = useMemo(() => {
     let nextSkipRecords = nextSessionSkipRecords;
 
     setState((prev) => {
+      const resolvedDiscountTime = prev.sessionDraft.manualDiscountTimeOverride
+        ? prev.sessionDraft.discountTime
+        : currentDiscountTime;
+
       const nextSession: SessionData = {
         ...prev.sessionDraft,
         date: currentDate,
         weekday: prev.sessionDraft.manualWeekdayOverride
           ? prev.sessionDraft.weekday
           : currentWeekday,
-        discountTime: prev.sessionDraft.manualDiscountTimeOverride
-          ? prev.sessionDraft.discountTime
-          : currentDiscountTime,
+        discountTime: resolvedDiscountTime,
+        weather: {
+          ...prev.sessionDraft.weather,
+          hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
+        },
         startedAt: prev.session?.startedAt ?? startedAt,
       };
 

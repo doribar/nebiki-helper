@@ -38,12 +38,30 @@ export type TempLevel =
   | "31to35"
   | "36orMore";
 
+export type ForecastHourKey = "15" | "16" | "17" | "18" | "19" | "20" | "21";
+export type ForecastWeatherKind = "sunny" | "rain" | "snow";
+
+export type HourlyForecastEntry = {
+  weather: ForecastWeatherKind;
+  tempC: number;
+  windMs: number;
+};
+
+export type HourlyForecastMap = Record<ForecastHourKey, HourlyForecastEntry>;
+
 export type WeatherInput = {
+  hourlyForecasts: HourlyForecastMap;
+  afterRainSky: AfterRainSky;
+};
+
+export type ResolvedWeatherInput = {
   nearTermWeather: NearTermWeather;
   hasLaterPrecip: boolean;
   laterPrecipType: LaterPrecipType;
   windLevel: WindLevel;
   tempLevel: TempLevel;
+  next17TempDropShift: 0 | 1;
+  next17WindWorsenShift: 0 | 1;
   afterRainSky: AfterRainSky;
 };
 

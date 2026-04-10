@@ -6,6 +6,7 @@ import {
 } from '../src/domain/weekdayBase.ts';
 import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
+import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
   cloneNavigationSnapshot,
@@ -20,11 +21,13 @@ import type {
   WeatherInput,
 } from '../src/domain/types.ts';
 
+type LegacyWeatherSpec = Record<string, unknown> & { afterRainSky?: 'cloudy' | 'sunny' | null };
+
 type Case = {
   name: string;
   weekday: number;
   discountTime: DiscountTime;
-  weather: WeatherInput;
+  weatherSpec: LegacyWeatherSpec;
   expected: {
     adjusted: string;
     baseRateBonus: number;
@@ -36,15 +39,24 @@ type Case = {
   };
 };
 
-function weather(partial: Partial<WeatherInput>): WeatherInput {
+function weather(partial: LegacyWeatherSpec): LegacyWeatherSpec {
   return {
     nearTermWeather: 'other',
     hasLaterPrecip: false,
     laterPrecipType: null,
     windLevel: '2orLess',
     tempLevel: '11to15',
+    next17WindLevel: null,
+    next17TempLevel: null,
     afterRainSky: null,
     ...partial,
+  };
+}
+
+function toWeatherInput(discountTime: DiscountTime, spec: LegacyWeatherSpec): WeatherInput {
+  return {
+    hourlyForecasts: buildHourlyForecastsFromLegacy({ legacyWeather: spec, discountTime }),
+    afterRainSky: spec.afterRainSky ?? null,
   };
 }
 
@@ -53,7 +65,7 @@ const cases: Case[] = [
     name: '乾いた日・基準変化なし',
     weekday: 2,
     discountTime: '15',
-    weather: weather({}),
+    weatherSpec: weather({}),
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
@@ -64,7 +76,7 @@ const cases: Case[] = [
     name: '低気温 + 風速3m以上は2段強める',
     weekday: 5,
     discountTime: '15',
-    weather: weather({ tempLevel: '6to10', windLevel: '3to4' }),
+    weatherSpec: weather({ tempLevel: '6to10', windLevel: '3to4' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 0,
@@ -76,7 +88,7 @@ const cases: Case[] = [
     name: '超低気温で上限に当たった乾いた日は +5%',
     weekday: 1,
     discountTime: '15',
-    weather: weather({ tempLevel: '5orLess' }),
+    weatherSpec: weather({ tempLevel: '5orLess' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
@@ -89,7 +101,7 @@ const cases: Case[] = [
     name: '近い時間の雨は +10% を残しつつ頭打ち +5% を入れない',
     weekday: 1,
     discountTime: '15',
-    weather: weather({ tempLevel: '5orLess', nearTermWeather: 'rain' }),
+    weatherSpec: weather({ tempLevel: '5orLess', nearTermWeather: 'rain' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 10,
@@ -101,7 +113,7 @@ const cases: Case[] = [
     name: '16〜20度は1段弱める',
     weekday: 2,
     discountTime: '15',
-    weather: weather({ tempLevel: '16to20' }),
+    weatherSpec: weather({ tempLevel: '16to20' }),
     expected: {
       adjusted: '金土',
       baseRateBonus: 0,
@@ -113,7 +125,7 @@ const cases: Case[] = [
     name: '16〜20度と風速5m以上は相殺される',
     weekday: 2,
     discountTime: '15',
-    weather: weather({ tempLevel: '16to20', windLevel: '5orMore' }),
+    weatherSpec: weather({ tempLevel: '16to20', windLevel: '5orMore' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
@@ -125,7 +137,7 @@ const cases: Case[] = [
     name: '21〜25度で17時以降の下限に当たる乾いた日は -5%',
     weekday: 5,
     discountTime: '17',
-    weather: weather({ tempLevel: '21to25' }),
+    weatherSpec: weather({ tempLevel: '21to25' }),
     expected: {
       adjusted: '金土',
       baseRateBonus: -5,
@@ -137,7 +149,7 @@ const cases: Case[] = [
     name: '日曜17時以降は火木基準から始まり下限は金土',
     weekday: 0,
     discountTime: '17',
-    weather: weather({ tempLevel: '21to25' }),
+    weatherSpec: weather({ tempLevel: '21to25' }),
     expected: {
       adjusted: '金土',
       baseRateBonus: -5,
@@ -148,7 +160,7 @@ const cases: Case[] = [
     name: '1時間30分後〜23時の雨で上限に当たったら +5% はかかる',
     weekday: 1,
     discountTime: '15',
-    weather: weather({ hasLaterPrecip: true, laterPrecipType: 'rain' }),
+    weatherSpec: weather({ hasLaterPrecip: true, laterPrecipType: 'rain' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
@@ -160,7 +172,7 @@ const cases: Case[] = [
     name: '1時間30分後〜23時の雪は曜日基準を2段強める',
     weekday: 5,
     discountTime: '15',
-    weather: weather({ hasLaterPrecip: true, laterPrecipType: 'snow' }),
+    weatherSpec: weather({ hasLaterPrecip: true, laterPrecipType: 'snow' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 0,
@@ -172,7 +184,7 @@ const cases: Case[] = [
     name: '17時以降の上方向2段あふれは +10%',
     weekday: 1,
     discountTime: '17',
-    weather: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
+    weatherSpec: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 10,
@@ -185,7 +197,7 @@ const cases: Case[] = [
     name: '15時の下方向2段あふれは -10%',
     weekday: 0,
     discountTime: '15',
-    weather: weather({ tempLevel: '21to25' }),
+    weatherSpec: weather({ tempLevel: '21to25' }),
     expected: {
       adjusted: '日',
       baseRateBonus: -10,
@@ -194,10 +206,45 @@ const cases: Case[] = [
     },
   },
   {
+    name: '15時で17時予報の気温が5度以上低い日は1段強める',
+    weekday: 5,
+    discountTime: '15',
+    weatherSpec: weather({
+      tempLevel: '16to20',
+      windLevel: '2orLess',
+      next17TempLevel: '11to15',
+      next17WindLevel: '2orLess',
+    }),
+    expected: {
+      adjusted: '金土',
+      baseRateBonus: 0,
+      weekdayCalcIncludes: ['気温 16〜20度 -1段', '17時予報で5度以上低下 +1段'],
+      weekdayResultIncludes: ['曜日基準補正は0段', '金曜・土曜の基準のままです'],
+    },
+  },
+  {
+    name: '15時で17時予報の気温低下と風強まりで補正しきれない分 +5% に届く',
+    weekday: 5,
+    discountTime: '15',
+    weatherSpec: weather({
+      tempLevel: '31to35',
+      windLevel: '2orLess',
+      next17TempLevel: '11to15',
+      next17WindLevel: '5orMore',
+    }),
+    expected: {
+      adjusted: '月水',
+      baseRateBonus: 5,
+      weekdayCalcIncludes: ['気温 31〜35度 +1段', '17時予報で5度以上低下 +1段', '17時予報で風も強まる +1段'],
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
+      bonusResultIncludes: ['値引率補正は+5%'],
+    },
+  },
+  {
     name: '26〜30度は補正なし',
     weekday: 2,
     discountTime: '15',
-    weather: weather({ tempLevel: '26to30' }),
+    weatherSpec: weather({ tempLevel: '26to30' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
@@ -208,7 +255,7 @@ const cases: Case[] = [
     name: '31〜35度は1段強める',
     weekday: 5,
     discountTime: '15',
-    weather: weather({ tempLevel: '31to35' }),
+    weatherSpec: weather({ tempLevel: '31to35' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
@@ -219,7 +266,7 @@ const cases: Case[] = [
     name: '36度以上は2段強める',
     weekday: 4,
     discountTime: '15',
-    weather: weather({ tempLevel: '36orMore' }),
+    weatherSpec: weather({ tempLevel: '36orMore' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
@@ -231,7 +278,7 @@ const cases: Case[] = [
     name: '近い時間の雪は +20%',
     weekday: 2,
     discountTime: '15',
-    weather: weather({ nearTermWeather: 'snow' }),
+    weatherSpec: weather({ nearTermWeather: 'snow' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 20,
@@ -243,7 +290,7 @@ const cases: Case[] = [
     name: '近い雨がある日は下限に当たっても -5% を入れない',
     weekday: 5,
     discountTime: '17',
-    weather: weather({ tempLevel: '21to25', nearTermWeather: 'rain' }),
+    weatherSpec: weather({ tempLevel: '21to25', nearTermWeather: 'rain' }),
     expected: {
       adjusted: '金土',
       baseRateBonus: 10,
@@ -255,7 +302,7 @@ const cases: Case[] = [
     name: '雨上がり後の晴れは1段弱める',
     weekday: 2,
     discountTime: '17',
-    weather: weather({ afterRainSky: 'sunny' }),
+    weatherSpec: weather({ afterRainSky: 'sunny' }),
     expected: {
       adjusted: '金土',
       baseRateBonus: 0,
@@ -267,7 +314,7 @@ const cases: Case[] = [
     name: '雨上がり後のくもりは補正なし',
     weekday: 2,
     discountTime: '17',
-    weather: weather({ afterRainSky: 'cloudy' }),
+    weatherSpec: weather({ afterRainSky: 'cloudy' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
@@ -288,7 +335,7 @@ function makeState(partial: Partial<AppState>): AppState {
       discountTime: '15',
       manualWeekdayOverride: false,
       manualDiscountTimeOverride: false,
-      weather: weather({}),
+      weather: toWeatherInput('15', weather({})),
     },
     areaProgressMap: {
       bento_men: { areaId: 'bento_men', status: 'unstarted', areaJudge: null },
@@ -333,7 +380,7 @@ type ScenarioCase = {
   name: string;
   weekday: number;
   discountTime: DiscountTime;
-  weather: WeatherInput;
+  weatherSpec: LegacyWeatherSpec;
   lateTimeBonus?: number;
   expected: {
     weekdaySummary: string;
@@ -347,7 +394,7 @@ const scenarioCases: ScenarioCase[] = [
     name: '運用シナリオ: 水曜日17時・近い雨あり',
     weekday: 3,
     discountTime: '17',
-    weather: weather({ nearTermWeather: 'rain' }),
+    weatherSpec: weather({ nearTermWeather: 'rain' }),
     expected: {
       weekdaySummary: '曜日基準補正：なし',
       bonusSummary: '値引率補正：+10％',
@@ -358,7 +405,7 @@ const scenarioCases: ScenarioCase[] = [
     name: '運用シナリオ: 日曜日15時・暑めで客足やや戻る',
     weekday: 0,
     discountTime: '15',
-    weather: weather({ tempLevel: '21to25' }),
+    weatherSpec: weather({ tempLevel: '21to25' }),
     expected: {
       weekdaySummary: '曜日基準補正：なし',
       bonusSummary: '値引率補正：-10％',
@@ -369,7 +416,7 @@ const scenarioCases: ScenarioCase[] = [
     name: '運用シナリオ: 金曜日19時30分・猛暑で風も強い',
     weekday: 5,
     discountTime: '19',
-    weather: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
+    weatherSpec: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
     expected: {
       weekdaySummary: '曜日基準補正：金土→月水',
       bonusSummary: '値引率補正：+5％',
@@ -380,7 +427,7 @@ const scenarioCases: ScenarioCase[] = [
     name: '運用シナリオ: 火曜日17時・雨上がり後に晴れ',
     weekday: 2,
     discountTime: '17',
-    weather: weather({ afterRainSky: 'sunny' }),
+    weatherSpec: weather({ afterRainSky: 'sunny' }),
     expected: {
       weekdaySummary: '曜日基準補正：火木→金土',
       bonusSummary: '値引率補正：なし',
@@ -391,11 +438,27 @@ const scenarioCases: ScenarioCase[] = [
     name: '運用シナリオ: 月曜日17時・近い雨と時刻接近が重なる',
     weekday: 1,
     discountTime: '17',
-    weather: weather({ nearTermWeather: 'rain' }),
+    weatherSpec: weather({ nearTermWeather: 'rain' }),
     lateTimeBonus: 5,
     expected: {
       weekdaySummary: '曜日基準補正：なし',
       bonusSummary: '値引率補正：+15％',
+      finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
+    },
+  },
+  {
+    name: '運用シナリオ: 15時に17時の寒さと風の強まりを先読みする',
+    weekday: 5,
+    discountTime: '15',
+    weatherSpec: weather({
+      tempLevel: '16to20',
+      windLevel: '2orLess',
+      next17TempLevel: '11to15',
+      next17WindLevel: '5orMore',
+    }),
+    expected: {
+      weekdaySummary: '曜日基準補正：金土→火木',
+      bonusSummary: '値引率補正：なし',
       finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },
@@ -427,15 +490,17 @@ const repeatManyNoteCases: RepeatManyNoteCase[] = [
 let passed = 0;
 
 for (const testCase of cases) {
+  const weatherInput = toWeatherInput(testCase.discountTime, testCase.weatherSpec);
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, testCase.discountTime);
   const info = getWeekdayBaseInfo(
     testCase.weekday,
     testCase.discountTime,
-    testCase.weather
+    resolvedWeather
   );
   const guide = getBasisGuideDisplay({
     weekday: testCase.weekday,
     discountTime: testCase.discountTime,
-    weather: testCase.weather,
+    weather: resolvedWeather,
   });
 
   try {
@@ -697,15 +762,20 @@ try {
 
 for (const scenarioCase of scenarioCases) {
   try {
+    const scenarioWeather = toWeatherInput(scenarioCase.discountTime, scenarioCase.weatherSpec);
+    const resolvedScenarioWeather = resolveWeatherInputForDiscount(
+      scenarioWeather,
+      scenarioCase.discountTime,
+    );
     const basisGuide = getBasisGuideDisplay({
       weekday: scenarioCase.weekday,
       discountTime: scenarioCase.discountTime,
-      weather: scenarioCase.weather,
+      weather: resolvedScenarioWeather,
     });
     const weekdayInfo = getWeekdayBaseInfo(
       scenarioCase.weekday,
       scenarioCase.discountTime,
-      scenarioCase.weather
+      resolvedScenarioWeather
     );
     const mergedBonus = buildMergedBonusDisplay({
       baseBonusParts: basisGuide.bonusCalcParts,
