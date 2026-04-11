@@ -7,7 +7,6 @@ import type {
 } from "../../domain/types";
 import {
   cloneHourlyForecasts,
-  cycleForecastWeather,
   FORECAST_HOUR_KEYS,
   getForecastWeatherLabel,
   getForecastWeatherSymbol,
@@ -56,6 +55,14 @@ const AFTER_RAIN_OPTIONS = [
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
 const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
 const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS;
+const FORECAST_WEATHER_ORDER: ForecastWeatherKind[] = ["sunny", "rain", "snow"];
+
+function stepForecastWeather(current: ForecastWeatherKind, delta: 1 | -1): ForecastWeatherKind {
+  const currentIndex = FORECAST_WEATHER_ORDER.indexOf(current);
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+  const nextIndex = (safeIndex + delta + FORECAST_WEATHER_ORDER.length) % FORECAST_WEATHER_ORDER.length;
+  return FORECAST_WEATHER_ORDER[nextIndex];
+}
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -153,44 +160,6 @@ function SegmentedSelector<T extends string>({
   );
 }
 
-function ForecastNumberSelect(props: {
-  value: number;
-  options: number[];
-  unit: string;
-  onChange: (next: number) => void;
-  disabled?: boolean;
-  isBlank?: boolean;
-}) {
-  return (
-    <select
-      value={props.isBlank ? "" : String(props.value)}
-      onChange={(e) => props.onChange(Number(e.target.value))}
-      disabled={props.disabled}
-      style={{
-        width: "100%",
-        padding: "8px 6px",
-        borderRadius: 8,
-        border: "1px solid #ccc",
-        background: props.disabled ? "#f0f0f0" : "#fff",
-        color: props.disabled ? "#999" : "#000",
-        fontWeight: 700,
-        cursor: props.disabled ? "not-allowed" : "pointer",
-      }}
-    >
-      {props.isBlank ? (
-        <option value="" disabled>
-          未入力
-        </option>
-      ) : null}
-      {props.options.map((option) => (
-        <option key={option} value={String(option)}>
-          {option}{props.unit}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 function ForecastNumberStepper(props: {
   value: number;
   options: number[];
@@ -282,45 +251,94 @@ function ForecastNumberStepper(props: {
   );
 }
 
-function ForecastWeatherButton(props: {
+function ForecastWeatherStepper(props: {
   weather: ForecastWeatherKind;
-  onClick: () => void;
+  onChange: (next: ForecastWeatherKind) => void;
+  onConfirmCurrent?: () => void;
+  isUnconfirmed?: boolean;
   disabled?: boolean;
-  isBlank?: boolean;
 }) {
+  const canAdjust = !props.disabled;
+
   return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      disabled={props.disabled}
+    <div
       style={{
-        width: "100%",
-        padding: "8px 6px",
-        borderRadius: 10,
-        border: "1px solid #ccc",
-        background: props.disabled ? "#f0f0f0" : "#fff",
-        color: props.disabled ? "#999" : "#000",
-        cursor: props.disabled ? "not-allowed" : "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        display: "grid",
+        gridTemplateRows: "30px 1fr 30px",
         gap: 4,
-        fontWeight: 700,
+        alignItems: "center",
+        justifyItems: "stretch",
       }}
-      title="タップで 晴れ→雨→雪 を切り替え"
     >
-      {props.isBlank ? (
-        <span style={{ fontSize: 12 }}>未入力</span>
-      ) : (
-        <>
-          <span style={{ fontSize: 18, lineHeight: 1 }}>{getForecastWeatherSymbol(props.weather)}</span>
-          <span style={{ fontSize: 12 }}>{getForecastWeatherLabel(props.weather)}</span>
-        </>
-      )}
-    </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (!canAdjust) return;
+          props.onChange(stepForecastWeather(props.weather, 1));
+        }}
+        disabled={!canAdjust}
+        style={{
+          height: 30,
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          background: canAdjust ? "#c62828" : "#f0f0f0",
+          color: canAdjust ? "#fff" : "#999",
+          fontWeight: 800,
+          cursor: canAdjust ? "pointer" : "not-allowed",
+        }}
+      >
+        +1
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          if (props.disabled || !props.isUnconfirmed || !props.onConfirmCurrent) return;
+          props.onConfirmCurrent();
+        }}
+        disabled={props.disabled}
+        style={{
+          minHeight: 34,
+          borderRadius: 8,
+          border: props.isUnconfirmed ? "2px dashed #aaa" : "1px solid #ccc",
+          background: props.disabled ? "#f0f0f0" : "#fff",
+          color: props.disabled ? "#999" : "#000",
+          fontWeight: 700,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "4px",
+          cursor: props.disabled ? "not-allowed" : props.isUnconfirmed ? "pointer" : "default",
+          gap: 2,
+        }}
+      >
+        <span style={{ fontSize: 18, lineHeight: 1 }}>{getForecastWeatherSymbol(props.weather)}</span>
+        <span style={{ fontSize: 12 }}>{getForecastWeatherLabel(props.weather)}</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          if (!canAdjust) return;
+          props.onChange(stepForecastWeather(props.weather, -1));
+        }}
+        disabled={!canAdjust}
+        style={{
+          height: 30,
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          background: canAdjust ? "#1565c0" : "#f0f0f0",
+          color: canAdjust ? "#fff" : "#999",
+          fontWeight: 800,
+          cursor: canAdjust ? "pointer" : "not-allowed",
+        }}
+      >
+        -1
+      </button>
+    </div>
   );
 }
-
 
 
 
@@ -657,26 +675,16 @@ export function StartScreen({
             {DISPLAY_FORECAST_HOURS.map((hour) => {
               const forecast = sessionDraft.weather.hourlyForecasts[hour];
               const enabled = isFieldEnabled(hour, "weather");
-              const isStartHour = hour === startForecastHour;
               const isConfirmed = confirmedInputs[hour].weather;
-              const isBlank = isStartHour && !isConfirmed;
               return (
                 <div key={`weather-wrap-${hour}`} ref={(node) => { hourlyFieldRefs.current[`weather-${hour}`] = node; }}>
-                  <ForecastWeatherButton
+                  <ForecastWeatherStepper
                     key={`weather-${hour}`}
-                  weather={forecast.weather}
-                  isBlank={isBlank}
-                  disabled={!enabled}
-                  onClick={() => {
-                    if (!enabled) return;
-                    if (!isConfirmed) {
-                      const nextWeather = isStartHour ? "sunny" : forecast.weather;
-                      applyHourlyChange(hour, "weather", { weather: nextWeather }, true);
-                      return;
-                    }
-
-                    applyHourlyChange(hour, "weather", { weather: cycleForecastWeather(forecast.weather) }, false);
-                  }}
+                    weather={forecast.weather}
+                    disabled={!enabled}
+                    isUnconfirmed={!isConfirmed}
+                    onConfirmCurrent={() => confirmCurrentDefault(hour, "weather")}
+                    onChange={(next) => applyHourlyChange(hour, "weather", { weather: next }, false)}
                   />
                 </div>
               );
@@ -685,37 +693,24 @@ export function StartScreen({
             {DISPLAY_FORECAST_HOURS.map((hour) => {
               const forecast = sessionDraft.weather.hourlyForecasts[hour];
               const enabled = isFieldEnabled(hour, "temp");
-              const isStartHour = hour === startForecastHour;
               const isConfirmed = confirmedInputs[hour].temp;
               return (
                 <div
-                    key={`temp-wrap-${hour}`}
-                    ref={(node) => {
-                      hourlyFieldRefs.current[`temp-${hour}`] = node;
-                    }}
-                  >
-                  {isStartHour ? (
-                    <ForecastNumberSelect
-                      key={`temp-${hour}`}
-                      value={forecast.tempC}
-                      options={TEMP_NUMBER_OPTIONS}
-                      unit="℃"
-                      isBlank={!isConfirmed}
-                      disabled={!enabled}
-                      onChange={(next) => applyHourlyChange(hour, "temp", { tempC: next }, true)}
-                    />
-                  ) : (
-                    <ForecastNumberStepper
-                      key={`temp-${hour}`}
-                      value={forecast.tempC}
-                      options={TEMP_NUMBER_OPTIONS}
-                      unit="℃"
-                      disabled={!enabled}
-                      isUnconfirmed={!isConfirmed}
-                      onConfirmCurrent={() => confirmCurrentDefault(hour, "temp")}
-                      onChange={(next) => applyHourlyChange(hour, "temp", { tempC: next }, true)}
-                    />
-                  )}
+                  key={`temp-wrap-${hour}`}
+                  ref={(node) => {
+                    hourlyFieldRefs.current[`temp-${hour}`] = node;
+                  }}
+                >
+                  <ForecastNumberStepper
+                    key={`temp-${hour}`}
+                    value={forecast.tempC}
+                    options={TEMP_NUMBER_OPTIONS}
+                    unit="℃"
+                    disabled={!enabled}
+                    isUnconfirmed={!isConfirmed}
+                    onConfirmCurrent={() => confirmCurrentDefault(hour, "temp")}
+                    onChange={(next) => applyHourlyChange(hour, "temp", { tempC: next }, false)}
+                  />
                 </div>
               );
             })}
@@ -723,37 +718,24 @@ export function StartScreen({
             {DISPLAY_FORECAST_HOURS.map((hour) => {
               const forecast = sessionDraft.weather.hourlyForecasts[hour];
               const enabled = isFieldEnabled(hour, "wind");
-              const isStartHour = hour === startForecastHour;
               const isConfirmed = confirmedInputs[hour].wind;
               return (
                 <div
-                    key={`wind-wrap-${hour}`}
-                    ref={(node) => {
-                      hourlyFieldRefs.current[`wind-${hour}`] = node;
-                    }}
-                  >
-                  {isStartHour ? (
-                    <ForecastNumberSelect
-                      key={`wind-${hour}`}
-                      value={forecast.windMs}
-                      options={WIND_NUMBER_OPTIONS}
-                      unit="m"
-                      isBlank={!isConfirmed}
-                      disabled={!enabled}
-                      onChange={(next) => applyHourlyChange(hour, "wind", { windMs: next }, true)}
-                    />
-                  ) : (
-                    <ForecastNumberStepper
-                      key={`wind-${hour}`}
-                      value={forecast.windMs}
-                      options={WIND_NUMBER_OPTIONS}
-                      unit="m"
-                      disabled={!enabled}
-                      isUnconfirmed={!isConfirmed}
-                      onConfirmCurrent={() => confirmCurrentDefault(hour, "wind")}
-                      onChange={(next) => applyHourlyChange(hour, "wind", { windMs: next }, true)}
-                    />
-                  )}
+                  key={`wind-wrap-${hour}`}
+                  ref={(node) => {
+                    hourlyFieldRefs.current[`wind-${hour}`] = node;
+                  }}
+                >
+                  <ForecastNumberStepper
+                    key={`wind-${hour}`}
+                    value={forecast.windMs}
+                    options={WIND_NUMBER_OPTIONS}
+                    unit="m"
+                    disabled={!enabled}
+                    isUnconfirmed={!isConfirmed}
+                    onConfirmCurrent={() => confirmCurrentDefault(hour, "wind")}
+                    onChange={(next) => applyHourlyChange(hour, "wind", { windMs: next }, false)}
+                  />
                 </div>
               );
             })}
