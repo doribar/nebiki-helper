@@ -1,8 +1,9 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type {
   DiscountTime,
   FinalGuideData,
   RateDisplayData,
+  SkipTargetOption,
 } from "../../domain/types";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
@@ -33,6 +34,9 @@ type RateDisplayScreenProps = {
   onNextArea: () => void;
   onSkip: () => void;
   onGoBack: () => void;
+  canChooseSkipTarget?: boolean;
+  skipTargetOptions?: SkipTargetOption[];
+  onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -91,8 +95,16 @@ export function RateDisplayScreen({
   onNextArea,
   onSkip,
   onGoBack,
+  canChooseSkipTarget = false,
+  skipTargetOptions = [],
+  onChooseSkipTarget,
 }: RateDisplayScreenProps) {
   const isFinalTime = discountTime === "20";
+  const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
+
+  useEffect(() => {
+    setShowSkipTargetPicker(false);
+  }, [areaName, canChooseSkipTarget]);
 
   const manyColor = "#d32f2f";
   const slightlyManyColor = "#ef6c00";
@@ -249,9 +261,49 @@ export function RateDisplayScreen({
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
         <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
 
-        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
-          今はスキップ
+        <button
+          type="button"
+          onClick={() => {
+            if (canChooseSkipTarget && skipTargetOptions.length > 0) {
+              setShowSkipTargetPicker((current) => !current);
+              return;
+            }
+
+            onSkip();
+          }}
+          style={subActionButtonStyle}
+        >
+          {canChooseSkipTarget && skipTargetOptions.length > 0 ? "スキップ先を選ぶ" : "今はスキップ"}
         </button>
+
+        {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (
+          <section
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 12,
+              padding: 12,
+              background: "#fafafa",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>まだ値引きが終わっていないエリア</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {skipTargetOptions.map((option) => (
+                <button
+                  key={option.areaId}
+                  type="button"
+                  onClick={() => onChooseSkipTarget?.(option.areaId)}
+                  style={{
+                    ...subActionButtonStyle,
+                    width: "100%",
+                    textAlign: "left",
+                  }}
+                >
+                  {option.areaName}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
 
 

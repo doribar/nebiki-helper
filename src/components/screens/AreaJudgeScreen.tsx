@@ -1,5 +1,5 @@
-import type { CSSProperties } from "react";
-import type { AreaJudge } from "../../domain/types";
+import { useEffect, useState, type CSSProperties } from "react";
+import type { AreaJudge, SkipTargetOption } from "../../domain/types";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
 
@@ -23,6 +23,9 @@ type AreaJudgeScreenProps = {
   onJudge: (judge: Exclude<AreaJudge, null>) => void;
   onSkip: () => void;
   onGoBack: () => void;
+  canChooseSkipTarget?: boolean;
+  skipTargetOptions?: SkipTargetOption[];
+  onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -83,8 +86,16 @@ export function AreaJudgeScreen({
   onJudge,
   onSkip,
   onGoBack,
+  canChooseSkipTarget = false,
+  skipTargetOptions = [],
+  onChooseSkipTarget,
 }: AreaJudgeScreenProps) {
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
+  const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
+
+  useEffect(() => {
+    setShowSkipTargetPicker(false);
+  }, [areaName, canChooseSkipTarget]);
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
@@ -184,9 +195,49 @@ export function AreaJudgeScreen({
       </section>
 
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
-        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
-          今はスキップ
+        <button
+          type="button"
+          onClick={() => {
+            if (canChooseSkipTarget && skipTargetOptions.length > 0) {
+              setShowSkipTargetPicker((current) => !current);
+              return;
+            }
+
+            onSkip();
+          }}
+          style={subActionButtonStyle}
+        >
+          {canChooseSkipTarget && skipTargetOptions.length > 0 ? "スキップ先を選ぶ" : "今はスキップ"}
         </button>
+
+        {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (
+          <section
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 12,
+              padding: 12,
+              background: "#fafafa",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>まだ値引きが終わっていないエリア</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {skipTargetOptions.map((option) => (
+                <button
+                  key={option.areaId}
+                  type="button"
+                  onClick={() => onChooseSkipTarget?.(option.areaId)}
+                  style={{
+                    ...subActionButtonStyle,
+                    width: "100%",
+                    textAlign: "left",
+                  }}
+                >
+                  {option.areaName}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <section

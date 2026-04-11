@@ -7,6 +7,7 @@ import type {
   PendingBannerInfo,
   PendingReason,
   SessionData,
+  SkipTargetOption,
   SessionDraft,
   UseNebikiAppResult,
   WeatherInput,
@@ -46,6 +47,7 @@ import {
   getNextPendingCandidate,
   getPendingRemainingCount,
   getPendingResumeScreen,
+  getSkipTargetOptions,
 } from "../domain/pending";
 import {
   applyAfterRainSelectionDefaults,
@@ -802,6 +804,68 @@ const lateSkipNotice = useMemo(() => {
     };
   }, [state.currentFlow, state.currentAreaId, state.areaProgressMap]);
 
+  const allSkipTargetOptions = useMemo<SkipTargetOption[]>(() => {
+    if (!state.currentAreaId) return [];
+
+    return getSkipTargetOptions({
+      areaProgressMap: state.areaProgressMap,
+      currentAreaId: state.currentAreaId,
+    });
+  }, [state.currentAreaId, state.areaProgressMap]);
+
+  const predictedSkipNextAreaId = useMemo<AreaId | null>(() => {
+    if (!state.currentAreaId) return null;
+
+    const currentAreaId = state.currentAreaId;
+    const { nextSession } = refreshSessionDiscountTime(state.session);
+
+    if (state.currentFlow === "pending") {
+      const nextDeferredAreaIds = state.pendingDeferredAreaIds.includes(currentAreaId)
+        ? state.pendingDeferredAreaIds
+        : [...state.pendingDeferredAreaIds, currentAreaId];
+
+      const nextCandidate = getNextPendingCandidate({
+        areaProgressMap: state.areaProgressMap,
+        referenceAreaId: currentAreaId,
+        deferredAreaIds: nextDeferredAreaIds,
+      });
+
+      return nextCandidate?.areaId ?? null;
+    }
+
+    if (nextSession?.discountTime === "20") return null;
+
+    const nextNormalAreaId = getNextNormalArea(currentAreaId);
+    if (nextNormalAreaId) return nextNormalAreaId;
+
+    const updatedMap = {
+      ...state.areaProgressMap,
+      [currentAreaId]: {
+        ...state.areaProgressMap[currentAreaId],
+        status: "skipped_manual" as const,
+        skipReason: "manual" as const,
+      },
+    };
+
+    const nextCandidate = getNextPendingCandidate({
+      areaProgressMap: updatedMap,
+      referenceAreaId: currentAreaId,
+    });
+
+    return nextCandidate?.areaId ?? null;
+  }, [state.currentAreaId, state.currentFlow, state.pendingDeferredAreaIds, state.areaProgressMap, state.session]);
+
+  const canChooseSkipTarget = useMemo(() => {
+    if (!state.currentAreaId) return false;
+    if (allSkipTargetOptions.length === 0) return false;
+    return predictedSkipNextAreaId === state.currentAreaId;
+  }, [allSkipTargetOptions.length, predictedSkipNextAreaId, state.currentAreaId]);
+
+  const skipTargetOptions = useMemo<SkipTargetOption[]>(() => {
+    if (!canChooseSkipTarget) return [];
+    return allSkipTargetOptions;
+  }, [allSkipTargetOptions, canChooseSkipTarget]);
+
   function moveToNextPendingOrDone(params: {
     prev: AppState;
     updatedMap: Record<AreaId, AreaProgress>;
@@ -993,14 +1057,15 @@ const lateSkipNotice = useMemo(() => {
     };
 
     if (prev.currentFlow === "pending") {
-      const wasFew = prev.areaProgressMap[currentAreaId].status === "postponed_few";
+      const nextDeferredAreaIds = prev.pendingDeferredAreaIds.includes(currentAreaId)
+        ? prev.pendingDeferredAreaIds
+        : [...prev.pendingDeferredAreaIds, currentAreaId];
 
       return moveToNextPendingOrDone({
         prev,
         updatedMap,
         referenceAreaId: currentAreaId,
-        deferredAreaIds: wasFew ? [] : undefined,
-        preferredNextReason: wasFew ? "manual" : null,
+        deferredAreaIds: nextDeferredAreaIds,
         nextSession,
         timeSwitchNotice,
       });
@@ -1187,23 +1252,7 @@ const lateSkipNotice = useMemo(() => {
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       if (prev.currentFlow === "pending") {
-        const alreadyDeferred = prev.pendingDeferredAreaIds.includes(currentAreaId);
-        const shouldPreferFewNext =
-          currentProgress.status === "skipped_manual" && alreadyDeferred;
-
-        if (currentProgress.status === "postponed_few") {
-          return moveToNextPendingOrDone({
-            prev,
-            updatedMap: prev.areaProgressMap,
-            referenceAreaId: currentAreaId,
-            deferredAreaIds: [currentAreaId],
-            preferredNextReason: "manual",
-            nextSession,
-            timeSwitchNotice,
-          });
-        }
-
-        const nextDeferredAreaIds = alreadyDeferred
+        const nextDeferredAreaIds = prev.pendingDeferredAreaIds.includes(currentAreaId)
           ? prev.pendingDeferredAreaIds
           : [...prev.pendingDeferredAreaIds, currentAreaId];
 
@@ -1212,7 +1261,6 @@ const lateSkipNotice = useMemo(() => {
           updatedMap: prev.areaProgressMap,
           referenceAreaId: currentAreaId,
           deferredAreaIds: nextDeferredAreaIds,
-          preferredNextReason: shouldPreferFewNext ? "few" : null,
           nextSession,
           timeSwitchNotice,
         });
@@ -1265,6 +1313,32 @@ const lateSkipNotice = useMemo(() => {
         nextSession,
         timeSwitchNotice,
       });
+    });
+  }
+
+
+  function chooseSkipTargetArea(targetAreaId: AreaId) {
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
+
+    setState((prev) => {
+      if (!prev.currentAreaId || prev.currentAreaId === targetAreaId) return prev;
+
+      const targetProgress = prev.areaProgressMap[targetAreaId];
+      if (!targetProgress || targetProgress.status === "completed") return prev;
+
+      return {
+        ...prev,
+        currentAreaId: targetAreaId,
+        lastReferenceAreaId: prev.currentAreaId,
+        screen: getPendingResumeScreen(targetProgress),
+        currentFlow:
+          targetProgress.status === "skipped_manual" || targetProgress.status === "postponed_few"
+            ? "pending"
+            : "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: null,
+      };
     });
   }
 
@@ -1402,6 +1476,8 @@ const lateSkipNotice = useMemo(() => {
   isResuming: resumeTargetScreen !== null,
   canUndo: undoSnapshot !== null,
   undoNotice,
+  canChooseSkipTarget,
+  skipTargetOptions,
 },
     actions: {
       updateSessionDraft,
@@ -1411,6 +1487,7 @@ const lateSkipNotice = useMemo(() => {
       undoLastAction,
       judgeCurrentArea,
       skipCurrentArea,
+      chooseSkipTargetArea,
       goToNextArea,
       advanceFinalTimeStep,
       resetApp,

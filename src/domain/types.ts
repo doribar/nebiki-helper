@@ -167,6 +167,13 @@ export type PendingBannerInfo = {
   reason: PendingReason;
 };
 
+export type SkipTargetOption = {
+  areaId: AreaId;
+  areaName: string;
+  resumeScreen: "area_judge" | "rate_display";
+  status: AreaStatus;
+};
+
 export type WeatherGuideText = {
   nearTermWeatherGuide: string;
   laterPrecipGuide: string;
@@ -212,6 +219,8 @@ export type UseNebikiAppDerived = {
   isResuming: boolean;
   canUndo: boolean;
   undoNotice: string | null;
+  canChooseSkipTarget: boolean;
+  skipTargetOptions: SkipTargetOption[];
 };
 
 export type UseNebikiAppActions = {
@@ -223,6 +232,7 @@ export type UseNebikiAppActions = {
 
   judgeCurrentArea: (judge: Exclude<AreaJudge, null>) => void;
   skipCurrentArea: () => void;
+  chooseSkipTargetArea: (areaId: AreaId) => void;
 
   goToNextArea: () => void;
   advanceFinalTimeStep: () => void;

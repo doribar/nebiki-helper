@@ -6,7 +6,7 @@ import {
 } from '../src/domain/weekdayBase.ts';
 import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
-import { getPendingResumeScreen } from '../src/domain/pending.ts';
+import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
@@ -895,6 +895,70 @@ assert.equal(sundayEveningRateDisplay.many.main, '20%');
 console.log('PASS: 日曜15時だけ やや多い を表示する');
 
 
+
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      croquette: { areaId: 'croquette', status: 'postponed_few', areaJudge: 'few' },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+      sushi: { areaId: 'sushi', status: 'postponed_few', areaJudge: 'few' },
+      hosomaki: { areaId: 'hosomaki', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'fry_chicken',
+  });
+
+  assert.equal(candidate?.areaId, 'croquette');
+  console.log('PASS: pending は理由より近さを優先して選ぶ');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: pending は理由より近さを優先して選ぶ');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      croquette: { areaId: 'croquette', status: 'postponed_few', areaJudge: 'few' },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+      sushi: { areaId: 'sushi', status: 'postponed_few', areaJudge: 'few' },
+    },
+    referenceAreaId: 'fry_chicken',
+    deferredAreaIds: ['croquette', 'tempura'],
+  });
+
+  assert.equal(candidate?.areaId, 'sushi');
+  console.log('PASS: 再スキップした pending は一時的に後ろへ回しつつ残りから近い順に選ぶ');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 再スキップした pending は一時的に後ろへ回しつつ残りから近い順に選ぶ');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      croquette: { areaId: 'croquette', status: 'postponed_few', areaJudge: 'few' },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'fry_chicken',
+    deferredAreaIds: ['croquette', 'tempura'],
+    preferredReason: 'manual',
+  });
+
+  assert.equal(candidate?.areaId, 'croquette');
+  console.log('PASS: deferred しか残っていない場合は理由指定よりも残り pending を近い順に再開する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: deferred しか残っていない場合は理由指定よりも残り pending を近い順に再開する');
+  console.error(error);
+  process.exitCode = 1;
+}
 try {
   assert.equal(
     getPendingResumeScreen({ areaId: 'bento_men', status: 'skipped_manual', areaJudge: 'many' }),

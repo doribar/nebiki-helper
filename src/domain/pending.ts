@@ -4,6 +4,7 @@ import type {
   AreaProgress,
   PendingAreaCandidate,
   PendingReason,
+  SkipTargetOption,
 } from "./types.ts";
 
 function toPendingReason(progress: AreaProgress): PendingReason | null {
@@ -35,36 +36,14 @@ export function getNextPendingCandidate(params: {
   preferredReason?: PendingReason | null;
 }): PendingAreaCandidate | null {
   const deferredSet = new Set(params.deferredAreaIds ?? []);
-  const all = Object.values(params.areaProgressMap);
+  const allPending = Object.values(params.areaProgressMap).filter((p) => {
+    return p.status === "skipped_manual" || p.status === "postponed_few";
+  });
 
-  const manual = all.filter((p) => p.status === "skipped_manual");
-  const few = all.filter((p) => p.status === "postponed_few");
+  if (allPending.length === 0) return null;
 
-  const manualFiltered = manual.filter((p) => !deferredSet.has(p.areaId));
-  const fewFiltered = few.filter((p) => !deferredSet.has(p.areaId));
-
-  let targetList: AreaProgress[] = [];
-
-  // 1回だけ優先したい理由がある場合
-  if (params.preferredReason === "few" && fewFiltered.length > 0) {
-    targetList = fewFiltered;
-  } else if (params.preferredReason === "manual" && manualFiltered.length > 0) {
-    targetList = manualFiltered;
-  } else if (manual.length > 0) {
-  if (manualFiltered.length > 0) {
-    targetList = manualFiltered;
-  } else {
-    targetList = manual;
-  }
-} else if (few.length > 0) {
-    if (fewFiltered.length > 0) {
-      targetList = fewFiltered;
-    } else {
-      targetList = few;
-    }
-  } else {
-    return null;
-  }
+  const nonDeferred = allPending.filter((p) => !deferredSet.has(p.areaId));
+  const targetList = nonDeferred.length > 0 ? nonDeferred : allPending;
 
   const sorted = sortByDistance(targetList, params.referenceAreaId);
   const picked = sorted[0];
@@ -94,4 +73,21 @@ export function getPendingRemainingCount(
   return Object.values(areaProgressMap).filter(
     (p) => p.status === "skipped_manual" || p.status === "postponed_few"
   ).length;
+}
+
+export function getSkipTargetOptions(params: {
+  areaProgressMap: Record<AreaId, AreaProgress>;
+  currentAreaId: AreaId;
+}): SkipTargetOption[] {
+  return Object.values(params.areaProgressMap)
+    .filter((progress) => progress.areaId !== params.currentAreaId && progress.status !== "completed")
+    .sort((a, b) => {
+      return getDistance(params.currentAreaId, a.areaId) - getDistance(params.currentAreaId, b.areaId);
+    })
+    .map((progress) => ({
+      areaId: progress.areaId,
+      areaName: getAreaName(progress.areaId),
+      resumeScreen: getPendingResumeScreen(progress),
+      status: progress.status,
+    }));
 }

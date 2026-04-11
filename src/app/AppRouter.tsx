@@ -44,6 +44,9 @@ export function AppRouter({ app }: AppRouterProps) {
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
+          canChooseSkipTarget={derived.canChooseSkipTarget}
+          skipTargetOptions={derived.skipTargetOptions}
+          onChooseSkipTarget={actions.chooseSkipTargetArea}
         />
       );
 
@@ -66,6 +69,9 @@ export function AppRouter({ app }: AppRouterProps) {
           onNextArea={actions.goToNextArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
+          canChooseSkipTarget={derived.canChooseSkipTarget}
+          skipTargetOptions={derived.skipTargetOptions}
+          onChooseSkipTarget={actions.chooseSkipTargetArea}
         />
       );
 
