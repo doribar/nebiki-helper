@@ -410,7 +410,7 @@ const scenarioCases: ScenarioCase[] = [
     expected: {
       weekdaySummary: '曜日基準補正：なし',
       bonusSummary: '値引率補正：-10％',
-      finalRates: { count3OrMore: '40%', count2: '30%', count1: '20%' },
+      finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },
   {
@@ -432,7 +432,7 @@ const scenarioCases: ScenarioCase[] = [
     expected: {
       weekdaySummary: '曜日基準補正：火木→金土',
       bonusSummary: '値引率補正：なし',
-      finalRates: { count3OrMore: '40%', count2: '30%', count1: '20%' },
+      finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },
   {
@@ -835,10 +835,10 @@ const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
   rateBonus: 0,
 });
-assert.equal(finalLow.count3OrMore.main, '40%');
-assert.equal(finalLow.count2.main, '30%');
-assert.equal(finalLow.count1.main, '20%');
-assert.equal(finalLow.score, -1);
+assert.equal(finalLow.count3OrMore.main, '50%');
+assert.equal(finalLow.count2.main, '40%');
+assert.equal(finalLow.count1.main, '30%');
+assert.equal(finalLow.score, 0);
 
 const finalHigh = getFinalTimeGuide({
   weekdayShift: 1,
@@ -847,21 +847,21 @@ const finalHigh = getFinalTimeGuide({
 assert.equal(finalHigh.count3OrMore.main, '50%');
 assert.equal(finalHigh.count2.main, '40%');
 assert.equal(finalHigh.count1.main, '30%');
-assert.equal(finalHigh.score, 1);
+assert.equal(finalHigh.score, 0);
 
 const finalBonusRaised = getFinalTimeGuide({
   weekdayShift: 0,
   rateBonus: 10,
 });
 assert.equal(finalBonusRaised.count3OrMore.main, '50%');
-assert.equal(finalBonusRaised.scoreBreakdown.rateBonusPoints, 2);
+assert.equal(finalBonusRaised.scoreBreakdown.rateBonusPoints, 0);
 
 const finalBonusLowered = getFinalTimeGuide({
   weekdayShift: 0,
   rateBonus: -10,
 });
-assert.equal(finalBonusLowered.count3OrMore.main, '40%');
-assert.equal(finalBonusLowered.scoreBreakdown.rateBonusPoints, -2);
+assert.equal(finalBonusLowered.count3OrMore.main, '50%');
+assert.equal(finalBonusLowered.scoreBreakdown.rateBonusPoints, 0);
 
 console.log('PASS: 最終値引き点数ロジック');
 

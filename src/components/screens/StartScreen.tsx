@@ -388,9 +388,11 @@ export function StartScreen({
     setConfirmedInputs(createEmptyConfirmationMap());
   }, [sessionDraft.discountTime, sessionDraft.date]);
 
-  const currentUnlockIndex = fieldOrder.findIndex(({ hour, field }: { hour: ForecastHourKey; field: InputField }) => !confirmedInputs[hour][field]);
+  const currentUnlockIndex = isFinalTime
+    ? -1
+    : fieldOrder.findIndex(({ hour, field }: { hour: ForecastHourKey; field: InputField }) => !confirmedInputs[hour][field]);
   const currentUnlockTarget = currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
-  const allRequiredInputsConfirmed = currentUnlockIndex === -1;
+  const allRequiredInputsConfirmed = isFinalTime || currentUnlockIndex === -1;
 
 
   useEffect(() => {
@@ -646,6 +648,8 @@ export function StartScreen({
         </div>
       </div>
 
+{!isFinalTime ? (
+        <>
       <div style={{ fontWeight: 800, marginBottom: 8 }}>天候</div>
       <section
         style={{
@@ -759,6 +763,8 @@ export function StartScreen({
           }
           columns={2}
         />
+      ) : null}
+        </>
       ) : null}
 
       {isFinalTime ? (

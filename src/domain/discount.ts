@@ -122,44 +122,19 @@ export function getNormalTimeRateDisplay(params: {
   };
 }
 
-const FINAL_RATE_LOWER_THRESHOLD = 0;
-
-function toRatePoints(rateBonus: number): number {
-  return Math.trunc(rateBonus / 5);
-}
-
-export function getFinalTimeGuide(params: {
+export function getFinalTimeGuide(_params: {
   weekdayShift: number;
   rateBonus: number;
 }): FinalGuideData {
-  const weekdayShiftPoints = params.weekdayShift;
-  const rateBonusPoints = toRatePoints(params.rateBonus);
-  const score = weekdayShiftPoints + rateBonusPoints;
-  const shouldLower = score <= FINAL_RATE_LOWER_THRESHOLD;
-
-  if (shouldLower) {
-    return {
-      count1: { main: "20%" },
-      count2: { main: "30%" },
-      count3OrMore: { main: "40%" },
-      score,
-      scoreThreshold: FINAL_RATE_LOWER_THRESHOLD,
-      scoreBreakdown: {
-        weekdayShiftPoints,
-        rateBonusPoints,
-      },
-    };
-  }
-
   return {
     count1: { main: "30%" },
     count2: { main: "40%" },
     count3OrMore: { main: "50%" },
-    score,
-    scoreThreshold: FINAL_RATE_LOWER_THRESHOLD,
+    score: 0,
+    scoreThreshold: 0,
     scoreBreakdown: {
-      weekdayShiftPoints,
-      rateBonusPoints,
+      weekdayShiftPoints: 0,
+      rateBonusPoints: 0,
     },
   };
 }
