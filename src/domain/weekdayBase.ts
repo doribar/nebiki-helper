@@ -259,34 +259,34 @@ function getAfterRainRecoveryShiftTerm(weather: ResolvedWeatherInput): ShiftTerm
   return { label: "雨上がり後 晴れ", value: -1 };
 }
 
-function getNext17TempDropShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {
-  return discountTime === "15" ? weather.next17TempDropShift : 0;
+function getNext18TempDropShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {
+  return discountTime === "15" ? weather.next18TempDropShift : 0;
 }
 
-function getNext17TempDropShiftTerm(
+function getNext18TempDropShiftTerm(
   weather: ResolvedWeatherInput,
   discountTime: DiscountTime
 ): ShiftTerm | undefined {
-  if (getNext17TempDropShift(weather, discountTime) === 0) {
+  if (getNext18TempDropShift(weather, discountTime) === 0) {
     return undefined;
   }
 
-  return { label: "17時予報で5度以上低下", value: 1 };
+  return { label: "18時予報で6度以上低下", value: 1 };
 }
 
-function getNext17WindWorsenShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {
-  return discountTime === "15" ? weather.next17WindWorsenShift : 0;
+function getNext18WindWorsenShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {
+  return discountTime === "15" ? weather.next18WindWorsenShift : 0;
 }
 
-function getNext17WindWorsenShiftTerm(
+function getNext18WindWorsenShiftTerm(
   weather: ResolvedWeatherInput,
   discountTime: DiscountTime
 ): ShiftTerm | undefined {
-  if (getNext17WindWorsenShift(weather, discountTime) === 0) {
+  if (getNext18WindWorsenShift(weather, discountTime) === 0) {
     return undefined;
   }
 
-  return { label: "17時予報で風も強まる", value: 1 };
+  return { label: "18時予報で風も強まる", value: 1 };
 }
 
 function getLaterPrecipShift(weather: ResolvedWeatherInput): number {
@@ -546,8 +546,8 @@ function resolveWeatherEffect(params: {
     getWindShiftTerm(params.weather.tempLevel, params.weather.windLevel),
     getLaterPrecipShiftTerm(params.weather),
     getAfterRainRecoveryShiftTerm(params.weather),
-    getNext17TempDropShiftTerm(params.weather, params.discountTime),
-    getNext17WindWorsenShiftTerm(params.weather, params.discountTime),
+    getNext18TempDropShiftTerm(params.weather, params.discountTime),
+    getNext18WindWorsenShiftTerm(params.weather, params.discountTime),
   ].filter((value): value is ShiftTerm => Boolean(value));
 
   const totalShift =
@@ -555,8 +555,8 @@ function resolveWeatherEffect(params: {
     getWindShift(params.weather.tempLevel, params.weather.windLevel) +
     getLaterPrecipShift(params.weather) +
     getAfterRainRecoveryShift(params.weather) +
-    getNext17TempDropShift(params.weather, params.discountTime) +
-    getNext17WindWorsenShift(params.weather, params.discountTime);
+    getNext18TempDropShift(params.weather, params.discountTime) +
+    getNext18WindWorsenShift(params.weather, params.discountTime);
 
   const shifted = applyWeekdayShift({
     base: original,

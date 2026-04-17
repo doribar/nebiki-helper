@@ -144,7 +144,6 @@ export function resolveWeatherInputForDiscount(
   weather: WeatherInput,
   discountTime: DiscountTime,
 ): ResolvedWeatherInput {
-  const currentEntry = weather.hourlyForecasts[getCurrentForecastHour(discountTime)];
   const nearEntry = weather.hourlyForecasts[getNearForecastHour(discountTime)];
   const laterEntries = getLaterForecastHours(discountTime).map((hour) => weather.hourlyForecasts[hour]);
 
@@ -162,20 +161,20 @@ export function resolveWeatherInputForDiscount(
   }
 
   const current15 = weather.hourlyForecasts['15'];
-  const current17 = weather.hourlyForecasts['17'];
-  const next17TempDropShift: 0 | 1 =
-    discountTime === '15' && current17.tempC <= current15.tempC - 5 ? 1 : 0;
-  const next17WindWorsenShift: 0 | 1 =
-    discountTime === '15' && next17TempDropShift === 1 && current17.windMs > current15.windMs ? 1 : 0;
+  const current18 = weather.hourlyForecasts['18'];
+  const next18TempDropShift: 0 | 1 =
+    discountTime === '15' && current18.tempC <= current15.tempC - 6 ? 1 : 0;
+  const next18WindWorsenShift: 0 | 1 =
+    discountTime === '15' && next18TempDropShift === 1 && current18.windMs > current15.windMs ? 1 : 0;
 
   return {
     nearTermWeather: toNearTermWeather(nearEntry.weather),
     hasLaterPrecip: laterPrecipType !== null,
     laterPrecipType,
-    windLevel: toWindLevel(currentEntry.windMs),
-    tempLevel: toTempLevel(currentEntry.tempC),
-    next17TempDropShift,
-    next17WindWorsenShift,
+    windLevel: toWindLevel(nearEntry.windMs),
+    tempLevel: toTempLevel(nearEntry.tempC),
+    next18TempDropShift,
+    next18WindWorsenShift,
     afterRainSky: weather.afterRainSky,
   };
 }
@@ -213,6 +212,8 @@ export function buildHourlyForecastsFromLegacy(params: {
 }): HourlyForecastMap {
   const currentTemp = typeof params.legacyWeather.tempLevel === 'string' ? params.legacyWeather.tempLevel : null;
   const currentWind = typeof params.legacyWeather.windLevel === 'string' ? params.legacyWeather.windLevel : null;
+  const nearTemp = typeof params.legacyWeather.nearTempLevel === 'string' ? params.legacyWeather.nearTempLevel : currentTemp;
+  const nearWind = typeof params.legacyWeather.nearWindLevel === 'string' ? params.legacyWeather.nearWindLevel : currentWind;
   const baseTempC = fromTempLevel(currentTemp);
   const baseWindMs = fromWindLevel(currentWind);
   const hourlyForecasts = FORECAST_HOUR_KEYS.reduce((acc, hour) => {
@@ -233,6 +234,9 @@ export function buildHourlyForecastsFromLegacy(params: {
   };
 
   const nearTermWeather = params.legacyWeather.nearTermWeather;
+  hourlyForecasts[nearHour].tempC = fromTempLevel(nearTemp);
+  hourlyForecasts[nearHour].windMs = fromWindLevel(nearWind);
+
   if (nearTermWeather === 'rain' || nearTermWeather === 'snow') {
     hourlyForecasts[nearHour].weather = nearTermWeather;
   }
@@ -246,19 +250,19 @@ export function buildHourlyForecastsFromLegacy(params: {
   }
 
   if (params.discountTime === '15') {
-    const next17TempLevel = typeof params.legacyWeather.next17TempLevel === 'string'
-      ? params.legacyWeather.next17TempLevel
-      : null;
-    const next17WindLevel = typeof params.legacyWeather.next17WindLevel === 'string'
-      ? params.legacyWeather.next17WindLevel
-      : null;
+    const next18TempLevelRaw = typeof params.legacyWeather.next18TempLevel === 'string'
+      ? params.legacyWeather.next18TempLevel
+      : (typeof params.legacyWeather.next17TempLevel === 'string' ? params.legacyWeather.next17TempLevel : null);
+    const next18WindLevelRaw = typeof params.legacyWeather.next18WindLevel === 'string'
+      ? params.legacyWeather.next18WindLevel
+      : (typeof params.legacyWeather.next17WindLevel === 'string' ? params.legacyWeather.next17WindLevel : null);
 
-    if (next17TempLevel !== null) {
-      hourlyForecasts['17'].tempC = fromTempLevel(next17TempLevel);
+    if (next18TempLevelRaw !== null) {
+      hourlyForecasts['18'].tempC = fromTempLevel(next18TempLevelRaw);
     }
 
-    if (next17WindLevel !== null) {
-      hourlyForecasts['17'].windMs = fromWindLevel(next17WindLevel);
+    if (next18WindLevelRaw !== null) {
+      hourlyForecasts['18'].windMs = fromWindLevel(next18WindLevelRaw);
     }
   }
 

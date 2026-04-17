@@ -361,6 +361,21 @@ function isHourAtOrAfter(hour: ForecastHourKey, startHour: ForecastHourKey) {
   return Number(hour) >= Number(startHour);
 }
 
+function getInputStartForecastHour(discountTime: DiscountTime): ForecastHourKey {
+  switch (discountTime) {
+    case "15":
+      return "15";
+    case "17":
+      return "18";
+    case "18":
+      return "19";
+    case "19":
+      return "20";
+    case "20":
+      return "21";
+  }
+}
+
 function createFieldOrder(startHour: ForecastHourKey) {
   const activeHours = DISPLAY_FORECAST_HOURS.filter((hour) => isHourAtOrAfter(hour, startHour));
   return INPUT_FIELDS.flatMap((field) => activeHours.map((hour) => ({ hour, field })));
@@ -375,7 +390,7 @@ export function StartScreen({
   startButtonLabel,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
-  const startForecastHour = sessionDraft.discountTime as ForecastHourKey;
+  const startForecastHour = getInputStartForecastHour(sessionDraft.discountTime);
   const activeHours = useMemo(
     () => DISPLAY_FORECAST_HOURS.filter((hour) => isHourAtOrAfter(hour, startForecastHour)),
     [startForecastHour]

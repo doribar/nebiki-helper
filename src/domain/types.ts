@@ -60,8 +60,8 @@ export type ResolvedWeatherInput = {
   laterPrecipType: LaterPrecipType;
   windLevel: WindLevel;
   tempLevel: TempLevel;
-  next17TempDropShift: 0 | 1;
-  next17WindWorsenShift: 0 | 1;
+  next18TempDropShift: 0 | 1;
+  next18WindWorsenShift: 0 | 1;
   afterRainSky: AfterRainSky;
 };
 
