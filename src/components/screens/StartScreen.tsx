@@ -376,9 +376,15 @@ function getInputStartForecastHour(discountTime: DiscountTime): ForecastHourKey 
   }
 }
 
+function getInputHoursForField(activeHours: ForecastHourKey[], field: InputField): ForecastHourKey[] {
+  return field === "temp" ? [...activeHours].reverse() : activeHours;
+}
+
 function createFieldOrder(startHour: ForecastHourKey) {
   const activeHours = DISPLAY_FORECAST_HOURS.filter((hour) => isHourAtOrAfter(hour, startHour));
-  return INPUT_FIELDS.flatMap((field) => activeHours.map((hour) => ({ hour, field })));
+  return INPUT_FIELDS.flatMap((field) =>
+    getInputHoursForField(activeHours, field).map((hour) => ({ hour, field }))
+  );
 }
 
 export function StartScreen({
@@ -447,12 +453,13 @@ export function StartScreen({
       ...patch,
     };
 
-    const activeIndex = activeHours.indexOf(hour);
-    const nextHour = activeIndex >= 0 ? activeHours[activeIndex + 1] : undefined;
+    const fieldInputHours = getInputHoursForField(activeHours, field);
+    const activeIndex = fieldInputHours.indexOf(hour);
+    const nextHour = activeIndex >= 0 ? fieldInputHours[activeIndex + 1] : undefined;
     if (nextHour && !confirmedInputs[nextHour][field]) {
       const currentEntry = nextHourlyForecasts[hour];
-      nextHourlyForecasts[nextHour as ForecastHourKey] = {
-        ...nextHourlyForecasts[nextHour as ForecastHourKey],
+      nextHourlyForecasts[nextHour] = {
+        ...nextHourlyForecasts[nextHour],
         ...(field === "weather" ? { weather: currentEntry.weather } : {}),
         ...(field === "temp" ? { tempC: currentEntry.tempC } : {}),
         ...(field === "wind" ? { windMs: currentEntry.windMs } : {}),
