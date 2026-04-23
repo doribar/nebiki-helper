@@ -29,51 +29,25 @@ function toRateLine(main: string, note?: string): RateLine {
   return note ? { main, note } : { main };
 }
 
-function getRepeatManyNote(params: {
-  discountTime: Exclude<DiscountTime, "20">;
-  areaJudge: Exclude<AreaJudge, null>;
-  manyRate: number;
-}): string | undefined {
-  const { discountTime, areaJudge, manyRate } = params;
+function getManyTenOrMoreNote(manyRate: number): string | undefined {
+  const tenOrMoreRate = capNormalDiscountRate(manyRate + 10);
 
-  if (discountTime === "15") return undefined;
-
-  if (areaJudge === "few" && discountTime === "18" && manyRate === 25) {
-    return `前回も多かった商品は
-　5個以下 → 25%
-　6〜9個 → 30%
-　10個以上 → 30%`;
+  if (tenOrMoreRate === manyRate) {
+    return undefined;
   }
 
-  if (manyRate === 10) {
-    return `前回も多かった商品は
-　5個以下 → 10%
-　6〜9個 → 15%
-　10個以上 → 20%`;
+  return `多いのうち10個以上は ${tenOrMoreRate}%`;
+}
+
+function buildManyNote(manyRate: number): string {
+  const notes: string[] = [];
+  const tenOrMoreNote = getManyTenOrMoreNote(manyRate);
+
+  if (tenOrMoreNote) {
+    notes.push(tenOrMoreNote);
   }
 
-  if (manyRate === 15) {
-    return `前回も多かった商品は
-　5個以下 → 15%
-　6〜9個 → 20%
-　10個以上 → 25%`;
-  }
-
-  if (manyRate === 20) {
-    return `前回も多かった商品は
-　5個以下 → 20%
-　6〜9個 → 25%
-　10個以上 → 30%`;
-  }
-
-  if (manyRate === 25) {
-    return `前回も多かった商品は
-　5個以下 → 25%
-　6〜9個 → 25%
-　10個以上 → 30%`;
-  }
-
-  return undefined;
+  return notes.join("\n\n");
 }
 
 export function getNormalTimeRateDisplay(params: {
@@ -86,10 +60,10 @@ export function getNormalTimeRateDisplay(params: {
 
   let areaAdjustedBase = base;
   if (params.areaJudge === "many") {
-  areaAdjustedBase = base + 10;
-} else if (params.areaJudge === "few") {
-  areaAdjustedBase = base - 5;
-}
+    areaAdjustedBase = base + 10;
+  } else if (params.areaJudge === "few") {
+    areaAdjustedBase = base - 5;
+  }
 
   const manyRate = capNormalDiscountRate(areaAdjustedBase + 10);
   const showSundaySlightlyMany = params.isSunday && params.discountTime === "15";
@@ -103,11 +77,7 @@ export function getNormalTimeRateDisplay(params: {
       manyRate > 0
         ? toRateLine(
             `${manyRate}%`,
-            getRepeatManyNote({
-              discountTime: params.discountTime,
-              areaJudge: params.areaJudge,
-              manyRate,
-            })
+            buildManyNote(manyRate)
           )
         : toRateLine("引かない"),
     slightlyMany:

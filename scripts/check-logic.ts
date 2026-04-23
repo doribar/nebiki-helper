@@ -466,29 +466,31 @@ const scenarioCases: ScenarioCase[] = [
 ];
 
 
-type RepeatManyNoteCase = {
+type ManyTenOrMoreNoteCase = {
   name: string;
   discountTime: Exclude<DiscountTime, '20'>;
   weatherBonus: number;
-  expectedNoteIncludes: string[];
+  expectedNoteIncludes?: string[];
+  expectedNoteExcludes?: string[];
 };
 
-const repeatManyNoteCases: RepeatManyNoteCase[] = [
+const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
   {
-    name: '多い 10% でも前回多い商品の目安を表示する',
-    discountTime: '17',
-    weatherBonus: -10,
-    expectedNoteIncludes: ['5個以下 → 10%', '6〜9個 → 15%', '10個以上 → 20%'],
+    name: '15時でも多い10個以上の+10%目安を表示する',
+    discountTime: '15',
+    weatherBonus: 0,
+    expectedNoteIncludes: ['多いのうち10個以上は 20%'],
   },
   {
-    name: '多い 15% でも前回多い商品の目安を表示する',
-    discountTime: '17',
-    weatherBonus: -5,
-    expectedNoteIncludes: ['5個以下 → 15%', '6〜9個 → 20%', '10個以上 → 25%'],
+    name: '30%上限に当たる場合は多い10個以上の同率注記を表示しない',
+    discountTime: '19',
+    weatherBonus: 0,
+    expectedNoteExcludes: ['多いのうち10個以上は 30%'],
   },
 ];
 
 let passed = 0;
+
 
 for (const testCase of cases) {
   const weatherInput = toWeatherInput(testCase.discountTime, testCase.weatherSpec);
@@ -807,29 +809,35 @@ for (const scenarioCase of scenarioCases) {
 }
 
 
-for (const repeatManyCase of repeatManyNoteCases) {
+for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
   const display = getNormalTimeRateDisplay({
-    discountTime: repeatManyCase.discountTime,
-    weatherBonus: repeatManyCase.weatherBonus,
+    discountTime: manyTenOrMoreCase.discountTime,
+    weatherBonus: manyTenOrMoreCase.weatherBonus,
     areaJudge: 'normal',
   });
 
   try {
-    assert.ok(display.many.note, 'many.note should exist');
-    for (const expected of repeatManyCase.expectedNoteIncludes) {
-      assert.ok(display.many.note?.includes(expected), `missing expected note text: ${expected}`);
+    const note = display.many.note ?? '';
+
+    for (const expected of manyTenOrMoreCase.expectedNoteIncludes ?? []) {
+      assert.ok(note.includes(expected), `missing expected note text: ${expected}`);
     }
 
-    console.log(`PASS: ${repeatManyCase.name}`);
+    for (const unexpected of manyTenOrMoreCase.expectedNoteExcludes ?? []) {
+      assert.ok(!note.includes(unexpected), `unexpected note text remained: ${unexpected}`);
+    }
+
+    console.log(`PASS: ${manyTenOrMoreCase.name}`);
     passed += 1;
   } catch (error) {
-    console.error(`FAIL: ${repeatManyCase.name}`);
+    console.error(`FAIL: ${manyTenOrMoreCase.name}`);
     console.error(error);
     process.exitCode = 1;
   }
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + repeatManyNoteCases.length + 9} checks passed.`);
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 9} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
