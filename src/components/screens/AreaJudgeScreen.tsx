@@ -86,7 +86,7 @@ export function AreaJudgeScreen({
   onJudge,
   onSkip,
   onGoBack,
-  canChooseSkipTarget = false,
+  canChooseSkipTarget: _canChooseSkipTarget = false,
   skipTargetOptions = [],
   onChooseSkipTarget,
 }: AreaJudgeScreenProps) {
@@ -95,7 +95,7 @@ export function AreaJudgeScreen({
 
   useEffect(() => {
     setShowSkipTargetPicker(false);
-  }, [areaName, canChooseSkipTarget]);
+  }, [areaName, skipTargetOptions.length]);
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
@@ -195,22 +195,24 @@ export function AreaJudgeScreen({
       </section>
 
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
-        <button
-          type="button"
-          onClick={() => {
-            if (canChooseSkipTarget && skipTargetOptions.length > 0) {
-              setShowSkipTargetPicker((current) => !current);
-              return;
-            }
-
-            onSkip();
-          }}
-          style={subActionButtonStyle}
-        >
-          {canChooseSkipTarget && skipTargetOptions.length > 0 ? "スキップ先を選ぶ" : "今はスキップ"}
+        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
+          今はスキップ
         </button>
 
-        {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (
+        <button
+          type="button"
+          onClick={() => setShowSkipTargetPicker((current) => !current)}
+          disabled={skipTargetOptions.length === 0}
+          style={{
+            ...subActionButtonStyle,
+            opacity: skipTargetOptions.length === 0 ? 0.45 : 1,
+            cursor: skipTargetOptions.length === 0 ? "not-allowed" : "pointer",
+          }}
+        >
+          スキップ先を選ぶ
+        </button>
+
+        {skipTargetOptions.length > 0 && showSkipTargetPicker ? (
           <section
             style={{
               border: "1px solid #ddd",

@@ -42,10 +42,21 @@ export function getNextPendingCandidate(params: {
 
   if (allPending.length === 0) return null;
 
-  const nonDeferred = allPending.filter((p) => !deferredSet.has(p.areaId));
-  const targetList = nonDeferred.length > 0 ? nonDeferred : allPending;
+  const manualAll = allPending.filter((p) => p.status === "skipped_manual");
+  const fewAll = allPending.filter((p) => p.status === "postponed_few");
+  const manualNonDeferred = manualAll.filter((p) => !deferredSet.has(p.areaId));
+  const fewNonDeferred = fewAll.filter((p) => !deferredSet.has(p.areaId));
 
-  const sorted = sortByDistance(targetList, params.referenceAreaId);
+  const prioritized =
+    manualAll.length > 0
+      ? manualNonDeferred.length > 0
+        ? manualNonDeferred
+        : manualAll
+      : fewNonDeferred.length > 0
+        ? fewNonDeferred
+        : fewAll;
+
+  const sorted = sortByDistance(prioritized, params.referenceAreaId);
   const picked = sorted[0];
 
   const reason = toPendingReason(picked);

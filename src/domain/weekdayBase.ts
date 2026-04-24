@@ -271,7 +271,7 @@ function getNext18TempDropShiftTerm(
     return undefined;
   }
 
-  return { label: "18時予報で6度以上低下", value: 1 };
+  return { label: "15時と18時の気温差が6度以上", value: 1 };
 }
 
 function getNext18WindWorsenShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {

@@ -207,7 +207,7 @@ const cases: Case[] = [
     },
   },
   {
-    name: '15時で18時予報の気温が6度以上低い日は1段強める',
+    name: '15時と18時の気温差が6度以上なら1段強める',
     weekday: 5,
     discountTime: '15',
     weatherSpec: weather({
@@ -219,12 +219,12 @@ const cases: Case[] = [
     expected: {
       adjusted: '金土',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['気温 16〜20度 -1段', '18時予報で6度以上低下 +1段'],
+      weekdayCalcIncludes: ['気温 16〜20度 -1段', '15時と18時の気温差が6度以上 +1段'],
       weekdayResultIncludes: ['曜日基準補正は0段', '金曜・土曜の基準のままです'],
     },
   },
   {
-    name: '15時で18時予報の気温低下と風強まりで補正しきれない分 +5% に届く',
+    name: '15時と18時の気温差6度以上と風強まりで補正しきれない分 +5% に届く',
     weekday: 5,
     discountTime: '15',
     weatherSpec: weather({
@@ -236,7 +236,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
-      weekdayCalcIncludes: ['気温 31〜35度 +1段', '18時予報で6度以上低下 +1段', '18時予報で風も強まる +1段'],
+      weekdayCalcIncludes: ['気温 31〜35度 +1段', '15時と18時の気温差が6度以上 +1段', '18時予報で風も強まる +1段'],
       bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
       bonusResultIncludes: ['値引率補正は+5%'],
     },
@@ -917,11 +917,11 @@ try {
     referenceAreaId: 'fry_chicken',
   });
 
-  assert.equal(candidate?.areaId, 'croquette');
-  console.log('PASS: pending は理由より近さを優先して選ぶ');
+  assert.equal(candidate?.areaId, 'tempura');
+  console.log('PASS: pending は手動スキップを少ないより優先して選ぶ');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: pending は理由より近さを優先して選ぶ');
+  console.error('FAIL: pending は手動スキップを少ないより優先して選ぶ');
   console.error(error);
   process.exitCode = 1;
 }
@@ -938,11 +938,11 @@ try {
     deferredAreaIds: ['croquette', 'tempura'],
   });
 
-  assert.equal(candidate?.areaId, 'sushi');
-  console.log('PASS: 再スキップした pending は一時的に後ろへ回しつつ残りから近い順に選ぶ');
+  assert.equal(candidate?.areaId, 'tempura');
+  console.log('PASS: 手動スキップが残っている間は deferred でも少ないより優先して再開する');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: 再スキップした pending は一時的に後ろへ回しつつ残りから近い順に選ぶ');
+  console.error('FAIL: 手動スキップが残っている間は deferred でも少ないより優先して再開する');
   console.error(error);
   process.exitCode = 1;
 }
@@ -959,11 +959,11 @@ try {
     preferredReason: 'manual',
   });
 
-  assert.equal(candidate?.areaId, 'croquette');
-  console.log('PASS: deferred しか残っていない場合は理由指定よりも残り pending を近い順に再開する');
+  assert.equal(candidate?.areaId, 'tempura');
+  console.log('PASS: deferred だけの手動スキップでも少ないより優先して再開する');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: deferred しか残っていない場合は理由指定よりも残り pending を近い順に再開する');
+  console.error('FAIL: deferred だけの手動スキップでも少ないより優先して再開する');
   console.error(error);
   process.exitCode = 1;
 }
