@@ -3,6 +3,7 @@ import type {
   AppState,
   AreaId,
   AreaProgress,
+  DoneSummaryItem,
   DiscountTime,
   PendingBannerInfo,
   PendingReason,
@@ -16,7 +17,7 @@ import type {
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
 } from "../domain/types";
-import { AREA_MASTERS, getAreaName, getNextNormalArea } from "../domain/area";
+import { AREA_MASTERS, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
   getBasisGuideDisplay,
   getWeatherGuideText,
@@ -103,6 +104,47 @@ function buildTimeSwitchNotice(to: DiscountTime): string {
   return `現在時刻が${getBasisTimeText(
     to
   )}を過ぎたため、ここから${getBasisTimeText(to)}の基準で表示します。`;
+}
+
+function getAreaJudgeText(judge: AreaJudge): string {
+  switch (judge) {
+    case "many":
+      return "多い";
+    case "normal":
+      return "どちらでもない";
+    case "few":
+      return "少ない";
+    default:
+      return "未判定";
+  }
+}
+
+function getAreaStatusText(progress: AreaProgress): string | undefined {
+  switch (progress.status) {
+    case "completed":
+      return undefined;
+    case "skipped_manual":
+      return "未完了（スキップ中）";
+    case "postponed_few":
+      return "未完了（少ないため後回し）";
+    case "unstarted":
+      return "未完了";
+  }
+}
+
+function getNextUnstartedAreaId(
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  referenceAreaId: AreaId
+): AreaId | null {
+  const currentIndex = NORMAL_ROUTE.indexOf(referenceAreaId);
+  const afterCurrent =
+    currentIndex >= 0 ? NORMAL_ROUTE.slice(currentIndex + 1) : NORMAL_ROUTE;
+
+  return (
+    afterCurrent.find((areaId) => areaProgressMap[areaId]?.status === "unstarted") ??
+    NORMAL_ROUTE.find((areaId) => areaProgressMap[areaId]?.status === "unstarted") ??
+    null
+  );
 }
 
 function createInitialSessionDraft(): SessionDraft {
@@ -788,6 +830,54 @@ const lateSkipNotice = useMemo(() => {
   });
 }, [state.session, weekdayBaseInfo.weekdayShift, weekdayBaseInfo.baseRateBonus]);
 
+  const doneSummaryItems = useMemo<DoneSummaryItem[]>(() => {
+    const session = state.session;
+    if (!session || session.discountTime === "20") return [];
+
+    const discountTime = session.discountTime;
+    const weatherBonus = weekdayBaseInfo.baseRateBonus + lateTimeBonus;
+
+    return NORMAL_ROUTE.map((areaId) => {
+      const progress = state.areaProgressMap[areaId];
+      const statusText = progress ? getAreaStatusText(progress) : "未完了";
+
+      if (!progress || !progress.areaJudge || progress.status !== "completed") {
+        return {
+          areaId,
+          areaName: getAreaName(areaId),
+          judgeText: progress ? getAreaJudgeText(progress.areaJudge) : "未判定",
+          rateText: "未完了",
+          manyRateText: "未完了",
+          normalRateText: "未完了",
+          statusText,
+        };
+      }
+
+      const display = getNormalTimeRateDisplay({
+        discountTime,
+        weatherBonus,
+        areaJudge: progress.areaJudge,
+        isSunday: session.weekday === 0 && discountTime === "15",
+      });
+
+      return {
+        areaId,
+        areaName: getAreaName(areaId),
+        judgeText: getAreaJudgeText(progress.areaJudge),
+        rateText: display.normal.main,
+        manyRateText: display.many.main,
+        manyNote: display.many.note,
+        normalRateText: display.normal.main,
+        statusText,
+      };
+    });
+  }, [
+    state.session,
+    state.areaProgressMap,
+    weekdayBaseInfo.baseRateBonus,
+    lateTimeBonus,
+  ]);
+
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
 
@@ -901,6 +991,26 @@ const lateSkipNotice = useMemo(() => {
     });
 
     if (!nextCandidate) {
+      const nextUnstartedAreaId = getNextUnstartedAreaId(
+        params.updatedMap,
+        params.referenceAreaId
+      );
+
+      if (nextUnstartedAreaId) {
+        return {
+          ...params.prev,
+          session: params.nextSession,
+          timeSwitchNotice: params.timeSwitchNotice,
+          areaProgressMap: params.updatedMap,
+          currentAreaId: nextUnstartedAreaId,
+          lastReferenceAreaId: params.referenceAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          finalTimeStep: 0,
+          screen: "area_judge",
+        };
+      }
+
       return {
         ...params.prev,
         session: params.nextSession,
@@ -1478,6 +1588,7 @@ const lateSkipNotice = useMemo(() => {
   undoNotice,
   canChooseSkipTarget,
   skipTargetOptions,
+  doneSummaryItems,
 },
     actions: {
       updateSessionDraft,

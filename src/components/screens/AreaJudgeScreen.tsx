@@ -174,6 +174,22 @@ export function AreaJudgeScreen({
           <span>このエリア全体の商品数は？</span>
         </div>
 
+        <div
+          style={{
+            border: "1px solid #f0d38a",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 14,
+            background: "#fffaf0",
+            fontSize: 14,
+            lineHeight: 1.7,
+          }}
+        >
+          まずエリアが多いかどうかを確認し、当てはまれば「多い」を選択してください。
+          多くなければ次に少ないかどうかを確認し、当てはまれば「少ない」を選択してください。
+          どちらにも当てはまらない場合は「どちらでもない」を選択してください。
+        </div>
+
         <div style={{ display: "grid", gap: 10 }}>
           <JudgeOptionButton
             label="多い"

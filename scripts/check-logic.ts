@@ -482,6 +482,12 @@ const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
     expectedNoteIncludes: ['多いのうち10個以上は 10%'],
   },
   {
+    name: '多いが5%なら10個以上は15%目安を表示する',
+    discountTime: '15',
+    weatherBonus: -5,
+    expectedNoteIncludes: ['多いのうち10個以上は 15%'],
+  },
+  {
     name: '15時でも多い10個以上の+10%目安を表示する',
     discountTime: '15',
     weatherBonus: 0,
@@ -995,6 +1001,19 @@ try {
   passed += 1;
 } catch (error) {
   console.error('FAIL: 手動スキップで未判定エリアはエリアジャッジから再開する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  assert.equal(
+    getPendingResumeScreen({ areaId: 'bento_men', status: 'postponed_few', areaJudge: 'few' }),
+    'rate_display'
+  );
+  console.log('PASS: 少ない後回し済みエリアは値引率表示から再開する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 少ない後回し済みエリアは値引率表示から再開する');
   console.error(error);
   process.exitCode = 1;
 }

@@ -94,6 +94,7 @@ export function AppRouter({ app }: AppRouterProps) {
     case "done":
       return (
         <DoneScreen
+          summaryItems={derived.doneSummaryItems}
           onReset={actions.resetApp}
           onGoBack={actions.goBackOneScreen}
         />

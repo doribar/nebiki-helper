@@ -174,6 +174,18 @@ export type SkipTargetOption = {
   status: AreaStatus;
 };
 
+export type DoneSummaryItem = {
+  areaId: AreaId;
+  areaName: string;
+  judgeText: string;
+  rateText: string;
+  note?: string;
+  manyRateText?: string;
+  manyNote?: string;
+  normalRateText?: string;
+  statusText?: string;
+};
+
 export type WeatherGuideText = {
   nearTermWeatherGuide: string;
   laterPrecipGuide: string;
@@ -221,6 +233,7 @@ export type UseNebikiAppDerived = {
   undoNotice: string | null;
   canChooseSkipTarget: boolean;
   skipTargetOptions: SkipTargetOption[];
+  doneSummaryItems: DoneSummaryItem[];
 };
 
 export type UseNebikiAppActions = {

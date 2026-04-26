@@ -71,7 +71,7 @@ export function getNextPendingCandidate(params: {
 
 
 export function getPendingResumeScreen(progress: AreaProgress): "area_judge" | "rate_display" {
-  if (progress.status === "skipped_manual" && progress.areaJudge) {
+  if (progress.areaJudge) {
     return "rate_display";
   }
 
