@@ -95,7 +95,7 @@ export function RateDisplayScreen({
   onNextArea,
   onSkip,
   onGoBack,
-  canChooseSkipTarget: _canChooseSkipTarget = false,
+  canChooseSkipTarget = false,
   skipTargetOptions = [],
   onChooseSkipTarget,
 }: RateDisplayScreenProps) {
@@ -104,7 +104,7 @@ export function RateDisplayScreen({
 
   useEffect(() => {
     setShowSkipTargetPicker(false);
-  }, [areaName, skipTargetOptions.length]);
+  }, [areaName, canChooseSkipTarget]);
 
   const manyColor = "#d32f2f";
   const slightlyManyColor = "#ef6c00";
@@ -261,24 +261,22 @@ export function RateDisplayScreen({
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
         <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
 
-        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
-          今はスキップ
-        </button>
-
         <button
           type="button"
-          onClick={() => setShowSkipTargetPicker((current) => !current)}
-          disabled={skipTargetOptions.length === 0}
-          style={{
-            ...subActionButtonStyle,
-            opacity: skipTargetOptions.length === 0 ? 0.45 : 1,
-            cursor: skipTargetOptions.length === 0 ? "not-allowed" : "pointer",
+          onClick={() => {
+            if (canChooseSkipTarget && skipTargetOptions.length > 0) {
+              setShowSkipTargetPicker((current) => !current);
+              return;
+            }
+
+            onSkip();
           }}
+          style={subActionButtonStyle}
         >
-          スキップ先を選ぶ
+          {canChooseSkipTarget && skipTargetOptions.length > 0 ? "スキップ先を選ぶ" : "今はスキップ"}
         </button>
 
-        {skipTargetOptions.length > 0 && showSkipTargetPicker ? (
+        {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (
           <section
             style={{
               border: "1px solid #ddd",

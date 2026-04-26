@@ -73,13 +73,10 @@ export function getNormalTimeRateDisplay(params: {
   const normalRate = capNormalDiscountRate(areaAdjustedBase);
 
   return {
-    many:
-      manyRate > 0
-        ? toRateLine(
-            `${manyRate}%`,
-            buildManyNote(manyRate)
-          )
-        : toRateLine("引かない"),
+    many: toRateLine(
+      manyRate > 0 ? `${manyRate}%` : "引かない",
+      buildManyNote(manyRate)
+    ),
     slightlyMany:
       showSundaySlightlyMany && slightlyManyRate !== null
         ? slightlyManyRate > 0

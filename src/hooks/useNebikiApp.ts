@@ -813,13 +813,58 @@ const lateSkipNotice = useMemo(() => {
     });
   }, [state.currentAreaId, state.areaProgressMap]);
 
+  const predictedSkipNextAreaId = useMemo<AreaId | null>(() => {
+    if (!state.currentAreaId) return null;
+
+    const currentAreaId = state.currentAreaId;
+    const { nextSession } = refreshSessionDiscountTime(state.session);
+
+    if (state.currentFlow === "pending") {
+      const nextDeferredAreaIds = state.pendingDeferredAreaIds.includes(currentAreaId)
+        ? state.pendingDeferredAreaIds
+        : [...state.pendingDeferredAreaIds, currentAreaId];
+
+      const nextCandidate = getNextPendingCandidate({
+        areaProgressMap: state.areaProgressMap,
+        referenceAreaId: currentAreaId,
+        deferredAreaIds: nextDeferredAreaIds,
+      });
+
+      return nextCandidate?.areaId ?? null;
+    }
+
+    if (nextSession?.discountTime === "20") return null;
+
+    const nextNormalAreaId = getNextNormalArea(currentAreaId);
+    if (nextNormalAreaId) return nextNormalAreaId;
+
+    const updatedMap = {
+      ...state.areaProgressMap,
+      [currentAreaId]: {
+        ...state.areaProgressMap[currentAreaId],
+        status: "skipped_manual" as const,
+        skipReason: "manual" as const,
+      },
+    };
+
+    const nextCandidate = getNextPendingCandidate({
+      areaProgressMap: updatedMap,
+      referenceAreaId: currentAreaId,
+    });
+
+    return nextCandidate?.areaId ?? null;
+  }, [state.currentAreaId, state.currentFlow, state.pendingDeferredAreaIds, state.areaProgressMap, state.session]);
+
   const canChooseSkipTarget = useMemo(() => {
-    return state.currentAreaId !== null && allSkipTargetOptions.length > 0;
-  }, [allSkipTargetOptions.length, state.currentAreaId]);
+    if (!state.currentAreaId) return false;
+    if (allSkipTargetOptions.length === 0) return false;
+    return predictedSkipNextAreaId === state.currentAreaId;
+  }, [allSkipTargetOptions.length, predictedSkipNextAreaId, state.currentAreaId]);
 
   const skipTargetOptions = useMemo<SkipTargetOption[]>(() => {
+    if (!canChooseSkipTarget) return [];
     return allSkipTargetOptions;
-  }, [allSkipTargetOptions]);
+  }, [allSkipTargetOptions, canChooseSkipTarget]);
 
   function moveToNextPendingOrDone(params: {
     prev: AppState;

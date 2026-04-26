@@ -476,6 +476,12 @@ type ManyTenOrMoreNoteCase = {
 
 const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
   {
+    name: '多いが引かないでも10個以上は10%目安を表示する',
+    discountTime: '15',
+    weatherBonus: -10,
+    expectedNoteIncludes: ['多いのうち10個以上は 10%'],
+  },
+  {
     name: '15時でも多い10個以上の+10%目安を表示する',
     discountTime: '15',
     weatherBonus: 0,
