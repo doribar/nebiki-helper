@@ -29,7 +29,6 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
-  showSlightlyManyOption?: boolean;
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
   onSkip: () => void;
@@ -90,7 +89,6 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
-  showSlightlyManyOption,
   finalGuide,
   onNextArea,
   onSkip,
@@ -107,7 +105,6 @@ export function RateDisplayScreen({
   }, [areaName, canChooseSkipTarget]);
 
   const manyColor = "#d32f2f";
-  const slightlyManyColor = "#ef6c00";
   const fewColor = "#1976d2";
   const normalColor = "#2e7d32";
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
@@ -202,12 +199,6 @@ export function RateDisplayScreen({
               <br />
               <span>各商品の量が「</span>
               <span style={{ color: "#d32f2f", fontWeight: 700 }}>多い</span>
-              {showSlightlyManyOption ? (
-                <>
-                  <span>・</span>
-                  <span style={{ color: "#ef6c00", fontWeight: 700 }}>やや多い</span>
-                </>
-              ) : null}
               <span>・</span>
               <span style={{ color: "#2e7d32", fontWeight: 700 }}>どちらでもない</span>
               <span>・</span>
@@ -215,23 +206,11 @@ export function RateDisplayScreen({
               <span>」のどれかを確認し、</span>
               <br />
               <span>完了したら以下の値引率で値引きをしてください。</span>
-              {showSlightlyManyOption ? (
-                <div style={{ marginTop: 6, fontSize: 13, color: "#666" }}>
-                  ※ やや多い は日曜日の15時だけ表示されます
-                </div>
-              ) : null}
             </div>
 
             {rateDisplay ? (
               <>
                 <RateRow label="多い" line={rateDisplay.many} color={manyColor} />
-                {showSlightlyManyOption && rateDisplay.slightlyMany ? (
-                  <RateRow
-                    label="やや多い"
-                    line={rateDisplay.slightlyMany}
-                    color={slightlyManyColor}
-                  />
-                ) : null}
                 <RateRow
                   label="どちらでもない"
                   line={rateDisplay.normal}
@@ -261,19 +240,22 @@ export function RateDisplayScreen({
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
         <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
 
+        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
+          今はスキップ
+        </button>
+
         <button
           type="button"
-          onClick={() => {
-            if (canChooseSkipTarget && skipTargetOptions.length > 0) {
-              setShowSkipTargetPicker((current) => !current);
-              return;
-            }
-
-            onSkip();
+          onClick={() => setShowSkipTargetPicker((current) => !current)}
+          disabled={!(canChooseSkipTarget && skipTargetOptions.length > 0)}
+          style={{
+            ...subActionButtonStyle,
+            background: canChooseSkipTarget && skipTargetOptions.length > 0 ? "#fff" : "#eee",
+            color: canChooseSkipTarget && skipTargetOptions.length > 0 ? "#000" : "#999",
+            cursor: canChooseSkipTarget && skipTargetOptions.length > 0 ? "pointer" : "not-allowed",
           }}
-          style={subActionButtonStyle}
         >
-          {canChooseSkipTarget && skipTargetOptions.length > 0 ? "スキップ先を選ぶ" : "今はスキップ"}
+          スキップ先を選ぶ
         </button>
 
         {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (

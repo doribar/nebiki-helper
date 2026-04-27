@@ -7,6 +7,7 @@ type AreaJudgeScreenProps = {
   weekdayText: string;
   timeText: string;
   areaName: string;
+  showJudgeGuide?: boolean;
   basisGuide: {
     noticeText?: string;
     weekdaySummaryText?: string;
@@ -80,6 +81,7 @@ export function AreaJudgeScreen({
   weekdayText,
   timeText,
   areaName,
+  showJudgeGuide = false,
   basisGuide,
   pendingBanner,
   timeSwitchNotice,
@@ -174,21 +176,23 @@ export function AreaJudgeScreen({
           <span>このエリア全体の商品数は？</span>
         </div>
 
-        <div
-          style={{
-            border: "1px solid #f0d38a",
-            borderRadius: 12,
-            padding: 12,
-            marginBottom: 14,
-            background: "#fffaf0",
-            fontSize: 14,
-            lineHeight: 1.7,
-          }}
-        >
-          まずエリアが多いかどうかを確認し、当てはまれば「多い」を選択してください。
-          多くなければ次に少ないかどうかを確認し、当てはまれば「少ない」を選択してください。
-          どちらにも当てはまらない場合は「どちらでもない」を選択してください。
-        </div>
+        {showJudgeGuide ? (
+          <div
+            style={{
+              border: "1px solid #f0d38a",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 14,
+              background: "#fffaf0",
+              fontSize: 14,
+              lineHeight: 1.7,
+            }}
+          >
+            まずエリアが多いかどうかを確認し、当てはまれば「多い」を選択してください。
+            多くなければ次に少ないかどうかを確認し、当てはまれば「少ない」を選択してください。
+            どちらにも当てはまらない場合は「どちらでもない」を選択してください。
+          </div>
+        ) : null}
 
         <div style={{ display: "grid", gap: 10 }}>
           <JudgeOptionButton
@@ -211,19 +215,22 @@ export function AreaJudgeScreen({
       </section>
 
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
+          今はスキップ
+        </button>
+
         <button
           type="button"
-          onClick={() => {
-            if (canChooseSkipTarget && skipTargetOptions.length > 0) {
-              setShowSkipTargetPicker((current) => !current);
-              return;
-            }
-
-            onSkip();
+          onClick={() => setShowSkipTargetPicker((current) => !current)}
+          disabled={!(canChooseSkipTarget && skipTargetOptions.length > 0)}
+          style={{
+            ...subActionButtonStyle,
+            background: canChooseSkipTarget && skipTargetOptions.length > 0 ? "#fff" : "#eee",
+            color: canChooseSkipTarget && skipTargetOptions.length > 0 ? "#000" : "#999",
+            cursor: canChooseSkipTarget && skipTargetOptions.length > 0 ? "pointer" : "not-allowed",
           }}
-          style={subActionButtonStyle}
         >
-          {canChooseSkipTarget && skipTargetOptions.length > 0 ? "スキップ先を選ぶ" : "今はスキップ"}
+          スキップ先を選ぶ
         </button>
 
         {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (

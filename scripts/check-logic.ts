@@ -470,6 +470,7 @@ type ManyTenOrMoreNoteCase = {
   name: string;
   discountTime: Exclude<DiscountTime, '20'>;
   weatherBonus: number;
+  isSunday?: boolean;
   expectedNoteIncludes?: string[];
   expectedNoteExcludes?: string[];
 };
@@ -492,6 +493,15 @@ const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
     discountTime: '15',
     weatherBonus: 0,
     expectedNoteIncludes: ['多いのうち10個以上は 20%'],
+  },
+  {
+    name: '日曜15時はやや多いを出さず10個以上補足だけを表示する',
+    discountTime: '15',
+    weatherBonus: 0,
+    isSunday: true,
+    expectedNoteIncludes: [
+      '多いのうち10個以上は 20%',
+    ],
   },
   {
     name: '30%上限に当たる場合は多い10個以上の同率注記を表示しない',
@@ -826,6 +836,7 @@ for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
     discountTime: manyTenOrMoreCase.discountTime,
     weatherBonus: manyTenOrMoreCase.weatherBonus,
     areaJudge: 'normal',
+    isSunday: manyTenOrMoreCase.isSunday,
   });
 
   try {
@@ -892,7 +903,10 @@ const sundayRateDisplay = getNormalTimeRateDisplay({
   areaJudge: 'normal',
   isSunday: true,
 });
-assert.equal(sundayRateDisplay.slightlyMany?.main, '5%');
+assert.equal(sundayRateDisplay.many.main, '10%');
+assert.equal(Object.hasOwn(sundayRateDisplay, 'slightlyMany'), false);
+assert.ok(!(sundayRateDisplay.many.note ?? '').includes('多いのうち5個以上'));
+assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち10個以上は 20%'));
 
 const nonSundayRateDisplay = getNormalTimeRateDisplay({
   discountTime: '15',
@@ -900,7 +914,8 @@ const nonSundayRateDisplay = getNormalTimeRateDisplay({
   areaJudge: 'normal',
   isSunday: false,
 });
-assert.equal(nonSundayRateDisplay.slightlyMany, undefined);
+assert.equal(Object.hasOwn(nonSundayRateDisplay, 'slightlyMany'), false);
+assert.ok(!(nonSundayRateDisplay.many.note ?? '').includes('多いのうち5個以上'));
 
 const sundayEveningRateDisplay = getNormalTimeRateDisplay({
   discountTime: '17',
@@ -909,10 +924,10 @@ const sundayEveningRateDisplay = getNormalTimeRateDisplay({
   isSunday: true,
 });
 assert.equal(sundayEveningRateDisplay.normal.main, '10%');
-assert.equal(sundayEveningRateDisplay.slightlyMany, undefined);
+assert.equal(Object.hasOwn(sundayEveningRateDisplay, 'slightlyMany'), false);
 assert.equal(sundayEveningRateDisplay.many.main, '20%');
 
-console.log('PASS: 日曜15時だけ やや多い を表示する');
+console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず10個以上補足だけを表示する');
 
 
 
@@ -1017,3 +1032,5 @@ try {
   console.error(error);
   process.exitCode = 1;
 }
+
+process.exit(process.exitCode ?? 0);

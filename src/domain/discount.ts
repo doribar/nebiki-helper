@@ -29,6 +29,7 @@ function toRateLine(main: string, note?: string): RateLine {
   return note ? { main, note } : { main };
 }
 
+
 function getManyTenOrMoreNote(manyRate: number): string | undefined {
   const tenOrMoreRate = capNormalDiscountRate(manyRate + 10);
 
@@ -41,6 +42,7 @@ function getManyTenOrMoreNote(manyRate: number): string | undefined {
 
 function buildManyNote(manyRate: number): string {
   const notes: string[] = [];
+
   const tenOrMoreNote = getManyTenOrMoreNote(manyRate);
 
   if (tenOrMoreNote) {
@@ -66,10 +68,6 @@ export function getNormalTimeRateDisplay(params: {
   }
 
   const manyRate = capNormalDiscountRate(areaAdjustedBase + 10);
-  const showSundaySlightlyMany = params.isSunday && params.discountTime === "15";
-  const slightlyManyRate = showSundaySlightlyMany
-    ? capNormalDiscountRate(areaAdjustedBase + 5)
-    : null;
   const normalRate = capNormalDiscountRate(areaAdjustedBase);
 
   return {
@@ -77,12 +75,6 @@ export function getNormalTimeRateDisplay(params: {
       manyRate > 0 ? `${manyRate}%` : "引かない",
       buildManyNote(manyRate)
     ),
-    slightlyMany:
-      showSundaySlightlyMany && slightlyManyRate !== null
-        ? slightlyManyRate > 0
-          ? toRateLine(`${slightlyManyRate}%`)
-          : toRateLine("引かない")
-        : undefined,
     few: toRateLine("引かない"),
     normal:
       normalRate > 0 ? toRateLine(`${normalRate}%`) : toRateLine("引かない"),
