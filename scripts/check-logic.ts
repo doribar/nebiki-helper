@@ -300,15 +300,14 @@ const cases: Case[] = [
     },
   },
   {
-    name: '雨上がり後の晴れは1段弱める',
+    name: '雨上がり後の晴れは補正なし',
     weekday: 2,
     discountTime: '17',
     weatherSpec: weather({ afterRainSky: 'sunny' }),
     expected: {
-      adjusted: '金土',
+      adjusted: '火木',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['雨上がり後 晴れ -1段'],
-      weekdayResultIncludes: ['曜日基準補正は-1段'],
+      bonusCalcAbsent: true,
     },
   },
   {
@@ -430,7 +429,7 @@ const scenarioCases: ScenarioCase[] = [
     discountTime: '17',
     weatherSpec: weather({ afterRainSky: 'sunny' }),
     expected: {
-      weekdaySummary: '曜日基準補正：火木→金土',
+      weekdaySummary: '曜日基準補正：なし',
       bonusSummary: '値引率補正：なし',
       finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
@@ -593,7 +592,7 @@ try {
         nearTermWeather: 'rain',
       },
     }),
-    true
+    false
   );
   assert.equal(
     shouldOfferAfterRainRecovery({
@@ -621,10 +620,10 @@ try {
     }),
     false
   );
-  console.log('PASS: 雨上がり後入力の表示条件');
+  console.log('PASS: 雨上がり後入力は表示しない');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: 雨上がり後入力の表示条件');
+  console.error('FAIL: 雨上がり後入力は表示しない');
   console.error(error);
   process.exitCode = 1;
 }

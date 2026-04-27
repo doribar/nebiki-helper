@@ -5,70 +5,21 @@ import type {
   NearTermWeather,
   SessionDraft,
 } from './types';
-import { getNearTermWeatherForDiscount } from './hourlyWeather.ts';
 
-function getDiscountTimeOrder(discountTime: DiscountTime): number {
-  switch (discountTime) {
-    case '15':
-      return 0;
-    case '17':
-      return 1;
-    case '18':
-      return 2;
-    case '19':
-      return 3;
-    case '20':
-      return 4;
-  }
-}
-
-export function shouldOfferAfterRainRecovery(params: {
+export function shouldOfferAfterRainRecovery(_params: {
   sessionDate: string;
   sessionDiscountTime: DiscountTime;
   nearTermWeather: NearTermWeather;
   lastSessionWeather: LastSessionWeatherRecord | null;
 }): boolean {
-  if (params.nearTermWeather !== 'other') {
-    return false;
-  }
-
-  const lastSessionWeather = params.lastSessionWeather;
-
-  if (!lastSessionWeather) {
-    return false;
-  }
-
-  if (lastSessionWeather.nearTermWeather !== 'rain') {
-    return false;
-  }
-
-  if (lastSessionWeather.date !== params.sessionDate) {
-    return false;
-  }
-
-  return (
-    getDiscountTimeOrder(lastSessionWeather.discountTime) <
-    getDiscountTimeOrder(params.sessionDiscountTime)
-  );
+  return false;
 }
 
 export function applyAfterRainSelectionDefaults(params: {
   sessionDraft: SessionDraft;
   lastSessionWeather: LastSessionWeatherRecord | null;
 }): SessionDraft {
-  const shouldOffer = shouldOfferAfterRainRecovery({
-    sessionDate: params.sessionDraft.date,
-    sessionDiscountTime: params.sessionDraft.discountTime,
-    nearTermWeather: getNearTermWeatherForDiscount(
-      params.sessionDraft.weather,
-      params.sessionDraft.discountTime,
-    ),
-    lastSessionWeather: params.lastSessionWeather,
-  });
-
-  const nextAfterRainSky: AfterRainSky = shouldOffer
-    ? params.sessionDraft.weather.afterRainSky ?? 'cloudy'
-    : null;
+  const nextAfterRainSky: AfterRainSky = null;
 
   if (params.sessionDraft.weather.afterRainSky === nextAfterRainSky) {
     return params.sessionDraft;

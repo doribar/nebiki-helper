@@ -247,16 +247,12 @@ function getWindShiftTerm(
   };
 }
 
-function getAfterRainRecoveryShift(weather: ResolvedWeatherInput): number {
-  return weather.afterRainSky === "sunny" ? -1 : 0;
+function getAfterRainRecoveryShift(_weather: ResolvedWeatherInput): number {
+  return 0;
 }
 
-function getAfterRainRecoveryShiftTerm(weather: ResolvedWeatherInput): ShiftTerm | undefined {
-  if (weather.afterRainSky !== "sunny") {
-    return undefined;
-  }
-
-  return { label: "雨上がり後 晴れ", value: -1 };
+function getAfterRainRecoveryShiftTerm(_weather: ResolvedWeatherInput): ShiftTerm | undefined {
+  return undefined;
 }
 
 function getNext18TempDropShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {

@@ -837,7 +837,7 @@ const lateSkipNotice = useMemo(() => {
     const discountTime = session.discountTime;
     const weatherBonus = weekdayBaseInfo.baseRateBonus + lateTimeBonus;
 
-    return NORMAL_ROUTE.map((areaId) => {
+    return [...NORMAL_ROUTE].reverse().map((areaId) => {
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
