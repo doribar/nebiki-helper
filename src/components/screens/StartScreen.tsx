@@ -343,6 +343,7 @@ export function StartScreen({
   const fieldOrder = useMemo(() => createFieldOrder(startForecastHour), [startForecastHour]);
   const [confirmedInputs, setConfirmedInputs] = useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const startButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
@@ -353,6 +354,7 @@ export function StartScreen({
     : fieldOrder.findIndex(({ hour, field }: { hour: ForecastHourKey; field: InputField }) => !confirmedInputs[hour][field]);
   const currentUnlockTarget = currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
   const allRequiredInputsConfirmed = isFinalTime || currentUnlockIndex === -1;
+  const wasAllRequiredInputsConfirmedRef = useRef(allRequiredInputsConfirmed);
 
 
   useEffect(() => {
@@ -372,6 +374,21 @@ export function StartScreen({
 
     return () => window.clearTimeout(timer);
   }, [currentUnlockTarget]);
+
+
+
+  useEffect(() => {
+    const wasAllRequiredInputsConfirmed = wasAllRequiredInputsConfirmedRef.current;
+    wasAllRequiredInputsConfirmedRef.current = allRequiredInputsConfirmed;
+
+    if (isFinalTime || wasAllRequiredInputsConfirmed || !allRequiredInputsConfirmed) return;
+
+    const timer = window.setTimeout(() => {
+      startButtonRef.current?.focus();
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [allRequiredInputsConfirmed, isFinalTime]);
 
   const isFieldEnabled = (hour: ForecastHourKey, field: InputField) => {
     if (!isHourAtOrAfter(hour, startForecastHour)) return false;
@@ -746,7 +763,7 @@ export function StartScreen({
         </div>
       ) : null}
 
-      <PrimaryButton onClick={onStart} disabled={!allRequiredInputsConfirmed}>
+      <PrimaryButton buttonRef={startButtonRef} onClick={onStart} disabled={!allRequiredInputsConfirmed}>
         {startButtonLabel ?? (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
       </PrimaryButton>
     </main>

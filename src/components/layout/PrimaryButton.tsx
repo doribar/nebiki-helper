@@ -1,17 +1,21 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 type PrimaryButtonProps = {
-children: ReactNode;  onClick: () => void;
+  children: ReactNode;
+  onClick: () => void;
   disabled?: boolean;
+  buttonRef?: Ref<HTMLButtonElement>;
 };
 
 export function PrimaryButton({
   children,
   onClick,
   disabled = false,
+  buttonRef,
 }: PrimaryButtonProps) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
       disabled={disabled}
