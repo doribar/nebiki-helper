@@ -99,14 +99,14 @@ const cases: Case[] = [
     },
   },
   {
-    name: '近い時間の雨は +10% を残しつつ頭打ち +5% を入れない',
+    name: '16時の雨は +10% を残しつつ頭打ち +5% を入れない',
     weekday: 1,
     discountTime: '15',
     weatherSpec: weather({ tempLevel: '5orLess', nearTermWeather: 'rain' }),
     expected: {
       adjusted: '月水',
       baseRateBonus: 10,
-      bonusCalcIncludes: ['近い雨 +10%'],
+      bonusCalcIncludes: ['16時に雨 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
@@ -165,7 +165,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
-      weekdayCalcIncludes: ['後の雨 +1段'],
+      weekdayCalcIncludes: ['17〜21時に雨 +1段'],
       bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
     },
   },
@@ -177,7 +177,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['後の雪 +2段'],
+      weekdayCalcIncludes: ['17〜21時に雪 +2段'],
       weekdayResultIncludes: ['曜日基準補正は+2段'],
     },
   },
@@ -276,26 +276,26 @@ const cases: Case[] = [
     },
   },
   {
-    name: '近い時間の雪は +20%',
+    name: '16時の雪は +20%',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ nearTermWeather: 'snow' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 20,
-      bonusCalcIncludes: ['近い雪 +20%'],
+      bonusCalcIncludes: ['16時に雪 +20%'],
       bonusResultIncludes: ['値引率補正は+20%'],
     },
   },
   {
-    name: '近い雨がある日は下限に当たっても -5% を入れない',
+    name: '18時の雨がある日は下限に当たっても -5% を入れない',
     weekday: 5,
     discountTime: '17',
     weatherSpec: weather({ tempLevel: '21to25', nearTermWeather: 'rain' }),
     expected: {
       adjusted: '金土',
       baseRateBonus: 10,
-      bonusCalcIncludes: ['近い雨 +10%'],
+      bonusCalcIncludes: ['18時に雨 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
@@ -391,7 +391,7 @@ type ScenarioCase = {
 
 const scenarioCases: ScenarioCase[] = [
   {
-    name: '運用シナリオ: 水曜日17時・近い雨あり',
+    name: '運用シナリオ: 水曜日17時・18時に雨あり',
     weekday: 3,
     discountTime: '17',
     weatherSpec: weather({ nearTermWeather: 'rain' }),
@@ -435,7 +435,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    name: '運用シナリオ: 月曜日17時・近い雨と時刻接近が重なる',
+    name: '運用シナリオ: 月曜日17時・18時の雨と時刻接近が重なる',
     weekday: 1,
     discountTime: '17',
     weatherSpec: weather({ nearTermWeather: 'rain' }),

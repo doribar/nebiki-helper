@@ -47,11 +47,6 @@ const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
   { value: "20", label: "20時30分" },
 ];
 
-const AFTER_RAIN_OPTIONS = [
-  { value: "cloudy", label: "くもり" },
-  { value: "sunny", label: "晴れ" },
-] as const;
-
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
 const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
 const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS;
@@ -103,61 +98,6 @@ function cycleIndex(length: number, currentIndex: number, delta: number): number
 
 function getWheelStep(deltaY: number): 1 | -1 {
   return deltaY > 0 ? 1 : -1;
-}
-
-type SegmentedProps<T extends string> = {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (next: T) => void;
-  columns?: number;
-  helperText?: string;
-};
-
-function SegmentedSelector<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  columns = options.length,
-  helperText,
-}: SegmentedProps<T>) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>{label}</div>
-      {helperText ? (
-        <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>{helperText}</div>
-      ) : null}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-          gap: 8,
-        }}
-      >
-        {options.map((option) => {
-          const active = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              style={{
-                padding: "12px 10px",
-                borderRadius: 12,
-                border: active ? "2px solid #1976d2" : "1px solid #ccc",
-                background: active ? "#e3f2fd" : "#fff",
-                fontWeight: active ? 800 : 600,
-                cursor: "pointer",
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function ForecastNumberStepper(props: {
@@ -390,7 +330,6 @@ function createFieldOrder(startHour: ForecastHourKey) {
 export function StartScreen({
   sessionDraft,
   weatherGuideText: _weatherGuideText,
-  showAfterRainRecoverySelector,
   onChangeSessionDraft,
   onStart,
   startButtonLabel,
@@ -765,27 +704,24 @@ export function StartScreen({
                 </div>
               );
             })}
+
+            {DISPLAY_FORECAST_HOURS.map((hour) => (
+              <div
+                key={`foot-${hour}`}
+                style={{
+                  textAlign: "center",
+                  fontWeight: 800,
+                  paddingTop: 2,
+                }}
+              >
+                {hour}時
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {showAfterRainRecoverySelector ? (
-        <SegmentedSelector
-          label="雨上がり後"
-          helperText="前回は近い雨あり、今回は近い雨なしのため選択"
-          value={sessionDraft.weather.afterRainSky ?? "cloudy"}
-          options={[...AFTER_RAIN_OPTIONS]}
-          onChange={(next) =>
-            onChangeSessionDraft({
-              weather: {
-                ...sessionDraft.weather,
-                afterRainSky: next,
-              },
-            })
-          }
-          columns={2}
-        />
-      ) : null}
+
         </>
       ) : null}
 

@@ -301,16 +301,36 @@ function getLaterPrecipShift(weather: ResolvedWeatherInput): number {
   }
 }
 
-function getLaterPrecipShiftTerm(weather: ResolvedWeatherInput): ShiftTerm | undefined {
+function getLaterPrecipRangeText(discountTime: DiscountTime): string {
+  switch (discountTime) {
+    case "15":
+      return "17〜21時";
+    case "17":
+      return "19〜21時";
+    case "18":
+      return "20〜21時";
+    case "19":
+      return "21時";
+    case "20":
+      return "21時";
+  }
+}
+
+function getLaterPrecipShiftTerm(
+  weather: ResolvedWeatherInput,
+  discountTime: DiscountTime
+): ShiftTerm | undefined {
   if (!weather.hasLaterPrecip) {
     return undefined;
   }
 
+  const rangeText = getLaterPrecipRangeText(discountTime);
+
   switch (weather.laterPrecipType) {
     case "rain":
-      return { label: "後の雨", value: 1 };
+      return { label: `${rangeText}に雨`, value: 1 };
     case "snow":
-      return { label: "後の雪", value: 2 };
+      return { label: `${rangeText}に雪`, value: 2 };
     default:
       return undefined;
   }
@@ -327,12 +347,32 @@ function getNearTermPercentBonus(weather: ResolvedWeatherInput): number {
   }
 }
 
-function getNearTermPercentTerm(weather: ResolvedWeatherInput): PercentTerm | undefined {
+function getNearForecastHourText(discountTime: DiscountTime): string {
+  switch (discountTime) {
+    case "15":
+      return "16時";
+    case "17":
+      return "18時";
+    case "18":
+      return "19時";
+    case "19":
+      return "20時";
+    case "20":
+      return "21時";
+  }
+}
+
+function getNearTermPercentTerm(
+  weather: ResolvedWeatherInput,
+  discountTime: DiscountTime
+): PercentTerm | undefined {
+  const hourText = getNearForecastHourText(discountTime);
+
   switch (weather.nearTermWeather) {
     case "rain":
-      return { label: "近い雨", value: 10 };
+      return { label: `${hourText}に雨`, value: 10 };
     case "snow":
-      return { label: "近い雪", value: 20 };
+      return { label: `${hourText}に雪`, value: 20 };
     default:
       return undefined;
   }
@@ -540,7 +580,7 @@ function resolveWeatherEffect(params: {
   const shiftTerms = [
     getTempShiftTerm(params.weather.tempLevel),
     getWindShiftTerm(params.weather.tempLevel, params.weather.windLevel),
-    getLaterPrecipShiftTerm(params.weather),
+    getLaterPrecipShiftTerm(params.weather, params.discountTime),
     getAfterRainRecoveryShiftTerm(params.weather),
     getNext18TempDropShiftTerm(params.weather, params.discountTime),
     getNext18WindWorsenShiftTerm(params.weather, params.discountTime),
@@ -561,7 +601,7 @@ function resolveWeatherEffect(params: {
   });
 
   const percentTerms = [
-    getNearTermPercentTerm(params.weather),
+    getNearTermPercentTerm(params.weather, params.discountTime),
     getOverflowBonusTerm({
       discountTime: params.discountTime,
       overflowDirection: shifted.overflowDirection,
