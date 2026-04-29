@@ -7,6 +7,7 @@ import {
 import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
+import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
@@ -15,6 +16,7 @@ import {
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
 import type {
+  AreaId,
   AppState,
   DiscountTime,
   LastSessionWeatherRecord,
@@ -931,6 +933,30 @@ console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず10�
 
 
 
+
+try {
+  assert.deepEqual(NORMAL_ROUTE.slice(8), [
+    'onigiri',
+    'sushi',
+    'futomaki_chumaki',
+    'inari',
+    'hosomaki',
+  ]);
+  assert.deepEqual(DONE_SUMMARY_ROUTE.slice(0, 5), [
+    'hosomaki',
+    'inari',
+    'futomaki_chumaki',
+    'sushi',
+    'onigiri',
+  ]);
+  console.log('PASS: おにぎり以降は寿司・太巻・いなり・細巻きの順番、完了画面は細巻きから表示する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: おにぎり以降は寿司・太巻・いなり・細巻きの順番、完了画面は細巻きから表示する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
 try {
   const candidate = getNextPendingCandidate({
     areaProgressMap: {
@@ -993,6 +1019,241 @@ try {
   console.error(error);
   process.exitCode = 1;
 }
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      hosomaki: { areaId: 'hosomaki', status: 'skipped_manual', areaJudge: null },
+      inari: { areaId: 'inari', status: 'skipped_manual', areaJudge: null },
+      futomaki_chumaki: { areaId: 'futomaki_chumaki', status: 'skipped_manual', areaJudge: null },
+      sushi: { areaId: 'sushi', status: 'skipped_manual', areaJudge: null },
+      onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
+      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
+      balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
+      chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
+      yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
+      fry_chicken: { areaId: 'fry_chicken', status: 'skipped_manual', areaJudge: null },
+      croquette: { areaId: 'croquette', status: 'skipped_manual', areaJudge: null },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+      bento_men: { areaId: 'bento_men', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'hosomaki',
+    deferredAreaIds: [
+      'sushi',
+      'futomaki_chumaki',
+      'inari',
+      'hosomaki',
+      'onigiri',
+      'sekihan_takikomi',
+      'balance_bento',
+      'chuka_fish',
+      'yakitori',
+      'fry_chicken',
+      'croquette',
+      'tempura',
+      'bento_men',
+      'tempura',
+      'croquette',
+      'fry_chicken',
+      'yakitori',
+      'chuka_fish',
+      'balance_bento',
+      'sekihan_takikomi',
+      'onigiri',
+      'hosomaki',
+    ],
+  });
+
+  assert.equal(candidate?.areaId, 'inari');
+  console.log('PASS: 全部スキップ後も細巻きからいなり方向へ進む');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 全部スキップ後も細巻きからいなり方向へ進む');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      hosomaki: { areaId: 'hosomaki', status: 'skipped_manual', areaJudge: null },
+      inari: { areaId: 'inari', status: 'skipped_manual', areaJudge: null },
+      futomaki_chumaki: { areaId: 'futomaki_chumaki', status: 'skipped_manual', areaJudge: null },
+      sushi: { areaId: 'sushi', status: 'skipped_manual', areaJudge: null },
+      onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
+      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
+      balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
+      chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
+      yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
+      fry_chicken: { areaId: 'fry_chicken', status: 'skipped_manual', areaJudge: null },
+      croquette: { areaId: 'croquette', status: 'skipped_manual', areaJudge: null },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+      bento_men: { areaId: 'bento_men', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'inari',
+    deferredAreaIds: [
+      'sushi',
+      'futomaki_chumaki',
+      'inari',
+      'hosomaki',
+      'onigiri',
+      'sekihan_takikomi',
+      'balance_bento',
+      'chuka_fish',
+      'yakitori',
+      'fry_chicken',
+      'croquette',
+      'tempura',
+      'bento_men',
+      'tempura',
+      'croquette',
+      'fry_chicken',
+      'yakitori',
+      'chuka_fish',
+      'balance_bento',
+      'sekihan_takikomi',
+      'onigiri',
+      'hosomaki',
+      'inari',
+    ],
+  });
+
+  assert.equal(candidate?.areaId, 'futomaki_chumaki');
+  console.log('PASS: 全部スキップ後もいなりと細巻きだけで往復しない');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 全部スキップ後もいなりと細巻きだけで往復しない');
+  console.error(error);
+  process.exitCode = 1;
+}
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
+      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
+      balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
+      chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
+      yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
+      fry_chicken: { areaId: 'fry_chicken', status: 'skipped_manual', areaJudge: null },
+      croquette: { areaId: 'croquette', status: 'skipped_manual', areaJudge: null },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+      bento_men: { areaId: 'bento_men', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'bento_men',
+    deferredAreaIds: [
+      'onigiri',
+      'sekihan_takikomi',
+      'balance_bento',
+      'chuka_fish',
+      'yakitori',
+      'fry_chicken',
+      'croquette',
+      'tempura',
+      'bento_men',
+    ],
+  });
+
+  assert.equal(candidate?.areaId, 'tempura');
+  console.log('PASS: スキップで弁当・麺類の端に来たら寿司方向へ折り返す');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: スキップで弁当・麺類の端に来たら寿司方向へ折り返す');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
+      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
+      balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
+      chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
+      yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
+      fry_chicken: { areaId: 'fry_chicken', status: 'skipped_manual', areaJudge: null },
+      croquette: { areaId: 'croquette', status: 'skipped_manual', areaJudge: null },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+      bento_men: { areaId: 'bento_men', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'tempura',
+    deferredAreaIds: [
+      'onigiri',
+      'sekihan_takikomi',
+      'balance_bento',
+      'chuka_fish',
+      'yakitori',
+      'fry_chicken',
+      'croquette',
+      'tempura',
+      'bento_men',
+    ],
+  });
+
+  assert.equal(candidate?.areaId, 'croquette');
+  console.log('PASS: 折り返し後は同じ端へ戻らず寿司方向の次エリアへ進む');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 折り返し後は同じ端へ戻らず寿司方向の次エリアへ進む');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+
+try {
+  const allSkippedMap = {
+    ...makeState({}).areaProgressMap,
+    ...Object.fromEntries(
+      AREA_MASTERS.map((area) => [
+        area.id,
+        { areaId: area.id, status: 'skipped_manual' as const, areaJudge: null },
+      ])
+    ),
+  };
+  let currentAreaId: AreaId = 'sushi';
+  let deferredAreaIds: AreaId[] = ['sushi'];
+  const sequence: string[] = [];
+
+  for (let index = 0; index < 28; index += 1) {
+    const candidate = getNextPendingCandidate({
+      areaProgressMap: allSkippedMap,
+      referenceAreaId: currentAreaId,
+      deferredAreaIds,
+    });
+
+    assert.ok(candidate);
+    sequence.push(candidate.areaId);
+    currentAreaId = candidate.areaId;
+    deferredAreaIds = [...deferredAreaIds, candidate.areaId];
+  }
+
+  assert.deepEqual(sequence.slice(0, 13), [
+    'futomaki_chumaki',
+    'inari',
+    'hosomaki',
+    'onigiri',
+    'sekihan_takikomi',
+    'balance_bento',
+    'chuka_fish',
+    'yakitori',
+    'fry_chicken',
+    'croquette',
+    'tempura',
+    'bento_men',
+    'tempura',
+  ]);
+  assert.ok(!sequence.join(',').includes('futomaki_chumaki,sushi,futomaki_chumaki,sushi'));
+  console.log('PASS: スキップ連打でも太巻・中巻と寿司だけで往復しない');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: スキップ連打でも太巻・中巻と寿司だけで往復しない');
+  console.error(error);
+  process.exitCode = 1;
+}
+
 try {
   assert.equal(
     getPendingResumeScreen({ areaId: 'bento_men', status: 'skipped_manual', areaJudge: 'many' }),

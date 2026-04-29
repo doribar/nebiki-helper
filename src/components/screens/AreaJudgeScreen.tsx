@@ -84,7 +84,6 @@ export function AreaJudgeScreen({
   areaName,
   showJudgeGuide = false,
   basisGuide,
-  pendingBanner,
   timeSwitchNotice,
   onJudge,
   onSkip,
@@ -146,27 +145,6 @@ export function AreaJudgeScreen({
           }}
         >
           <div>{timeSwitchNotice}</div>
-        </section>
-      ) : null}
-
-      {pendingBanner ? (
-        <section
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 12,
-            marginBottom: 16,
-            background: "#fafafa",
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>
-            まだ値引きをしていないエリアが{pendingBanner.remainingCount}個あります。
-          </div>
-          <div>
-            {pendingBanner.reason === "manual"
-              ? "手動でスキップしたエリアから表示しています。"
-              : "少ないため後回しにしたエリアを表示しています。"}
-          </div>
         </section>
       ) : null}
 

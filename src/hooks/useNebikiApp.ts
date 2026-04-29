@@ -18,7 +18,7 @@ import type {
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
 } from "../domain/types";
-import { AREA_MASTERS, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
+import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
   getBasisGuideDisplay,
   getWeatherGuideText,
@@ -863,7 +863,7 @@ const lateSkipNotice = useMemo(() => {
     const discountTime = session.discountTime;
     const weatherBonus = weekdayBaseInfo.baseRateBonus + lateTimeBonus;
 
-    return [...NORMAL_ROUTE].reverse().map((areaId) => {
+    return DONE_SUMMARY_ROUTE.map((areaId) => {
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
@@ -1013,6 +1013,10 @@ const lateSkipNotice = useMemo(() => {
       nextCandidate.reason === "manual"
         ? getPendingResumeScreen(nextProgress)
         : "rate_display";
+    const nextDeferredAreaIds =
+      params.prev.currentFlow === "pending" || effectiveDeferredAreaIds.includes(params.referenceAreaId)
+        ? effectiveDeferredAreaIds
+        : [...effectiveDeferredAreaIds, params.referenceAreaId];
 
     return {
       ...params.prev,
@@ -1022,7 +1026,7 @@ const lateSkipNotice = useMemo(() => {
       currentAreaId: nextCandidate.areaId,
       lastReferenceAreaId: params.referenceAreaId,
       currentFlow: "pending",
-      pendingDeferredAreaIds: effectiveDeferredAreaIds,
+      pendingDeferredAreaIds: nextDeferredAreaIds,
       finalTimeStep: 0,
       screen: nextScreen,
     };
@@ -1150,9 +1154,7 @@ const lateSkipNotice = useMemo(() => {
     };
 
     if (prev.currentFlow === "pending") {
-      const nextDeferredAreaIds = prev.pendingDeferredAreaIds.includes(currentAreaId)
-        ? prev.pendingDeferredAreaIds
-        : [...prev.pendingDeferredAreaIds, currentAreaId];
+      const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
 
       return moveToNextPendingOrDone({
         prev,
@@ -1371,9 +1373,7 @@ const lateSkipNotice = useMemo(() => {
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       if (prev.currentFlow === "pending") {
-        const nextDeferredAreaIds = prev.pendingDeferredAreaIds.includes(currentAreaId)
-          ? prev.pendingDeferredAreaIds
-          : [...prev.pendingDeferredAreaIds, currentAreaId];
+        const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
 
         return moveToNextPendingOrDone({
           prev,
@@ -1455,7 +1455,10 @@ const lateSkipNotice = useMemo(() => {
           targetProgress.status === "skipped_manual" || targetProgress.status === "postponed_few"
             ? "pending"
             : "normal",
-        pendingDeferredAreaIds: [],
+        pendingDeferredAreaIds:
+          targetProgress.status === "skipped_manual" || targetProgress.status === "postponed_few"
+            ? [prev.currentAreaId]
+            : [],
         timeSwitchNotice: null,
       };
     });
