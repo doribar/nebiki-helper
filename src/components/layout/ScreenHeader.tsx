@@ -11,13 +11,13 @@ type ScreenHeaderProps = {
 
 export function ScreenHeader({
   weekdayText,
-  timeText,
+  timeText: _timeText,
   areaName,
   titleFontSize,
   rightAction,
   titleContent,
 }: ScreenHeaderProps) {
-  const titleText = [weekdayText, timeText].filter(Boolean).join(" ");
+  const titleText = [weekdayText, areaName].filter(Boolean).join(" ");
 
   return (
     <header style={{ marginBottom: 16 }}>
@@ -30,15 +30,9 @@ export function ScreenHeader({
         }}
       >
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: titleFontSize ?? 24, fontWeight: 700 }}>
+          <div style={{ fontSize: titleFontSize ?? 20, fontWeight: 800 }}>
             {titleContent ?? titleText}
           </div>
-
-          {areaName ? (
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>
-              {areaName}
-            </div>
-          ) : null}
         </div>
 
         {rightAction ? <div style={{ flexShrink: 0 }}>{rightAction}</div> : null}
