@@ -1,6 +1,7 @@
 import type {
   AppState,
   AreaId,
+  DailyMessageState,
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
   SessionDraft,
@@ -11,6 +12,7 @@ export const STORAGE_KEYS = {
   nextSessionSkipRecords: "nebiki-helper/next-session-skip-records",
   lastSessionWeather: "nebiki-helper/last-session-weather",
   lastUsedSessionDraft: "nebiki-helper/last-used-session-draft",
+  dailyMessageState: "nebiki-helper/daily-message-state",
 } as const;
 
 export type PersistedNebikiState = {
@@ -18,6 +20,7 @@ export type PersistedNebikiState = {
   nextSessionSkipRecords: NextSessionSkipRecord[];
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft | null;
+  dailyMessageState: DailyMessageState;
 };
 
 function safeParseJSON<T>(value: string | null, fallback: T): T {
@@ -134,12 +137,47 @@ export function clearLastUsedSessionDraft(): void {
   localStorage.removeItem(STORAGE_KEYS.lastUsedSessionDraft);
 }
 
+const defaultDailyMessageState: DailyMessageState = {
+  bentoJudgeGuideShownDate: null,
+  rateNoticeShownDate: null,
+};
+
+export function normalizeDailyMessageState(
+  raw?: Partial<DailyMessageState> | null
+): DailyMessageState {
+  return {
+    bentoJudgeGuideShownDate:
+      typeof raw?.bentoJudgeGuideShownDate === "string"
+        ? raw.bentoJudgeGuideShownDate
+        : null,
+    rateNoticeShownDate:
+      typeof raw?.rateNoticeShownDate === "string"
+        ? raw.rateNoticeShownDate
+        : null,
+  };
+}
+
+export function loadDailyMessageState(): DailyMessageState {
+  const raw = localStorage.getItem(STORAGE_KEYS.dailyMessageState);
+  return normalizeDailyMessageState(
+    safeParseJSON<Partial<DailyMessageState> | null>(raw, defaultDailyMessageState)
+  );
+}
+
+export function saveDailyMessageState(state: DailyMessageState): void {
+  localStorage.setItem(
+    STORAGE_KEYS.dailyMessageState,
+    JSON.stringify(normalizeDailyMessageState(state))
+  );
+}
+
 export function loadPersistedNebikiState(): PersistedNebikiState {
   return {
     currentSession: loadCurrentSession(),
     nextSessionSkipRecords: loadNextSessionSkipRecords(),
     lastSessionWeather: loadLastSessionWeather(),
     lastUsedSessionDraft: loadLastUsedSessionDraft(),
+    dailyMessageState: loadDailyMessageState(),
   };
 }
 
@@ -163,6 +201,8 @@ export function savePersistedNebikiState(state: PersistedNebikiState): void {
   } else {
     clearLastUsedSessionDraft();
   }
+
+  saveDailyMessageState(state.dailyMessageState);
 }
 
 export function appendSkipRecordsInMemory(params: {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppState,
   AreaId,
+  DailyMessageState,
   AreaProgress,
   DoneSummaryItem,
   DiscountTime,
@@ -32,6 +33,7 @@ import {
   appendSkipRecordsInMemory,
   consumeSkipRecordsInMemory,
   loadPersistedNebikiState,
+  normalizeDailyMessageState,
   savePersistedNebikiState,
 } from "../domain/storage";
 import {
@@ -194,12 +196,14 @@ function clonePersistedNebikiStateSnapshot(params: {
   nextSessionSkipRecords: NextSessionSkipRecord[];
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft;
+  dailyMessageState: DailyMessageState;
 }) {
   return {
     currentSession: cloneAppState(params.currentSession),
     nextSessionSkipRecords: cloneSkipRecords(params.nextSessionSkipRecords),
     lastSessionWeather: cloneLastSessionWeatherRecord(params.lastSessionWeather),
     lastUsedSessionDraft: normalizeSessionDraft(params.lastUsedSessionDraft),
+    dailyMessageState: normalizeDailyMessageState(params.dailyMessageState),
   };
 }
 
@@ -475,6 +479,9 @@ export function useNebikiApp(): UseNebikiAppResult {
   const [lastUsedSessionDraft, setLastUsedSessionDraft] = useState<SessionDraft>(() =>
     normalizeSessionDraft(initialPersistenceRef.current?.lastUsedSessionDraft ?? null)
   );
+  const [dailyMessageState, setDailyMessageState] = useState<DailyMessageState>(() =>
+    normalizeDailyMessageState(initialPersistenceRef.current?.dailyMessageState ?? null)
+  );
 
   const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(null);
   const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(null);
@@ -509,9 +516,16 @@ export function useNebikiApp(): UseNebikiAppResult {
         nextSessionSkipRecords,
         lastSessionWeather,
         lastUsedSessionDraft,
+        dailyMessageState,
       })
     );
-  }, [state, nextSessionSkipRecords, lastSessionWeather, lastUsedSessionDraft]);
+  }, [
+    state,
+    nextSessionSkipRecords,
+    lastSessionWeather,
+    lastUsedSessionDraft,
+    dailyMessageState,
+  ]);
 
   useEffect(() => {
     const historyResult = appendNavigationHistory({
@@ -680,6 +694,18 @@ export function useNebikiApp(): UseNebikiAppResult {
     return getNearTermWeatherForDiscount(state.sessionDraft.weather, state.sessionDraft.discountTime);
   }, [state.sessionDraft.weather, state.sessionDraft.discountTime]);
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
+  const activeSessionDate = state.session?.date ?? state.sessionDraft.date;
+
+  const showBentoJudgeGuide =
+    state.screen === "area_judge" &&
+    state.currentAreaId === "bento_men" &&
+    dailyMessageState.bentoJudgeGuideShownDate !== activeSessionDate;
+
+  const showDailyNoticeBeforeRate =
+    state.screen === "rate_display" &&
+    state.currentAreaId === "bento_men" &&
+    state.session?.discountTime !== "20" &&
+    dailyMessageState.rateNoticeShownDate !== activeSessionDate;
 
   const showAfterRainRecoverySelector = useMemo(() => {
     return shouldOfferAfterRainRecovery({
@@ -1269,6 +1295,32 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
+  function markBentoJudgeGuideShown() {
+    const shownDate = activeSessionDate;
+
+    setDailyMessageState((current) => {
+      if (current.bentoJudgeGuideShownDate === shownDate) return current;
+
+      return {
+        ...current,
+        bentoJudgeGuideShownDate: shownDate,
+      };
+    });
+  }
+
+  function confirmDailyNotice() {
+    const shownDate = activeSessionDate;
+
+    setDailyMessageState((current) => {
+      if (current.rateNoticeShownDate === shownDate) return current;
+
+      return {
+        ...current,
+        rateNoticeShownDate: shownDate,
+      };
+    });
+  }
+
   function judgeCurrentArea(judge: Exclude<AreaJudge, null>) {
     setAreaJudgeSelection(judge);
     setUndoSnapshot(createUndoSnapshot());
@@ -1539,6 +1591,8 @@ const lateSkipNotice = useMemo(() => {
   timeSwitchNotice: state.timeSwitchNotice,
   lateSkipNotice,
   showAfterRainRecoverySelector,
+  showBentoJudgeGuide,
+  showDailyNoticeBeforeRate,
   areaJudgeSelection,
   isResuming: resumeTargetScreen !== null,
   canUndo: undoSnapshot !== null,
@@ -1553,6 +1607,8 @@ const lateSkipNotice = useMemo(() => {
       goBackOneScreen,
       startEditingConditions,
       undoLastAction,
+      markBentoJudgeGuideShown,
+      confirmDailyNotice,
       judgeCurrentArea,
       skipCurrentArea,
       chooseSkipTargetArea,

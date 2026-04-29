@@ -27,6 +27,7 @@ type AreaJudgeScreenProps = {
   canChooseSkipTarget?: boolean;
   skipTargetOptions?: SkipTargetOption[];
   onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
+  onJudgeGuideShown?: () => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -91,9 +92,11 @@ export function AreaJudgeScreen({
   canChooseSkipTarget = false,
   skipTargetOptions = [],
   onChooseSkipTarget,
+  onJudgeGuideShown,
 }: AreaJudgeScreenProps) {
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
+  const [displayJudgeGuide, setDisplayJudgeGuide] = useState(showJudgeGuide);
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -111,7 +114,13 @@ export function AreaJudgeScreen({
 
   useEffect(() => {
     setShowSkipTargetPicker(false);
-  }, [areaName, canChooseSkipTarget]);
+    setDisplayJudgeGuide(showJudgeGuide);
+  }, [areaName]);
+
+  useEffect(() => {
+    if (!displayJudgeGuide) return;
+    onJudgeGuideShown?.();
+  }, [displayJudgeGuide, onJudgeGuideShown]);
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
@@ -190,7 +199,7 @@ export function AreaJudgeScreen({
           <span>このエリア全体の商品数は？</span>
         </div>
 
-        {showJudgeGuide ? (
+        {displayJudgeGuide ? (
           <div
             style={{
               border: "1px solid #f0d38a",

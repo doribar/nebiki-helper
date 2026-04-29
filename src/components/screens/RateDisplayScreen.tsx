@@ -29,6 +29,8 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
+  showDailyNotice?: boolean;
+  onConfirmDailyNotice?: () => void;
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
   onSkip: () => void;
@@ -79,6 +81,24 @@ function RateRow({
   );
 }
 
+function NoticeItems() {
+  return (
+    <div style={{ lineHeight: 1.8 }}>
+      ・2個は多いにしない
+      <br />
+      ・1個は最終値引以外引かない
+      <br />
+      ・見た目が悪い個別商品は表示値引率に+10%
+      <br />
+      ・不人気な商品は表示値引率に+10%
+      <br />
+      ・その日の売れ方が順調なとき定番・広告商品は表示値引率から-10%
+      <br />
+      ・夜によく売れる商品は表示値引率から−10%
+    </div>
+  );
+}
+
 export function RateDisplayScreen({
   weekdayText,
   timeText,
@@ -89,6 +109,8 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
+  showDailyNotice = false,
+  onConfirmDailyNotice,
   finalGuide,
   onNextArea,
   onSkip,
@@ -122,6 +144,37 @@ export function RateDisplayScreen({
   const fewColor = "#1976d2";
   const normalColor = "#2e7d32";
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
+
+  if (showDailyNotice) {
+    return (
+      <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
+        <ScreenHeader
+          weekdayText={weekdayText}
+          timeText={timeText}
+          areaName={areaName}
+          rightAction={
+            <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+              戻る
+            </button>
+          }
+        />
+
+        <section
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
+          <NoticeItems />
+        </section>
+
+        <PrimaryButton onClick={onConfirmDailyNotice ?? (() => {})}>OK</PrimaryButton>
+      </main>
+    );
+  }
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
@@ -308,30 +361,6 @@ export function RateDisplayScreen({
         ) : null}
       </div>
 
-
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
-        <div style={{ lineHeight: 1.8 }}>
-          ・2個は多いにしない
-          <br />
-          ・1個は最終値引以外引かない
-          <br />
-          ・見た目が悪い個別商品は表示値引率に+10%
-          <br />
-          ・不人気な商品は表示値引率に+10%
-          <br />
-          ・その日の売れ方が順調なとき定番・広告商品は表示値引率から-10%
-          <br />
-          ・夜によく売れる商品は表示値引率から−10%
-        </div>
-      </section>
 
       <section
         style={{

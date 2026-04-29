@@ -38,7 +38,8 @@ export function AppRouter({ app }: AppRouterProps) {
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
           areaName={derived.currentAreaName}
-          showJudgeGuide={state.currentAreaId === "bento_men"}
+          showJudgeGuide={derived.showBentoJudgeGuide}
+          onJudgeGuideShown={actions.markBentoJudgeGuideShown}
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
           timeSwitchNotice={derived.timeSwitchNotice}
@@ -65,6 +66,8 @@ export function AppRouter({ app }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
+          showDailyNotice={derived.showDailyNoticeBeforeRate}
+          onConfirmDailyNotice={actions.confirmDailyNotice}
           finalGuide={derived.finalGuide ?? undefined}
           onNextArea={actions.goToNextArea}
           onSkip={actions.skipCurrentArea}

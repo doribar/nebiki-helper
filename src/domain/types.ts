@@ -201,6 +201,11 @@ export type LastSessionWeatherRecord = {
 
 export type FinalTimeStep = 0 | 1 | 2 | 3;
 
+export type DailyMessageState = {
+  bentoJudgeGuideShownDate: string | null;
+  rateNoticeShownDate: string | null;
+};
+
 export type AppState = {
   screen: ScreenName;
   session: SessionData | null;
@@ -226,6 +231,8 @@ export type UseNebikiAppDerived = {
   timeSwitchNotice: string | null;
   lateSkipNotice: string | null;
   showAfterRainRecoverySelector: boolean;
+  showBentoJudgeGuide: boolean;
+  showDailyNoticeBeforeRate: boolean;
   areaJudgeSelection: AreaJudge;
   isResuming: boolean;
   canUndo: boolean;
@@ -241,6 +248,8 @@ export type UseNebikiAppActions = {
   goBackOneScreen: () => void;
   startEditingConditions: () => void;
   undoLastAction: () => void;
+  markBentoJudgeGuideShown: () => void;
+  confirmDailyNotice: () => void;
 
   judgeCurrentArea: (judge: Exclude<AreaJudge, null>) => void;
   skipCurrentArea: () => void;
