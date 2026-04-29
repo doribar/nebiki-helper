@@ -94,6 +94,20 @@ export function AreaJudgeScreen({
 }: AreaJudgeScreenProps) {
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
+  const skipTargetGroups = [
+    {
+      label: "スキップしたエリア",
+      options: skipTargetOptions.filter((option) => option.status === "skipped_manual"),
+    },
+    {
+      label: "少ないため後回ししたエリア",
+      options: skipTargetOptions.filter((option) => option.status === "postponed_few"),
+    },
+    {
+      label: "未着手のエリア",
+      options: skipTargetOptions.filter((option) => option.status === "unstarted"),
+    },
+  ].filter((group) => group.options.length > 0);
 
   useEffect(() => {
     setShowSkipTargetPicker(false);
@@ -242,21 +256,27 @@ export function AreaJudgeScreen({
               background: "#fafafa",
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>まだ値引きが終わっていないエリア</div>
-            <div style={{ display: "grid", gap: 8 }}>
-              {skipTargetOptions.map((option) => (
-                <button
-                  key={option.areaId}
-                  type="button"
-                  onClick={() => onChooseSkipTarget?.(option.areaId)}
-                  style={{
-                    ...subActionButtonStyle,
-                    width: "100%",
-                    textAlign: "left",
-                  }}
-                >
-                  {option.areaName}
-                </button>
+            <div style={{ display: "grid", gap: 12 }}>
+              {skipTargetGroups.map((group) => (
+                <div key={group.label}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>{group.label}</div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {group.options.map((option) => (
+                      <button
+                        key={option.areaId}
+                        type="button"
+                        onClick={() => onChooseSkipTarget?.(option.areaId)}
+                        style={{
+                          ...subActionButtonStyle,
+                          width: "100%",
+                          textAlign: "left",
+                        }}
+                      >
+                        {option.areaName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </section>
