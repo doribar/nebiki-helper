@@ -112,6 +112,7 @@ export function AreaJudgeScreen({
   const [photoJudgeResult, setPhotoJudgeResult] = useState<PhotoJudgeResult | null>(null);
   const [photoJudgeError, setPhotoJudgeError] = useState<string | null>(null);
   const [photoJudgeLoading, setPhotoJudgeLoading] = useState(false);
+  const [lastPhotoFiles, setLastPhotoFiles] = useState<File[]>([]);
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -133,6 +134,7 @@ export function AreaJudgeScreen({
     setPhotoJudgeResult(null);
     setPhotoJudgeError(null);
     setPhotoJudgeLoading(false);
+    setLastPhotoFiles([]);
   }, [areaName, showJudgeGuide]);
 
   useEffect(() => {
@@ -145,10 +147,11 @@ export function AreaJudgeScreen({
     savePhotoJudgeBaseUrl(url);
   }
 
-  async function handlePhotoInputChange(event: ChangeEvent<HTMLInputElement>) {
-    const photos = Array.from(event.currentTarget.files ?? []);
-    event.currentTarget.value = "";
-    if (photos.length === 0) return;
+  async function submitPhotoJudgeRequest(photos: File[]) {
+    if (photos.length === 0) {
+      setPhotoJudgeError("写真が選択されませんでした。もう一度撮ってください。");
+      return;
+    }
 
     setPhotoJudgeLoading(true);
     setPhotoJudgeError(null);
@@ -167,11 +170,22 @@ export function AreaJudgeScreen({
       setPhotoJudgeError(
         error instanceof Error
           ? error.message
-          : "写真判定でエラーが発生しました。"
+          : "写真判定でエラーが発生しました。もう一度送信してください。"
       );
     } finally {
       setPhotoJudgeLoading(false);
     }
+  }
+
+  async function handlePhotoInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const photos = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    setLastPhotoFiles(photos);
+    await submitPhotoJudgeRequest(photos);
+  }
+
+  async function handleRetryPhotoJudge() {
+    await submitPhotoJudgeRequest(lastPhotoFiles);
   }
 
   function handleJudge(judge: Exclude<AreaJudge, null>) {
@@ -337,6 +351,12 @@ export function AreaJudgeScreen({
           {photoJudgeLoading ? "判定中..." : "写真を撮る"}
         </button>
 
+        {lastPhotoFiles.length > 0 ? (
+          <div style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
+            撮影済み写真: {lastPhotoFiles.length}枚
+          </div>
+        ) : null}
+
         <details style={{ marginTop: 10 }}>
           <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
             写真判定サーバー設定
@@ -368,7 +388,25 @@ export function AreaJudgeScreen({
               lineHeight: 1.6,
             }}
           >
-            {photoJudgeError}
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>写真判定に失敗しました</div>
+            <div>{photoJudgeError}</div>
+            {lastPhotoFiles.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleRetryPhotoJudge}
+                disabled={photoJudgeLoading}
+                style={{
+                  ...subActionButtonStyle,
+                  width: "100%",
+                  marginTop: 10,
+                  background: photoJudgeLoading ? "#eee" : "#fff",
+                  color: photoJudgeLoading ? "#777" : "#000",
+                  cursor: photoJudgeLoading ? "wait" : "pointer",
+                }}
+              >
+                同じ写真でもう一度送信
+              </button>
+            ) : null}
           </div>
         ) : null}
 

@@ -35,6 +35,24 @@ function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, "");
 }
 
+function createTimeoutSignal(milliseconds: number): AbortSignal {
+  const controller = new AbortController();
+  window.setTimeout(() => controller.abort(), milliseconds);
+  return controller.signal;
+}
+
+function normalizeFetchError(error: unknown): Error {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return new Error("写真判定サーバーの応答が遅いため中断しました。もう一度送信してください。");
+  }
+
+  if (error instanceof TypeError && /fetch/i.test(error.message)) {
+    return new Error("写真判定サーバーに接続できませんでした。URL、Tailscale接続、写真判定サーバーの起動状態を確認してください。");
+  }
+
+  return error instanceof Error ? error : new Error("写真判定でエラーが発生しました。");
+}
+
 async function parseErrorMessage(response: Response): Promise<string> {
   try {
     const body = await response.json();
@@ -65,10 +83,16 @@ export async function requestPhotoJudge(params: {
     form.append("photos", photo);
   }
 
-  const response = await fetch(`${trimTrailingSlash(params.apiBaseUrl)}/api/judge`, {
-    method: "POST",
-    body: form,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${trimTrailingSlash(params.apiBaseUrl)}/api/judge`, {
+      method: "POST",
+      body: form,
+      signal: createTimeoutSignal(90000),
+    });
+  } catch (error) {
+    throw normalizeFetchError(error);
+  }
 
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
@@ -110,16 +134,22 @@ export async function sendPhotoJudgeFeedback(params: {
 }): Promise<void> {
   if (!params.photoGroupId) return;
 
-  const response = await fetch(`${trimTrailingSlash(params.apiBaseUrl)}/api/feedback`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      photoGroupId: params.photoGroupId,
-      humanJudge: params.humanJudge,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${trimTrailingSlash(params.apiBaseUrl)}/api/feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        photoGroupId: params.photoGroupId,
+        humanJudge: params.humanJudge,
+      }),
+      signal: createTimeoutSignal(30000),
+    });
+  } catch (error) {
+    throw normalizeFetchError(error);
+  }
 
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
