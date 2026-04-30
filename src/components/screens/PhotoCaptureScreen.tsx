@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import type { AreaId, PhotoCaptureSlotView } from "../../domain/types";
 import { compressPhotoForUpload } from "../../domain/photoJudge";
 import { ScreenHeader } from "../layout/ScreenHeader";
@@ -56,10 +56,40 @@ export function PhotoCaptureScreen({
   onGoBack,
 }: PhotoCaptureScreenProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const slotButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [activeSlot, setActiveSlot] = useState<PhotoCaptureSlotView | null>(null);
   const [processingSlotKey, setProcessingSlotKey] = useState<string | null>(null);
+  const [focusAfterCaptureKey, setFocusAfterCaptureKey] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const allCaptured = completedCount === totalCount;
+
+  useEffect(() => {
+    if (!focusAfterCaptureKey || processingSlotKey) return;
+
+    const capturedIndex = slots.findIndex(
+      (slot) => `${slot.areaId}:${slot.slotId}` === focusAfterCaptureKey
+    );
+    if (capturedIndex < 0) {
+      setFocusAfterCaptureKey(null);
+      return;
+    }
+
+    const nextSlot = slots.slice(capturedIndex + 1).find((slot) => !slot.captured);
+    if (!nextSlot) {
+      setFocusAfterCaptureKey(null);
+      return;
+    }
+
+    const nextKey = `${nextSlot.areaId}:${nextSlot.slotId}`;
+    window.setTimeout(() => {
+      slotButtonRefs.current[nextKey]?.focus();
+      slotButtonRefs.current[nextKey]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+    setFocusAfterCaptureKey(null);
+  }, [focusAfterCaptureKey, processingSlotKey, slots]);
 
   function openCamera(slot: PhotoCaptureSlotView) {
     setCaptureError(null);
@@ -79,6 +109,8 @@ export function PhotoCaptureScreen({
     try {
       const compressed = await compressPhotoForUpload(file);
       onCapturePhoto(slot.areaId, slot.slotId, compressed);
+      setFocusAfterCaptureKey(key);
+      setActiveSlot(null);
     } catch (error) {
       setCaptureError(
         error instanceof Error
@@ -171,6 +203,9 @@ export function PhotoCaptureScreen({
                 return (
                   <button
                     key={key}
+                    ref={(element) => {
+                      slotButtonRefs.current[key] = element;
+                    }}
                     type="button"
                     onClick={() => openCamera(slot)}
                     disabled={Boolean(processingSlotKey)}
