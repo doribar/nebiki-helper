@@ -68,49 +68,87 @@ async function parseErrorMessage(response: Response): Promise<string> {
 export async function compressPhotoForUpload(file: File): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
 
-  const maxSide = 1600;
-  const quality = 0.78;
+  const originalSize = file.size;
   const objectUrl = URL.createObjectURL(file);
 
+  let image: HTMLImageElement | null = null;
+  let canvas: HTMLCanvasElement | null = null;
+
   try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
+      img.onerror = () => reject(new Error("画像の読み込みに失敗しました。もう一度撮影してください。"));
       img.src = objectUrl;
     });
 
-    const longest = Math.max(image.naturalWidth, image.naturalHeight);
-    if (!longest || longest <= maxSide && file.size <= 900 * 1024) {
+    const sourceWidth = image.naturalWidth;
+    const sourceHeight = image.naturalHeight;
+    const longest = Math.max(sourceWidth, sourceHeight);
+
+    if (!sourceWidth || !sourceHeight || !longest) {
+      throw new Error("画像サイズを読み取れませんでした。もう一度撮影してください。");
+    }
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
+    const attempts = [
+      { maxSide: 1280, quality: 0.72 },
+      { maxSide: 1024, quality: 0.66 },
+      { maxSide: 800, quality: 0.62 },
+    ];
+
+    let bestBlob: Blob | null = null;
+
+    for (const attempt of attempts) {
+      const scale = Math.min(1, attempt.maxSide / longest);
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+
+      canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) {
+        throw new Error("画像の圧縮準備に失敗しました。もう一度撮影してください。");
+      }
+
+      context.drawImage(image, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas?.toBlob(resolve, "image/jpeg", attempt.quality);
+      });
+
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas = null;
+
+      if (!blob) continue;
+      bestBlob = blob;
+
+      if (blob.size <= 650 * 1024) break;
+    }
+
+    if (!bestBlob) {
+      throw new Error("画像の圧縮に失敗しました。もう一度撮影してください。");
+    }
+
+    if (originalSize <= 500 * 1024 && originalSize <= bestBlob.size) {
       return file;
     }
 
-    const scale = Math.min(1, maxSide / longest);
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) return file;
-
-    context.drawImage(image, 0, 0, width, height);
-
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, "image/jpeg", quality);
-    });
-
-    if (!blob) return file;
-
-    const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
-    return new File([blob], `${baseName}.jpg`, {
+    return new File([bestBlob], `${baseName}.jpg`, {
       type: "image/jpeg",
       lastModified: Date.now(),
     });
-  } catch {
-    return file;
+  } catch (error) {
+    if (originalSize <= 500 * 1024) return file;
+    if (error instanceof Error) throw error;
+    throw new Error("画像の処理中にメモリ不足または読み込みエラーが発生しました。撮影し直してください。");
   } finally {
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
     URL.revokeObjectURL(objectUrl);
   }
 }

@@ -58,9 +58,11 @@ export function PhotoCaptureScreen({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [activeSlot, setActiveSlot] = useState<PhotoCaptureSlotView | null>(null);
   const [processingSlotKey, setProcessingSlotKey] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const allCaptured = completedCount === totalCount;
 
   function openCamera(slot: PhotoCaptureSlotView) {
+    setCaptureError(null);
     setActiveSlot(slot);
     inputRef.current?.click();
   }
@@ -73,9 +75,16 @@ export function PhotoCaptureScreen({
 
     const key = `${slot.areaId}:${slot.slotId}`;
     setProcessingSlotKey(key);
+    setCaptureError(null);
     try {
       const compressed = await compressPhotoForUpload(file);
       onCapturePhoto(slot.areaId, slot.slotId, compressed);
+    } catch (error) {
+      setCaptureError(
+        error instanceof Error
+          ? error.message
+          : "画像の準備に失敗しました。撮影し直してください。"
+      );
     } finally {
       setProcessingSlotKey(null);
     }
@@ -112,6 +121,9 @@ export function PhotoCaptureScreen({
         <div style={{ marginTop: 10, fontWeight: 800 }}>
           撮影済み: {completedCount} / {totalCount}
         </div>
+        <div style={{ marginTop: 8, fontSize: 13, color: "#666", lineHeight: 1.6 }}>
+          撮影後は端末内で軽量化してから保持します。メモリ不足が出た場合は、少し引いて撮るか、不要なタブを閉じてから撮り直してください。
+        </div>
       </section>
 
       <input
@@ -122,6 +134,23 @@ export function PhotoCaptureScreen({
         onChange={handlePhotoSelected}
         style={{ display: "none" }}
       />
+
+      {captureError ? (
+        <section
+          style={{
+            border: "1px solid #f0b3b3",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12,
+            background: "#fff5f5",
+            color: "#9a1b1b",
+            lineHeight: 1.6,
+            fontSize: 14,
+          }}
+        >
+          {captureError}
+        </section>
+      ) : null}
 
       <div style={{ display: "grid", gap: 12 }}>
         {groupSlots(slots).map((group) => (
