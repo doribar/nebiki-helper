@@ -43,6 +43,7 @@ export function AppRouter({ app }: AppRouterProps) {
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
           timeSwitchNotice={derived.timeSwitchNotice}
+          currentPhotoJudgeFeedback={derived.currentPhotoJudgeFeedback}
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}

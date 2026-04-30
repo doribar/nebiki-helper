@@ -17,6 +17,8 @@ import type {
   ScreenName,
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
+  PhotoJudgeFeedbackDraft,
+  PhotoJudgeFeedbackRecord,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -63,6 +65,7 @@ import {
   getNearTermWeatherForDiscount,
   resolveWeatherInputForDiscount,
 } from "../domain/hourlyWeather.ts";
+import { areaJudgeToHumanText, sendPhotoJudgeFeedback } from "../domain/photoJudge";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -186,9 +189,46 @@ function createInitialState(initialSessionDraft: SessionDraft = createInitialSes
     lastReferenceAreaId: null,
     currentFlow: "normal",
     pendingDeferredAreaIds: [],
+    photoJudgeFeedbackMap: {},
     timeSwitchNotice: null,
     finalTimeStep: 0,
   };
+}
+
+function normalizePhotoJudgeFeedbackMap(
+  raw: unknown
+): Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> {
+  if (!raw || typeof raw !== "object") return {};
+
+  const result: Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> = {};
+  const source = raw as Partial<Record<AreaId, Partial<PhotoJudgeFeedbackRecord>>>;
+
+  for (const area of AREA_MASTERS) {
+    const record = source[area.id];
+    if (!record) continue;
+    if (record.areaId !== area.id) continue;
+    if (typeof record.photoGroupId !== "string" || !record.photoGroupId) continue;
+    if (typeof record.apiBaseUrl !== "string" || !record.apiBaseUrl) continue;
+    if (
+      record.humanJudge !== "多い" &&
+      record.humanJudge !== "どちらでもない" &&
+      record.humanJudge !== "少ない"
+    ) {
+      continue;
+    }
+
+    result[area.id] = {
+      areaId: area.id,
+      photoGroupId: record.photoGroupId,
+      apiBaseUrl: record.apiBaseUrl,
+      humanJudge: record.humanJudge,
+      updatedAt:
+        typeof record.updatedAt === "string" ? record.updatedAt : new Date().toISOString(),
+      savedAt: typeof record.savedAt === "string" ? record.savedAt : undefined,
+    };
+  }
+
+  return result;
 }
 
 function clonePersistedNebikiStateSnapshot(params: {
@@ -356,6 +396,9 @@ function normalizeLoadedState(
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",
     pendingDeferredAreaIds:
       (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [],
+    photoJudgeFeedbackMap: normalizePhotoJudgeFeedbackMap(
+      (loaded as Partial<AppState>).photoJudgeFeedbackMap
+    ),
     timeSwitchNotice:
       (loaded as Partial<AppState>).timeSwitchNotice ?? null,
     finalTimeStep:
@@ -488,6 +531,7 @@ export function useNebikiApp(): UseNebikiAppResult {
   const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(null);
   const [undoNotice, setUndoNotice] = useState<string | null>(null);
   const screenHistoryRef = useRef<NavigationSnapshot[]>([]);
+  const photoJudgeFeedbackSaveInFlightRef = useRef(false);
 
   function buildNavigationSnapshot(baseState: AppState = state) {
     return createNavigationSnapshot({
@@ -526,6 +570,63 @@ export function useNebikiApp(): UseNebikiAppResult {
     lastUsedSessionDraft,
     dailyMessageState,
   ]);
+
+  useEffect(() => {
+    if (state.screen !== "done") return;
+    if (photoJudgeFeedbackSaveInFlightRef.current) return;
+
+    const pendingRecords = Object.values(state.photoJudgeFeedbackMap ?? {}).filter(
+      (record): record is PhotoJudgeFeedbackRecord =>
+        Boolean(record?.photoGroupId && record.apiBaseUrl && record.humanJudge && !record.savedAt)
+    );
+
+    if (pendingRecords.length === 0) return;
+
+    photoJudgeFeedbackSaveInFlightRef.current = true;
+
+    Promise.allSettled(
+      pendingRecords.map((record) =>
+        sendPhotoJudgeFeedback({
+          apiBaseUrl: record.apiBaseUrl,
+          photoGroupId: record.photoGroupId,
+          humanJudge: record.humanJudge,
+        })
+      )
+    )
+      .then((results) => {
+        const savedPhotoGroupIds = pendingRecords
+          .filter((_record, index) => results[index]?.status === "fulfilled")
+          .map((record) => record.photoGroupId);
+
+        if (savedPhotoGroupIds.length === 0) return;
+
+        const savedAt = new Date().toISOString();
+        setState((prev) => {
+          const currentMap = prev.photoJudgeFeedbackMap ?? {};
+          const nextMap: Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> = {};
+
+          for (const area of AREA_MASTERS) {
+            const record = currentMap[area.id];
+            if (!record) continue;
+
+            nextMap[area.id] = savedPhotoGroupIds.includes(record.photoGroupId)
+              ? { ...record, savedAt }
+              : record;
+          }
+
+          return {
+            ...prev,
+            photoJudgeFeedbackMap: nextMap,
+          };
+        });
+      })
+      .catch((error) => {
+        console.error("写真判定のまとめ保存に失敗しました", error);
+      })
+      .finally(() => {
+        photoJudgeFeedbackSaveInFlightRef.current = false;
+      });
+  }, [state.screen, state.photoJudgeFeedbackMap]);
 
   useEffect(() => {
     const historyResult = appendNavigationHistory({
@@ -830,6 +931,11 @@ const lateSkipNotice = useMemo(() => {
     return state.areaProgressMap[state.currentAreaId];
   }, [state.currentAreaId, state.areaProgressMap]);
 
+  const currentPhotoJudgeFeedback = useMemo(() => {
+    if (!state.currentAreaId) return null;
+    return state.photoJudgeFeedbackMap[state.currentAreaId] ?? null;
+  }, [state.currentAreaId, state.photoJudgeFeedbackMap]);
+
   const rateDisplay = useMemo(() => {
     if (!state.session || !currentAreaProgress) return null;
     if (state.session.discountTime === "20") return null;
@@ -1058,6 +1164,40 @@ const lateSkipNotice = useMemo(() => {
     return buildNavigationSnapshot(baseState);
   }
 
+  function buildPhotoJudgeFeedbackMap(params: {
+    prev: AppState;
+    areaId: AreaId;
+    selection: Exclude<AreaJudge, null>;
+    draft?: PhotoJudgeFeedbackDraft | null;
+  }): Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> {
+    const existing = params.prev.photoJudgeFeedbackMap[params.areaId] ?? null;
+    const source = params.draft?.photoGroupId ? params.draft : existing;
+
+    if (!source?.photoGroupId || !source.apiBaseUrl) {
+      return params.prev.photoJudgeFeedbackMap;
+    }
+
+    const humanJudge = areaJudgeToHumanText(params.selection);
+    const sameSavedRecord =
+      existing?.photoGroupId === source.photoGroupId &&
+      existing?.apiBaseUrl === source.apiBaseUrl &&
+      existing?.humanJudge === humanJudge
+        ? existing.savedAt
+        : undefined;
+
+    return {
+      ...params.prev.photoJudgeFeedbackMap,
+      [params.areaId]: {
+        areaId: params.areaId,
+        photoGroupId: source.photoGroupId,
+        apiBaseUrl: source.apiBaseUrl,
+        humanJudge,
+        updatedAt: new Date().toISOString(),
+        savedAt: sameSavedRecord,
+      },
+    };
+  }
+
   function resolveResumeState(prev: AppState, nextSession: SessionData, requestedScreen: ScreenName) {
     if (nextSession.discountTime === "20") {
       return {
@@ -1119,14 +1259,25 @@ const lateSkipNotice = useMemo(() => {
     };
   }
 
-  function applyAreaJudgeSelection(prev: AppState, selection: Exclude<AreaJudge, null>): AppState {
+  function applyAreaJudgeSelection(
+    prev: AppState,
+    selection: Exclude<AreaJudge, null>,
+    photoJudgeFeedback?: PhotoJudgeFeedbackDraft | null
+  ): AppState {
     if (!prev.currentAreaId) return prev;
     const currentAreaId = prev.currentAreaId;
+    const photoJudgeFeedbackMap = buildPhotoJudgeFeedbackMap({
+      prev,
+      areaId: currentAreaId,
+      selection,
+      draft: photoJudgeFeedback,
+    });
 
     if (selection === "many" || selection === "normal") {
       return {
         ...prev,
         screen: "rate_display",
+        photoJudgeFeedbackMap,
         timeSwitchNotice: null,
         finalTimeStep: 0,
         areaProgressMap: {
@@ -1157,7 +1308,7 @@ const lateSkipNotice = useMemo(() => {
       const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
 
       return moveToNextPendingOrDone({
-        prev,
+        prev: { ...prev, photoJudgeFeedbackMap },
         updatedMap,
         referenceAreaId: currentAreaId,
         deferredAreaIds: nextDeferredAreaIds,
@@ -1172,6 +1323,7 @@ const lateSkipNotice = useMemo(() => {
         session: nextSession,
         timeSwitchNotice,
         areaProgressMap: updatedMap,
+        photoJudgeFeedbackMap,
         currentAreaId: null,
         lastReferenceAreaId: currentAreaId,
         currentFlow: "normal",
@@ -1189,6 +1341,7 @@ const lateSkipNotice = useMemo(() => {
         session: nextSession,
         timeSwitchNotice,
         areaProgressMap: updatedMap,
+        photoJudgeFeedbackMap,
         currentAreaId: nextAreaId,
         lastReferenceAreaId: currentAreaId,
         pendingDeferredAreaIds: [],
@@ -1198,7 +1351,7 @@ const lateSkipNotice = useMemo(() => {
     }
 
     return moveToNextPendingOrDone({
-      prev,
+      prev: { ...prev, photoJudgeFeedbackMap },
       updatedMap,
       referenceAreaId: currentAreaId,
       nextSession,
@@ -1323,12 +1476,15 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function judgeCurrentArea(judge: Exclude<AreaJudge, null>) {
+  function judgeCurrentArea(
+    judge: Exclude<AreaJudge, null>,
+    photoJudgeFeedback?: PhotoJudgeFeedbackDraft | null
+  ) {
     setAreaJudgeSelection(judge);
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
-    setState((prev) => applyAreaJudgeSelection(prev, judge));
+    setState((prev) => applyAreaJudgeSelection(prev, judge, photoJudgeFeedback));
   }
 
   function goBackOneScreen() {
@@ -1603,6 +1759,7 @@ const lateSkipNotice = useMemo(() => {
   canChooseSkipTarget,
   skipTargetOptions,
   doneSummaryItems,
+  currentPhotoJudgeFeedback,
 },
     actions: {
       updateSessionDraft,

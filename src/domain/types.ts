@@ -95,6 +95,22 @@ export type AreaProgress = {
   skipReason?: "manual" | "few";
 };
 
+export type PhotoJudgeHumanJudge = "多い" | "どちらでもない" | "少ない";
+
+export type PhotoJudgeFeedbackRecord = {
+  areaId: AreaId;
+  photoGroupId: string;
+  apiBaseUrl: string;
+  humanJudge: PhotoJudgeHumanJudge;
+  updatedAt: string;
+  savedAt?: string;
+};
+
+export type PhotoJudgeFeedbackDraft = {
+  photoGroupId: string;
+  apiBaseUrl: string;
+};
+
 export type ScreenName =
   | "start"
   | "area_judge"
@@ -215,6 +231,7 @@ export type AppState = {
   lastReferenceAreaId: AreaId | null;
   currentFlow: FlowMode;
   pendingDeferredAreaIds: AreaId[];
+  photoJudgeFeedbackMap: Partial<Record<AreaId, PhotoJudgeFeedbackRecord>>;
   timeSwitchNotice: string | null;
   finalTimeStep: FinalTimeStep;
 };
@@ -240,6 +257,7 @@ export type UseNebikiAppDerived = {
   canChooseSkipTarget: boolean;
   skipTargetOptions: SkipTargetOption[];
   doneSummaryItems: DoneSummaryItem[];
+  currentPhotoJudgeFeedback: PhotoJudgeFeedbackRecord | null;
 };
 
 export type UseNebikiAppActions = {
@@ -251,7 +269,7 @@ export type UseNebikiAppActions = {
   markBentoJudgeGuideShown: () => void;
   confirmDailyNotice: () => void;
 
-  judgeCurrentArea: (judge: Exclude<AreaJudge, null>) => void;
+  judgeCurrentArea: (judge: Exclude<AreaJudge, null>, photoJudgeFeedback?: PhotoJudgeFeedbackDraft | null) => void;
   skipCurrentArea: () => void;
   chooseSkipTargetArea: (areaId: AreaId) => void;
 
