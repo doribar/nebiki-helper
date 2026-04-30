@@ -1,13 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
-import type { AreaJudge, PhotoJudgeFeedbackRecord, SkipTargetOption } from "../../domain/types";
+import { useEffect, useState, type CSSProperties } from "react";
+import type { AreaJudge, PhotoJudgeFeedbackRecord, PhotoJudgeQueueRecord, SkipTargetOption } from "../../domain/types";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
-import {
-  getPhotoJudgeBaseUrl,
-  requestPhotoJudge,
-  setPhotoJudgeBaseUrl as savePhotoJudgeBaseUrl,
-  type PhotoJudgeResult,
-} from "../../domain/photoJudge";
 
 type AreaJudgeScreenProps = {
   weekdayText: string;
@@ -28,6 +22,8 @@ type AreaJudgeScreenProps = {
   } | null;
   timeSwitchNotice?: string | null;
   currentPhotoJudgeFeedback?: PhotoJudgeFeedbackRecord | null;
+  currentPhotoJudgeQueueRecord?: PhotoJudgeQueueRecord | null;
+  photoJudgeBaseUrl: string;
   onJudge: (
     judge: Exclude<AreaJudge, null>,
     photoJudgeFeedback?: { photoGroupId: string; apiBaseUrl: string } | null
@@ -38,6 +34,7 @@ type AreaJudgeScreenProps = {
   skipTargetOptions?: SkipTargetOption[];
   onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
   onJudgeGuideShown?: () => void;
+  onRetryPhotoJudge?: () => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -88,6 +85,112 @@ function JudgeOptionButton({
   );
 }
 
+function PhotoJudgeStatusPanel({
+  queueRecord,
+  currentFeedback,
+  onRetry,
+}: {
+  queueRecord?: PhotoJudgeQueueRecord | null;
+  currentFeedback?: PhotoJudgeFeedbackRecord | null;
+  onRetry?: () => void;
+}) {
+  if (!queueRecord && !currentFeedback?.photoGroupId) return null;
+
+  const result = queueRecord?.result;
+
+  return (
+    <section
+      style={{
+        border: "1px solid #ddd",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        background: "#fafafa",
+      }}
+    >
+      <div style={{ fontWeight: 800, marginBottom: 10 }}>写真で参考判定（任意）</div>
+
+      {queueRecord?.status === "queued" ? (
+        <div style={{ lineHeight: 1.7 }}>
+          参考判定を準備中です。写真{queueRecord.photoCount}枚を順番に送信します。
+        </div>
+      ) : null}
+
+      {queueRecord?.status === "uploading" ? (
+        <div style={{ lineHeight: 1.7 }}>
+          判定中です。待たずに売場を見て選択しても大丈夫です。
+        </div>
+      ) : null}
+
+      {queueRecord?.status === "error" ? (
+        <div
+          style={{
+            border: "1px solid #f1b5b5",
+            borderRadius: 12,
+            padding: 12,
+            background: "#fff5f5",
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>写真判定に失敗しました</div>
+          <div>{queueRecord.error ?? "写真判定でエラーが発生しました。"}</div>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              style={{ ...subActionButtonStyle, width: "100%", marginTop: 10 }}
+            >
+              このエリアをもう一度送信
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {result ? (
+        <div
+          style={{
+            border: "1px solid #b9d7ff",
+            borderRadius: 12,
+            padding: 12,
+            background: "#f3f8ff",
+            lineHeight: 1.7,
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 4 }}>
+            参考判定：{result.suggestion ?? "判定なし"}
+            {result.confidence ? `（自信度：${result.confidence}）` : ""}
+          </div>
+          {result.reason.length > 0 ? (
+            <div style={{ fontSize: 14 }}>
+              {result.reason.map((line) => (
+                <div key={line}>・{line}</div>
+              ))}
+            </div>
+          ) : null}
+          <div style={{ fontSize: 13, color: "#555", marginTop: 8 }}>
+            最終判断は売場を見て選択してください。
+          </div>
+        </div>
+      ) : null}
+
+      {!result && !queueRecord && currentFeedback?.photoGroupId ? (
+        <div
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 12,
+            padding: 12,
+            background: "#fff",
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}
+        >
+          前回撮った写真判定を保持しています。選び直した場合は、値引完了時に最後の判定だけ保存します。
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function AreaJudgeScreen({
   weekdayText,
   timeText,
@@ -96,6 +199,8 @@ export function AreaJudgeScreen({
   basisGuide,
   timeSwitchNotice,
   currentPhotoJudgeFeedback = null,
+  currentPhotoJudgeQueueRecord = null,
+  photoJudgeBaseUrl,
   onJudge,
   onSkip,
   onGoBack,
@@ -103,16 +208,11 @@ export function AreaJudgeScreen({
   skipTargetOptions = [],
   onChooseSkipTarget,
   onJudgeGuideShown,
+  onRetryPhotoJudge,
 }: AreaJudgeScreenProps) {
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [displayJudgeGuide, setDisplayJudgeGuide] = useState(showJudgeGuide);
-  const [photoJudgeBaseUrl, setPhotoJudgeBaseUrlState] = useState(() => getPhotoJudgeBaseUrl());
-  const [photoJudgeResult, setPhotoJudgeResult] = useState<PhotoJudgeResult | null>(null);
-  const [photoJudgeError, setPhotoJudgeError] = useState<string | null>(null);
-  const [photoJudgeLoading, setPhotoJudgeLoading] = useState(false);
-  const [lastPhotoFiles, setLastPhotoFiles] = useState<File[]>([]);
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -131,10 +231,6 @@ export function AreaJudgeScreen({
   useEffect(() => {
     setShowSkipTargetPicker(false);
     setDisplayJudgeGuide(showJudgeGuide);
-    setPhotoJudgeResult(null);
-    setPhotoJudgeError(null);
-    setPhotoJudgeLoading(false);
-    setLastPhotoFiles([]);
   }, [areaName, showJudgeGuide]);
 
   useEffect(() => {
@@ -142,57 +238,12 @@ export function AreaJudgeScreen({
     onJudgeGuideShown?.();
   }, [displayJudgeGuide, onJudgeGuideShown]);
 
-  function updatePhotoJudgeBaseUrl(url: string) {
-    setPhotoJudgeBaseUrlState(url);
-    savePhotoJudgeBaseUrl(url);
-  }
-
-  async function submitPhotoJudgeRequest(photos: File[]) {
-    if (photos.length === 0) {
-      setPhotoJudgeError("写真が選択されませんでした。もう一度撮ってください。");
-      return;
-    }
-
-    setPhotoJudgeLoading(true);
-    setPhotoJudgeError(null);
-    setPhotoJudgeResult(null);
-
-    try {
-      const result = await requestPhotoJudge({
-        apiBaseUrl: photoJudgeBaseUrl,
-        areaName,
-        weekdayText,
-        timeText,
-        photos,
-      });
-      setPhotoJudgeResult(result);
-    } catch (error) {
-      setPhotoJudgeError(
-        error instanceof Error
-          ? error.message
-          : "写真判定でエラーが発生しました。もう一度送信してください。"
-      );
-    } finally {
-      setPhotoJudgeLoading(false);
-    }
-  }
-
-  async function handlePhotoInputChange(event: ChangeEvent<HTMLInputElement>) {
-    const photos = Array.from(event.currentTarget.files ?? []);
-    event.currentTarget.value = "";
-    setLastPhotoFiles(photos);
-    await submitPhotoJudgeRequest(photos);
-  }
-
-  async function handleRetryPhotoJudge() {
-    await submitPhotoJudgeRequest(lastPhotoFiles);
-  }
-
   function handleJudge(judge: Exclude<AreaJudge, null>) {
-    const photoJudgeFeedback = photoJudgeResult?.photoGroupId
+    const result = currentPhotoJudgeQueueRecord?.result;
+    const photoJudgeFeedback = result?.photoGroupId
       ? {
           apiBaseUrl: photoJudgeBaseUrl,
-          photoGroupId: photoJudgeResult.photoGroupId,
+          photoGroupId: result.photoGroupId,
         }
       : currentPhotoJudgeFeedback?.photoGroupId
       ? {
@@ -201,7 +252,7 @@ export function AreaJudgeScreen({
         }
       : null;
 
-    onJudge(judge, photoJudgeFeedback);
+    onJudge(judge, photoJudgeFeedback?.apiBaseUrl ? photoJudgeFeedback : null);
   }
 
   return (
@@ -279,22 +330,9 @@ export function AreaJudgeScreen({
         ) : null}
 
         <div style={{ display: "grid", gap: 10 }}>
-          <JudgeOptionButton
-            label="多い"
-            selected={false}
-            onClick={() => handleJudge("many")}
-          />
-          <JudgeOptionButton
-            label="どちらでもない"
-            selected={false}
-            onClick={() => handleJudge("normal")}
-          />
-          <JudgeOptionButton
-            label="少ない"
-            subLabel="後回しします"
-            selected={false}
-            onClick={() => handleJudge("few")}
-          />
+          <JudgeOptionButton label="多い" selected={false} onClick={() => handleJudge("many")} />
+          <JudgeOptionButton label="どちらでもない" selected={false} onClick={() => handleJudge("normal")} />
+          <JudgeOptionButton label="少ない" subLabel="後回しします" selected={false} onClick={() => handleJudge("few")} />
         </div>
       </section>
 
@@ -317,143 +355,11 @@ export function AreaJudgeScreen({
           スキップ先を選ぶ
         </button>
 
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 10 }}>写真で参考判定（任意）</div>
-        <input
-          ref={photoInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          multiple
-          onChange={handlePhotoInputChange}
-          style={{ display: "none" }}
+        <PhotoJudgeStatusPanel
+          queueRecord={currentPhotoJudgeQueueRecord}
+          currentFeedback={currentPhotoJudgeFeedback}
+          onRetry={onRetryPhotoJudge}
         />
-        <button
-          type="button"
-          onClick={() => photoInputRef.current?.click()}
-          disabled={photoJudgeLoading}
-          style={{
-            ...subActionButtonStyle,
-            width: "100%",
-            background: photoJudgeLoading ? "#eee" : "#fff",
-            color: photoJudgeLoading ? "#777" : "#000",
-            cursor: photoJudgeLoading ? "wait" : "pointer",
-          }}
-        >
-          {photoJudgeLoading ? "判定中..." : "写真を撮る"}
-        </button>
-
-        {lastPhotoFiles.length > 0 ? (
-          <div style={{ marginTop: 8, fontSize: 13, color: "#555" }}>
-            撮影済み写真: {lastPhotoFiles.length}枚
-          </div>
-        ) : null}
-
-        <details style={{ marginTop: 10 }}>
-          <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
-            写真判定サーバー設定
-          </summary>
-          <input
-            type="text"
-            value={photoJudgeBaseUrl}
-            onChange={(event) => updatePhotoJudgeBaseUrl(event.currentTarget.value)}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              marginTop: 8,
-              padding: 10,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              fontSize: 14,
-            }}
-          />
-        </details>
-
-        {photoJudgeError ? (
-          <div
-            style={{
-              marginTop: 12,
-              border: "1px solid #f1b5b5",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fff5f5",
-              lineHeight: 1.6,
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>写真判定に失敗しました</div>
-            <div>{photoJudgeError}</div>
-            {lastPhotoFiles.length > 0 ? (
-              <button
-                type="button"
-                onClick={handleRetryPhotoJudge}
-                disabled={photoJudgeLoading}
-                style={{
-                  ...subActionButtonStyle,
-                  width: "100%",
-                  marginTop: 10,
-                  background: photoJudgeLoading ? "#eee" : "#fff",
-                  color: photoJudgeLoading ? "#777" : "#000",
-                  cursor: photoJudgeLoading ? "wait" : "pointer",
-                }}
-              >
-                同じ写真でもう一度送信
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!photoJudgeResult && currentPhotoJudgeFeedback?.photoGroupId ? (
-          <div
-            style={{
-              marginTop: 12,
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fff",
-              fontSize: 13,
-              lineHeight: 1.6,
-            }}
-          >
-            前回撮った写真判定を保持しています。選び直した場合は、値引完了時に最後の判定だけ保存します。
-          </div>
-        ) : null}
-
-        {photoJudgeResult ? (
-          <div
-            style={{
-              marginTop: 12,
-              border: "1px solid #b9d7ff",
-              borderRadius: 12,
-              padding: 12,
-              background: "#f3f8ff",
-              lineHeight: 1.7,
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>
-              参考判定：{photoJudgeResult.suggestion ?? "判定なし"}
-              {photoJudgeResult.confidence ? `（自信度：${photoJudgeResult.confidence}）` : ""}
-            </div>
-            {photoJudgeResult.reason.length > 0 ? (
-              <div style={{ fontSize: 14 }}>
-                {photoJudgeResult.reason.map((line) => (
-                  <div key={line}>・{line}</div>
-                ))}
-              </div>
-            ) : null}
-            <div style={{ fontSize: 13, color: "#555", marginTop: 8 }}>
-              最終判断は売場を見て選択してください。
-            </div>
-          </div>
-        ) : null}
-      </section>
 
         {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (
           <section

@@ -95,6 +95,37 @@ export type AreaProgress = {
   skipReason?: "manual" | "few";
 };
 
+
+export type PhotoJudgeSuggestion = "多い" | "どちらでもない" | "少ない" | null;
+export type PhotoJudgeConfidence = "低" | "中" | "高" | null;
+
+export type PhotoJudgeAreaResult = {
+  photoGroupId: string;
+  suggestion: PhotoJudgeSuggestion;
+  confidence: PhotoJudgeConfidence;
+  reason: string[];
+  aiSkipped?: boolean;
+};
+
+export type PhotoJudgeQueueStatus = "queued" | "uploading" | "done" | "error";
+
+export type PhotoJudgeQueueRecord = {
+  areaId: AreaId;
+  status: PhotoJudgeQueueStatus;
+  photoCount: number;
+  result?: PhotoJudgeAreaResult;
+  error?: string;
+};
+
+export type PhotoCaptureSlotView = {
+  areaId: AreaId;
+  areaName: string;
+  slotId: string;
+  slotLabel: string;
+  captured: boolean;
+  previewUrl?: string;
+};
+
 export type PhotoJudgeHumanJudge = "多い" | "どちらでもない" | "少ない";
 
 export type PhotoJudgeFeedbackRecord = {
@@ -113,6 +144,7 @@ export type PhotoJudgeFeedbackDraft = {
 
 export type ScreenName =
   | "start"
+  | "photo_capture"
   | "area_judge"
   | "rate_display"
   | "final_time"
@@ -258,11 +290,20 @@ export type UseNebikiAppDerived = {
   skipTargetOptions: SkipTargetOption[];
   doneSummaryItems: DoneSummaryItem[];
   currentPhotoJudgeFeedback: PhotoJudgeFeedbackRecord | null;
+  photoJudgeBaseUrl: string;
+  photoCaptureSlots: PhotoCaptureSlotView[];
+  photoCaptureCompletedCount: number;
+  photoCaptureTotalCount: number;
+  currentPhotoJudgeQueueRecord: PhotoJudgeQueueRecord | null;
 };
 
 export type UseNebikiAppActions = {
   updateSessionDraft: (patch: Partial<SessionDraft>) => void;
   startSession: () => void;
+  updatePhotoJudgeBaseUrl: (url: string) => void;
+  capturePhotoSlot: (areaId: AreaId, slotId: string, file: File) => void;
+  startValueAfterPhotoCapture: (withPhotos: boolean) => void;
+  retryPhotoJudgeForArea: (areaId: AreaId) => void;
   goBackOneScreen: () => void;
   startEditingConditions: () => void;
   undoLastAction: () => void;
