@@ -50,7 +50,7 @@ npm run check:logic
 - 写真判定連携は `src/domain/photoJudge.ts` と `src/domain/photoCapture.ts` 周辺
 
 ## 2026-05-01 時点の確認状況
-前回確認時点で、本体側の `npm run check:logic` は主要チェックが通っています。
+最新修正後、本体側の `npm run check:logic` と `npm run build` は通っています。
 ただし、次セッションで修正する場合は、必ず最新 ZIP 展開後に再実行してください。
 
 ## 値引きヘルパー本体の主な仕様
@@ -216,3 +216,29 @@ npm run dev
 ### 注意点
 この修正は「圧縮時のメモリ不足で撮影が止まる」問題への対策。
 ブラウザやOSのカメラ起動自体がメモリ不足で失敗する場合は、アプリ側の JavaScript まで制御が来ないため完全には防げない。その場合は、不要なタブを閉じる、端末を再起動する、写真なしで値引開始する、などの運用回避が必要。
+
+
+## 2026-05-01 追加修正: 撮影サムネイルが埋まらない問題
+
+ユーザーから「最初の2回撮影してもサムネが埋まらない」と報告があった。
+
+原因:
+- 前回のメモリ不足対策で、`useNebikiApp.ts` の `capturePhotoSlot` が `1.2MB` を超える写真では `previewUrl` を作らないようにしていた。
+- 高解像度写真では撮影済みにはなるが、`PhotoCaptureScreen` 側で `slot.previewUrl` がなく、サムネイル画像が表示されない。
+
+修正内容:
+- `src/domain/photoJudge.ts` に `createPhotoPreviewUrl(file)` を追加。
+- アップロード用写真とは別に、表示用の小さいサムネイルを作るようにした。
+- canvas サムネイル作成に失敗した場合でも、最後の手段として元ファイルの Object URL をプレビューに使う。
+- `PhotoCaptureScreen` は `compressPhotoForUpload` 後に `createPhotoPreviewUrl` を呼び、`onCapturePhoto` へ `previewUrl` を渡す。
+- `useNebikiApp.ts` の `capturePhotoSlot` はファイルサイズでプレビューを捨てず、渡された `previewUrl` を保持する。
+- それでも `previewUrl` がない場合は、写真の代わりに「撮影済み」プレースホルダーを表示する。
+- `<img>` には `loading="lazy"` と `decoding="async"` を付けた。
+
+確認:
+- `npm run check:logic` PASS。
+- `npm run build` PASS。
+
+注意:
+- 端末のカメラ起動そのものがOS/ブラウザ側でメモリ不足になる場合は、アプリ側では完全には防げない。
+- ただし、今回の修正で「撮影済みなのにサムネ枠が空に見える」問題は避けやすくなっている。

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import type { AreaId, PhotoCaptureSlotView } from "../../domain/types";
-import { compressPhotoForUpload } from "../../domain/photoJudge";
+import { compressPhotoForUpload, createPhotoPreviewUrl } from "../../domain/photoJudge";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -12,7 +12,7 @@ type PhotoCaptureScreenProps = {
   totalCount: number;
   photoJudgeBaseUrl: string;
   onChangePhotoJudgeBaseUrl: (url: string) => void;
-  onCapturePhoto: (areaId: AreaId, slotId: string, file: File) => void;
+  onCapturePhoto: (areaId: AreaId, slotId: string, file: File, previewUrl?: string) => void;
   onStartWithPhotos: () => void;
   onStartWithoutPhotos: () => void;
   onGoBack: () => void;
@@ -118,7 +118,8 @@ export function PhotoCaptureScreen({
     setCaptureError(null);
     try {
       const compressed = await compressPhotoForUpload(file);
-      onCapturePhoto(slot.areaId, slot.slotId, compressed);
+      const previewUrl = await createPhotoPreviewUrl(compressed);
+      onCapturePhoto(slot.areaId, slot.slotId, compressed, previewUrl);
       setFocusAfterCaptureKey(key);
       activeSlotRef.current = null;
       setActiveSlot(null);
@@ -165,7 +166,7 @@ export function PhotoCaptureScreen({
           撮影済み: {completedCount} / {totalCount}
         </div>
         <div style={{ marginTop: 8, fontSize: 13, color: "#666", lineHeight: 1.6 }}>
-          撮影後は端末内で軽量化します。端末のメモリが足りない場合は圧縮を諦めて元写真のまま保持し、大きい写真ではプレビューを省略します。
+          撮影後は端末内で軽量化します。アップロード用の写真と表示用の小さいサムネイルを分け、端末のメモリが足りない場合でも撮影済み状態が分かるようにします。
         </div>
       </section>
 
@@ -243,6 +244,8 @@ export function PhotoCaptureScreen({
                       <img
                         src={slot.previewUrl}
                         alt={`${group.areaName} ${slot.slotLabel}`}
+                        loading="lazy"
+                        decoding="async"
                         style={{
                           width: 72,
                           height: 72,
@@ -251,6 +254,26 @@ export function PhotoCaptureScreen({
                           border: "1px solid #ddd",
                         }}
                       />
+                    ) : slot.captured ? (
+                      <div
+                        aria-label={`${group.areaName} ${slot.slotLabel} 撮影済み`}
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 10,
+                          border: "1px solid #b7c6ff",
+                          background: "#eaf1ff",
+                          display: "grid",
+                          placeItems: "center",
+                          color: "#2f5ef5",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          textAlign: "center",
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        撮影済み
+                      </div>
                     ) : null}
                   </button>
                 );

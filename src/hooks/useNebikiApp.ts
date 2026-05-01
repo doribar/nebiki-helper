@@ -139,8 +139,6 @@ function getAreaJudgeText(judge: AreaJudge): string {
   }
 }
 
-const MAX_CAPTURE_PREVIEW_BYTES = 1200 * 1024;
-
 type CapturedPhotoSlot = {
   areaId: AreaId;
   slotId: string;
@@ -1306,9 +1304,8 @@ const lateSkipNotice = useMemo(() => {
     setPhotoJudgeQueueMap({});
   }
 
-  function capturePhotoSlot(areaId: AreaId, slotId: string, file: File) {
+  function capturePhotoSlot(areaId: AreaId, slotId: string, file: File, previewUrl?: string) {
     const key = getPhotoCaptureKey(areaId, slotId);
-    const previewUrl = file.size <= MAX_CAPTURE_PREVIEW_BYTES ? URL.createObjectURL(file) : undefined;
 
     setCapturedPhotoSlots((current) => {
       const existing = current[key];

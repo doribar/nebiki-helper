@@ -31,6 +31,73 @@ export function setPhotoJudgeBaseUrl(url: string): void {
   }
 }
 
+
+const PHOTO_PREVIEW_MAX_SIDE = 180;
+const PHOTO_PREVIEW_JPEG_QUALITY = 0.66;
+
+export async function createPhotoPreviewUrl(file: File): Promise<string | undefined> {
+  if (!file.type.startsWith("image/")) return undefined;
+
+  const sourceUrl = URL.createObjectURL(file);
+  let shouldRevokeSourceUrl = true;
+  let image: HTMLImageElement | null = null;
+  let canvas: HTMLCanvasElement | null = null;
+
+  try {
+    image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("サムネイル用画像の読み込みに失敗しました。"));
+      img.src = sourceUrl;
+    });
+
+    const sourceWidth = image.naturalWidth;
+    const sourceHeight = image.naturalHeight;
+    const longest = Math.max(sourceWidth, sourceHeight);
+
+    if (!sourceWidth || !sourceHeight || !longest) {
+      throw new Error("サムネイル用の画像サイズを読み取れませんでした。");
+    }
+
+    const scale = Math.min(1, PHOTO_PREVIEW_MAX_SIDE / longest);
+    const width = Math.max(1, Math.round(sourceWidth * scale));
+    const height = Math.max(1, Math.round(sourceHeight * scale));
+
+    canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) {
+      throw new Error("サムネイルの作成に失敗しました。");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas?.toBlob(resolve, "image/jpeg", PHOTO_PREVIEW_JPEG_QUALITY);
+    });
+
+    if (!blob) {
+      throw new Error("サムネイルの書き出しに失敗しました。");
+    }
+
+    return URL.createObjectURL(blob);
+  } catch {
+    // 端末によっては canvas サムネイル作成でも失敗することがある。
+    // その場合でも撮影済みの見た目を崩さないよう、最後の手段として元ファイルの Object URL を表示に使う。
+    shouldRevokeSourceUrl = false;
+    return sourceUrl;
+  } finally {
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    if (shouldRevokeSourceUrl) {
+      URL.revokeObjectURL(sourceUrl);
+    }
+  }
+}
+
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, "");
 }
