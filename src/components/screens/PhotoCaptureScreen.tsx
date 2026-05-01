@@ -165,7 +165,7 @@ export function PhotoCaptureScreen({
           撮影済み: {completedCount} / {totalCount}
         </div>
         <div style={{ marginTop: 8, fontSize: 13, color: "#666", lineHeight: 1.6 }}>
-          撮影後は端末内で軽量化してから保持します。メモリ不足が出た場合は、少し引いて撮るか、不要なタブを閉じてから撮り直してください。
+          撮影後は端末内で軽量化します。端末のメモリが足りない場合は圧縮を諦めて元写真のまま保持し、大きい写真ではプレビューを省略します。
         </div>
       </section>
 

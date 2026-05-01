@@ -78,7 +78,7 @@ export async function compressPhotoForUpload(file: File): Promise<File> {
     image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("画像の読み込みに失敗しました。もう一度撮影してください。"));
+      img.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
       img.src = objectUrl;
     });
 
@@ -87,14 +87,14 @@ export async function compressPhotoForUpload(file: File): Promise<File> {
     const longest = Math.max(sourceWidth, sourceHeight);
 
     if (!sourceWidth || !sourceHeight || !longest) {
-      throw new Error("画像サイズを読み取れませんでした。もう一度撮影してください。");
+      throw new Error("画像サイズを読み取れませんでした。");
     }
 
     const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
     const attempts = [
-      { maxSide: 1280, quality: 0.72 },
-      { maxSide: 1024, quality: 0.66 },
-      { maxSide: 800, quality: 0.62 },
+      { maxSide: 960, quality: 0.64 },
+      { maxSide: 800, quality: 0.58 },
+      { maxSide: 640, quality: 0.54 },
     ];
 
     let bestBlob: Blob | null = null;
@@ -109,7 +109,7 @@ export async function compressPhotoForUpload(file: File): Promise<File> {
       canvas.height = height;
       const context = canvas.getContext("2d", { alpha: false });
       if (!context) {
-        throw new Error("画像の圧縮準備に失敗しました。もう一度撮影してください。");
+        throw new Error("画像の圧縮準備に失敗しました。");
       }
 
       context.drawImage(image, 0, 0, width, height);
@@ -125,14 +125,14 @@ export async function compressPhotoForUpload(file: File): Promise<File> {
       if (!blob) continue;
       bestBlob = blob;
 
-      if (blob.size <= 650 * 1024) break;
+      if (blob.size <= 450 * 1024) break;
     }
 
     if (!bestBlob) {
-      throw new Error("画像の圧縮に失敗しました。もう一度撮影してください。");
+      throw new Error("画像の圧縮に失敗しました。");
     }
 
-    if (originalSize <= 500 * 1024 && originalSize <= bestBlob.size) {
+    if (originalSize <= 450 * 1024 && originalSize <= bestBlob.size) {
       return file;
     }
 
@@ -140,10 +140,10 @@ export async function compressPhotoForUpload(file: File): Promise<File> {
       type: "image/jpeg",
       lastModified: Date.now(),
     });
-  } catch (error) {
-    if (originalSize <= 500 * 1024) return file;
-    if (error instanceof Error) throw error;
-    throw new Error("画像の処理中にメモリ不足または読み込みエラーが発生しました。撮影し直してください。");
+  } catch {
+    // 端末によっては、高解像度写真を canvas に展開する時点でメモリ不足になる。
+    // その場合でも撮影フローを止めないよう、圧縮を諦めて元ファイルを保持・送信する。
+    return file;
   } finally {
     if (canvas) {
       canvas.width = 0;
@@ -159,6 +159,7 @@ export async function requestPhotoJudge(params: {
   weekdayText: string;
   weekdayBaseText: string;
   timeText: string;
+  sessionDate: string;
   photos: File[];
   photoLabels?: string[];
 }): Promise<PhotoJudgeResult> {
@@ -172,6 +173,7 @@ export async function requestPhotoJudge(params: {
   form.append("actualWeekday", params.weekdayText);
   form.append("weekdayBase", params.weekdayBaseText);
   form.append("discountTime", params.timeText);
+  form.append("sessionDate", params.sessionDate);
   for (const photo of params.photos) {
     form.append("photos", photo);
   }

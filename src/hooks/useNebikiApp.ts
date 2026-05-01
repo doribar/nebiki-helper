@@ -139,11 +139,14 @@ function getAreaJudgeText(judge: AreaJudge): string {
   }
 }
 
+const MAX_CAPTURE_PREVIEW_BYTES = 1200 * 1024;
+
 type CapturedPhotoSlot = {
   areaId: AreaId;
   slotId: string;
-  file: File;
-  previewUrl: string;
+  file?: File;
+  previewUrl?: string;
+  uploaded?: boolean;
 };
 
 type CapturedPhotoItem = {
@@ -1296,7 +1299,7 @@ const lateSkipNotice = useMemo(() => {
   function clearPhotoCaptureState() {
     photoJudgeQueueRunIdRef.current += 1;
     for (const record of Object.values(capturedPhotoSlotsRef.current)) {
-      URL.revokeObjectURL(record.previewUrl);
+      if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
     }
     capturedPhotoSlotsRef.current = {};
     setCapturedPhotoSlots({});
@@ -1305,7 +1308,7 @@ const lateSkipNotice = useMemo(() => {
 
   function capturePhotoSlot(areaId: AreaId, slotId: string, file: File) {
     const key = getPhotoCaptureKey(areaId, slotId);
-    const previewUrl = URL.createObjectURL(file);
+    const previewUrl = file.size <= MAX_CAPTURE_PREVIEW_BYTES ? URL.createObjectURL(file) : undefined;
 
     setCapturedPhotoSlots((current) => {
       const existing = current[key];
@@ -1323,6 +1326,37 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
+  function releaseCapturedPhotoFilesForArea(
+    areaId: AreaId,
+    snapshot?: Record<string, CapturedPhotoSlot>
+  ) {
+    if (snapshot) {
+      for (const key of Object.keys(snapshot)) {
+        if (snapshot[key]?.areaId === areaId) {
+          delete snapshot[key];
+        }
+      }
+    }
+
+    setCapturedPhotoSlots((current) => {
+      let changed = false;
+      const next: Record<string, CapturedPhotoSlot> = { ...current };
+
+      for (const [key, record] of Object.entries(current)) {
+        if (record.areaId !== areaId) continue;
+        if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
+        next[key] = {
+          areaId: record.areaId,
+          slotId: record.slotId,
+          uploaded: true,
+        };
+        changed = true;
+      }
+
+      return changed ? next : current;
+    });
+  }
+
   function getCapturedPhotoItemsForArea(
     snapshot: Record<string, CapturedPhotoSlot>,
     areaId: AreaId
@@ -1330,7 +1364,7 @@ const lateSkipNotice = useMemo(() => {
     return getPhotoCaptureSlotsForArea(areaId)
       .map((slot) => {
         const captured = snapshot[getPhotoCaptureKey(areaId, slot.slotId)];
-        if (!captured) return null;
+        if (!captured?.file) return null;
         return {
           file: captured.file,
           label: slot.slotLabel,
@@ -1397,6 +1431,7 @@ const lateSkipNotice = useMemo(() => {
     weekdayTextValue: string;
     weekdayBaseTextValue: string;
     timeTextValue: string;
+    sessionDateValue: string;
     snapshot: Record<string, CapturedPhotoSlot>;
   }) {
     const photoItems = getCapturedPhotoItemsForArea(params.snapshot, params.areaId);
@@ -1421,6 +1456,7 @@ const lateSkipNotice = useMemo(() => {
           weekdayText: params.weekdayTextValue,
           weekdayBaseText: params.weekdayBaseTextValue,
           timeText: params.timeTextValue,
+          sessionDate: params.sessionDateValue,
           photos,
           photoLabels,
         })
@@ -1443,6 +1479,8 @@ const lateSkipNotice = useMemo(() => {
         result,
         apiBaseUrl: params.apiBaseUrl,
       });
+
+      releaseCapturedPhotoFilesForArea(params.areaId, params.snapshot);
     } catch (error) {
       if (photoJudgeQueueRunIdRef.current !== params.runId) return;
 
@@ -1467,6 +1505,7 @@ const lateSkipNotice = useMemo(() => {
     weekdayTextValue: string;
     weekdayBaseTextValue: string;
     timeTextValue: string;
+    sessionDateValue: string;
     snapshot: Record<string, CapturedPhotoSlot>;
   }) {
     for (const areaId of PHOTO_JUDGE_UPLOAD_ROUTE) {
@@ -1495,6 +1534,7 @@ const lateSkipNotice = useMemo(() => {
       weekdayTextValue: getWeekdayText(state.session.weekday),
       weekdayBaseTextValue: getWeekdayBaseText(weekdayBaseInfo.adjusted),
       timeTextValue: getBasisTimeText(state.session.discountTime),
+      sessionDateValue: state.session.date,
       snapshot,
     });
   }
@@ -1516,6 +1556,7 @@ const lateSkipNotice = useMemo(() => {
       weekdayTextValue: getWeekdayText(state.session.weekday),
       weekdayBaseTextValue: getWeekdayBaseText(weekdayBaseInfo.adjusted),
       timeTextValue: getBasisTimeText(state.session.discountTime),
+      sessionDateValue: state.session.date,
       snapshot,
     });
   }
