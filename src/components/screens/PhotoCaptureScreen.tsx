@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import type { AreaId, PhotoCaptureSlotView } from "../../domain/types";
-import { compressPhotoForUpload, createPhotoPreviewUrl } from "../../domain/photoJudge";
+import { createPhotoObjectPreviewUrl } from "../../domain/photoJudge";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -62,6 +62,7 @@ export function PhotoCaptureScreen({
   const [processingSlotKey, setProcessingSlotKey] = useState<string | null>(null);
   const [focusAfterCaptureKey, setFocusAfterCaptureKey] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [failedPreviewKeys, setFailedPreviewKeys] = useState<Record<string, true>>({});
   const allCaptured = completedCount === totalCount;
 
   useEffect(() => {
@@ -117,17 +118,27 @@ export function PhotoCaptureScreen({
     setProcessingSlotKey(key);
     setCaptureError(null);
     try {
-      const compressed = await compressPhotoForUpload(file);
-      const previewUrl = await createPhotoPreviewUrl(compressed);
-      onCapturePhoto(slot.areaId, slot.slotId, compressed, previewUrl);
+      const previewUrl = createPhotoObjectPreviewUrl(file);
+      setFailedPreviewKeys((current) => {
+        if (!current[key]) return current;
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      onCapturePhoto(slot.areaId, slot.slotId, file, previewUrl);
       setFocusAfterCaptureKey(key);
       activeSlotRef.current = null;
       setActiveSlot(null);
     } catch (error) {
+      // プレビュー用URL作成で失敗しても、撮影自体は保存する。
+      onCapturePhoto(slot.areaId, slot.slotId, file);
+      setFocusAfterCaptureKey(key);
+      activeSlotRef.current = null;
+      setActiveSlot(null);
       setCaptureError(
         error instanceof Error
-          ? error.message
-          : "画像の準備に失敗しました。撮影し直してください。"
+          ? `${error.message} 撮影済みとして保存しました。`
+          : "サムネイル表示に失敗しましたが、撮影済みとして保存しました。"
       );
     } finally {
       setProcessingSlotKey(null);
@@ -166,7 +177,7 @@ export function PhotoCaptureScreen({
           撮影済み: {completedCount} / {totalCount}
         </div>
         <div style={{ marginTop: 8, fontSize: 13, color: "#666", lineHeight: 1.6 }}>
-          撮影後は端末内で軽量化します。アップロード用の写真と表示用の小さいサムネイルを分け、端末のメモリが足りない場合でも撮影済み状態が分かるようにします。
+          撮影直後は写真をすぐ保存します。重い圧縮処理は値引開始後のアップロード時に回し、撮影中に止まりにくくしています。
         </div>
       </section>
 
@@ -240,12 +251,15 @@ export function PhotoCaptureScreen({
                         {isProcessing ? "画像を準備中..." : slot.captured ? "撮影済み。タップで撮り直し" : "タップして撮影"}
                       </div>
                     </div>
-                    {slot.previewUrl ? (
+                    {slot.previewUrl && !failedPreviewKeys[key] ? (
                       <img
                         src={slot.previewUrl}
                         alt={`${group.areaName} ${slot.slotLabel}`}
                         loading="lazy"
                         decoding="async"
+                        onError={() => {
+                          setFailedPreviewKeys((current) => ({ ...current, [key]: true }));
+                        }}
                         style={{
                           width: 72,
                           height: 72,

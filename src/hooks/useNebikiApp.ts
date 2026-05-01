@@ -71,6 +71,7 @@ import {
 import {
   areaJudgeToHumanText,
   getPhotoJudgeBaseUrl,
+  compressPhotoForUpload,
   requestPhotoJudge,
   sendPhotoJudgeFeedback,
   setPhotoJudgeBaseUrl as savePhotoJudgeBaseUrl,
@@ -1446,6 +1447,12 @@ const lateSkipNotice = useMemo(() => {
     }));
 
     try {
+      const uploadPhotos: File[] = [];
+      for (const photo of photos) {
+        if (photoJudgeQueueRunIdRef.current !== params.runId) return;
+        uploadPhotos.push(await compressPhotoForUpload(photo));
+      }
+
       const result = normalizePhotoJudgeResult(
         await requestPhotoJudge({
           apiBaseUrl: params.apiBaseUrl,
@@ -1454,7 +1461,7 @@ const lateSkipNotice = useMemo(() => {
           weekdayBaseText: params.weekdayBaseTextValue,
           timeText: params.timeTextValue,
           sessionDate: params.sessionDateValue,
-          photos,
+          photos: uploadPhotos,
           photoLabels,
         })
       );
