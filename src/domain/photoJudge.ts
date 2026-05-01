@@ -157,6 +157,7 @@ export async function requestPhotoJudge(params: {
   apiBaseUrl: string;
   areaName: string;
   weekdayText: string;
+  weekdayBaseText: string;
   timeText: string;
   photos: File[];
   photoLabels?: string[];
@@ -168,6 +169,8 @@ export async function requestPhotoJudge(params: {
   const form = new FormData();
   form.append("area", params.areaName);
   form.append("weekday", params.weekdayText);
+  form.append("actualWeekday", params.weekdayText);
+  form.append("weekdayBase", params.weekdayBaseText);
   form.append("discountTime", params.timeText);
   for (const photo of params.photos) {
     form.append("photos", photo);

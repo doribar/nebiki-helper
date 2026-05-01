@@ -454,6 +454,21 @@ function getWeekdayText(weekday: number): string {
   return `${map[weekday] ?? ""}曜日`;
 }
 
+function getWeekdayBaseText(label: string): string {
+  switch (label) {
+    case "日":
+      return "日";
+    case "金土":
+      return "金・土";
+    case "火木":
+      return "火・木";
+    case "月水":
+      return "月・水";
+    default:
+      return "基準不明";
+  }
+}
+
 function getNextSkipTargetDiscountTime(
   discountTime: DiscountTime
 ): "18" | "19" | null {
@@ -1380,6 +1395,7 @@ const lateSkipNotice = useMemo(() => {
     areaId: AreaId;
     apiBaseUrl: string;
     weekdayTextValue: string;
+    weekdayBaseTextValue: string;
     timeTextValue: string;
     snapshot: Record<string, CapturedPhotoSlot>;
   }) {
@@ -1403,6 +1419,7 @@ const lateSkipNotice = useMemo(() => {
           apiBaseUrl: params.apiBaseUrl,
           areaName: getAreaName(params.areaId),
           weekdayText: params.weekdayTextValue,
+          weekdayBaseText: params.weekdayBaseTextValue,
           timeText: params.timeTextValue,
           photos,
           photoLabels,
@@ -1448,6 +1465,7 @@ const lateSkipNotice = useMemo(() => {
     runId: number;
     apiBaseUrl: string;
     weekdayTextValue: string;
+    weekdayBaseTextValue: string;
     timeTextValue: string;
     snapshot: Record<string, CapturedPhotoSlot>;
   }) {
@@ -1475,6 +1493,7 @@ const lateSkipNotice = useMemo(() => {
       runId,
       apiBaseUrl: photoJudgeBaseUrl,
       weekdayTextValue: getWeekdayText(state.session.weekday),
+      weekdayBaseTextValue: getWeekdayBaseText(weekdayBaseInfo.adjusted),
       timeTextValue: getBasisTimeText(state.session.discountTime),
       snapshot,
     });
@@ -1495,6 +1514,7 @@ const lateSkipNotice = useMemo(() => {
       areaId,
       apiBaseUrl: photoJudgeBaseUrl,
       weekdayTextValue: getWeekdayText(state.session.weekday),
+      weekdayBaseTextValue: getWeekdayBaseText(weekdayBaseInfo.adjusted),
       timeTextValue: getBasisTimeText(state.session.discountTime),
       snapshot,
     });

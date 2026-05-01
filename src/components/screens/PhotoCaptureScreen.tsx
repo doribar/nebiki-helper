@@ -56,6 +56,7 @@ export function PhotoCaptureScreen({
   onGoBack,
 }: PhotoCaptureScreenProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const activeSlotRef = useRef<PhotoCaptureSlotView | null>(null);
   const slotButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [activeSlot, setActiveSlot] = useState<PhotoCaptureSlotView | null>(null);
   const [processingSlotKey, setProcessingSlotKey] = useState<string | null>(null);
@@ -93,15 +94,24 @@ export function PhotoCaptureScreen({
 
   function openCamera(slot: PhotoCaptureSlotView) {
     setCaptureError(null);
+    activeSlotRef.current = slot;
     setActiveSlot(slot);
     inputRef.current?.click();
   }
 
   async function handlePhotoSelected(event: ChangeEvent<HTMLInputElement>) {
-    const slot = activeSlot;
+    const slot = activeSlotRef.current ?? activeSlot;
     const file = event.currentTarget.files?.[0] ?? null;
     event.currentTarget.value = "";
-    if (!slot || !file) return;
+    if (!file) {
+      activeSlotRef.current = null;
+      setActiveSlot(null);
+      return;
+    }
+    if (!slot) {
+      setCaptureError("撮影枠の取得に失敗しました。もう一度撮影してください。");
+      return;
+    }
 
     const key = `${slot.areaId}:${slot.slotId}`;
     setProcessingSlotKey(key);
@@ -110,6 +120,7 @@ export function PhotoCaptureScreen({
       const compressed = await compressPhotoForUpload(file);
       onCapturePhoto(slot.areaId, slot.slotId, compressed);
       setFocusAfterCaptureKey(key);
+      activeSlotRef.current = null;
       setActiveSlot(null);
     } catch (error) {
       setCaptureError(
