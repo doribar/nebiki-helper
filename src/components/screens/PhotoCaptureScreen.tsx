@@ -28,6 +28,64 @@ const subActionButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
+const commonGuideItemStyle: CSSProperties = {
+  margin: 0,
+};
+
+const slotGuideStyle: CSSProperties = {
+  fontSize: 12,
+  color: "#555",
+  marginTop: 6,
+  lineHeight: 1.45,
+};
+
+const COMMON_CAPTURE_GUIDE = [
+  "売場幅と空きスペースが分かるよう、少し引いて撮る",
+  "できるだけ毎回同じ位置・高さ・向きで撮る",
+  "商品の積み重なり、残り量、広く薄い/狭く厚い残り方が分かるようにする",
+  "ブレた、暗い、近すぎたと感じたら同じ枠を撮り直す",
+];
+
+const AREA_CAPTURE_GUIDES: Partial<Record<AreaId, string>> = {
+  bento_men: "弁当・麺類は4枚セットで比較します。各区分の売場幅、空き、積み重なりが分かるように撮ってください。",
+  fry_chicken: "フライ・鶏惣菜は2枚セットで比較します。フライ側と鶏惣菜側を混ぜず、それぞれの残量感が分かるように撮ってください。",
+};
+
+function getAreaCaptureGuide(areaId: AreaId): string {
+  return (
+    AREA_CAPTURE_GUIDES[areaId] ??
+    "エリア全体の売場幅、空きスペース、商品の積み重なりが分かるように撮ってください。"
+  );
+}
+
+function getSlotCaptureGuide(areaId: AreaId, slotLabel: string): string {
+  if (areaId === "bento_men") {
+    if (slotLabel === "正面") {
+      return "弁当・麺類エリア全体の残り具合が分かるよう、正面から少し引いて撮る。";
+    }
+    if (slotLabel === "バラ側") {
+      return "バラ弁当側の幅、空き、商品の山の高さが分かるように撮る。";
+    }
+    if (slotLabel === "寿司側") {
+      return "寿司・丼側の残り量と空きスペースが分かるように撮る。";
+    }
+    if (slotLabel === "麺類") {
+      return "麺類の売場幅、残り量、積み重なりが分かるように撮る。";
+    }
+  }
+
+  if (areaId === "fry_chicken") {
+    if (slotLabel === "フライ側") {
+      return "フライ側の幅、トレーの空き、商品の積み上がり具合が分かるように撮る。";
+    }
+    if (slotLabel === "鶏惣菜側") {
+      return "鶏惣菜側の幅、空き、残り量の厚みが分かるように撮る。";
+    }
+  }
+
+  return "このエリア全体の売場幅、空き、残り量が分かるように少し引いて撮る。";
+}
+
 function groupSlots(slots: PhotoCaptureSlotView[]) {
   const groups: Array<{ areaId: AreaId; areaName: string; slots: PhotoCaptureSlotView[] }> = [];
   for (const slot of slots) {
@@ -171,6 +229,27 @@ export function PhotoCaptureScreen({
         <div style={{ lineHeight: 1.7, fontSize: 14 }}>
           値引は弁当・麺類から始まります。撮影後、AI判定は弁当・麺類から順番に裏で進めます。
         </div>
+        <div
+          style={{
+            marginTop: 12,
+            border: "1px solid #d9e2ff",
+            borderRadius: 12,
+            padding: 12,
+            background: "#f5f8ff",
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>撮り方の目安</div>
+          <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.65, fontSize: 13 }}>
+            {COMMON_CAPTURE_GUIDE.map((guide) => (
+              <li key={guide} style={commonGuideItemStyle}>
+                {guide}
+              </li>
+            ))}
+          </ul>
+          <div style={{ marginTop: 8, fontSize: 12, color: "#666", lineHeight: 1.55 }}>
+            AIは過去写真と今回写真を比べます。完全に同じ構図でなくてもよいですが、売場幅・空き・積み重なりが毎回見えるようにすると判定が安定しやすくなります。
+          </div>
+        </div>
         <div style={{ marginTop: 10, fontWeight: 800 }}>
           撮影済み: {completedCount} / {totalCount}
         </div>
@@ -217,7 +296,10 @@ export function PhotoCaptureScreen({
               background: "#fff",
             }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 10 }}>{group.areaName}</div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>{group.areaName}</div>
+            <div style={{ fontSize: 13, color: "#555", lineHeight: 1.55, marginBottom: 10 }}>
+              {getAreaCaptureGuide(group.areaId)}
+            </div>
             <div style={{ display: "grid", gap: 10 }}>
               {group.slots.map((slot) => {
                 const key = `${slot.areaId}:${slot.slotId}`;
@@ -249,6 +331,7 @@ export function PhotoCaptureScreen({
                       <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>
                         {isProcessing ? "保存中..." : slot.captured ? "撮影済み。タップで撮り直し" : "タップして撮影"}
                       </div>
+                      <div style={slotGuideStyle}>{getSlotCaptureGuide(slot.areaId, slot.slotLabel)}</div>
                     </div>
                     {slot.captured ? (
                       <div
