@@ -46,14 +46,55 @@ async function toImageContentItem(filePath) {
 
 function groupLabel(group, index) {
   return [
-    `過去例${index + 1}`,
+    `過去適切例${index + 1}`,
     `エリア:${group.area}`,
     `曜日基準:${group.weekdayBase || group.weekday}`,
     group.actualWeekday || group.weekday ? `実際曜日:${group.actualWeekday || group.weekday}` : null,
     `時刻:${group.discountTime}`,
-    `人間判定:${group.humanJudge}`,
-    group.feedbackText ? `前回評価:${group.feedbackText}` : "前回評価:未評価",
+    `この過去例で人間が選んだ判定:${group.humanJudge}`,
+    group.feedbackText
+      ? `次回値引による評価:${group.feedbackText}`
+      : "次回値引による評価:適切だった可能性",
   ].filter(Boolean).join(" / ");
+}
+
+function clampExamplePhotoPaths(group) {
+  const max = Number(process.env.MAX_EXAMPLE_PHOTOS_PER_GROUP || 6);
+  const limit = Number.isFinite(max) && max > 0 ? max : 6;
+  return (group.photoPaths || []).slice(0, limit);
+}
+
+function buildInstructionText({ currentGroup, hasExamples }) {
+  const baseLines = [
+    "これは惣菜・弁当売場の値引判断を補助するための画像判定です。",
+    "今回写真セットは同じエリアの別角度・別部分を含む場合があります。写真を別エリアとして扱わず、エリア全体として判断してください。",
+    "出力する判定は、人間が最終選択する前の参考判定です。必ずJSONスキーマに従ってください。",
+    "判定は 多い / どちらでもない / 少ない の3択です。",
+    "比較では、単純な見た目の類似だけでなく、撮影角度や距離、写真に写っている売場幅、商品の積み重なり方、空きスペース、商品密度、広く薄く残っているのか狭く厚く残っているのかを考慮してください。",
+    "",
+    `今回条件: エリア=${currentGroup.area} / 曜日基準=${currentGroup.weekdayBase || currentGroup.weekday} / 実際曜日=${currentGroup.actualWeekday || currentGroup.weekday} / 時刻=${currentGroup.discountTime}`,
+  ];
+
+  if (hasExamples) {
+    return [
+      ...baseLines,
+      "",
+      "このあと、過去に適切だった写真セットと今回写真セットを見せます。",
+      "過去適切例とは、過去に人間が 多い / どちらでもない / 少ない のいずれかを選び、その次の値引で同じエリアが どちらでもない になったため、結果的にちょうどよかった可能性がある例です。",
+      "過去適切例の判定は どちらでもない とは限りません。多い も 少ない もあります。",
+      "今回写真が過去適切例と同じ判定として扱えそうなら、その過去例の判定を参考にしてください。",
+      "今回の方が過去適切例より残量・密度・積み上がりが多そうなら、多い寄りへ補正してください。今回の方が少なそうなら、少ない寄りへ補正してください。",
+      "過去例と構図や売場幅が違う場合は、その違いを補正して判断してください。",
+      "理由には、どの過去例の判定を参考にしたか、またはなぜ補正したかを短く含めてください。",
+    ].join("\n");
+  }
+
+  return [
+    ...baseLines,
+    "",
+    "同じ曜日基準・同じ時刻・同じエリアで、次回値引により適切だったと確認済みの過去例はまだありません。",
+    "今回は今回写真だけから、幅、奥行き、商品の重なり、空き具合、手前だけ/奥まで残っているかを見て、控えめに参考判定を返してください。",
+  ].join("\n");
 }
 
 export async function judgeWithOpenAI({ currentGroup, currentPhotos, examples }) {
@@ -73,45 +114,39 @@ export async function judgeWithOpenAI({ currentGroup, currentPhotos, examples })
   const content = [
     {
       type: "input_text",
-      text: [
-        "これは惣菜・弁当売場の値引判断を補助するための画像判定です。",
-        "今回写真セットは同じエリアの別角度・別部分を含む場合があります。写真を別エリアとして扱わず、全体として判断してください。",
-        "過去例には、この店で人間が最終的に選んだ判定が付いています。",
-        "幅、奥行き、商品の重なり、空き具合、手前だけ/奥まで残っているかを考慮してください。",
-        "最終判断ではなく参考判定です。結果は必ずJSONスキーマに従ってください。",
-        "",
-        `今回条件: エリア=${currentGroup.area} / 曜日基準=${currentGroup.weekdayBase || currentGroup.weekday} / 実際曜日=${currentGroup.actualWeekday || currentGroup.weekday} / 時刻=${currentGroup.discountTime}`,
-        "以下が今回写真セットです。",
-      ].join("\n"),
+      text: buildInstructionText({
+        currentGroup,
+        hasExamples: examples.length > 0,
+      }),
     },
   ];
-
-  for (let i = 0; i < currentPhotos.length; i += 1) {
-    content.push({ type: "input_text", text: `今回写真 ${i + 1}: ${currentPhotos[i].label || "写真"}` });
-    content.push(await toImageContentItem(currentPhotos[i].absolutePath));
-  }
 
   if (examples.length > 0) {
     content.push({
       type: "input_text",
-      text: "以下は同じエリアの過去例です。各過去例の人間判定を基準として参考にしてください。",
+      text: "以下が、同じ曜日基準・同じ時刻・同じエリアから選んだ過去適切例です。各例は写真セット単位です。",
     });
 
     for (let i = 0; i < examples.length; i += 1) {
       const group = examples[i];
       content.push({ type: "input_text", text: groupLabel(group, i) });
-      const photoPaths = (group.photoPaths || []).slice(0, 3);
+      const photoPaths = clampExamplePhotoPaths(group);
       for (let j = 0; j < photoPaths.length; j += 1) {
         const label = group.photoLabels?.[j] || `写真${j + 1}`;
-        content.push({ type: "input_text", text: `過去例${i + 1} ${label}` });
+        content.push({ type: "input_text", text: `過去適切例${i + 1} ${label}` });
         content.push(await toImageContentItem(dataPath(photoPaths[j])));
       }
     }
-  } else {
-    content.push({
-      type: "input_text",
-      text: "同じエリアの過去例はまだありません。今回写真だけから、理由と自信度を控えめに返してください。",
-    });
+  }
+
+  content.push({
+    type: "input_text",
+    text: "以下が今回写真セットです。過去適切例がある場合は、それと比較して今回の参考判定を出してください。",
+  });
+
+  for (let i = 0; i < currentPhotos.length; i += 1) {
+    content.push({ type: "input_text", text: `今回写真 ${i + 1}: ${currentPhotos[i].label || "写真"}` });
+    content.push(await toImageContentItem(currentPhotos[i].absolutePath));
   }
 
   const response = await client.responses.create({
@@ -130,7 +165,7 @@ export async function judgeWithOpenAI({ currentGroup, currentPhotos, examples })
         schema: JUDGE_SCHEMA,
       },
     },
-    max_output_tokens: 400,
+    max_output_tokens: 500,
   });
 
   let parsed;
