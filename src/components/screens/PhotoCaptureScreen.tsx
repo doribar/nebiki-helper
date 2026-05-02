@@ -74,7 +74,14 @@ export function PhotoCaptureScreen({
   const [focusAfterCaptureKey, setFocusAfterCaptureKey] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [inputResetKey, setInputResetKey] = useState(0);
-  const allCaptured = completedCount === totalCount;
+  const groupedSlots = groupSlots(slots);
+  const completeAreaCount = groupedSlots.filter((group) =>
+    group.slots.every((slot) => slot.captured)
+  ).length;
+  const partialAreaCount = groupedSlots.filter((group) =>
+    group.slots.some((slot) => slot.captured) && group.slots.some((slot) => !slot.captured)
+  ).length;
+  const canStartWithPhotos = completeAreaCount > 0;
 
   useEffect(() => {
     if (!focusAfterCaptureKey || processingSlotKey) return;
@@ -240,7 +247,7 @@ export function PhotoCaptureScreen({
       ) : null}
 
       <div style={{ display: "grid", gap: 12 }}>
-        {groupSlots(slots).map((group) => (
+        {groupedSlots.map((group) => (
           <section
             key={group.areaId}
             style={{
@@ -343,12 +350,26 @@ export function PhotoCaptureScreen({
       </section>
 
       <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-        <PrimaryButton onClick={onStartWithPhotos} disabled={!allCaptured}>
-          撮影を終えて値引開始
+        <PrimaryButton onClick={onStartWithPhotos} disabled={!canStartWithPhotos}>
+          撮影済みエリアだけAI判定して値引開始
         </PrimaryButton>
-        {!allCaptured ? (
-          <div style={{ fontSize: 13, color: "#666", textAlign: "center" }}>
-            写真ありで始めるには、すべての写真を撮ってください。
+        <div style={{ fontSize: 13, color: "#666", textAlign: "center", lineHeight: 1.6 }}>
+          {canStartWithPhotos ? (
+            <>
+              写真が揃っている{completeAreaCount}エリアだけAI判定します。
+              {partialAreaCount > 0
+                ? ` 撮影途中の${partialAreaCount}エリアはAI判定せず、通常どおり人間判断で進みます。`
+                : ""}
+            </>
+          ) : completedCount > 0 ? (
+            "撮影途中のエリアだけではAI判定できません。1エリア分を揃えるか、写真なしで開始してください。"
+          ) : (
+            "写真ありで始めるには、まず1エリア分の写真を揃えてください。"
+          )}
+        </div>
+        {completedCount < totalCount ? (
+          <div style={{ fontSize: 13, color: "#666", textAlign: "center", lineHeight: 1.6 }}>
+            すべて撮らなくても開始できます。未撮影エリアと撮影途中エリアはAI判定なしになります。
           </div>
         ) : null}
         <button type="button" onClick={onStartWithoutPhotos} style={subActionButtonStyle}>

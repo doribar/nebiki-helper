@@ -1445,6 +1445,16 @@ const lateSkipNotice = useMemo(() => {
       .filter((item): item is CapturedPhotoItem => Boolean(item));
   }
 
+  function hasCompleteCapturedPhotosForArea(
+    snapshot: Record<string, CapturedPhotoSlot>,
+    areaId: AreaId
+  ): boolean {
+    return getPhotoCaptureSlotsForArea(areaId).every((slot) => {
+      const captured = snapshot[getPhotoCaptureKey(areaId, slot.slotId)];
+      return Boolean(captured?.file);
+    });
+  }
+
   function getCapturedPhotoFilesForArea(
     snapshot: Record<string, CapturedPhotoSlot>,
     areaId: AreaId
@@ -1458,6 +1468,7 @@ const lateSkipNotice = useMemo(() => {
     const next: Partial<Record<AreaId, PhotoJudgeQueueRecord>> = {};
 
     for (const areaId of PHOTO_JUDGE_UPLOAD_ROUTE) {
+      if (!hasCompleteCapturedPhotosForArea(snapshot, areaId)) continue;
       const photos = getCapturedPhotoFilesForArea(snapshot, areaId);
       if (photos.length === 0) continue;
       next[areaId] = {
@@ -1506,6 +1517,8 @@ const lateSkipNotice = useMemo(() => {
     sessionDateValue: string;
     snapshot: Record<string, CapturedPhotoSlot>;
   }) {
+    if (!hasCompleteCapturedPhotosForArea(params.snapshot, params.areaId)) return;
+
     const photoItems = getCapturedPhotoItemsForArea(params.snapshot, params.areaId);
     const photos = photoItems.map((item) => item.file);
     const photoLabels = photoItems.map((item) => item.label);
