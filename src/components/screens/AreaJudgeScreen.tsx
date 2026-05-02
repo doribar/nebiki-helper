@@ -51,11 +51,13 @@ const subActionButtonStyle: CSSProperties = {
 function JudgeOptionButton({
   label,
   subLabel,
+  aiRecommended = false,
   selected,
   onClick,
 }: {
   label: string;
   subLabel?: string;
+  aiRecommended?: boolean;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -67,14 +69,31 @@ function JudgeOptionButton({
         width: "100%",
         padding: "14px 16px",
         borderRadius: 12,
-        border: selected ? "2px solid #2f5ef5" : "1px solid #ccc",
-        background: selected ? "#e8f0ff" : "#fff",
+        border: aiRecommended ? "2px solid #2f5ef5" : selected ? "2px solid #2f5ef5" : "1px solid #ccc",
+        background: aiRecommended ? "#e8f0ff" : selected ? "#e8f0ff" : "#fff",
         textAlign: "left",
         cursor: "pointer",
       }}
     >
       <div style={{ fontSize: 16, fontWeight: 800 }}>
         {label}
+        {aiRecommended ? (
+          <span
+            style={{
+              display: "inline-block",
+              fontSize: 12,
+              color: "#fff",
+              background: "#2f5ef5",
+              fontWeight: 800,
+              marginLeft: 8,
+              padding: "2px 8px",
+              borderRadius: 999,
+              verticalAlign: "middle",
+            }}
+          >
+            AI参考
+          </span>
+        ) : null}
         {subLabel ? (
           <span style={{ fontSize: 13, color: "#555", fontWeight: 600, marginLeft: 6 }}>
             ({subLabel})
@@ -238,6 +257,8 @@ export function AreaJudgeScreen({
     onJudgeGuideShown?.();
   }, [displayJudgeGuide, onJudgeGuideShown]);
 
+  const aiSuggestion = currentPhotoJudgeQueueRecord?.result?.suggestion ?? null;
+
   function handleJudge(judge: Exclude<AreaJudge, null>) {
     const result = currentPhotoJudgeQueueRecord?.result;
     const photoJudgeFeedback = result?.photoGroupId
@@ -329,10 +350,32 @@ export function AreaJudgeScreen({
           </div>
         ) : null}
 
+        <PhotoJudgeStatusPanel
+          queueRecord={currentPhotoJudgeQueueRecord}
+          currentFeedback={currentPhotoJudgeFeedback}
+          onRetry={onRetryPhotoJudge}
+        />
+
         <div style={{ display: "grid", gap: 10 }}>
-          <JudgeOptionButton label="多い" selected={false} onClick={() => handleJudge("many")} />
-          <JudgeOptionButton label="どちらでもない" selected={false} onClick={() => handleJudge("normal")} />
-          <JudgeOptionButton label="少ない" subLabel="後回しします" selected={false} onClick={() => handleJudge("few")} />
+          <JudgeOptionButton
+            label="多い"
+            aiRecommended={aiSuggestion === "多い"}
+            selected={false}
+            onClick={() => handleJudge("many")}
+          />
+          <JudgeOptionButton
+            label="どちらでもない"
+            aiRecommended={aiSuggestion === "どちらでもない"}
+            selected={false}
+            onClick={() => handleJudge("normal")}
+          />
+          <JudgeOptionButton
+            label="少ない"
+            subLabel="後回しします"
+            aiRecommended={aiSuggestion === "少ない"}
+            selected={false}
+            onClick={() => handleJudge("few")}
+          />
         </div>
       </section>
 
@@ -354,12 +397,6 @@ export function AreaJudgeScreen({
         >
           スキップ先を選ぶ
         </button>
-
-        <PhotoJudgeStatusPanel
-          queueRecord={currentPhotoJudgeQueueRecord}
-          currentFeedback={currentPhotoJudgeFeedback}
-          onRetry={onRetryPhotoJudge}
-        />
 
         {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (
           <section
