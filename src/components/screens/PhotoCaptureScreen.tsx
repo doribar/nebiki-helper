@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import type { AreaId, PhotoCaptureSlotView } from "../../domain/types";
-import { createPhotoObjectPreviewUrl } from "../../domain/photoJudge";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -12,7 +11,7 @@ type PhotoCaptureScreenProps = {
   totalCount: number;
   photoJudgeBaseUrl: string;
   onChangePhotoJudgeBaseUrl: (url: string) => void;
-  onCapturePhoto: (areaId: AreaId, slotId: string, file: File, previewUrl?: string) => void;
+  onCapturePhoto: (areaId: AreaId, slotId: string, file: File) => void;
   onStartWithPhotos: () => void;
   onStartWithoutPhotos: () => void;
   onGoBack: () => void;
@@ -62,7 +61,7 @@ export function PhotoCaptureScreen({
   const [processingSlotKey, setProcessingSlotKey] = useState<string | null>(null);
   const [focusAfterCaptureKey, setFocusAfterCaptureKey] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
-  const [failedPreviewKeys, setFailedPreviewKeys] = useState<Record<string, true>>({});
+  const [inputResetKey, setInputResetKey] = useState(0);
   const allCaptured = completedCount === totalCount;
 
   useEffect(() => {
@@ -93,6 +92,12 @@ export function PhotoCaptureScreen({
     setFocusAfterCaptureKey(null);
   }, [focusAfterCaptureKey, processingSlotKey, slots]);
 
+  function resetActiveCapture() {
+    activeSlotRef.current = null;
+    setActiveSlot(null);
+    setInputResetKey((current) => current + 1);
+  }
+
   function openCamera(slot: PhotoCaptureSlotView) {
     setCaptureError(null);
     activeSlotRef.current = slot;
@@ -100,48 +105,41 @@ export function PhotoCaptureScreen({
     inputRef.current?.click();
   }
 
-  async function handlePhotoSelected(event: ChangeEvent<HTMLInputElement>) {
+  function handlePhotoSelected(event: ChangeEvent<HTMLInputElement>) {
     const slot = activeSlotRef.current ?? activeSlot;
     const file = event.currentTarget.files?.[0] ?? null;
     event.currentTarget.value = "";
+
     if (!file) {
-      activeSlotRef.current = null;
-      setActiveSlot(null);
+      resetActiveCapture();
       return;
     }
+
     if (!slot) {
       setCaptureError("撮影枠の取得に失敗しました。もう一度撮影してください。");
+      resetActiveCapture();
       return;
     }
 
     const key = `${slot.areaId}:${slot.slotId}`;
     setProcessingSlotKey(key);
     setCaptureError(null);
+
     try {
-      const previewUrl = createPhotoObjectPreviewUrl(file);
-      setFailedPreviewKeys((current) => {
-        if (!current[key]) return current;
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
-      onCapturePhoto(slot.areaId, slot.slotId, file, previewUrl);
-      setFocusAfterCaptureKey(key);
-      activeSlotRef.current = null;
-      setActiveSlot(null);
-    } catch (error) {
-      // プレビュー用URL作成で失敗しても、撮影自体は保存する。
+      // 撮影直後は、画像を画面に展開しない。
+      // 画像プレビューや canvas 圧縮は再読込直後の低メモリ端末で落ちやすいため、
+      // File だけを保存し、画面は軽い「撮影済み」枠で表す。
       onCapturePhoto(slot.areaId, slot.slotId, file);
       setFocusAfterCaptureKey(key);
-      activeSlotRef.current = null;
-      setActiveSlot(null);
+    } catch (error) {
       setCaptureError(
         error instanceof Error
-          ? `${error.message} 撮影済みとして保存しました。`
-          : "サムネイル表示に失敗しましたが、撮影済みとして保存しました。"
+          ? `撮影データの保存に失敗しました。${error.message}`
+          : "撮影データの保存に失敗しました。もう一度撮影してください。"
       );
     } finally {
       setProcessingSlotKey(null);
+      resetActiveCapture();
     }
   }
 
@@ -177,11 +175,12 @@ export function PhotoCaptureScreen({
           撮影済み: {completedCount} / {totalCount}
         </div>
         <div style={{ marginTop: 8, fontSize: 13, color: "#666", lineHeight: 1.6 }}>
-          撮影直後は写真をすぐ保存します。重い圧縮処理は値引開始後のアップロード時に回し、撮影中に止まりにくくしています。
+          安定性優先のため、撮影画面では実写真サムネイルを表示しません。撮影データは保持し、AI判定には送信します。
         </div>
       </section>
 
       <input
+        key={inputResetKey}
         ref={inputRef}
         type="file"
         accept="image/*"
@@ -248,27 +247,10 @@ export function PhotoCaptureScreen({
                     <div>
                       <div style={{ fontWeight: 800 }}>{slot.slotLabel}</div>
                       <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>
-                        {isProcessing ? "画像を準備中..." : slot.captured ? "撮影済み。タップで撮り直し" : "タップして撮影"}
+                        {isProcessing ? "保存中..." : slot.captured ? "撮影済み。タップで撮り直し" : "タップして撮影"}
                       </div>
                     </div>
-                    {slot.previewUrl && !failedPreviewKeys[key] ? (
-                      <img
-                        src={slot.previewUrl}
-                        alt={`${group.areaName} ${slot.slotLabel}`}
-                        loading="lazy"
-                        decoding="async"
-                        onError={() => {
-                          setFailedPreviewKeys((current) => ({ ...current, [key]: true }));
-                        }}
-                        style={{
-                          width: 72,
-                          height: 72,
-                          objectFit: "cover",
-                          borderRadius: 10,
-                          border: "1px solid #ddd",
-                        }}
-                      />
-                    ) : slot.captured ? (
+                    {slot.captured ? (
                       <div
                         aria-label={`${group.areaName} ${slot.slotLabel} 撮影済み`}
                         style={{

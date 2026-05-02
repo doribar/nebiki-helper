@@ -82,6 +82,12 @@ import {
   getPhotoCaptureKey,
   getPhotoCaptureSlotsForArea,
 } from "../domain/photoCapture";
+import {
+  clearPersistedCapturedPhotosForSession,
+  deletePersistedCapturedPhotosForArea,
+  loadPersistedCapturedPhotoSlots,
+  savePersistedCapturedPhotoSlot,
+} from "../domain/photoCaptureStore";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -619,6 +625,43 @@ export function useNebikiApp(): UseNebikiAppResult {
   useEffect(() => {
     capturedPhotoSlotsRef.current = capturedPhotoSlots;
   }, [capturedPhotoSlots]);
+
+  useEffect(() => {
+    if (state.screen !== "photo_capture" || !state.session) return;
+
+    let cancelled = false;
+    const { date: sessionDate, discountTime } = state.session;
+
+    void loadPersistedCapturedPhotoSlots({ sessionDate, discountTime })
+      .then((records) => {
+        if (cancelled || records.length === 0) return;
+
+        setCapturedPhotoSlots((current) => {
+          let changed = false;
+          const next: Record<string, CapturedPhotoSlot> = { ...current };
+
+          for (const record of records) {
+            const key = getPhotoCaptureKey(record.areaId, record.slotId);
+            if (next[key]?.file) continue;
+            next[key] = {
+              areaId: record.areaId,
+              slotId: record.slotId,
+              file: record.file,
+            };
+            changed = true;
+          }
+
+          return changed ? next : current;
+        });
+      })
+      .catch(() => {
+        // IndexedDB は復元用の補助。失敗しても通常の撮影フローは止めない。
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.screen, state.session?.date, state.session?.discountTime]);
 
   useEffect(() => {
     savePersistedNebikiState(
@@ -1297,6 +1340,16 @@ const lateSkipNotice = useMemo(() => {
 
   function clearPhotoCaptureState() {
     photoJudgeQueueRunIdRef.current += 1;
+
+    if (state.session) {
+      void clearPersistedCapturedPhotosForSession({
+        sessionDate: state.session.date,
+        discountTime: state.session.discountTime,
+      }).catch(() => {
+        // 復元用ストレージの削除に失敗しても、画面操作は止めない。
+      });
+    }
+
     for (const record of Object.values(capturedPhotoSlotsRef.current)) {
       if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
     }
@@ -1305,8 +1358,20 @@ const lateSkipNotice = useMemo(() => {
     setPhotoJudgeQueueMap({});
   }
 
-  function capturePhotoSlot(areaId: AreaId, slotId: string, file: File, previewUrl?: string) {
+  function capturePhotoSlot(areaId: AreaId, slotId: string, file: File) {
     const key = getPhotoCaptureKey(areaId, slotId);
+
+    if (state.session) {
+      void savePersistedCapturedPhotoSlot({
+        sessionDate: state.session.date,
+        discountTime: state.session.discountTime,
+        areaId,
+        slotId,
+        file,
+      }).catch(() => {
+        // IndexedDB は保険。保存に失敗しても、メモリ上の撮影状態は維持する。
+      });
+    }
 
     setCapturedPhotoSlots((current) => {
       const existing = current[key];
@@ -1318,7 +1383,6 @@ const lateSkipNotice = useMemo(() => {
           areaId,
           slotId,
           file,
-          previewUrl,
         },
       };
     });
@@ -1328,6 +1392,16 @@ const lateSkipNotice = useMemo(() => {
     areaId: AreaId,
     snapshot?: Record<string, CapturedPhotoSlot>
   ) {
+    if (state.session) {
+      void deletePersistedCapturedPhotosForArea({
+        sessionDate: state.session.date,
+        discountTime: state.session.discountTime,
+        areaId,
+      }).catch(() => {
+        // 復元用ストレージの削除に失敗しても、AI判定完了後の操作は止めない。
+      });
+    }
+
     if (snapshot) {
       for (const key of Object.keys(snapshot)) {
         if (snapshot[key]?.areaId === areaId) {

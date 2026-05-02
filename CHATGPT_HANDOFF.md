@@ -289,3 +289,32 @@ npm run dev
 
 撮影済みカウントが増えているなら、サムネ表示だけの問題。
 撮影済みカウントも増えないなら、`input[type=file]` の `onChange` が発火していない可能性がある。
+
+## 2026-05-02 追加修正: 撮影1〜2枚目の安定化
+ユーザーから、タブ再読込直後の1枚目・2枚目で「撮ってOKして戻ってもサムネが追加されない」「メモリ不足と出て撮影がなかったことになる」「2枚目で失敗すると1枚目も消える」という報告があった。
+
+対応内容:
+- `src/components/screens/PhotoCaptureScreen.tsx`
+  - 撮影直後に実画像サムネイルを表示しない。
+  - 撮影直後に `URL.createObjectURL` や canvas 圧縮を行わない。
+  - 撮影済み表示は、実写真ではなく軽い青い「撮影済み」枠に固定。
+  - hidden file input に `key` を付け、撮影選択ごとに作り直す。
+  - 撮影直後は `File` をすぐ `onCapturePhoto` に渡し、重い処理を挟まない。
+- `src/domain/photoCaptureStore.ts`
+  - IndexedDB に撮影ファイルを1枚ずつ退避するストレージを追加。
+- `src/hooks/useNebikiApp.ts`
+  - 写真撮影画面に入ったとき、同じ `sessionDate` / `discountTime` の退避写真を IndexedDB から復元。
+  - 撮影時に IndexedDB へ非同期保存。
+  - AI判定へ送信完了したエリアは、IndexedDB から該当エリア分を削除。
+  - リセット時は可能なら同セッションの退避写真を削除。
+
+意図:
+- 再読込直後の低メモリ状態で高解像度写真を画面に展開しない。
+- 2枚目の失敗で1枚目の React state が失われても、IndexedDB から復元できるようにする。
+- サムネイルの見た目より、撮影済み状態とAI判定用写真が消えないことを優先する。
+
+確認:
+- `npm run check:logic` は PASS。
+- `npx tsc -b` は PASS。
+- `npm run build` はこの環境では `vite: Permission denied` で止まったが、同じ内容を `node node_modules/vite/bin/vite.js build` で実行し PASS。
+- 写真判定サーバー側は `node --check src/*.js` で構文チェック PASS。
