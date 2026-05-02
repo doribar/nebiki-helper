@@ -108,13 +108,8 @@ export async function judgeWithOpenAI({ currentGroup, currentPhotos, examples })
     };
   }
 
-  const timeoutMs = Number(process.env.OPENAI_REQUEST_TIMEOUT_MS || process.env.AI_TIMEOUT_MS || 180000);
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 180000,
-    maxRetries: 1,
-  });
-  const model = process.env.OPENAI_MODEL || "gpt-5.4-mini";
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
   const content = [
     {

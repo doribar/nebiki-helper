@@ -191,7 +191,7 @@ function timeoutAiResult(milliseconds) {
       resolve({
         suggestion: null,
         confidence: "低",
-        reason: [`AI判定が${Math.round(milliseconds / 1000)}秒以内に終わりませんでした。売場を見て選択してください。必要なら AI_TIMEOUT_MS を延ばしてください。`],
+        reason: ["AI判定が時間内に終わりませんでした。売場を見て選択してください。"],
         raw: null,
         skipped: true,
       });
@@ -200,7 +200,7 @@ function timeoutAiResult(milliseconds) {
 }
 
 async function judgeWithTimeout(params) {
-  const timeoutMs = Number(process.env.AI_TIMEOUT_MS || 180000);
+  const timeoutMs = Number(process.env.AI_TIMEOUT_MS || 45000);
   try {
     return await Promise.race([
       judgeWithOpenAI(params),

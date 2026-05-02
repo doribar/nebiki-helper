@@ -169,19 +169,3 @@ OPENAI_MODEL=gpt-5.4-mini
 - `.env.example` には `OPENAI_API_KEY=` のように空欄またはダミー値だけを置く。
 - GitHub push protection に引っかかった場合は、commit から `.env` を削除し、APIキーは再発行する。
 
-
-## 2026-05-03 追加修正: AI参考判定のタイムアウト対策
-過去適切例を今回写真と一緒にAIへ渡す方式にした結果、リクエストが重くなり、45秒タイムアウトでは参考判定が失敗しやすい可能性が出た。
-
-変更:
-- `src/server.js`: `AI_TIMEOUT_MS` の既定値を `180000` に変更。
-- `src/openaiJudge.js`: OpenAI SDKクライアントに `OPENAI_REQUEST_TIMEOUT_MS` / `AI_TIMEOUT_MS` ベースのタイムアウトを設定。
-- `.env.example`: `AI_TIMEOUT_MS=180000` と `OPENAI_REQUEST_TIMEOUT_MS=180000` を記載。
-- 既定モデルはユーザー運用に合わせて `gpt-5.4-mini`。
-
-必要なら `.env` で以下のようにさらに延ばす。
-
-```env
-AI_TIMEOUT_MS=240000
-OPENAI_REQUEST_TIMEOUT_MS=240000
-```
