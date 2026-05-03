@@ -132,8 +132,12 @@ npm run build
 - pending 中に同じエリアをもう一度 `少ない` / `スキップ` した場合は、そのエリアだけ一時的に後ろへ回す。
 
 ## 今回の確認結果
+- ユーザーアップロード版 `nebiki-helper(5).zip` は、`.git/`、`node_modules/`、`dist/`、一時ログ類が混入していて重かった。
+- AI写真判定廃止済みなのに、未使用の `PhotoCaptureScreen.tsx` / `photoJudge.ts` / `photoCapture.ts` / `photoCaptureStore.ts` が残っており、TypeScript ビルドが落ちる状態だった。
+- 今回のクリーン版では上記の写真関連残骸を削除し、配布ZIPから `.git/`、`node_modules/`、`dist/`、`.env`、一時ログ類を除外した。
 - `npm run check:logic` PASS。主要チェックは `45 / 45 checks passed`。
-- `npm run build` PASS。
+- `npx tsc -b --pretty false` PASS。
+- `node node_modules/vite/bin/vite.js build` PASS。
 
 ## 次の ChatGPT への作業指示
 1. ユーザーがこの ZIP をアップロードしたら、まずこの `CHATGPT_HANDOFF.md` を読む。
