@@ -26,6 +26,4 @@ dist-ssr
 .env
 *.env
 !*.env.example
-nebiki-photo-judge/.env
-nebiki-photo-judge/data/
 

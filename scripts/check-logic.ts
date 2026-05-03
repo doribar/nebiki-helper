@@ -861,7 +861,71 @@ for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
 }
 
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 9} checks passed.`);
+const holidayWeekdayBaseCases = [
+  {
+    name: '祝日の15時は日曜日基準を使う',
+    date: '2026-05-05',
+    weekday: 2,
+    discountTime: '15' as DiscountTime,
+    expectedAdjusted: '日',
+    expectedNotice: '祝日の15時は日曜日の基準',
+  },
+  {
+    name: '祝日17時以降で翌日も休日なら金土基準を使う',
+    date: '2026-05-05',
+    weekday: 2,
+    discountTime: '17' as DiscountTime,
+    expectedAdjusted: '金土',
+    expectedNotice: '翌日も休日・祝日',
+  },
+  {
+    name: '祝日17時以降で翌日が平日なら火木基準を使う',
+    date: '2026-01-12',
+    weekday: 1,
+    discountTime: '17' as DiscountTime,
+    expectedAdjusted: '火木',
+    expectedNotice: '翌日が平日',
+  },
+  {
+    name: '祝日に挟まれた休日も翌日休日判定に使う',
+    date: '2026-09-22',
+    weekday: 2,
+    discountTime: '17' as DiscountTime,
+    expectedAdjusted: '金土',
+    expectedNotice: '翌日も休日・祝日',
+  },
+];
+
+for (const holidayCase of holidayWeekdayBaseCases) {
+  try {
+    const weatherInput = toWeatherInput(holidayCase.discountTime, weather({}));
+    const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, holidayCase.discountTime);
+    const info = getWeekdayBaseInfo(
+      holidayCase.weekday,
+      holidayCase.discountTime,
+      resolvedWeather,
+      holidayCase.date
+    );
+    const guide = getBasisGuideDisplay({
+      date: holidayCase.date,
+      weekday: holidayCase.weekday,
+      discountTime: holidayCase.discountTime,
+      weather: resolvedWeather,
+    });
+
+    assert.equal(info.adjusted, holidayCase.expectedAdjusted);
+    assert.ok(guide.noticeText?.includes(holidayCase.expectedNotice));
+    console.log(`PASS: ${holidayCase.name}`);
+    passed += 1;
+  } catch (error) {
+    console.error(`FAIL: ${holidayCase.name}`);
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 13} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

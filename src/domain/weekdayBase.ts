@@ -8,6 +8,7 @@ import type {
   WeekdayBaseLabel,
   WindLevel,
 } from "./types";
+import { addDaysToDateString, isJapaneseHolidayOrObserved, isJapaneseHolidayOrWeekend } from "./japaneseHoliday.ts";
 
 type ShiftTerm = {
   label: string;
@@ -89,15 +90,45 @@ function isNightFloorTime(discountTime: DiscountTime): boolean {
   );
 }
 
-function getNightAdjustedWeekdayBase(
-  weekday: number,
-  discountTime: DiscountTime
-): WeekdayBaseLabel {
-  if (weekday === 0 && isNightFloorTime(discountTime)) {
-    return "火木";
+function getHolidayAdjustedWeekdayBase(params: {
+  date?: string;
+  weekday: number;
+  discountTime: DiscountTime;
+}): { original: WeekdayBaseLabel; noticeText?: string } {
+  const isHoliday = Boolean(params.date && isJapaneseHolidayOrObserved(params.date));
+
+  if (isHoliday) {
+    if (params.discountTime === "15") {
+      return {
+        original: "日",
+        noticeText: "祝日の15時は日曜日の基準を使います。",
+      };
+    }
+
+    if (isNightFloorTime(params.discountTime) && params.date) {
+      const nextDate = addDaysToDateString(params.date, 1);
+      if (isJapaneseHolidayOrWeekend(nextDate)) {
+        return {
+          original: "金土",
+          noticeText: "祝日の17時以降で翌日も休日・祝日のため、金曜・土曜の基準を使います。",
+        };
+      }
+
+      return {
+        original: "火木",
+        noticeText: "祝日の17時以降で翌日が平日のため、火曜・木曜の基準を使います。",
+      };
+    }
   }
 
-  return getOriginalWeekdayBase(weekday);
+  if (params.weekday === 0 && isNightFloorTime(params.discountTime)) {
+    return {
+      original: "火木",
+      noticeText: "日曜日の17時以降は客足が減るため、火曜・木曜の基準を使います。",
+    };
+  }
+
+  return { original: getOriginalWeekdayBase(params.weekday) };
 }
 
 function getRelaxFloor(discountTime: DiscountTime): WeekdayBaseLabel {
@@ -567,15 +598,18 @@ export function buildMergedBonusDisplay(params: {
 }
 
 function resolveWeatherEffect(params: {
+  date?: string;
   weekday: number;
   discountTime: DiscountTime;
   weather: ResolvedWeatherInput;
 }) {
-  const original = getNightAdjustedWeekdayBase(params.weekday, params.discountTime);
-  const isSundayNight = params.weekday === 0 && isNightFloorTime(params.discountTime);
-  const noticeText = isSundayNight
-    ? "日曜日の17時以降は客足が減るため、火曜・木曜の基準を使います。"
-    : undefined;
+  const holidayAdjusted = getHolidayAdjustedWeekdayBase({
+    date: params.date,
+    weekday: params.weekday,
+    discountTime: params.discountTime,
+  });
+  const original = holidayAdjusted.original;
+  const noticeText = holidayAdjusted.noticeText;
 
   const shiftTerms = [
     getTempShiftTerm(params.weather.tempLevel),
@@ -654,9 +688,11 @@ function resolveWeatherEffect(params: {
 export function getWeekdayBaseInfo(
   weekday: number,
   discountTime: DiscountTime,
-  weather: ResolvedWeatherInput
+  weather: ResolvedWeatherInput,
+  date?: string
 ): WeekdayBaseInfo {
   const resolved = resolveWeatherEffect({
+    date,
     weekday,
     discountTime,
     weather,
@@ -676,6 +712,7 @@ export function getWeekdayBaseInfo(
 }
 
 export function getBasisGuideDisplay(params: {
+  date?: string;
   weekday: number;
   discountTime: DiscountTime;
   weather: ResolvedWeatherInput;

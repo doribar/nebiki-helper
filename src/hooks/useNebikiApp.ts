@@ -17,11 +17,6 @@ import type {
   ScreenName,
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
-  PhotoJudgeFeedbackDraft,
-  PhotoJudgeFeedbackRecord,
-  PhotoCaptureSlotView,
-  PhotoJudgeQueueRecord,
-  PhotoJudgeAreaResult,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -68,26 +63,6 @@ import {
   getNearTermWeatherForDiscount,
   resolveWeatherInputForDiscount,
 } from "../domain/hourlyWeather.ts";
-import {
-  areaJudgeToHumanText,
-  getPhotoJudgeBaseUrl,
-  compressPhotoForUpload,
-  requestPhotoJudge,
-  sendPhotoJudgeFeedback,
-  setPhotoJudgeBaseUrl as savePhotoJudgeBaseUrl,
-} from "../domain/photoJudge";
-import {
-  PHOTO_JUDGE_UPLOAD_ROUTE,
-  getAllPhotoCaptureSlots,
-  getPhotoCaptureKey,
-  getPhotoCaptureSlotsForArea,
-} from "../domain/photoCapture";
-import {
-  clearPersistedCapturedPhotosForSession,
-  deletePersistedCapturedPhotosForArea,
-  loadPersistedCapturedPhotoSlots,
-  savePersistedCapturedPhotoSlot,
-} from "../domain/photoCaptureStore";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -146,32 +121,8 @@ function getAreaJudgeText(judge: AreaJudge): string {
   }
 }
 
-type CapturedPhotoSlot = {
-  areaId: AreaId;
-  slotId: string;
-  file?: File;
-  previewUrl?: string;
-  uploaded?: boolean;
-};
 
-type CapturedPhotoItem = {
-  file: File;
-  label: string;
-};
 
-function isNormalDiscountTime(discountTime: DiscountTime): boolean {
-  return discountTime !== "20";
-}
-
-function normalizePhotoJudgeResult(result: PhotoJudgeAreaResult): PhotoJudgeAreaResult {
-  return {
-    photoGroupId: result.photoGroupId,
-    suggestion: result.suggestion,
-    confidence: result.confidence,
-    reason: [...result.reason],
-    aiSkipped: result.aiSkipped,
-  };
-}
 
 function getAreaStatusText(progress: AreaProgress): string | undefined {
   switch (progress.status) {
@@ -238,46 +189,9 @@ function createInitialState(initialSessionDraft: SessionDraft = createInitialSes
     lastReferenceAreaId: null,
     currentFlow: "normal",
     pendingDeferredAreaIds: [],
-    photoJudgeFeedbackMap: {},
     timeSwitchNotice: null,
     finalTimeStep: 0,
   };
-}
-
-function normalizePhotoJudgeFeedbackMap(
-  raw: unknown
-): Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> {
-  if (!raw || typeof raw !== "object") return {};
-
-  const result: Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> = {};
-  const source = raw as Partial<Record<AreaId, Partial<PhotoJudgeFeedbackRecord>>>;
-
-  for (const area of AREA_MASTERS) {
-    const record = source[area.id];
-    if (!record) continue;
-    if (record.areaId !== area.id) continue;
-    if (typeof record.photoGroupId !== "string" || !record.photoGroupId) continue;
-    if (typeof record.apiBaseUrl !== "string" || !record.apiBaseUrl) continue;
-    if (
-      record.humanJudge !== "多い" &&
-      record.humanJudge !== "どちらでもない" &&
-      record.humanJudge !== "少ない"
-    ) {
-      continue;
-    }
-
-    result[area.id] = {
-      areaId: area.id,
-      photoGroupId: record.photoGroupId,
-      apiBaseUrl: record.apiBaseUrl,
-      humanJudge: record.humanJudge,
-      updatedAt:
-        typeof record.updatedAt === "string" ? record.updatedAt : new Date().toISOString(),
-      savedAt: typeof record.savedAt === "string" ? record.savedAt : undefined,
-    };
-  }
-
-  return result;
 }
 
 function clonePersistedNebikiStateSnapshot(params: {
@@ -445,9 +359,6 @@ function normalizeLoadedState(
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",
     pendingDeferredAreaIds:
       (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [],
-    photoJudgeFeedbackMap: normalizePhotoJudgeFeedbackMap(
-      (loaded as Partial<AppState>).photoJudgeFeedbackMap
-    ),
     timeSwitchNotice:
       (loaded as Partial<AppState>).timeSwitchNotice ?? null,
     finalTimeStep:
@@ -462,20 +373,6 @@ function getWeekdayText(weekday: number): string {
   return `${map[weekday] ?? ""}曜日`;
 }
 
-function getWeekdayBaseText(label: string): string {
-  switch (label) {
-    case "日":
-      return "日";
-    case "金土":
-      return "金・土";
-    case "火木":
-      return "火・木";
-    case "月水":
-      return "月・水";
-    default:
-      return "基準不明";
-  }
-}
 
 function getNextSkipTargetDiscountTime(
   discountTime: DiscountTime
@@ -594,13 +491,7 @@ export function useNebikiApp(): UseNebikiAppResult {
   const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(null);
   const [undoNotice, setUndoNotice] = useState<string | null>(null);
-  const [photoJudgeBaseUrl, setPhotoJudgeBaseUrlState] = useState(() => getPhotoJudgeBaseUrl());
-  const [capturedPhotoSlots, setCapturedPhotoSlots] = useState<Record<string, CapturedPhotoSlot>>({});
-  const [photoJudgeQueueMap, setPhotoJudgeQueueMap] = useState<Partial<Record<AreaId, PhotoJudgeQueueRecord>>>({});
   const screenHistoryRef = useRef<NavigationSnapshot[]>([]);
-  const photoJudgeFeedbackSaveInFlightRef = useRef(false);
-  const capturedPhotoSlotsRef = useRef<Record<string, CapturedPhotoSlot>>({});
-  const photoJudgeQueueRunIdRef = useRef(0);
 
   function buildNavigationSnapshot(baseState: AppState = state) {
     return createNavigationSnapshot({
@@ -622,46 +513,7 @@ export function useNebikiApp(): UseNebikiAppResult {
   const previousRenderRef = useRef<NavigationSnapshot | null>(null);
   const suppressHistoryPushRef = useRef(false);
 
-  useEffect(() => {
-    capturedPhotoSlotsRef.current = capturedPhotoSlots;
-  }, [capturedPhotoSlots]);
 
-  useEffect(() => {
-    if (state.screen !== "photo_capture" || !state.session) return;
-
-    let cancelled = false;
-    const { date: sessionDate, discountTime } = state.session;
-
-    void loadPersistedCapturedPhotoSlots({ sessionDate, discountTime })
-      .then((records) => {
-        if (cancelled || records.length === 0) return;
-
-        setCapturedPhotoSlots((current) => {
-          let changed = false;
-          const next: Record<string, CapturedPhotoSlot> = { ...current };
-
-          for (const record of records) {
-            const key = getPhotoCaptureKey(record.areaId, record.slotId);
-            if (next[key]?.file) continue;
-            next[key] = {
-              areaId: record.areaId,
-              slotId: record.slotId,
-              file: record.file,
-            };
-            changed = true;
-          }
-
-          return changed ? next : current;
-        });
-      })
-      .catch(() => {
-        // IndexedDB は復元用の補助。失敗しても通常の撮影フローは止めない。
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [state.screen, state.session?.date, state.session?.discountTime]);
 
   useEffect(() => {
     savePersistedNebikiState(
@@ -681,62 +533,6 @@ export function useNebikiApp(): UseNebikiAppResult {
     dailyMessageState,
   ]);
 
-  useEffect(() => {
-    if (state.screen !== "done") return;
-    if (photoJudgeFeedbackSaveInFlightRef.current) return;
-
-    const pendingRecords = Object.values(state.photoJudgeFeedbackMap ?? {}).filter(
-      (record): record is PhotoJudgeFeedbackRecord =>
-        Boolean(record?.photoGroupId && record.apiBaseUrl && record.humanJudge && !record.savedAt)
-    );
-
-    if (pendingRecords.length === 0) return;
-
-    photoJudgeFeedbackSaveInFlightRef.current = true;
-
-    Promise.allSettled(
-      pendingRecords.map((record) =>
-        sendPhotoJudgeFeedback({
-          apiBaseUrl: record.apiBaseUrl,
-          photoGroupId: record.photoGroupId,
-          humanJudge: record.humanJudge,
-        })
-      )
-    )
-      .then((results) => {
-        const savedPhotoGroupIds = pendingRecords
-          .filter((_record, index) => results[index]?.status === "fulfilled")
-          .map((record) => record.photoGroupId);
-
-        if (savedPhotoGroupIds.length === 0) return;
-
-        const savedAt = new Date().toISOString();
-        setState((prev) => {
-          const currentMap = prev.photoJudgeFeedbackMap ?? {};
-          const nextMap: Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> = {};
-
-          for (const area of AREA_MASTERS) {
-            const record = currentMap[area.id];
-            if (!record) continue;
-
-            nextMap[area.id] = savedPhotoGroupIds.includes(record.photoGroupId)
-              ? { ...record, savedAt }
-              : record;
-          }
-
-          return {
-            ...prev,
-            photoJudgeFeedbackMap: nextMap,
-          };
-        });
-      })
-      .catch((error) => {
-        console.error("写真判定のまとめ保存に失敗しました", error);
-      })
-      .finally(() => {
-        photoJudgeFeedbackSaveInFlightRef.current = false;
-      });
-  }, [state.screen, state.photoJudgeFeedbackMap]);
 
   useEffect(() => {
     const historyResult = appendNavigationHistory({
@@ -944,12 +740,14 @@ export function useNebikiApp(): UseNebikiAppResult {
   return getWeekdayBaseInfo(
     sessionSource.weekday,
     sessionSource.discountTime,
-    sessionSourceResolvedWeather
+    sessionSourceResolvedWeather,
+    sessionSource.date
   );
 }, [
   sessionSource.weekday,
   sessionSource.discountTime,
   sessionSourceResolvedWeather,
+  sessionSource.date,
 ]);
 
   const lateTimeBonus = useMemo(() => {
@@ -1008,6 +806,7 @@ const lateSkipNotice = useMemo(() => {
 
   const basisGuide = useMemo(() => {
   const baseGuide = getBasisGuideDisplay({
+    date: sessionSource.date,
     weekday: sessionSource.weekday,
     discountTime: sessionSource.discountTime,
     weather: sessionSourceResolvedWeather,
@@ -1030,6 +829,7 @@ const lateSkipNotice = useMemo(() => {
   sessionSource.discountTime,
   sessionSourceResolvedWeather,
   lateTimeBonusNotice,
+  sessionSource.date,
 ]);
 
   const weatherGuideText = useMemo(() => {
@@ -1041,35 +841,8 @@ const lateSkipNotice = useMemo(() => {
     return state.areaProgressMap[state.currentAreaId];
   }, [state.currentAreaId, state.areaProgressMap]);
 
-  const currentPhotoJudgeFeedback = useMemo(() => {
-    if (!state.currentAreaId) return null;
-    return state.photoJudgeFeedbackMap[state.currentAreaId] ?? null;
-  }, [state.currentAreaId, state.photoJudgeFeedbackMap]);
 
-  const currentPhotoJudgeQueueRecord = useMemo(() => {
-    if (!state.currentAreaId) return null;
-    return photoJudgeQueueMap[state.currentAreaId] ?? null;
-  }, [state.currentAreaId, photoJudgeQueueMap]);
 
-  const photoCaptureSlots = useMemo<PhotoCaptureSlotView[]>(() => {
-    return getAllPhotoCaptureSlots().map((slot) => {
-      const captured = capturedPhotoSlots[getPhotoCaptureKey(slot.areaId, slot.slotId)];
-      return {
-        areaId: slot.areaId,
-        areaName: slot.areaName,
-        slotId: slot.slotId,
-        slotLabel: slot.slotLabel,
-        captured: Boolean(captured),
-        previewUrl: captured?.previewUrl,
-      };
-    });
-  }, [capturedPhotoSlots]);
-
-  const photoCaptureCompletedCount = useMemo(() => {
-    return photoCaptureSlots.filter((slot) => slot.captured).length;
-  }, [photoCaptureSlots]);
-
-  const photoCaptureTotalCount = photoCaptureSlots.length;
 
   const rateDisplay = useMemo(() => {
     if (!state.session || !currentAreaProgress) return null;
@@ -1299,383 +1072,6 @@ const lateSkipNotice = useMemo(() => {
     return buildNavigationSnapshot(baseState);
   }
 
-  function buildPhotoJudgeFeedbackMap(params: {
-    prev: AppState;
-    areaId: AreaId;
-    selection: Exclude<AreaJudge, null>;
-    draft?: PhotoJudgeFeedbackDraft | null;
-  }): Partial<Record<AreaId, PhotoJudgeFeedbackRecord>> {
-    const existing = params.prev.photoJudgeFeedbackMap[params.areaId] ?? null;
-    const source = params.draft?.photoGroupId ? params.draft : existing;
-
-    if (!source?.photoGroupId || !source.apiBaseUrl) {
-      return params.prev.photoJudgeFeedbackMap;
-    }
-
-    const humanJudge = areaJudgeToHumanText(params.selection);
-    const sameSavedRecord =
-      existing?.photoGroupId === source.photoGroupId &&
-      existing?.apiBaseUrl === source.apiBaseUrl &&
-      existing?.humanJudge === humanJudge
-        ? existing.savedAt
-        : undefined;
-
-    return {
-      ...params.prev.photoJudgeFeedbackMap,
-      [params.areaId]: {
-        areaId: params.areaId,
-        photoGroupId: source.photoGroupId,
-        apiBaseUrl: source.apiBaseUrl,
-        humanJudge,
-        updatedAt: new Date().toISOString(),
-        savedAt: sameSavedRecord,
-      },
-    };
-  }
-
-  function updatePhotoJudgeBaseUrl(url: string) {
-    setPhotoJudgeBaseUrlState(url);
-    savePhotoJudgeBaseUrl(url);
-  }
-
-  function clearPhotoCaptureState() {
-    photoJudgeQueueRunIdRef.current += 1;
-
-    if (state.session) {
-      void clearPersistedCapturedPhotosForSession({
-        sessionDate: state.session.date,
-        discountTime: state.session.discountTime,
-      }).catch(() => {
-        // 復元用ストレージの削除に失敗しても、画面操作は止めない。
-      });
-    }
-
-    for (const record of Object.values(capturedPhotoSlotsRef.current)) {
-      if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
-    }
-    capturedPhotoSlotsRef.current = {};
-    setCapturedPhotoSlots({});
-    setPhotoJudgeQueueMap({});
-  }
-
-  function capturePhotoSlot(areaId: AreaId, slotId: string, file: File) {
-    const key = getPhotoCaptureKey(areaId, slotId);
-
-    if (state.session) {
-      void savePersistedCapturedPhotoSlot({
-        sessionDate: state.session.date,
-        discountTime: state.session.discountTime,
-        areaId,
-        slotId,
-        file,
-      }).catch(() => {
-        // IndexedDB は保険。保存に失敗しても、メモリ上の撮影状態は維持する。
-      });
-    }
-
-    setCapturedPhotoSlots((current) => {
-      const existing = current[key];
-      if (existing?.previewUrl) URL.revokeObjectURL(existing.previewUrl);
-
-      return {
-        ...current,
-        [key]: {
-          areaId,
-          slotId,
-          file,
-        },
-      };
-    });
-  }
-
-  function releaseCapturedPhotoFilesForArea(
-    areaId: AreaId,
-    snapshot?: Record<string, CapturedPhotoSlot>
-  ) {
-    if (state.session) {
-      void deletePersistedCapturedPhotosForArea({
-        sessionDate: state.session.date,
-        discountTime: state.session.discountTime,
-        areaId,
-      }).catch(() => {
-        // 復元用ストレージの削除に失敗しても、AI判定完了後の操作は止めない。
-      });
-    }
-
-    if (snapshot) {
-      for (const key of Object.keys(snapshot)) {
-        if (snapshot[key]?.areaId === areaId) {
-          delete snapshot[key];
-        }
-      }
-    }
-
-    setCapturedPhotoSlots((current) => {
-      let changed = false;
-      const next: Record<string, CapturedPhotoSlot> = { ...current };
-
-      for (const [key, record] of Object.entries(current)) {
-        if (record.areaId !== areaId) continue;
-        if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
-        next[key] = {
-          areaId: record.areaId,
-          slotId: record.slotId,
-          uploaded: true,
-        };
-        changed = true;
-      }
-
-      return changed ? next : current;
-    });
-  }
-
-  function getCapturedPhotoItemsForArea(
-    snapshot: Record<string, CapturedPhotoSlot>,
-    areaId: AreaId
-  ): CapturedPhotoItem[] {
-    return getPhotoCaptureSlotsForArea(areaId)
-      .map((slot) => {
-        const captured = snapshot[getPhotoCaptureKey(areaId, slot.slotId)];
-        if (!captured?.file) return null;
-        return {
-          file: captured.file,
-          label: slot.slotLabel,
-        };
-      })
-      .filter((item): item is CapturedPhotoItem => Boolean(item));
-  }
-
-  function hasCompleteCapturedPhotosForArea(
-    snapshot: Record<string, CapturedPhotoSlot>,
-    areaId: AreaId
-  ): boolean {
-    return getPhotoCaptureSlotsForArea(areaId).every((slot) => {
-      const captured = snapshot[getPhotoCaptureKey(areaId, slot.slotId)];
-      return Boolean(captured?.file);
-    });
-  }
-
-  function getCapturedPhotoFilesForArea(
-    snapshot: Record<string, CapturedPhotoSlot>,
-    areaId: AreaId
-  ): File[] {
-    return getCapturedPhotoItemsForArea(snapshot, areaId).map((item) => item.file);
-  }
-
-  function buildInitialPhotoJudgeQueueMap(
-    snapshot: Record<string, CapturedPhotoSlot>
-  ): Partial<Record<AreaId, PhotoJudgeQueueRecord>> {
-    const next: Partial<Record<AreaId, PhotoJudgeQueueRecord>> = {};
-
-    for (const areaId of PHOTO_JUDGE_UPLOAD_ROUTE) {
-      if (!hasCompleteCapturedPhotosForArea(snapshot, areaId)) continue;
-      const photos = getCapturedPhotoFilesForArea(snapshot, areaId);
-      if (photos.length === 0) continue;
-      next[areaId] = {
-        areaId,
-        status: "queued",
-        photoCount: photos.length,
-      };
-    }
-
-    return next;
-  }
-
-  function attachPhotoJudgeFeedbackIfAlreadyJudged(params: {
-    areaId: AreaId;
-    result: PhotoJudgeAreaResult;
-    apiBaseUrl: string;
-  }) {
-    if (!params.result.photoGroupId) return;
-
-    setState((prev) => {
-      const selection = prev.areaProgressMap[params.areaId]?.areaJudge;
-      if (!selection) return prev;
-
-      return {
-        ...prev,
-        photoJudgeFeedbackMap: buildPhotoJudgeFeedbackMap({
-          prev,
-          areaId: params.areaId,
-          selection,
-          draft: {
-            photoGroupId: params.result.photoGroupId,
-            apiBaseUrl: params.apiBaseUrl,
-          },
-        }),
-      };
-    });
-  }
-
-  async function requestPhotoJudgeForArea(params: {
-    runId: number;
-    areaId: AreaId;
-    apiBaseUrl: string;
-    weekdayTextValue: string;
-    weekdayBaseTextValue: string;
-    timeTextValue: string;
-    sessionDateValue: string;
-    snapshot: Record<string, CapturedPhotoSlot>;
-  }) {
-    if (!hasCompleteCapturedPhotosForArea(params.snapshot, params.areaId)) return;
-
-    const photoItems = getCapturedPhotoItemsForArea(params.snapshot, params.areaId);
-    const photos = photoItems.map((item) => item.file);
-    const photoLabels = photoItems.map((item) => item.label);
-    if (photos.length === 0) return;
-
-    setPhotoJudgeQueueMap((current) => ({
-      ...current,
-      [params.areaId]: {
-        areaId: params.areaId,
-        status: "uploading",
-        photoCount: photos.length,
-      },
-    }));
-
-    try {
-      const uploadPhotos: File[] = [];
-      for (const photo of photos) {
-        if (photoJudgeQueueRunIdRef.current !== params.runId) return;
-        uploadPhotos.push(await compressPhotoForUpload(photo));
-      }
-
-      const result = normalizePhotoJudgeResult(
-        await requestPhotoJudge({
-          apiBaseUrl: params.apiBaseUrl,
-          areaName: getAreaName(params.areaId),
-          weekdayText: params.weekdayTextValue,
-          weekdayBaseText: params.weekdayBaseTextValue,
-          timeText: params.timeTextValue,
-          sessionDate: params.sessionDateValue,
-          photos: uploadPhotos,
-          photoLabels,
-        })
-      );
-
-      if (photoJudgeQueueRunIdRef.current !== params.runId) return;
-
-      setPhotoJudgeQueueMap((current) => ({
-        ...current,
-        [params.areaId]: {
-          areaId: params.areaId,
-          status: "done",
-          photoCount: photos.length,
-          result,
-        },
-      }));
-
-      attachPhotoJudgeFeedbackIfAlreadyJudged({
-        areaId: params.areaId,
-        result,
-        apiBaseUrl: params.apiBaseUrl,
-      });
-
-      releaseCapturedPhotoFilesForArea(params.areaId, params.snapshot);
-    } catch (error) {
-      if (photoJudgeQueueRunIdRef.current !== params.runId) return;
-
-      setPhotoJudgeQueueMap((current) => ({
-        ...current,
-        [params.areaId]: {
-          areaId: params.areaId,
-          status: "error",
-          photoCount: photos.length,
-          error:
-            error instanceof Error
-              ? error.message
-              : "写真判定でエラーが発生しました。",
-        },
-      }));
-    }
-  }
-
-  async function runPhotoJudgeQueue(params: {
-    runId: number;
-    apiBaseUrl: string;
-    weekdayTextValue: string;
-    weekdayBaseTextValue: string;
-    timeTextValue: string;
-    sessionDateValue: string;
-    snapshot: Record<string, CapturedPhotoSlot>;
-  }) {
-    for (const areaId of PHOTO_JUDGE_UPLOAD_ROUTE) {
-      if (photoJudgeQueueRunIdRef.current !== params.runId) return;
-      await requestPhotoJudgeForArea({
-        ...params,
-        areaId,
-      });
-    }
-  }
-
-  function startPhotoJudgeQueueFromCapturedPhotos() {
-    const snapshot = { ...capturedPhotoSlotsRef.current };
-    const initialQueueMap = buildInitialPhotoJudgeQueueMap(snapshot);
-
-    setPhotoJudgeQueueMap(initialQueueMap);
-
-    if (!state.session || Object.keys(initialQueueMap).length === 0) return;
-
-    const runId = photoJudgeQueueRunIdRef.current + 1;
-    photoJudgeQueueRunIdRef.current = runId;
-
-    void runPhotoJudgeQueue({
-      runId,
-      apiBaseUrl: photoJudgeBaseUrl,
-      weekdayTextValue: getWeekdayText(state.session.weekday),
-      weekdayBaseTextValue: getWeekdayBaseText(weekdayBaseInfo.adjusted),
-      timeTextValue: getBasisTimeText(state.session.discountTime),
-      sessionDateValue: state.session.date,
-      snapshot,
-    });
-  }
-
-  function retryPhotoJudgeForArea(areaId: AreaId) {
-    if (!state.session) return;
-
-    const snapshot = { ...capturedPhotoSlotsRef.current };
-    const photos = getCapturedPhotoFilesForArea(snapshot, areaId);
-    if (photos.length === 0) return;
-
-    const runId = photoJudgeQueueRunIdRef.current + 1;
-    photoJudgeQueueRunIdRef.current = runId;
-
-    void requestPhotoJudgeForArea({
-      runId,
-      areaId,
-      apiBaseUrl: photoJudgeBaseUrl,
-      weekdayTextValue: getWeekdayText(state.session.weekday),
-      weekdayBaseTextValue: getWeekdayBaseText(weekdayBaseInfo.adjusted),
-      timeTextValue: getBasisTimeText(state.session.discountTime),
-      sessionDateValue: state.session.date,
-      snapshot,
-    });
-  }
-
-  function startValueAfterPhotoCapture(withPhotos: boolean) {
-    if (!state.session || !isNormalDiscountTime(state.session.discountTime)) return;
-
-    const firstAreaId = getFirstAvailableAreaId(state.areaProgressMap);
-
-    setUndoSnapshot(createUndoSnapshot());
-    setUndoNotice(null);
-    setState((prev) => ({
-      ...prev,
-      screen: firstAreaId ? "area_judge" : "done",
-      currentAreaId: firstAreaId,
-      lastReferenceAreaId: firstAreaId ?? prev.lastReferenceAreaId,
-      timeSwitchNotice: null,
-      finalTimeStep: 0,
-    }));
-
-    if (withPhotos) {
-      startPhotoJudgeQueueFromCapturedPhotos();
-    } else {
-      photoJudgeQueueRunIdRef.current += 1;
-      setPhotoJudgeQueueMap({});
-    }
-  }
-
   function resolveResumeState(prev: AppState, nextSession: SessionData, requestedScreen: ScreenName) {
     if (nextSession.discountTime === "20") {
       return {
@@ -1739,23 +1135,15 @@ const lateSkipNotice = useMemo(() => {
 
   function applyAreaJudgeSelection(
     prev: AppState,
-    selection: Exclude<AreaJudge, null>,
-    photoJudgeFeedback?: PhotoJudgeFeedbackDraft | null
+    selection: Exclude<AreaJudge, null>
   ): AppState {
     if (!prev.currentAreaId) return prev;
     const currentAreaId = prev.currentAreaId;
-    const photoJudgeFeedbackMap = buildPhotoJudgeFeedbackMap({
-      prev,
-      areaId: currentAreaId,
-      selection,
-      draft: photoJudgeFeedback,
-    });
 
     if (selection === "many" || selection === "normal") {
       return {
         ...prev,
         screen: "rate_display",
-        photoJudgeFeedbackMap,
         timeSwitchNotice: null,
         finalTimeStep: 0,
         areaProgressMap: {
@@ -1786,7 +1174,7 @@ const lateSkipNotice = useMemo(() => {
       const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
 
       return moveToNextPendingOrDone({
-        prev: { ...prev, photoJudgeFeedbackMap },
+        prev,
         updatedMap,
         referenceAreaId: currentAreaId,
         deferredAreaIds: nextDeferredAreaIds,
@@ -1801,7 +1189,6 @@ const lateSkipNotice = useMemo(() => {
         session: nextSession,
         timeSwitchNotice,
         areaProgressMap: updatedMap,
-        photoJudgeFeedbackMap,
         currentAreaId: null,
         lastReferenceAreaId: currentAreaId,
         currentFlow: "normal",
@@ -1819,7 +1206,6 @@ const lateSkipNotice = useMemo(() => {
         session: nextSession,
         timeSwitchNotice,
         areaProgressMap: updatedMap,
-        photoJudgeFeedbackMap,
         currentAreaId: nextAreaId,
         lastReferenceAreaId: currentAreaId,
         pendingDeferredAreaIds: [],
@@ -1829,7 +1215,7 @@ const lateSkipNotice = useMemo(() => {
     }
 
     return moveToNextPendingOrDone({
-      prev: { ...prev, photoJudgeFeedbackMap },
+      prev,
       updatedMap,
       referenceAreaId: currentAreaId,
       nextSession,
@@ -1838,10 +1224,6 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startSession() {
-    if (!state.session) {
-      clearPhotoCaptureState();
-    }
-
     const now = new Date();
     const startedAt = now.toISOString();
     const currentDate = formatLocalDate(now);
@@ -1913,7 +1295,7 @@ const lateSkipNotice = useMemo(() => {
           nextSession.discountTime === "20"
             ? "final_time"
             : firstAreaId
-            ? "photo_capture"
+            ? "area_judge"
             : "done",
         session: nextSession,
         areaProgressMap,
@@ -1958,15 +1340,12 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function judgeCurrentArea(
-    judge: Exclude<AreaJudge, null>,
-    photoJudgeFeedback?: PhotoJudgeFeedbackDraft | null
-  ) {
+  function judgeCurrentArea(judge: Exclude<AreaJudge, null>) {
     setAreaJudgeSelection(judge);
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
-    setState((prev) => applyAreaJudgeSelection(prev, judge, photoJudgeFeedback));
+    setState((prev) => applyAreaJudgeSelection(prev, judge));
   }
 
   function goBackOneScreen() {
@@ -2208,7 +1587,6 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function resetApp() {
-    clearPhotoCaptureState();
     screenHistoryRef.current = [];
     previousRenderRef.current = null;
     suppressHistoryPushRef.current = false;
@@ -2242,20 +1620,10 @@ const lateSkipNotice = useMemo(() => {
   canChooseSkipTarget,
   skipTargetOptions,
   doneSummaryItems,
-  currentPhotoJudgeFeedback,
-  photoJudgeBaseUrl,
-  photoCaptureSlots,
-  photoCaptureCompletedCount,
-  photoCaptureTotalCount,
-  currentPhotoJudgeQueueRecord,
 },
     actions: {
       updateSessionDraft,
       startSession,
-      updatePhotoJudgeBaseUrl,
-      capturePhotoSlot,
-      startValueAfterPhotoCapture,
-      retryPhotoJudgeForArea,
       goBackOneScreen,
       startEditingConditions,
       undoLastAction,

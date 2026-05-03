@@ -5,7 +5,6 @@ import { AreaJudgeScreen } from "../components/screens/AreaJudgeScreen";
 import { RateDisplayScreen } from "../components/screens/RateDisplayScreen";
 import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
-import { PhotoCaptureScreen } from "../components/screens/PhotoCaptureScreen";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -31,25 +30,6 @@ export function AppRouter({ app }: AppRouterProps) {
         />
       );
 
-    case "photo_capture":
-      if (!state.session) return null;
-
-      return (
-        <PhotoCaptureScreen
-          weekdayText={derived.weekdayText}
-          timeText={derived.timeText}
-          slots={derived.photoCaptureSlots}
-          completedCount={derived.photoCaptureCompletedCount}
-          totalCount={derived.photoCaptureTotalCount}
-          photoJudgeBaseUrl={derived.photoJudgeBaseUrl}
-          onChangePhotoJudgeBaseUrl={actions.updatePhotoJudgeBaseUrl}
-          onCapturePhoto={actions.capturePhotoSlot}
-          onStartWithPhotos={() => actions.startValueAfterPhotoCapture(true)}
-          onStartWithoutPhotos={() => actions.startValueAfterPhotoCapture(false)}
-          onGoBack={actions.goBackOneScreen}
-        />
-      );
-
     case "area_judge":
       if (!derived.currentAreaName) return null;
 
@@ -63,18 +43,12 @@ export function AppRouter({ app }: AppRouterProps) {
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
           timeSwitchNotice={derived.timeSwitchNotice}
-          currentPhotoJudgeFeedback={derived.currentPhotoJudgeFeedback}
-          currentPhotoJudgeQueueRecord={derived.currentPhotoJudgeQueueRecord}
-          photoJudgeBaseUrl={derived.photoJudgeBaseUrl}
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
           canChooseSkipTarget={derived.canChooseSkipTarget}
           skipTargetOptions={derived.skipTargetOptions}
           onChooseSkipTarget={actions.chooseSkipTargetArea}
-          onRetryPhotoJudge={() => {
-            if (state.currentAreaId) actions.retryPhotoJudgeForArea(state.currentAreaId);
-          }}
         />
       );
 
@@ -128,8 +102,5 @@ export function AppRouter({ app }: AppRouterProps) {
           onGoBack={actions.goBackOneScreen}
         />
       );
-
-    default:
-      return null;
   }
 }
