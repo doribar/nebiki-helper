@@ -251,7 +251,6 @@ export type UseNebikiAppActions = {
   undoLastAction: () => void;
   markBentoJudgeGuideShown: () => void;
   confirmDailyNotice: () => void;
-
   judgeCurrentArea: (judge: Exclude<AreaJudge, null>) => void;
   skipCurrentArea: () => void;
   chooseSkipTargetArea: (areaId: AreaId) => void;

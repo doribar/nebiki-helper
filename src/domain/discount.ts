@@ -22,7 +22,7 @@ export function getBaseRate(discountTime: DiscountTime): number {
 }
 
 function capNormalDiscountRate(rawRate: number): number {
-  return Math.min(Math.max(rawRate, 0), 30);
+  return Math.min(rawRate, 30);
 }
 
 function toRateLine(main: string, note?: string): RateLine {
@@ -71,13 +71,9 @@ export function getNormalTimeRateDisplay(params: {
   const normalRate = capNormalDiscountRate(areaAdjustedBase);
 
   return {
-    many: toRateLine(
-      manyRate > 0 ? `${manyRate}%` : "引かない",
-      buildManyNote(manyRate)
-    ),
+    many: toRateLine(`${manyRate}%`, buildManyNote(manyRate)),
     few: toRateLine("引かない"),
-    normal:
-      normalRate > 0 ? toRateLine(`${normalRate}%`) : toRateLine("引かない"),
+    normal: toRateLine(`${normalRate}%`),
   };
 }
 

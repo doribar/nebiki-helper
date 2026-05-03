@@ -81,12 +81,12 @@ function RateRow({
   );
 }
 
-function NoticeItems() {
+export function NoticeItems() {
   return (
     <div style={{ lineHeight: 1.8 }}>
       ・2個は多いにしない
       <br />
-      ・1個は最終値引以外引かない
+      ・少ない判定の商品は最終値引以外では引かない
       <br />
       ・見た目が悪い個別商品は表示値引率に+10%
       <br />
@@ -96,6 +96,23 @@ function NoticeItems() {
       <br />
       ・夜によく売れる商品は表示値引率から−10%
     </div>
+  );
+}
+
+function NoticeSection() {
+  return (
+    <section
+      style={{
+        border: "1px solid #ddd",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        background: "#fffdf7",
+      }}
+    >
+      <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
+      <NoticeItems />
+    </section>
   );
 }
 
@@ -140,7 +157,6 @@ export function RateDisplayScreen({
   }, [areaName, canChooseSkipTarget]);
 
   const manyColor = "#d32f2f";
-  const fewColor = "#1976d2";
   const normalColor = "#2e7d32";
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
 
@@ -158,17 +174,7 @@ export function RateDisplayScreen({
           }
         />
 
-        <section
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
-          <NoticeItems />
-        </section>
+        <NoticeSection />
 
         <PrimaryButton onClick={onConfirmDailyNotice ?? (() => {})}>OK</PrimaryButton>
       </main>
@@ -261,7 +267,6 @@ export function RateDisplayScreen({
                   line={rateDisplay.normal}
                   color={normalColor}
                 />
-                <RateRow label="少ない" line={rateDisplay.few} color={fewColor} />
               </>
             ) : null}
           </>
@@ -372,6 +377,8 @@ export function RateDisplayScreen({
           </div>
         </div>
       </section>
+
+      {!isFinalTime ? <NoticeSection /> : null}
     </main>
   );
 }

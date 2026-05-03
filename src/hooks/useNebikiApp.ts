@@ -1340,6 +1340,7 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
+
   function judgeCurrentArea(judge: Exclude<AreaJudge, null>) {
     setAreaJudgeSelection(judge);
     setUndoSnapshot(createUndoSnapshot());
