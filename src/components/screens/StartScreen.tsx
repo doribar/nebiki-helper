@@ -70,7 +70,7 @@ function resolveDiscountTime(date = new Date()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
   if (minutes < 16 * 60 + 30) return "15";
-  if (minutes < 18 * 60 + 30) return "17";
+  if (minutes < 18 * 60 + 15) return "17";
   if (minutes < 19 * 60 + 30) return "18";
   if (minutes < 20 * 60 + 30) return "19";
   return "20";

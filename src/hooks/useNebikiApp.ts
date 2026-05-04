@@ -75,9 +75,9 @@ function resolveDiscountTime(date = new Date()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
   if (minutes < 16 * 60 + 30) return "15";
-  if (minutes < 18 * 60 + 30) return "17";
-  if (minutes < 19 * 60 + 30) return "18";
-  if (minutes < 20 * 60 + 30) return "19";
+  if (minutes < 18 * 60 + 15) return "17";
+  if (minutes < 19 * 60 + 15) return "18";
+  if (minutes < 20 * 60 + 15) return "19";
   return "20";
 }
 
@@ -98,9 +98,15 @@ function getBasisTimeText(discountTime: DiscountTime): string {
 
 function buildTimeSwitchNotice(to: DiscountTime): string {
   if (to === "20") {
-    return `現在時刻が${getBasisTimeText(
-      to
-    )}を過ぎたため、ここから最終値引ルールで表示します。`;
+    return "20時15分を過ぎたため、19時30分の値引を打ち切り、20時30分の最終値引を開始します。";
+  }
+
+  if (to === "19") {
+    return "19時15分を過ぎたため、18時30分の値引を打ち切り、19時30分の値引を開始します。";
+  }
+
+  if (to === "18") {
+    return "18時15分を過ぎたため、17時の値引を打ち切り、18時30分の値引を開始します。";
   }
 
   return `現在時刻が${getBasisTimeText(
@@ -382,6 +388,13 @@ function getNextSkipTargetDiscountTime(
   return null;
 }
 
+function shouldStartNewSessionOnTimeSwitch(current: DiscountTime, next: DiscountTime): boolean {
+  return (
+    (current === "17" && next === "18") ||
+    (current === "18" && next === "19")
+  );
+}
+
 function createAreaProgressMapWithAutoSkippedAreas(
   skippedAreaIds: AreaId[]
 ): Record<AreaId, AreaProgress> {
@@ -597,12 +610,111 @@ export function useNebikiApp(): UseNebikiAppResult {
   }, [state.session?.startedAt]);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 30000);
+    const updateNow = () => setNowMs(Date.now());
+    const onVisibilityChange = () => {
+      if (!document.hidden) updateNow();
+    };
 
-    return () => window.clearInterval(id);
+    const id = window.setInterval(updateNow, 30000);
+    window.addEventListener("focus", updateNow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", updateNow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!state.session || state.session.manualDiscountTimeOverride) return;
+
+    const now = new Date(nowMs);
+    const nowDiscountTime = resolveDiscountTime(now);
+
+    if (state.session.discountTime === nowDiscountTime) return;
+
+    if (shouldStartNewSessionOnTimeSwitch(state.session.discountTime, nowDiscountTime)) {
+      let nextSkipRecords = nextSessionSkipRecords;
+
+      setState((prev) => {
+        if (!prev.session || prev.session.manualDiscountTimeOverride) return prev;
+
+        const nextNowDiscountTime = resolveDiscountTime(new Date(nowMs));
+        if (!shouldStartNewSessionOnTimeSwitch(prev.session.discountTime, nextNowDiscountTime)) {
+          return prev;
+        }
+
+        let areaProgressMap = createInitialAreaProgressMap();
+
+        if (nextNowDiscountTime === "18" || nextNowDiscountTime === "19") {
+          const consumed = consumeSkipRecordsInMemory({
+            currentRecords: nextSkipRecords,
+            date: prev.session.date,
+            targetDiscountTime: nextNowDiscountTime,
+          });
+
+          nextSkipRecords = consumed.remainingRecords;
+          areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedAreaIds);
+        }
+
+        const firstAreaId = getFirstAvailableAreaId(areaProgressMap);
+
+        return {
+          ...prev,
+          session: {
+            ...prev.session,
+            discountTime: nextNowDiscountTime,
+            weather: {
+              ...prev.session.weather,
+              hourlyForecasts: cloneHourlyForecasts(prev.session.weather.hourlyForecasts),
+            },
+            startedAt: new Date(nowMs).toISOString(),
+          },
+          areaProgressMap,
+          currentAreaId: firstAreaId,
+          lastReferenceAreaId: firstAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          timeSwitchNotice: buildTimeSwitchNotice(nextNowDiscountTime),
+          finalTimeStep: 0,
+          screen: firstAreaId ? "area_judge" : "done",
+        };
+      });
+
+      setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
+      setAreaJudgeSelection(null);
+      setResumeTargetScreen(null);
+      setUndoSnapshot(null);
+      setUndoNotice(null);
+      return;
+    }
+
+    if (nowDiscountTime === "20") {
+      setState((prev) => {
+        if (!prev.session || prev.session.manualDiscountTimeOverride) return prev;
+        if (prev.session.discountTime === "20") return prev;
+
+        return {
+          ...prev,
+          session: {
+            ...prev.session,
+            discountTime: "20",
+            weather: {
+              ...prev.session.weather,
+              hourlyForecasts: cloneHourlyForecasts(prev.session.weather.hourlyForecasts),
+            },
+          },
+          timeSwitchNotice: buildTimeSwitchNotice("20"),
+          currentAreaId: null,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          finalTimeStep: 0,
+          screen: "final_time",
+        };
+      });
+    }
+  }, [state.session, nowMs, nextSessionSkipRecords]);
 
   useEffect(() => {
   if (state.screen !== "start") return;
@@ -752,7 +864,6 @@ export function useNebikiApp(): UseNebikiAppResult {
 
   const lateTimeBonus = useMemo(() => {
   if (!state.session) return 0;
-  if (state.session.discountTime === "15") return 0;
   if (state.session.discountTime === "20") return 0;
 
   // 手動で時刻を切り替えている場合は、実時間による +5% を適用しない
@@ -761,19 +872,24 @@ export function useNebikiApp(): UseNebikiAppResult {
   const now = new Date(nowMs);
   const minutes = now.getHours() * 60 + now.getMinutes();
 
-  // 17時基準の値引中に18時を超えた
+  // 15時基準の値引中に16時を超えた
+  if (state.session.discountTime === "15") {
+    return minutes >= 16 * 60 ? 5 : 0;
+  }
+
+  // 17時基準の値引中に18時を超えた。18時15分以降は18時30分値引へ切り替える。
   if (state.session.discountTime === "17") {
-    return minutes >= 18 * 60 ? 5 : 0;
+    return minutes >= 18 * 60 && minutes < 18 * 60 + 15 ? 5 : 0;
   }
 
-  // 18時30分基準の値引中に19時を超えた
+  // 18時30分基準の値引中に19時を超えた。19時15分以降は19時30分値引へ切り替える。
   if (state.session.discountTime === "18") {
-    return minutes >= 19 * 60 ? 5 : 0;
+    return minutes >= 19 * 60 && minutes < 19 * 60 + 15 ? 5 : 0;
   }
 
-  // 19時30分基準の値引中に20時を超えた
+  // 19時30分基準の値引中に20時を超えた。20時15分以降は20時30分の最終値引へ切り替える。
   if (state.session.discountTime === "19") {
-    return minutes >= 20 * 60 ? 5 : 0;
+    return minutes >= 20 * 60 && minutes < 20 * 60 + 15 ? 5 : 0;
   }
 
   return 0;
@@ -782,16 +898,20 @@ export function useNebikiApp(): UseNebikiAppResult {
 const lateTimeBonusNotice = useMemo(() => {
   if (!state.session || lateTimeBonus === 0) return null;
 
+  if (state.session.discountTime === "15") {
+    return "16時を過ぎたため値引率を5%上げています。";
+  }
+
   if (state.session.discountTime === "17") {
-    return "18時を過ぎたため値引率を5%上げています。";
+    return "18時を過ぎたため値引率を5%上げています。18時15分を過ぎたら17時値引を打ち切ります。";
   }
 
   if (state.session.discountTime === "18") {
-    return "19時を過ぎたため値引率を5%上げています。";
+    return "19時を過ぎたため値引率を5%上げています。19時15分を過ぎたら18時30分値引を打ち切ります。";
   }
 
   if (state.session.discountTime === "19") {
-    return "20時を過ぎたため値引率を5%上げています。";
+    return "20時を過ぎたため値引率を5%上げています。20時15分を過ぎたら19時30分値引を打ち切り、最終値引を開始します。";
   }
 
   return null;
@@ -799,6 +919,14 @@ const lateTimeBonusNotice = useMemo(() => {
 
 const lateSkipNotice = useMemo(() => {
   if (!state.session || lateTimeBonus === 0) return null;
+
+  if (state.session.discountTime === "15") {
+    return "16時を過ぎたため、今回は5%強めて値引します。";
+  }
+
+  if (state.session.discountTime === "19") {
+    return "20時を過ぎたため、今回は5%強めて値引します。";
+  }
 
   return `次の基準時刻に近づいているため、今回は5%強めて値引します。
 このエリアは次回の値引でスキップします。`;
