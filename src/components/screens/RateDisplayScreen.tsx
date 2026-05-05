@@ -84,17 +84,17 @@ function RateRow({
 export function NoticeItems() {
   return (
     <div style={{ lineHeight: 1.8 }}>
-      ・2個は多いにしない
+      ・<strong>2個の商品</strong>は<strong>多いにしない</strong>
       <br />
-      ・少ない判定の商品は最終値引以外では引かない
+      ・<strong>少ない判定の商品</strong>は最終値引以外では<strong>引かない</strong>
       <br />
-      ・見た目が悪い個別商品は表示値引率に+10%
+      ・<strong>見た目が悪い個別商品</strong>は表示値引率に<strong>+10%</strong>
       <br />
-      ・不人気な商品は表示値引率に+10%
+      ・<strong>不人気な商品</strong>は表示値引率に<strong>+10%</strong>
       <br />
-      ・その日の売れ方が順調なとき定番・広告商品は表示値引率から-10%
+      ・<strong>その日の売れ方が順調なとき</strong>定番・広告商品は表示値引率から<strong>-10%</strong>
       <br />
-      ・夜によく売れる商品は表示値引率から−10%
+      ・<strong>夜によく売れる商品</strong>は表示値引率から<strong>−10%</strong>
     </div>
   );
 }
