@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AreaJudge, SkipTargetOption } from "../../domain/types";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
@@ -96,6 +96,7 @@ export function AreaJudgeScreen({
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [displayJudgeGuide, setDisplayJudgeGuide] = useState(showJudgeGuide);
+  const previousAreaNameRef = useRef(areaName);
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -112,8 +113,16 @@ export function AreaJudgeScreen({
   ].filter((group) => group.options.length > 0);
 
   useEffect(() => {
-    setShowSkipTargetPicker(false);
-    setDisplayJudgeGuide(showJudgeGuide);
+    if (previousAreaNameRef.current !== areaName) {
+      previousAreaNameRef.current = areaName;
+      setShowSkipTargetPicker(false);
+      setDisplayJudgeGuide(showJudgeGuide);
+      return;
+    }
+
+    if (showJudgeGuide) {
+      setDisplayJudgeGuide(true);
+    }
   }, [areaName, showJudgeGuide]);
 
   useEffect(() => {

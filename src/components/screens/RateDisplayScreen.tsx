@@ -107,7 +107,7 @@ function NoticeSection() {
         borderRadius: 12,
         padding: 16,
         marginBottom: 16,
-        background: "#fffdf7",
+        background: "#fff",
       }}
     >
       <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>

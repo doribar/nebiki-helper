@@ -208,3 +208,27 @@ npm run build
 ### 2026-05-04 この追記時点の確認結果
 - `npm run check:logic` PASS。主要チェックは `45 / 45 checks passed`。
 - `npm run build` PASS。
+
+## 2026-05-03 追記：注意事項カードの背景
+
+- 注意事項カードは常時表示されるため、強い警告色やクリーム色ではなく、既存UIに馴染む白背景 `#fff` にする。
+- 1日1回の注意事項確認画面と、値引率表示画面下部の再確認用注意事項カードはどちらも同じ `NoticeSection` を使う。
+- 最終値引画面には引き続き注意事項カードを表示しない。
+
+## 2026-05-05 追記：エリア判定案内が一瞬で消える問題の修正
+
+ユーザー報告：注意事項は表示されるが、弁当・麺類エリアのエリア判定案内（「まず多いかどうかを見る → 少ないかどうかを見る → どちらでもなければどちらでもない」）が、localStorage を消しても表示されない。
+
+原因：`AreaJudgeScreen` が `displayJudgeGuide` を表示した直後に `onJudgeGuideShown` で日次表示済みにし、その親 state 更新で `showJudgeGuide=false` が戻ってきたとき、同じエリア表示中でも `setDisplayJudgeGuide(false)` してしまっていた。結果として案内が出てもすぐ消え、ユーザーには見えない状態だった。
+
+修正内容：
+
+- `src/components/screens/AreaJudgeScreen.tsx` で `useRef` を使い、同じエリア表示中は `showJudgeGuide` が false に戻っても、すでに表示中の案内を消さないようにした。
+- エリアが変わったときだけ `displayJudgeGuide` をそのエリアの `showJudgeGuide` に合わせてリセットする。
+- これにより、弁当・麺類エリアでその日まだ案内を見ていない場合は、案内が画面に残ったまま見える。
+- 表示済み記録は従来どおり `nebiki-helper/daily-message-state.bentoJudgeGuideShownDate` に保存される。
+
+### 2026-05-05 この追記時点の確認結果
+- `npm run check:logic` PASS。主要チェックは `45 / 45 checks passed`。
+- `npx tsc -b --pretty false` PASS。
+- `node node_modules/vite/bin/vite.js build` PASS。
