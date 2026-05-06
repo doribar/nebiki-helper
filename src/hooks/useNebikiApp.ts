@@ -63,6 +63,10 @@ import {
   getNearTermWeatherForDiscount,
   resolveWeatherInputForDiscount,
 } from "../domain/hourlyWeather.ts";
+import {
+  getHolidayStreakBentoBonus,
+  getHolidayStreakBentoBonusTerm,
+} from "../domain/holidayStreakBonus";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -932,6 +936,18 @@ const lateSkipNotice = useMemo(() => {
 このエリアは次回の値引でスキップします。`;
 }, [state.session, lateTimeBonus]);
 
+const holidayStreakBentoBonusTerm = useMemo(() => {
+  if (!state.session || !state.currentAreaId) return undefined;
+
+  return getHolidayStreakBentoBonusTerm({
+    date: state.session.date,
+    discountTime: state.session.discountTime,
+    areaId: state.currentAreaId,
+  });
+}, [state.session?.date, state.session?.discountTime, state.currentAreaId]);
+
+const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
+
   const basisGuide = useMemo(() => {
   const baseGuide = getBasisGuideDisplay({
     date: sessionSource.date,
@@ -940,7 +956,9 @@ const lateSkipNotice = useMemo(() => {
     weather: sessionSourceResolvedWeather,
   });
 
-  if (!lateTimeBonusNotice) {
+  const extraBonusTerms = holidayStreakBentoBonusTerm ? [holidayStreakBentoBonusTerm] : [];
+
+  if (!lateTimeBonusNotice && extraBonusTerms.length === 0) {
     return baseGuide;
   }
 
@@ -950,6 +968,7 @@ const lateSkipNotice = useMemo(() => {
       baseBonusParts: baseGuide.bonusCalcParts,
       baseRateBonus: weekdayBaseInfo.baseRateBonus,
       lateTimeBonus,
+      extraBonusTerms,
     }),
   };
 }, [
@@ -957,6 +976,9 @@ const lateSkipNotice = useMemo(() => {
   sessionSource.discountTime,
   sessionSourceResolvedWeather,
   lateTimeBonusNotice,
+  lateTimeBonus,
+  holidayStreakBentoBonusTerm,
+  weekdayBaseInfo.baseRateBonus,
   sessionSource.date,
 ]);
 
@@ -979,7 +1001,7 @@ const lateSkipNotice = useMemo(() => {
 
     return getNormalTimeRateDisplay({
       discountTime: state.session.discountTime,
-      weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+      weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus + holidayStreakBentoBonus,
       areaJudge: currentAreaProgress.areaJudge,
       isSunday: state.session.weekday === 0 && state.session.discountTime === "15",
     });
@@ -988,6 +1010,7 @@ const lateSkipNotice = useMemo(() => {
   currentAreaProgress,
   weekdayBaseInfo.baseRateBonus,
   lateTimeBonus,
+  holidayStreakBentoBonus,
 ]);
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
@@ -1003,9 +1026,16 @@ const lateSkipNotice = useMemo(() => {
     if (!session || session.discountTime === "20") return [];
 
     const discountTime = session.discountTime;
-    const weatherBonus = weekdayBaseInfo.baseRateBonus + lateTimeBonus;
+    const baseWeatherBonus = weekdayBaseInfo.baseRateBonus + lateTimeBonus;
 
     return DONE_SUMMARY_ROUTE.map((areaId) => {
+      const weatherBonus =
+        baseWeatherBonus +
+        getHolidayStreakBentoBonus({
+          date: session.date,
+          discountTime,
+          areaId,
+        });
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 

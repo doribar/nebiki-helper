@@ -575,6 +575,7 @@ export function buildMergedBonusDisplay(params: {
   baseBonusParts?: string[];
   baseRateBonus: number;
   lateTimeBonus: number;
+  extraBonusTerms?: PercentTerm[];
 }): Pick<
   BasisGuideDisplay,
   "bonusSummaryText" | "bonusDetailLines" | "bonusCalcText" | "bonusResultText" | "bonusCalcParts" | "bonusTotal"
@@ -585,7 +586,13 @@ export function buildMergedBonusDisplay(params: {
     parts.push(`次の基準時刻が近い ${formatSignedValue(params.lateTimeBonus, "%")}`);
   }
 
-  const total = params.baseRateBonus + params.lateTimeBonus;
+  const extraBonusTerms = params.extraBonusTerms ?? [];
+  for (const term of extraBonusTerms) {
+    parts.push(toPercentCalcPart(term));
+  }
+
+  const extraBonusTotal = extraBonusTerms.reduce((sum, term) => sum + term.value, 0);
+  const total = params.baseRateBonus + params.lateTimeBonus + extraBonusTotal;
 
   return {
     bonusSummaryText: buildBonusSummaryText(total),

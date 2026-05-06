@@ -162,3 +162,19 @@ export function isWeekendDate(dateString: string): boolean {
 export function isJapaneseHolidayOrWeekend(dateString: string): boolean {
   return isWeekendDate(dateString) || isJapaneseHolidayOrObserved(dateString);
 }
+export function getHolidayOrWeekendStreakDay(dateString: string): number {
+  if (!isJapaneseHolidayOrWeekend(dateString)) return 0;
+
+  let count = 1;
+  let current = dateString;
+
+  while (true) {
+    const previous = addDaysToDateString(current, -1);
+    if (previous === current || !isJapaneseHolidayOrWeekend(previous)) {
+      return count;
+    }
+
+    count += 1;
+    current = previous;
+  }
+}

@@ -9,6 +9,8 @@ import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
+import { getHolidayOrWeekendStreakDay } from '../src/domain/japaneseHoliday.ts';
+import { getHolidayStreakBentoBonus, getHolidayStreakBentoBonusTerm } from '../src/domain/holidayStreakBonus.ts';
 import {
   appendNavigationHistory,
   cloneNavigationSnapshot,
@@ -924,8 +926,75 @@ for (const holidayCase of holidayWeekdayBaseCases) {
   }
 }
 
+try {
+  assert.equal(getHolidayOrWeekendStreakDay('2026-05-01'), 0);
+  assert.equal(getHolidayOrWeekendStreakDay('2026-05-02'), 1);
+  assert.equal(getHolidayOrWeekendStreakDay('2026-05-05'), 4);
+  assert.equal(
+    getHolidayStreakBentoBonus({
+      date: '2026-05-05',
+      discountTime: '17',
+      areaId: 'bento_men',
+    }),
+    10
+  );
+  assert.equal(
+    getHolidayStreakBentoBonus({
+      date: '2026-05-05',
+      discountTime: '17',
+      areaId: 'balance_bento',
+    }),
+    10
+  );
+  assert.equal(
+    getHolidayStreakBentoBonus({
+      date: '2026-05-04',
+      discountTime: '17',
+      areaId: 'bento_men',
+    }),
+    0
+  );
+  assert.equal(
+    getHolidayStreakBentoBonus({
+      date: '2026-05-05',
+      discountTime: '15',
+      areaId: 'bento_men',
+    }),
+    0
+  );
+  assert.equal(
+    getHolidayStreakBentoBonus({
+      date: '2026-05-05',
+      discountTime: '17',
+      areaId: 'fry_chicken',
+    }),
+    0
+  );
+  assert.deepEqual(getHolidayStreakBentoBonusTerm({
+    date: '2026-05-05',
+    discountTime: '17',
+    areaId: 'bento_men',
+  }), { label: '土日祝連休4日目以降の弁当系', value: 10 });
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 13} checks passed.`);
+  const mergedHolidayStreakBonus = buildMergedBonusDisplay({
+    baseBonusParts: [],
+    baseRateBonus: 0,
+    lateTimeBonus: 0,
+    extraBonusTerms: [{ label: '土日祝連休4日目以降の弁当系', value: 10 }],
+  });
+  assert.equal(mergedHolidayStreakBonus.bonusSummaryText, '値引率補正：+10％');
+  assert.ok(mergedHolidayStreakBonus.bonusDetailLines?.includes('土日祝連休4日目以降の弁当系 +10%'));
+
+  console.log('PASS: 土日祝連休4日目以降は17時以降の弁当系だけ+10%');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 土日祝連休4日目以降は17時以降の弁当系だけ+10%');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 14} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
