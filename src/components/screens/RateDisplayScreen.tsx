@@ -156,8 +156,8 @@ export function RateDisplayScreen({
     setShowSkipTargetPicker(false);
   }, [areaName, canChooseSkipTarget]);
 
-  const manyColor = "#d32f2f";
-  const normalColor = "#2e7d32";
+  const manyColor = "#ff0000";
+  const normalColor = "#008000";
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
 
   if (showDailyNotice) {
@@ -249,11 +249,11 @@ export function RateDisplayScreen({
               <span>を基準に考えて</span>
               <br />
               <span>各商品の量が「</span>
-              <span style={{ color: "#d32f2f", fontWeight: 700 }}>多い</span>
+              <span style={{ color: "#ff0000", fontWeight: 700 }}>多い</span>
               <span>・</span>
-              <span style={{ color: "#2e7d32", fontWeight: 700 }}>どちらでもない</span>
+              <span style={{ color: "#008000", fontWeight: 700 }}>どちらでもない</span>
               <span>・</span>
-              <span style={{ color: "#1976d2", fontWeight: 700 }}>少ない</span>
+              <span style={{ color: "#0000ff", fontWeight: 700 }}>少ない</span>
               <span>」のどれかを確認し、</span>
               <br />
               <span>完了したら以下の値引率で値引きをしてください。</span>
@@ -356,6 +356,10 @@ export function RateDisplayScreen({
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
+          <div>
+            ・アウトパック
+            <span style={{ color: "#00897b", fontWeight: 700 }}>➡多い側に寄せる</span>
+          </div>
           ・商品が大パックと小パックで分かれている
           <span style={{ color: "#ab47bc", fontWeight: 700 }}>➡大パックだけ値引</span>
           <br />

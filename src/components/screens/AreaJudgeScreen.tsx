@@ -41,6 +41,13 @@ const subActionButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
+function getJudgeLabelColor(label: string) {
+  if (label === "多い") return "#ff0000";
+  if (label === "どちらでもない") return "#008000";
+  if (label === "少ない") return "#0000ff";
+  return "#000";
+}
+
 function JudgeOptionButton({
   label,
   subLabel,
@@ -66,7 +73,7 @@ function JudgeOptionButton({
         cursor: "pointer",
       }}
     >
-      <div style={{ fontSize: 16, fontWeight: 800 }}>
+      <div style={{ fontSize: 16, fontWeight: 800, color: getJudgeLabelColor(label) }}>
         {label}
         {subLabel ? (
           <span style={{ fontSize: 13, color: "#555", fontWeight: 600, marginLeft: 6 }}>

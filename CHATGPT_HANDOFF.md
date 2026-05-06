@@ -26,7 +26,7 @@
 PowerShell で以下を実行する。
 
 ```powershell
-Expand-Archive .\nebiki-helper-no-ai-holiday-fix.zip -DestinationPath C:\nebiki-helper -Force
+Expand-Archive .\<受け取ったZIPファイル名>.zip -DestinationPath C:\nebiki-helper -Force
 cd C:\nebiki-helper\nebiki-helper
 npm install
 npm run dev
@@ -245,3 +245,28 @@ npm run build
 - `夜によく売れる商品` / `−10%`
 
 実画面では括弧は出さず、該当語句だけ `<strong>` で強調する。
+
+## 2026-05-05 追記：値引率表示画面「迷ったら…」のアウトパック補足
+
+ユーザー要望により、値引率表示画面下部の「迷ったら…」欄に、アウトパックは多い側に寄せる旨を追記した。
+
+- 変更ファイル: `src/components/screens/RateDisplayScreen.tsx`
+- 追加表示: `アウトパック ➡多い側に寄せる`
+- エリア判定画面側の「迷ったら…」には今回追記していない。
+
+### 2026-05-05 この追記時点の確認結果
+- `npm run check:logic` PASS。主要チェックは `45 / 45 checks passed`。
+- `npx tsc -b --pretty false` PASS。
+- `node node_modules/vite/bin/vite.js build` PASS。
+
+
+## 2026-05-05 追記：迷ったら欄・判定色のUI調整
+
+ユーザー要望により、値引率表示画面下部の「迷ったら…」欄と判定色を調整した。
+
+- `・アウトパック ➡多い側に寄せる` を「迷ったら…」欄の先頭へ移動
+- アウトパックの `➡多い側に寄せる` は、白背景でも見やすいティール系 `#00897b`
+- `多い` は `#ff0000`
+- `どちらでもない` は、黄緑では見づらかったため緑 `#008000`
+- `少ない` は `#0000ff`
+- 反映箇所は、エリア判定画面の選択ボタンラベル、値引率表示画面の説明文中ラベル、値引率表示画面の値引率行
