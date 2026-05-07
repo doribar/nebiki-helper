@@ -63,10 +63,6 @@ import {
   getNearTermWeatherForDiscount,
   resolveWeatherInputForDiscount,
 } from "../domain/hourlyWeather.ts";
-import {
-  getHolidayStreakBentoBonus,
-  getHolidayStreakBentoBonusTerm,
-} from "../domain/holidayStreakBonus";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -160,6 +156,16 @@ function getNextUnstartedAreaId(
     NORMAL_ROUTE.find((areaId) => areaProgressMap[areaId]?.status === "unstarted") ??
     null
   );
+}
+
+
+function hasRemainingUnstartedArea(
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  currentAreaId: AreaId
+): boolean {
+  return Object.values(areaProgressMap).some((progress) => {
+    return progress.areaId !== currentAreaId && progress.status === "unstarted";
+  });
 }
 
 function createInitialSessionDraft(): SessionDraft {
@@ -826,7 +832,6 @@ export function useNebikiApp(): UseNebikiAppResult {
 
   const showDailyNoticeBeforeRate =
     state.screen === "rate_display" &&
-    state.currentAreaId === "bento_men" &&
     state.session?.discountTime !== "20" &&
     dailyMessageState.rateNoticeShownDate !== activeSessionDate;
 
@@ -936,19 +941,7 @@ const lateSkipNotice = useMemo(() => {
 このエリアは次回の値引でスキップします。`;
 }, [state.session, lateTimeBonus]);
 
-const holidayStreakBentoBonusTerm = useMemo(() => {
-  if (!state.session || !state.currentAreaId) return undefined;
-
-  return getHolidayStreakBentoBonusTerm({
-    date: state.session.date,
-    discountTime: state.session.discountTime,
-    areaId: state.currentAreaId,
-  });
-}, [state.session?.date, state.session?.discountTime, state.currentAreaId]);
-
-const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
-
-  const basisGuide = useMemo(() => {
+    const basisGuide = useMemo(() => {
   const baseGuide = getBasisGuideDisplay({
     date: sessionSource.date,
     weekday: sessionSource.weekday,
@@ -956,9 +949,7 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
     weather: sessionSourceResolvedWeather,
   });
 
-  const extraBonusTerms = holidayStreakBentoBonusTerm ? [holidayStreakBentoBonusTerm] : [];
-
-  if (!lateTimeBonusNotice && extraBonusTerms.length === 0) {
+  if (!lateTimeBonusNotice) {
     return baseGuide;
   }
 
@@ -968,7 +959,6 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
       baseBonusParts: baseGuide.bonusCalcParts,
       baseRateBonus: weekdayBaseInfo.baseRateBonus,
       lateTimeBonus,
-      extraBonusTerms,
     }),
   };
 }, [
@@ -977,7 +967,6 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
   sessionSourceResolvedWeather,
   lateTimeBonusNotice,
   lateTimeBonus,
-  holidayStreakBentoBonusTerm,
   weekdayBaseInfo.baseRateBonus,
   sessionSource.date,
 ]);
@@ -1001,7 +990,7 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
 
     return getNormalTimeRateDisplay({
       discountTime: state.session.discountTime,
-      weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus + holidayStreakBentoBonus,
+      weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
       areaJudge: currentAreaProgress.areaJudge,
       isSunday: state.session.weekday === 0 && state.session.discountTime === "15",
     });
@@ -1010,7 +999,6 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
   currentAreaProgress,
   weekdayBaseInfo.baseRateBonus,
   lateTimeBonus,
-  holidayStreakBentoBonus,
 ]);
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
@@ -1029,13 +1017,7 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
     const baseWeatherBonus = weekdayBaseInfo.baseRateBonus + lateTimeBonus;
 
     return DONE_SUMMARY_ROUTE.map((areaId) => {
-      const weatherBonus =
-        baseWeatherBonus +
-        getHolidayStreakBentoBonus({
-          date: session.date,
-          discountTime,
-          areaId,
-        });
+      const weatherBonus = baseWeatherBonus;
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
@@ -1317,6 +1299,16 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
 
     const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
+    const currentVisitedAt = new Date().toISOString();
+    const judgedCurrentMap = {
+      ...prev.areaProgressMap,
+      [currentAreaId]: {
+        ...prev.areaProgressMap[currentAreaId],
+        areaJudge: "few" as const,
+        visitedAt: currentVisitedAt,
+      },
+    };
+
     const updatedMap = {
       ...prev.areaProgressMap,
       [currentAreaId]: {
@@ -1324,22 +1316,9 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
         areaJudge: "few" as const,
         status: "postponed_few" as const,
         skipReason: "few" as const,
-        visitedAt: new Date().toISOString(),
+        visitedAt: currentVisitedAt,
       },
     };
-
-    if (prev.currentFlow === "pending") {
-      const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
-
-      return moveToNextPendingOrDone({
-        prev,
-        updatedMap,
-        referenceAreaId: currentAreaId,
-        deferredAreaIds: nextDeferredAreaIds,
-        nextSession,
-        timeSwitchNotice,
-      });
-    }
 
     if (nextSession?.discountTime === "20") {
       return {
@@ -1354,6 +1333,32 @@ const holidayStreakBentoBonus = holidayStreakBentoBonusTerm?.value ?? 0;
         finalTimeStep: 0,
         screen: "final_time",
       };
+    }
+
+    if (!hasRemainingUnstartedArea(judgedCurrentMap, currentAreaId)) {
+      return {
+        ...prev,
+        session: nextSession,
+        timeSwitchNotice,
+        areaProgressMap: judgedCurrentMap,
+        currentAreaId,
+        lastReferenceAreaId: currentAreaId,
+        finalTimeStep: 0,
+        screen: "rate_display",
+      };
+    }
+
+    if (prev.currentFlow === "pending") {
+      const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
+
+      return moveToNextPendingOrDone({
+        prev,
+        updatedMap,
+        referenceAreaId: currentAreaId,
+        deferredAreaIds: nextDeferredAreaIds,
+        nextSession,
+        timeSwitchNotice,
+      });
     }
 
     const nextAreaId = getNextNormalArea(currentAreaId);
