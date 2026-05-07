@@ -6,7 +6,6 @@ export type AreaId =
   | "futomaki_chumaki"
   | "sushi"
   | "onigiri"
-  | "sekihan_takikomi"
   | "balance_bento"
   | "chuka_fish"
   | "yakitori"

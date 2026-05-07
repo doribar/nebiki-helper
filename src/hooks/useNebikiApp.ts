@@ -195,6 +195,55 @@ function createInitialAreaProgressMap(): Record<AreaId, AreaProgress> {
   }, {} as Record<AreaId, AreaProgress>);
 }
 
+function isValidAreaId(value: unknown): value is AreaId {
+  return typeof value === "string" && NORMAL_ROUTE.includes(value as AreaId);
+}
+
+function isValidAreaStatus(value: unknown): value is AreaProgress["status"] {
+  return (
+    value === "unstarted" ||
+    value === "completed" ||
+    value === "skipped_manual" ||
+    value === "postponed_few"
+  );
+}
+
+function isValidAreaJudge(value: unknown): value is AreaJudge {
+  return value === "many" || value === "normal" || value === "few" || value === null;
+}
+
+function normalizeAreaProgressMap(
+  raw?: Partial<Record<string, AreaProgress>> | null
+): Record<AreaId, AreaProgress> {
+  const base = createInitialAreaProgressMap();
+
+  if (!raw || typeof raw !== "object") {
+    return base;
+  }
+
+  for (const area of AREA_MASTERS) {
+    const progress = raw[area.id];
+    if (!progress || typeof progress !== "object") continue;
+
+    base[area.id] = {
+      ...base[area.id],
+      status: isValidAreaStatus(progress.status) ? progress.status : "unstarted",
+      areaJudge: isValidAreaJudge(progress.areaJudge) ? progress.areaJudge : null,
+      visitedAt:
+        typeof progress.visitedAt === "string" ? progress.visitedAt : undefined,
+      completedAt:
+        typeof progress.completedAt === "string" ? progress.completedAt : undefined,
+      skipReason:
+        progress.skipReason === "manual" || progress.skipReason === "few"
+          ? progress.skipReason
+          : undefined,
+    };
+  }
+
+  return base;
+}
+
+
 function createInitialState(initialSessionDraft: SessionDraft = createInitialSessionDraft()): AppState {
   return {
     screen: "start",
@@ -364,17 +413,27 @@ function normalizeLoadedState(
 ): AppState {
   if (!loaded) return createInitialState(initialSessionDraft);
 
+  const areaProgressMap = normalizeAreaProgressMap(loaded.areaProgressMap);
+  const currentAreaId = isValidAreaId(loaded.currentAreaId)
+    ? loaded.currentAreaId
+    : null;
+  const rawLastReferenceAreaId = (loaded as Partial<AppState>).lastReferenceAreaId;
+  const lastReferenceAreaId = isValidAreaId(rawLastReferenceAreaId)
+    ? rawLastReferenceAreaId
+    : null;
+  const rawPendingDeferredAreaIds =
+    (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [];
+  const pendingDeferredAreaIds = rawPendingDeferredAreaIds.filter(isValidAreaId);
+
   return {
     ...loaded,
     session: normalizeSessionData(loaded.session),
     sessionDraft: normalizeSessionDraft(loaded.sessionDraft),
-    areaProgressMap: loaded.areaProgressMap ?? createInitialAreaProgressMap(),
-    currentAreaId: loaded.currentAreaId ?? null,
-    lastReferenceAreaId:
-      (loaded as Partial<AppState>).lastReferenceAreaId ?? null,
+    areaProgressMap,
+    currentAreaId,
+    lastReferenceAreaId,
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",
-    pendingDeferredAreaIds:
-      (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [],
+    pendingDeferredAreaIds,
     timeSwitchNotice:
       (loaded as Partial<AppState>).timeSwitchNotice ?? null,
     finalTimeStep:
@@ -411,6 +470,8 @@ function createAreaProgressMapWithAutoSkippedAreas(
   const base = createInitialAreaProgressMap();
 
   for (const areaId of skippedAreaIds) {
+    if (!isValidAreaId(areaId) || !base[areaId]) continue;
+
     base[areaId] = {
       ...base[areaId],
       status: "completed",

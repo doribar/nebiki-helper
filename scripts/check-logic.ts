@@ -346,7 +346,6 @@ function makeState(partial: Partial<AppState>): AppState {
       futomaki_chumaki: { areaId: 'futomaki_chumaki', status: 'unstarted', areaJudge: null },
       sushi: { areaId: 'sushi', status: 'unstarted', areaJudge: null },
       onigiri: { areaId: 'onigiri', status: 'unstarted', areaJudge: null },
-      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'unstarted', areaJudge: null },
       balance_bento: { areaId: 'balance_bento', status: 'unstarted', areaJudge: null },
       chuka_fish: { areaId: 'chuka_fish', status: 'unstarted', areaJudge: null },
       yakitori: { areaId: 'yakitori', status: 'unstarted', areaJudge: null },
@@ -1000,7 +999,7 @@ console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず10�
 
 
 try {
-  assert.deepEqual(NORMAL_ROUTE.slice(8), [
+  assert.deepEqual(NORMAL_ROUTE.slice(7), [
     'onigiri',
     'sushi',
     'futomaki_chumaki',
@@ -1094,7 +1093,6 @@ try {
       futomaki_chumaki: { areaId: 'futomaki_chumaki', status: 'skipped_manual', areaJudge: null },
       sushi: { areaId: 'sushi', status: 'skipped_manual', areaJudge: null },
       onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
-      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
       balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
       chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
       yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
@@ -1110,7 +1108,6 @@ try {
       'inari',
       'hosomaki',
       'onigiri',
-      'sekihan_takikomi',
       'balance_bento',
       'chuka_fish',
       'yakitori',
@@ -1124,7 +1121,6 @@ try {
       'yakitori',
       'chuka_fish',
       'balance_bento',
-      'sekihan_takikomi',
       'onigiri',
       'hosomaki',
     ],
@@ -1148,7 +1144,6 @@ try {
       futomaki_chumaki: { areaId: 'futomaki_chumaki', status: 'skipped_manual', areaJudge: null },
       sushi: { areaId: 'sushi', status: 'skipped_manual', areaJudge: null },
       onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
-      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
       balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
       chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
       yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
@@ -1164,7 +1159,6 @@ try {
       'inari',
       'hosomaki',
       'onigiri',
-      'sekihan_takikomi',
       'balance_bento',
       'chuka_fish',
       'yakitori',
@@ -1178,7 +1172,6 @@ try {
       'yakitori',
       'chuka_fish',
       'balance_bento',
-      'sekihan_takikomi',
       'onigiri',
       'hosomaki',
       'inari',
@@ -1198,7 +1191,6 @@ try {
     areaProgressMap: {
       ...makeState({}).areaProgressMap,
       onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
-      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
       balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
       chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
       yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
@@ -1210,7 +1202,6 @@ try {
     referenceAreaId: 'bento_men',
     deferredAreaIds: [
       'onigiri',
-      'sekihan_takikomi',
       'balance_bento',
       'chuka_fish',
       'yakitori',
@@ -1235,7 +1226,6 @@ try {
     areaProgressMap: {
       ...makeState({}).areaProgressMap,
       onigiri: { areaId: 'onigiri', status: 'skipped_manual', areaJudge: null },
-      sekihan_takikomi: { areaId: 'sekihan_takikomi', status: 'skipped_manual', areaJudge: null },
       balance_bento: { areaId: 'balance_bento', status: 'skipped_manual', areaJudge: null },
       chuka_fish: { areaId: 'chuka_fish', status: 'skipped_manual', areaJudge: null },
       yakitori: { areaId: 'yakitori', status: 'skipped_manual', areaJudge: null },
@@ -1247,7 +1237,6 @@ try {
     referenceAreaId: 'tempura',
     deferredAreaIds: [
       'onigiri',
-      'sekihan_takikomi',
       'balance_bento',
       'chuka_fish',
       'yakitori',
@@ -1295,12 +1284,11 @@ try {
     deferredAreaIds = [...deferredAreaIds, candidate.areaId];
   }
 
-  assert.deepEqual(sequence.slice(0, 13), [
+  assert.deepEqual(sequence.slice(0, 12), [
     'futomaki_chumaki',
     'inari',
     'hosomaki',
     'onigiri',
-    'sekihan_takikomi',
     'balance_bento',
     'chuka_fish',
     'yakitori',
