@@ -374,3 +374,30 @@ npm run build
 - `npm run check:logic` PASS。主要チェックは `49 / 49 checks passed`。
 - `npm run build` PASS。
 - `npm ci` 時に既存依存関係の `npm audit` 警告は出るが、今回の仕様変更範囲では未対応。
+
+## 2026-05-08 追記：値引き画面の数量確認文言の並び順変更
+
+ユーザー要望により、値引率表示画面の案内文にある数量確認の並び順を変更した。
+
+変更前:
+
+```text
+各商品の量が「多い・どちらでもない・少ない」のどれかを確認し、
+完了したら以下の値引率で値引きをしてください。
+```
+
+変更後:
+
+```text
+各商品の量が「多い・少ない・どちらでもない」のどれかを確認し、
+完了したら以下の値引率で値引きをしてください。
+```
+
+変更ファイル:
+
+- `src/components/screens/RateDisplayScreen.tsx`
+
+確認結果:
+
+- `npm run check:logic` PASS。
+- `npm run build` はこの文言のみの変更では未再実行。依存関係の再取得確認で `npm ci --offline` は npm キャッシュ不足（`zod-validation-error`）により失敗。直前の GW ルール版では `npm run build` PASS 済み。

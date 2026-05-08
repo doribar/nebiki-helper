@@ -251,9 +251,9 @@ export function RateDisplayScreen({
               <span>各商品の量が「</span>
               <span style={{ color: "#ff0000", fontWeight: 700 }}>多い</span>
               <span>・</span>
-              <span style={{ color: "#008000", fontWeight: 700 }}>どちらでもない</span>
-              <span>・</span>
               <span style={{ color: "#0000ff", fontWeight: 700 }}>少ない</span>
+              <span>・</span>
+              <span style={{ color: "#008000", fontWeight: 700 }}>どちらでもない</span>
               <span>」のどれかを確認し、</span>
               <br />
               <span>完了したら以下の値引率で値引きをしてください。</span>
