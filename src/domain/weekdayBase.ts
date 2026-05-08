@@ -409,6 +409,91 @@ function getNearTermPercentTerm(
   }
 }
 
+function parseMonthDay(dateString: string): { month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+  if (!match) return null;
+
+  return {
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function isGoldenWeekWindow(dateString: string): boolean {
+  const monthDay = parseMonthDay(dateString);
+  if (!monthDay) return false;
+
+  if (monthDay.month === 4) {
+    return monthDay.day >= 29;
+  }
+
+  if (monthDay.month === 5) {
+    return monthDay.day <= 6;
+  }
+
+  return false;
+}
+
+function isThirdDayOfConsecutiveHolidayOrWeekend(dateString: string): boolean {
+  if (!isJapaneseHolidayOrWeekend(dateString)) {
+    return false;
+  }
+
+  const dayBefore1 = addDaysToDateString(dateString, -1);
+  const dayBefore2 = addDaysToDateString(dateString, -2);
+  const dayBefore3 = addDaysToDateString(dateString, -3);
+
+  return (
+    isJapaneseHolidayOrWeekend(dayBefore1) &&
+    isJapaneseHolidayOrWeekend(dayBefore2) &&
+    !isJapaneseHolidayOrWeekend(dayBefore3)
+  );
+}
+
+function isDayAfterGoldenWeekThirdConsecutiveHoliday(dateString?: string): boolean {
+  if (!dateString) {
+    return false;
+  }
+
+  const previousDate = addDaysToDateString(dateString, -1);
+
+  return (
+    isGoldenWeekWindow(previousDate) &&
+    isThirdDayOfConsecutiveHolidayOrWeekend(previousDate)
+  );
+}
+
+function getGoldenWeekAfterPeakShift(discountTime: DiscountTime): number {
+  if (discountTime === "15") {
+    return 1;
+  }
+
+  if (discountTime === "17") {
+    return 2;
+  }
+
+  return 0;
+}
+
+function getGoldenWeekAfterPeakShiftTerm(params: {
+  date?: string;
+  discountTime: DiscountTime;
+}): ShiftTerm | undefined {
+  if (!isDayAfterGoldenWeekThirdConsecutiveHoliday(params.date)) {
+    return undefined;
+  }
+
+  const value = getGoldenWeekAfterPeakShift(params.discountTime);
+  if (value === 0) {
+    return undefined;
+  }
+
+  return {
+    label: "GW連休3日目の翌日",
+    value,
+  };
+}
+
 function applyWeekdayShift(params: {
   base: WeekdayBaseLabel;
   discountTime: DiscountTime;
@@ -625,6 +710,10 @@ function resolveWeatherEffect(params: {
     getAfterRainRecoveryShiftTerm(params.weather),
     getNext18TempDropShiftTerm(params.weather, params.discountTime),
     getNext18WindWorsenShiftTerm(params.weather, params.discountTime),
+    getGoldenWeekAfterPeakShiftTerm({
+      date: params.date,
+      discountTime: params.discountTime,
+    }),
   ].filter((value): value is ShiftTerm => Boolean(value));
 
   const totalShift =
@@ -633,7 +722,10 @@ function resolveWeatherEffect(params: {
     getLaterPrecipShift(params.weather) +
     getAfterRainRecoveryShift(params.weather) +
     getNext18TempDropShift(params.weather, params.discountTime) +
-    getNext18WindWorsenShift(params.weather, params.discountTime);
+    getNext18WindWorsenShift(params.weather, params.discountTime) +
+    (isDayAfterGoldenWeekThirdConsecutiveHoliday(params.date)
+      ? getGoldenWeekAfterPeakShift(params.discountTime)
+      : 0);
 
   const shifted = applyWeekdayShift({
     base: original,

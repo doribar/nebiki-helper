@@ -28,6 +28,7 @@ type LegacyWeatherSpec = Record<string, unknown> & { afterRainSky?: 'cloudy' | '
 
 type Case = {
   name: string;
+  date?: string;
   weekday: number;
   discountTime: DiscountTime;
   weatherSpec: LegacyWeatherSpec;
@@ -323,6 +324,59 @@ const cases: Case[] = [
       bonusCalcAbsent: true,
     },
   },
+  {
+    name: 'GW連休3日目の翌日15時は曜日基準を1段強める',
+    date: '2026-05-05',
+    weekday: 2,
+    discountTime: '15',
+    weatherSpec: weather({}),
+    expected: {
+      adjusted: '金土',
+      baseRateBonus: 0,
+      weekdayCalcIncludes: ['GW連休3日目の翌日 +1段'],
+      weekdayResultIncludes: ['曜日基準補正は+1段', '金曜・土曜の基準を使用します'],
+    },
+  },
+  {
+    name: 'GW連休3日目の翌日17時は曜日基準を2段強める',
+    date: '2026-05-05',
+    weekday: 2,
+    discountTime: '17',
+    weatherSpec: weather({}),
+    expected: {
+      adjusted: '月水',
+      baseRateBonus: 0,
+      weekdayCalcIncludes: ['GW連休3日目の翌日 +2段'],
+      weekdayResultIncludes: ['曜日基準補正は+2段', '月曜・水曜の基準を使用します'],
+    },
+  },
+  {
+    name: '2025年のGW連休3日目翌日17時も曜日基準を2段強める',
+    date: '2025-05-06',
+    weekday: 2,
+    discountTime: '17',
+    weatherSpec: weather({}),
+    expected: {
+      adjusted: '月水',
+      baseRateBonus: 5,
+      weekdayCalcIncludes: ['GW連休3日目の翌日 +2段'],
+      weekdayResultIncludes: ['曜日基準補正は+2段', '上限に当たるため月曜・水曜の基準を使用します'],
+      bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
+      bonusResultIncludes: ['値引率補正は+5%'],
+    },
+  },
+  {
+    name: 'GW連休3日目の翌日でも18時30分以降は追加しない',
+    date: '2026-05-05',
+    weekday: 2,
+    discountTime: '18',
+    weatherSpec: weather({}),
+    expected: {
+      adjusted: '金土',
+      baseRateBonus: 0,
+      bonusCalcAbsent: true,
+    },
+  },
 ];
 
 
@@ -520,9 +574,11 @@ for (const testCase of cases) {
   const info = getWeekdayBaseInfo(
     testCase.weekday,
     testCase.discountTime,
-    resolvedWeather
+    resolvedWeather,
+    testCase.date
   );
   const guide = getBasisGuideDisplay({
+    date: testCase.date,
     weekday: testCase.weekday,
     discountTime: testCase.discountTime,
     weather: resolvedWeather,
@@ -863,15 +919,15 @@ for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
 const holidayWeekdayBaseCases = [
   {
     name: '祝日の15時は日曜日基準を使う',
-    date: '2026-05-05',
-    weekday: 2,
+    date: '2026-01-01',
+    weekday: 4,
     discountTime: '15' as DiscountTime,
     expectedAdjusted: '日',
     expectedNotice: '祝日の15時は日曜日の基準',
   },
   {
     name: '祝日17時以降で翌日も休日なら金土基準を使う',
-    date: '2026-05-05',
+    date: '2026-09-22',
     weekday: 2,
     discountTime: '17' as DiscountTime,
     expectedAdjusted: '金土',
