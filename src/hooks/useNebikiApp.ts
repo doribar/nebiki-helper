@@ -96,6 +96,29 @@ function getBasisTimeText(discountTime: DiscountTime): string {
   }
 }
 
+function getDiscountTimeRank(discountTime: DiscountTime): number {
+  switch (discountTime) {
+    case "15":
+      return 0;
+    case "17":
+      return 1;
+    case "18":
+      return 2;
+    case "19":
+      return 3;
+    case "20":
+      return 4;
+  }
+}
+
+function shouldOfferTimeSwitch(current: DiscountTime, next: DiscountTime): boolean {
+  return getDiscountTimeRank(next) > getDiscountTimeRank(current);
+}
+
+function buildTimeSwitchConfirmMessage(to: DiscountTime): string {
+  return `${getBasisTimeText(to)}の値引に移動しますか？`;
+}
+
 function buildTimeSwitchNotice(to: DiscountTime): string {
   if (to === "20") {
     return "20時15分を過ぎたため、19時30分の値引を打ち切り、20時30分の最終値引を開始します。";
@@ -457,13 +480,6 @@ function getNextSkipTargetDiscountTime(
   return null;
 }
 
-function shouldStartNewSessionOnTimeSwitch(current: DiscountTime, next: DiscountTime): boolean {
-  return (
-    (current === "17" && next === "18") ||
-    (current === "18" && next === "19")
-  );
-}
-
 function createAreaProgressMapWithAutoSkippedAreas(
   skippedAreaIds: AreaId[]
 ): Record<AreaId, AreaProgress> {
@@ -503,40 +519,11 @@ function refreshSessionDiscountTime(session: SessionData | null): {
   nextSession: SessionData | null;
   timeSwitchNotice: string | null;
 } {
-  if (!session) {
-    return {
-      nextSession: null,
-      timeSwitchNotice: null,
-    };
-  }
-
-  // 手動で時刻を切り替えている場合は、その値を現在時刻として扱う
-  if (session.manualDiscountTimeOverride) {
-    return {
-      nextSession: session,
-      timeSwitchNotice: null,
-    };
-  }
-
-  const nowDiscountTime = resolveDiscountTime(new Date());
-
-  if (session.discountTime === nowDiscountTime) {
-    return {
-      nextSession: session,
-      timeSwitchNotice: null,
-    };
-  }
-
+  // 実時間が次の値引帯に入っていても、ユーザーの許可なしに打ち切って移動しない。
+  // 自動判定は別の effect で確認ダイアログを出し、許可された場合だけ天候入力へ移動する。
   return {
-    nextSession: {
-      ...session,
-      discountTime: nowDiscountTime,
-      weather: {
-        ...session.weather,
-        hourlyForecasts: cloneHourlyForecasts(session.weather.hourlyForecasts),
-      },
-    },
-    timeSwitchNotice: buildTimeSwitchNotice(nowDiscountTime),
+    nextSession: session,
+    timeSwitchNotice: null,
   };
 }
 
@@ -573,6 +560,9 @@ export function useNebikiApp(): UseNebikiAppResult {
 
   const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(null);
   const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(null);
+  const [timeSwitchTarget, setTimeSwitchTarget] = useState<DiscountTime | null>(null);
+  const dismissedTimeSwitchKeyRef = useRef<string | null>(null);
+  const promptedTimeSwitchKeyRef = useRef<string | null>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(null);
   const [undoNotice, setUndoNotice] = useState<string | null>(null);
   const screenHistoryRef = useRef<NavigationSnapshot[]>([]);
@@ -593,6 +583,7 @@ export function useNebikiApp(): UseNebikiAppResult {
     setState(cloneAppState(snapshot.state));
     setAreaJudgeSelection(snapshot.areaJudgeSelection);
     setResumeTargetScreen(snapshot.resumeTargetScreen);
+    setTimeSwitchTarget(null);
   }
   const previousRenderRef = useRef<NavigationSnapshot | null>(null);
   const suppressHistoryPushRef = useRef(false);
@@ -699,93 +690,63 @@ export function useNebikiApp(): UseNebikiAppResult {
 
   useEffect(() => {
     if (!state.session || state.session.manualDiscountTimeOverride) return;
+    if (state.screen === "start") return;
 
     const now = new Date(nowMs);
     const nowDiscountTime = resolveDiscountTime(now);
 
-    if (state.session.discountTime === nowDiscountTime) return;
-
-    if (shouldStartNewSessionOnTimeSwitch(state.session.discountTime, nowDiscountTime)) {
-      let nextSkipRecords = nextSessionSkipRecords;
-
-      setState((prev) => {
-        if (!prev.session || prev.session.manualDiscountTimeOverride) return prev;
-
-        const nextNowDiscountTime = resolveDiscountTime(new Date(nowMs));
-        if (!shouldStartNewSessionOnTimeSwitch(prev.session.discountTime, nextNowDiscountTime)) {
-          return prev;
-        }
-
-        let areaProgressMap = createInitialAreaProgressMap();
-
-        if (nextNowDiscountTime === "18" || nextNowDiscountTime === "19") {
-          const consumed = consumeSkipRecordsInMemory({
-            currentRecords: nextSkipRecords,
-            date: prev.session.date,
-            targetDiscountTime: nextNowDiscountTime,
-          });
-
-          nextSkipRecords = consumed.remainingRecords;
-          areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedAreaIds);
-        }
-
-        const firstAreaId = getFirstAvailableAreaId(areaProgressMap);
-
-        return {
-          ...prev,
-          session: {
-            ...prev.session,
-            discountTime: nextNowDiscountTime,
-            weather: {
-              ...prev.session.weather,
-              hourlyForecasts: cloneHourlyForecasts(prev.session.weather.hourlyForecasts),
-            },
-            startedAt: new Date(nowMs).toISOString(),
-          },
-          areaProgressMap,
-          currentAreaId: firstAreaId,
-          lastReferenceAreaId: firstAreaId,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          timeSwitchNotice: buildTimeSwitchNotice(nextNowDiscountTime),
-          finalTimeStep: 0,
-          screen: firstAreaId ? "area_judge" : "done",
-        };
-      });
-
-      setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
-      setAreaJudgeSelection(null);
-      setResumeTargetScreen(null);
-      setUndoSnapshot(null);
-      setUndoNotice(null);
+    if (!shouldOfferTimeSwitch(state.session.discountTime, nowDiscountTime)) {
+      dismissedTimeSwitchKeyRef.current = null;
+      promptedTimeSwitchKeyRef.current = null;
       return;
     }
 
-    if (nowDiscountTime === "20") {
-      setState((prev) => {
-        if (!prev.session || prev.session.manualDiscountTimeOverride) return prev;
-        if (prev.session.discountTime === "20") return prev;
+    const switchKey = `${state.session.startedAt}:${state.session.discountTime}->${nowDiscountTime}`;
+    if (dismissedTimeSwitchKeyRef.current === switchKey) return;
+    if (promptedTimeSwitchKeyRef.current === switchKey) return;
 
-        return {
-          ...prev,
-          session: {
-            ...prev.session,
-            discountTime: "20",
-            weather: {
-              ...prev.session.weather,
-              hourlyForecasts: cloneHourlyForecasts(prev.session.weather.hourlyForecasts),
-            },
-          },
-          timeSwitchNotice: buildTimeSwitchNotice("20"),
-          currentAreaId: null,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          finalTimeStep: 0,
-          screen: "final_time",
-        };
-      });
+    promptedTimeSwitchKeyRef.current = switchKey;
+    const ok = window.confirm(buildTimeSwitchConfirmMessage(nowDiscountTime));
+
+    if (!ok) {
+      dismissedTimeSwitchKeyRef.current = switchKey;
+      return;
     }
-  }, [state.session, nowMs, nextSessionSkipRecords]);
+
+    dismissedTimeSwitchKeyRef.current = null;
+    setTimeSwitchTarget(nowDiscountTime);
+    setResumeTargetScreen(null);
+    setAreaJudgeSelection(null);
+    setUndoSnapshot(null);
+    setUndoNotice(null);
+
+    setState((prev) => {
+      if (!prev.session || prev.session.manualDiscountTimeOverride) return prev;
+
+      const nextNow = new Date(nowMs);
+      const nextDiscountTime = resolveDiscountTime(nextNow);
+      if (!shouldOfferTimeSwitch(prev.session.discountTime, nextDiscountTime)) return prev;
+
+      const nextDraft = syncAfterRainSelection(normalizeSessionDraft(prev.session), lastSessionWeather);
+      return {
+        ...prev,
+        screen: "start",
+        sessionDraft: {
+          ...nextDraft,
+          date: formatLocalDate(nextNow),
+          weekday: nextNow.getDay(),
+          discountTime: nextDiscountTime,
+          manualWeekdayOverride: false,
+          manualDiscountTimeOverride: false,
+          weather: {
+            ...nextDraft.weather,
+            hourlyForecasts: cloneHourlyForecasts(nextDraft.weather.hourlyForecasts),
+          },
+        },
+        timeSwitchNotice: null,
+      };
+    });
+  }, [state.session, state.screen, nowMs, lastSessionWeather]);
 
   useEffect(() => {
   if (state.screen !== "start") return;
@@ -1475,6 +1436,49 @@ const lateSkipNotice = useMemo(() => {
         startedAt: prev.session?.startedAt ?? startedAt,
       };
 
+      if (timeSwitchTarget && prev.session) {
+        let areaProgressMap = createInitialAreaProgressMap();
+
+        if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
+          const consumed = consumeSkipRecordsInMemory({
+            currentRecords: nextSkipRecords,
+            date: nextSession.date,
+            targetDiscountTime: nextSession.discountTime,
+          });
+
+          nextSkipRecords = consumed.remainingRecords;
+          areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
+            consumed.skippedAreaIds
+          );
+        }
+
+        const firstAreaId =
+          nextSession.discountTime === "20"
+            ? null
+            : getFirstAvailableAreaId(areaProgressMap);
+
+        return {
+          ...prev,
+          screen:
+            nextSession.discountTime === "20"
+              ? "final_time"
+              : firstAreaId
+              ? "area_judge"
+              : "done",
+          session: {
+            ...nextSession,
+            startedAt,
+          },
+          areaProgressMap,
+          currentAreaId: firstAreaId,
+          lastReferenceAreaId: firstAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          timeSwitchNotice: buildTimeSwitchNotice(nextSession.discountTime),
+          finalTimeStep: 0,
+        };
+      }
+
       if (prev.session) {
         const requestedScreen =
           resumeTargetScreen ??
@@ -1534,6 +1538,9 @@ const lateSkipNotice = useMemo(() => {
 
     setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
     setResumeTargetScreen(null);
+    setTimeSwitchTarget(null);
+    promptedTimeSwitchKeyRef.current = null;
+    dismissedTimeSwitchKeyRef.current = null;
     setUndoSnapshot(null);
     setUndoNotice(null);
   }
@@ -1818,6 +1825,9 @@ const lateSkipNotice = useMemo(() => {
     setState(createInitialState(buildStartDefaultDraft(lastUsedSessionDraft)));
     setAreaJudgeSelection(null);
     setResumeTargetScreen(null);
+    setTimeSwitchTarget(null);
+    promptedTimeSwitchKeyRef.current = null;
+    dismissedTimeSwitchKeyRef.current = null;
     setUndoSnapshot(null);
     setUndoNotice(null);
   }
@@ -1840,6 +1850,11 @@ const lateSkipNotice = useMemo(() => {
   showDailyNoticeBeforeRate,
   areaJudgeSelection,
   isResuming: resumeTargetScreen !== null,
+  startButtonLabel: timeSwitchTarget
+    ? `${getBasisTimeText(timeSwitchTarget)}の値引へ進む`
+    : resumeTargetScreen !== null
+    ? "再開"
+    : undefined,
   canUndo: undoSnapshot !== null,
   undoNotice,
   canChooseSkipTarget,

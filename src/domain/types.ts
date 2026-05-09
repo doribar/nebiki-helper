@@ -235,6 +235,7 @@ export type UseNebikiAppDerived = {
   showDailyNoticeBeforeRate: boolean;
   areaJudgeSelection: AreaJudge;
   isResuming: boolean;
+  startButtonLabel?: string;
   canUndo: boolean;
   undoNotice: string | null;
   canChooseSkipTarget: boolean;

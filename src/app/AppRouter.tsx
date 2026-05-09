@@ -26,7 +26,7 @@ export function AppRouter({ app }: AppRouterProps) {
           showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startSession}
-          startButtonLabel={derived.isResuming ? "再開" : undefined}
+          startButtonLabel={derived.startButtonLabel}
         />
       );
 
