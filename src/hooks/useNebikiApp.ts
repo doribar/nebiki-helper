@@ -161,6 +161,8 @@ function getAreaStatusText(progress: AreaProgress): string | undefined {
       return "未完了（スキップ中）";
     case "postponed_few":
       return "未完了（少ないため後回し）";
+    case "auto_skipped_late_time":
+      return "スキップ済み（前回+5%で値引済み）";
     case "unstarted":
       return "未完了";
   }
@@ -227,7 +229,8 @@ function isValidAreaStatus(value: unknown): value is AreaProgress["status"] {
     value === "unstarted" ||
     value === "completed" ||
     value === "skipped_manual" ||
-    value === "postponed_few"
+    value === "postponed_few" ||
+    value === "auto_skipped_late_time"
   );
 }
 
@@ -257,7 +260,9 @@ function normalizeAreaProgressMap(
       completedAt:
         typeof progress.completedAt === "string" ? progress.completedAt : undefined,
       skipReason:
-        progress.skipReason === "manual" || progress.skipReason === "few"
+        progress.skipReason === "manual" ||
+        progress.skipReason === "few" ||
+        progress.skipReason === "late_time"
           ? progress.skipReason
           : undefined,
     };
@@ -490,12 +495,26 @@ function createAreaProgressMapWithAutoSkippedAreas(
 
     base[areaId] = {
       ...base[areaId],
-      status: "completed",
+      status: "auto_skipped_late_time",
+      skipReason: "late_time",
       completedAt: new Date().toISOString(),
     };
   }
 
   return base;
+}
+
+function buildAutoSkippedAreaNotice(skippedAreaIds: AreaId[]): string | null {
+  const validSkippedAreaIds = skippedAreaIds.filter(isValidAreaId);
+  if (validSkippedAreaIds.length === 0) return null;
+
+  const names = validSkippedAreaIds.map(getAreaName).join("、");
+  return `${names}は前回「次の値引の方が近くなったため+5%」で値引済みのため、この値引ではスキップしました。`;
+}
+
+function mergeNoticeLines(...notices: Array<string | null | undefined>): string | null {
+  const lines = notices.filter((notice): notice is string => Boolean(notice));
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 function getFirstAvailableAreaId(
@@ -1043,6 +1062,18 @@ const lateSkipNotice = useMemo(() => {
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
+      if (progress?.status === "auto_skipped_late_time") {
+        return {
+          areaId,
+          areaName: getAreaName(areaId),
+          judgeText: "前回+5%済み",
+          rateText: "スキップ済み",
+          manyRateText: "スキップ済み",
+          normalRateText: "スキップ済み",
+          statusText,
+        };
+      }
+
       if (!progress || !progress.areaJudge || progress.status !== "completed") {
         return {
           areaId,
@@ -1438,6 +1469,7 @@ const lateSkipNotice = useMemo(() => {
 
       if (timeSwitchTarget && prev.session) {
         let areaProgressMap = createInitialAreaProgressMap();
+        let consumedSkippedAreaIds: AreaId[] = [];
 
         if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
           const consumed = consumeSkipRecordsInMemory({
@@ -1447,8 +1479,9 @@ const lateSkipNotice = useMemo(() => {
           });
 
           nextSkipRecords = consumed.remainingRecords;
+          consumedSkippedAreaIds = consumed.skippedAreaIds;
           areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-            consumed.skippedAreaIds
+            consumedSkippedAreaIds
           );
         }
 
@@ -1474,7 +1507,10 @@ const lateSkipNotice = useMemo(() => {
           lastReferenceAreaId: firstAreaId,
           currentFlow: "normal",
           pendingDeferredAreaIds: [],
-          timeSwitchNotice: buildTimeSwitchNotice(nextSession.discountTime),
+          timeSwitchNotice: mergeNoticeLines(
+            buildTimeSwitchNotice(nextSession.discountTime),
+            buildAutoSkippedAreaNotice(consumedSkippedAreaIds)
+          ),
           finalTimeStep: 0,
         };
       }
@@ -1498,6 +1534,7 @@ const lateSkipNotice = useMemo(() => {
       }
 
       let areaProgressMap = createInitialAreaProgressMap();
+      let consumedSkippedAreaIds: AreaId[] = [];
 
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
@@ -1507,8 +1544,9 @@ const lateSkipNotice = useMemo(() => {
         });
 
         nextSkipRecords = consumed.remainingRecords;
+        consumedSkippedAreaIds = consumed.skippedAreaIds;
         areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-          consumed.skippedAreaIds
+          consumedSkippedAreaIds
         );
       }
 
@@ -1531,7 +1569,7 @@ const lateSkipNotice = useMemo(() => {
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
-        timeSwitchNotice: null,
+        timeSwitchNotice: buildAutoSkippedAreaNotice(consumedSkippedAreaIds),
         finalTimeStep: 0,
       };
     });
@@ -1733,6 +1771,9 @@ const lateSkipNotice = useMemo(() => {
         },
       };
 
+      // 次回スキップ予約は「次のエリアへ」で完遂した時点で作る。
+      // ただし直後に「戻る」または取り消しを押した場合は、
+      // NavigationSnapshot から nextSessionSkipRecords も復元されるため予約も取り消される。
       if (
         prev.session &&
         lateTimeBonus > 0 &&

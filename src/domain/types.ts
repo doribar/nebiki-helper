@@ -83,7 +83,8 @@ export type AreaStatus =
   | "unstarted"
   | "completed"
   | "skipped_manual"
-  | "postponed_few";
+  | "postponed_few"
+  | "auto_skipped_late_time";
 
 export type AreaProgress = {
   areaId: AreaId;
@@ -91,7 +92,7 @@ export type AreaProgress = {
   areaJudge: AreaJudge;
   visitedAt?: string;
   completedAt?: string;
-  skipReason?: "manual" | "few";
+  skipReason?: "manual" | "few" | "late_time";
 };
 
 

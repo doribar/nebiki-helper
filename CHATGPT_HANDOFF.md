@@ -429,3 +429,74 @@ npm run build
 - `npm run build` PASS。
 - `npm run lint` は既存の lint 指摘で失敗。今回変更による `buildDraftFromSource` の参照順エラーは修正済みだが、既存の未使用変数・React Hooks ルール指摘が残っている。
 - `npm ci` 時に既存依存関係の `npm audit` 警告は出るが、今回の仕様変更範囲では未対応。
+
+## 2026-05-09 追記：+5%済みエリアの次回スキップ表示を明確化
+
+ユーザー要望により、「次の値引の方が近くなったため+5%」で値引したエリアが、次の値引で確実にスキップされ、かつスキップ済みであることが画面上で分かるように確認・修正した。
+
+### 確認した挙動
+
+- 次回スキップ記録は `goToNextArea()` の中でのみ追加される。
+- つまり、値引率表示まで進んだだけのエリアや、「戻る」で戻ったエリアは次回スキップ対象にならない。
+- `goToNextArea()` で現在エリアを `completed` にしてから記録するため、「次のエリアへ」を押して値引を完遂したエリアだけが対象になる。
+- 17時値引中の18時以降+5%は次の18時30分値引でスキップ対象になる。
+- 18時30分値引中の19時以降+5%は次の19時30分値引でスキップ対象になる。
+
+### 実装内容
+
+- 自動スキップ済みエリア用のステータス `auto_skipped_late_time` を追加。
+- 次回値引開始時、前回+5%済みでスキップしたエリアを `completed` 扱いで無言スキップするのではなく、専用ステータスで保持するよう変更。
+- 次回値引開始時の通知に、スキップしたエリア名と理由を表示するよう変更。
+- 完了画面の一覧でも `スキップ済み（前回+5%で値引済み）` と表示するよう変更。
+- `スキップ先を選ぶ` の候補には、自動スキップ済みエリアを出さないよう変更。
+- `timeSwitchNotice` の複数行表示が崩れないよう、通知欄に `whiteSpace: pre-wrap` を追加。
+
+### 変更した主なファイル
+
+- `src/domain/types.ts`
+- `src/domain/pending.ts`
+- `src/hooks/useNebikiApp.ts`
+- `src/components/screens/AreaJudgeScreen.tsx`
+- `src/components/screens/RateDisplayScreen.tsx`
+- `src/components/screens/FinalTimeScreen.tsx`
+- `src/components/screens/DoneScreen.tsx`
+
+### 2026-05-09 この追記時点の確認結果
+
+- `npm ci` 実行済み。
+- `npm run check:logic` PASS。主要チェックは `49 / 49 checks passed`。
+- `npm run build` PASS。
+- `npm ci` 時に既存依存関係の `npm audit` 警告は出るが、今回の仕様変更範囲では未対応。
+
+## 2026-05-09 追記：戻る操作時の+5%次回スキップ予約取り消しを明確化
+
+ユーザー確認により、「次のエリアへ」を誤って押したあとに「戻る」で取り消した場合、そのエリアが完遂扱いのまま残り、次の値引でスキップされないかを確認した。
+
+### 確認した挙動
+
+- `goToNextArea()` で「次の値引の方が近くなったため+5%」の次回スキップ予約を作成する。
+- ただし、「次のエリアへ」を押す直前の `NavigationSnapshot` には `nextSessionSkipRecords` も含まれる。
+- そのため、直後に「戻る」または取り消しを押すと、エリアの `completed` 状態だけでなく `nextSessionSkipRecords` も押下前へ戻る。
+- 結果として、「次のエリアへ」後に戻ったエリアは完遂扱いにならず、次回スキップ対象にもならない。
+- 「次のエリアへ」を押して、その後戻っていないエリアだけが完遂扱いになり、次回スキップ予約として残る。
+
+### 実装内容
+
+- 挙動自体は既存の `NavigationSnapshot` 復元で成立していたため、ロジック本体の変更は不要。
+- 今後壊れないよう、`scripts/check-logic.ts` に回帰テストを2件追加。
+  - 「次のエリアへ」後に「戻る」と、完遂扱いと次回スキップ予約を取り消す。
+  - 戻らず完遂したエリアだけ、次回スキップ予約として残る。
+- `goToNextArea()` 内に、戻る／取り消し時は `nextSessionSkipRecords` も復元されることをコメントで明記。
+
+### 変更した主なファイル
+
+- `src/hooks/useNebikiApp.ts`
+- `scripts/check-logic.ts`
+
+### 2026-05-09 この追記時点の確認結果
+
+- `npm ci` 実行済み。
+- `npm run check:logic` PASS。主要チェックは `51 / 51 checks passed`。
+- `npm run build` PASS。
+- `npm run lint` は既存の lint 指摘で失敗。今回追加範囲ではなく、既存の未使用変数・React Hooks ルール指摘が残っている。
+- `npm ci` 時に既存依存関係の `npm audit` 警告は出るが、今回の確認・回帰テスト追加範囲では未対応。

@@ -15,6 +15,7 @@ import {
   createNavigationSnapshot,
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
+import { appendSkipRecordsInMemory } from '../src/domain/storage.ts';
 import type {
   AreaId,
   AppState,
@@ -980,8 +981,80 @@ for (const holidayCase of holidayWeekdayBaseCases) {
 }
 
 
+try {
+  const beforeNextArea = makeNavigationSnapshot({
+    state: makeState({
+      screen: 'rate_display',
+      currentAreaId: 'bento_men',
+      areaProgressMap: {
+        ...makeState({}).areaProgressMap,
+        bento_men: { areaId: 'bento_men', status: 'unstarted', areaJudge: 'normal' },
+      },
+    }),
+    nextSessionSkipRecords: [],
+  });
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 13} checks passed.`);
+  const afterNextAreaState = makeState({
+    screen: 'area_judge',
+    currentAreaId: 'hosomaki',
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      bento_men: {
+        areaId: 'bento_men',
+        status: 'completed',
+        areaJudge: 'normal',
+        completedAt: '2026-05-09T10:00:00.000Z',
+      },
+    },
+  });
+
+  const historyResult = appendNavigationHistory({
+    history: [],
+    previousSnapshot: beforeNextArea,
+    nextState: afterNextAreaState,
+    suppressHistoryPush: false,
+  });
+  const popped = popNavigationHistory(historyResult.history);
+
+  assert.equal(popped.previousSnapshot?.state.screen, 'rate_display');
+  assert.equal(popped.previousSnapshot?.state.areaProgressMap.bento_men.status, 'unstarted');
+  assert.deepEqual(popped.previousSnapshot?.nextSessionSkipRecords, []);
+  console.log('PASS: 次のエリアへ後に戻ると完遂扱いと次回スキップ予約を取り消す');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 次のエリアへ後に戻ると完遂扱いと次回スキップ予約を取り消す');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const records = appendSkipRecordsInMemory({
+    currentRecords: [],
+    recordsToAdd: [
+      {
+        date: '2026-05-09',
+        targetDiscountTime: '18',
+        areaId: 'bento_men',
+      },
+    ],
+  });
+
+  assert.deepEqual(records, [
+    {
+      date: '2026-05-09',
+      targetDiscountTime: '18',
+      areaId: 'bento_men',
+    },
+  ]);
+  console.log('PASS: 戻らず完遂したエリアだけ次回スキップ予約として残る');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 戻らず完遂したエリアだけ次回スキップ予約として残る');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 15} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

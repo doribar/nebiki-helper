@@ -192,7 +192,12 @@ export function getSkipTargetOptions(params: {
   currentAreaId: AreaId;
 }): SkipTargetOption[] {
   return Object.values(params.areaProgressMap)
-    .filter((progress) => progress.areaId !== params.currentAreaId && progress.status !== "completed")
+    .filter(
+      (progress) =>
+        progress.areaId !== params.currentAreaId &&
+        progress.status !== "completed" &&
+        progress.status !== "auto_skipped_late_time"
+    )
     .sort((a, b) => {
       return getDistance(params.currentAreaId, a.areaId) - getDistance(params.currentAreaId, b.areaId);
     })

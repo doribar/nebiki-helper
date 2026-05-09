@@ -58,6 +58,8 @@ export function FinalTimeScreen({
             padding: 12,
             marginBottom: 16,
             background: "#fff8e1",
+            whiteSpace: "pre-wrap",
+            lineHeight: 1.7,
           }}
         >
           <div>{timeSwitchNotice}</div>

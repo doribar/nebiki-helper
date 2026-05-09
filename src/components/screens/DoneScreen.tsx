@@ -90,17 +90,35 @@ export function DoneScreen({ onReset, onGoBack, summaryItems }: DoneScreenProps)
             <div key={item.areaId} style={summaryRowStyle}>
               <div style={{ fontWeight: 800 }}>{item.areaName}</div>
               <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontWeight: 800 }}>
-                  多い → {item.manyRateText ?? item.rateText}
-                </div>
-                {item.manyNote ? (
-                  <div style={{ color: "#666", whiteSpace: "pre-line" }}>
-                    {item.manyNote}
-                  </div>
-                ) : null}
-                <div style={{ fontWeight: 800 }}>
-                  どちらでもない → {item.normalRateText ?? item.rateText}
-                </div>
+                {item.rateText === "スキップ済み" ? (
+                  <>
+                    <div style={{ fontWeight: 800 }}>スキップ済み</div>
+                    {item.statusText ? (
+                      <div style={{ color: "#666", whiteSpace: "pre-line" }}>
+                        {item.statusText}
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontWeight: 800 }}>
+                      多い → {item.manyRateText ?? item.rateText}
+                    </div>
+                    {item.manyNote ? (
+                      <div style={{ color: "#666", whiteSpace: "pre-line" }}>
+                        {item.manyNote}
+                      </div>
+                    ) : null}
+                    <div style={{ fontWeight: 800 }}>
+                      どちらでもない → {item.normalRateText ?? item.rateText}
+                    </div>
+                    {item.statusText ? (
+                      <div style={{ color: "#666", whiteSpace: "pre-line" }}>
+                        {item.statusText}
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
           ))}
