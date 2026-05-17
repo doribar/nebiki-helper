@@ -33,7 +33,9 @@ export type TempLevel =
   | "11to15"
   | "16to20"
   | "21to25"
-  | "26to30"
+  | "26to27"
+  | "28to30"
+  | "26to30" // legacy: old saved/legacy 26〜30 bucket
   | "31to35"
   | "36orMore";
 

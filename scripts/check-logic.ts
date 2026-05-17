@@ -246,10 +246,22 @@ const cases: Case[] = [
     },
   },
   {
-    name: '26〜30度は補正なし',
+    name: '26〜27度は1段弱める',
     weekday: 2,
     discountTime: '15',
-    weatherSpec: weather({ tempLevel: '26to30' }),
+    weatherSpec: weather({ tempLevel: '26to27' }),
+    expected: {
+      adjusted: '金土',
+      baseRateBonus: 0,
+      weekdayCalcIncludes: ['気温 26〜27度 -1段'],
+      weekdayResultIncludes: ['曜日基準補正は-1段', '金曜・土曜の基準を使用します'],
+    },
+  },
+  {
+    name: '28〜30度は補正なし',
+    weekday: 2,
+    discountTime: '15',
+    weatherSpec: weather({ tempLevel: '28to30' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 0,
@@ -567,6 +579,70 @@ const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
 ];
 
 let passed = 0;
+
+
+{
+  const weatherInput: WeatherInput = {
+    hourlyForecasts: buildHourlyForecastsFromLegacy({ legacyWeather: weather({}), discountTime: '15' }),
+    afterRainSky: null,
+  };
+  weatherInput.hourlyForecasts['16'].tempC = 27;
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
+  const info = getWeekdayBaseInfo(2, '15', resolvedWeather, '2026-04-01');
+  const guide = getBasisGuideDisplay({
+    date: '2026-04-01',
+    weekday: 2,
+    discountTime: '15',
+    weather: resolvedWeather,
+  });
+
+  try {
+    assert.equal(resolvedWeather.tempLevel, '26to27');
+    assert.equal(info.adjusted, '金土');
+    assert.equal(info.baseRateBonus, 0);
+    assert.ok(guide.weekdayCalcText?.includes('気温 26〜27度 -1段'), 'weekdayCalcText に「気温 26〜27度 -1段」がありません');
+    console.log('PASS: 27度は26〜27度として1段弱める');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 27度は26〜27度として1段弱める');
+    console.error(error);
+    console.error('actual info =', info);
+    console.error('actual guide =', guide);
+    process.exitCode = 1;
+  }
+}
+
+{
+  const weatherInput: WeatherInput = {
+    hourlyForecasts: buildHourlyForecastsFromLegacy({ legacyWeather: weather({}), discountTime: '15' }),
+    afterRainSky: null,
+  };
+  weatherInput.hourlyForecasts['16'].tempC = 28;
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
+  const info = getWeekdayBaseInfo(2, '15', resolvedWeather, '2026-04-01');
+  const guide = getBasisGuideDisplay({
+    date: '2026-04-01',
+    weekday: 2,
+    discountTime: '15',
+    weather: resolvedWeather,
+  });
+
+  try {
+    assert.equal(resolvedWeather.tempLevel, '28to30');
+    assert.equal(info.adjusted, '火木');
+    assert.equal(info.baseRateBonus, 0);
+    assert.equal(guide.weekdayCalcText, undefined);
+    console.log('PASS: 28度は28〜30度として補正なし');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 28度は28〜30度として補正なし');
+    console.error(error);
+    console.error('actual info =', info);
+    console.error('actual guide =', guide);
+    process.exitCode = 1;
+  }
+}
+
 
 
 for (const testCase of cases) {
@@ -1054,7 +1130,7 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 15} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 17} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

@@ -218,6 +218,9 @@ function getTempShift(tempLevel: TempLevel): number {
       return -1;
     case "21to25":
       return -2;
+    case "26to27":
+      return -1;
+    case "28to30":
     case "26to30":
       return 0;
     case "31to35":
@@ -237,6 +240,11 @@ function getTempShiftTerm(tempLevel: TempLevel): ShiftTerm | undefined {
       return { label: "気温 16〜20度", value: -1 };
     case "21to25":
       return { label: "気温 21〜25度", value: -2 };
+    case "26to27":
+      return { label: "気温 26〜27度", value: -1 };
+    case "28to30":
+    case "26to30":
+      return undefined;
     case "31to35":
       return { label: "気温 31〜35度", value: 1 };
     case "36orMore":
