@@ -8,6 +8,7 @@ import type {
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { PrimaryButton } from "../layout/PrimaryButton";
+import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 
 type RateDisplayScreenProps = {
   weekdayText: string;
@@ -136,6 +137,10 @@ export function RateDisplayScreen({
   onChooseSkipTarget,
 }: RateDisplayScreenProps) {
   const isFinalTime = discountTime === "20";
+  const swipeToSkipHandlers = useSwipeToSkip({
+    enabled: !showDailyNotice,
+    onSwipeLeft: onSkip,
+  });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const skipTargetGroups = [
     {
@@ -182,7 +187,10 @@ export function RateDisplayScreen({
   }
 
   return (
-    <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
+    <main
+      {...swipeToSkipHandlers}
+      style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}
+    >
       <ScreenHeader
         weekdayText={weekdayText}
         timeText={timeText}
@@ -295,6 +303,9 @@ export function RateDisplayScreen({
         <button type="button" onClick={onSkip} style={subActionButtonStyle}>
           今はスキップ
         </button>
+        <div style={{ fontSize: 12, color: "#666", textAlign: "center" }}>
+          画面を左にスワイプしてもスキップできます
+        </div>
 
         <button
           type="button"

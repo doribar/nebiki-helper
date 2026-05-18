@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AreaJudge, SkipTargetOption } from "../../domain/types";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
+import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 
 type AreaJudgeScreenProps = {
   weekdayText: string;
@@ -101,6 +102,7 @@ export function AreaJudgeScreen({
   onJudgeGuideShown,
 }: AreaJudgeScreenProps) {
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
+  const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: onSkip });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [displayJudgeGuide, setDisplayJudgeGuide] = useState(showJudgeGuide);
   const previousAreaNameRef = useRef(areaName);
@@ -138,7 +140,10 @@ export function AreaJudgeScreen({
   }, [displayJudgeGuide, onJudgeGuideShown]);
 
   return (
-    <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
+    <main
+      {...swipeToSkipHandlers}
+      style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}
+    >
       <ScreenHeader
         weekdayText={weekdayText}
         timeText={timeText}
@@ -229,6 +234,9 @@ export function AreaJudgeScreen({
         <button type="button" onClick={onSkip} style={subActionButtonStyle}>
           今はスキップ
         </button>
+        <div style={{ fontSize: 12, color: "#666", textAlign: "center" }}>
+          画面を左にスワイプしてもスキップできます
+        </div>
 
         <button
           type="button"

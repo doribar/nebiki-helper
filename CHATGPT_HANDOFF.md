@@ -542,3 +542,36 @@ npm run build
 - `npm run build` PASS。
 - `npm run lint` は既存の lint 指摘で失敗。今回変更範囲ではなく、既存の未使用変数・React Hooks 系の指摘が残っている。
 - `npm ci` 時に既存依存関係の `npm audit` 警告は出るが、今回の仕様変更範囲では未対応。
+
+## 2026-05-18 追加変更（左スワイプで現在エリアをスキップ）
+
+ユーザー要望により、通常値引中の画面操作として「画面を左にスワイプしたらスキップ」を追加した。
+
+### 実装内容
+
+- `src/hooks/useSwipeToSkip.ts` を追加。
+- 左方向に一定距離以上スワイプし、縦方向の動きが大きすぎない場合のみ `onSwipeLeft` を発火する。
+- `AreaJudgeScreen` に左スワイプ操作を追加し、既存の `onSkip` と同じ `skipCurrentArea()` へ接続した。
+- `RateDisplayScreen` に左スワイプ操作を追加し、既存の `onSkip` と同じ `skipCurrentArea()` へ接続した。
+- 日次注意事項の確認画面表示中は、誤操作防止のため `RateDisplayScreen` の左スワイプスキップを無効化している。
+- 「今はスキップ」ボタン下に「画面を左にスワイプしてもスキップできます」の補足表示を追加した。
+
+### 挙動メモ
+
+- 左スワイプによるスキップは、ボタンの「今はスキップ」と同じ扱い。
+- そのため、手動スキップとして記録され、後でスキップ先選択や pending 再開の対象になる。
+- 「次のエリアへ」とは別扱いのため、完遂扱いにはならない。
+
+### 変更した主なファイル
+
+- `src/hooks/useSwipeToSkip.ts`
+- `src/components/screens/AreaJudgeScreen.tsx`
+- `src/components/screens/RateDisplayScreen.tsx`
+
+### 2026-05-18 この追記時点の確認結果
+
+- `npm run check:logic` PASS。主要チェックは `54 / 54 checks passed`。
+- `npm ci` 実行済み。
+- `npm run build` PASS。
+- `npm run lint` は既存の lint 指摘で失敗。今回追加した `useSwipeToSkip.ts` 自体の TypeScript build は通過しているが、既存の未使用変数・React Hooks ルール指摘が残っている。
+- `npm ci` 時に既存依存関係の `npm audit` 警告は出るが、今回の仕様変更範囲では未対応。
