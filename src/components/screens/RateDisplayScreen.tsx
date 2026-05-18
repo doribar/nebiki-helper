@@ -301,11 +301,8 @@ export function RateDisplayScreen({
         <PrimaryButton onClick={onNextArea}>次のエリアへ</PrimaryButton>
 
         <button type="button" onClick={onSkip} style={subActionButtonStyle}>
-          今はスキップ
+          今はスキップ（画面左スワイプ）
         </button>
-        <div style={{ fontSize: 12, color: "#666", textAlign: "center" }}>
-          画面を左にスワイプしてもスキップできます
-        </div>
 
         <button
           type="button"
