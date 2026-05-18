@@ -306,7 +306,11 @@ function getNext18TempDropShiftTerm(
     return undefined;
   }
 
-  return { label: "15時と18時の気温差が6度以上", value: 1 };
+  if (weather.next18TempDropShift < 0) {
+    return { label: "15時と18時の気温差が6度以上（18時が21〜25度）", value: -1 };
+  }
+
+  return { label: "15時と18時の気温差が6度以上（18時が15度以下）", value: 1 };
 }
 
 function getNext18WindWorsenShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {
@@ -321,7 +325,7 @@ function getNext18WindWorsenShiftTerm(
     return undefined;
   }
 
-  return { label: "18時予報で風も強まる", value: 1 };
+  return { label: "18時が15度以下で風3m以上に強まる", value: 1 };
 }
 
 function getLaterPrecipShift(weather: ResolvedWeatherInput): number {

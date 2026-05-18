@@ -163,10 +163,22 @@ export function resolveWeatherInputForDiscount(
 
   const current15 = weather.hourlyForecasts['15'];
   const current18 = weather.hourlyForecasts['18'];
-  const next18TempDropShift: 0 | 1 =
-    discountTime === '15' && current18.tempC <= current15.tempC - 6 ? 1 : 0;
+  const hasNext18TempDrop = discountTime === '15' && current18.tempC <= current15.tempC - 6;
+  const next18TempDropShift: -1 | 0 | 1 = hasNext18TempDrop
+    ? current18.tempC >= 21 && current18.tempC <= 25
+      ? -1
+      : current18.tempC <= 15
+        ? 1
+        : 0
+    : 0;
   const next18WindWorsenShift: 0 | 1 =
-    discountTime === '15' && next18TempDropShift === 1 && current18.windMs > current15.windMs ? 1 : 0;
+    discountTime === '15' &&
+    next18TempDropShift === 1 &&
+    current18.tempC <= 15 &&
+    current18.windMs >= 3 &&
+    current18.windMs > current15.windMs
+      ? 1
+      : 0;
 
   return {
     nearTermWeather: toNearTermWeather(nearEntry.weather),

@@ -223,7 +223,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '金土',
       baseRateBonus: 0,
-      weekdayCalcIncludes: ['気温 16〜20度 -1段', '15時と18時の気温差が6度以上 +1段'],
+      weekdayCalcIncludes: ['気温 16〜20度 -1段', '15時と18時の気温差が6度以上（18時が15度以下） +1段'],
       weekdayResultIncludes: ['曜日基準補正は0段', '金曜・土曜の基準のままです'],
     },
   },
@@ -240,7 +240,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
-      weekdayCalcIncludes: ['気温 31〜35度 +1段', '15時と18時の気温差が6度以上 +1段', '18時予報で風も強まる +1段'],
+      weekdayCalcIncludes: ['気温 31〜35度 +1段', '15時と18時の気温差が6度以上（18時が15度以下） +1段', '18時が15度以下で風3m以上に強まる +1段'],
       bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
       bonusResultIncludes: ['値引率補正は+5%'],
     },
@@ -639,6 +639,145 @@ let passed = 0;
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
+    process.exitCode = 1;
+  }
+}
+
+
+
+{
+  const weatherInput: WeatherInput = {
+    hourlyForecasts: buildHourlyForecastsFromLegacy({ legacyWeather: weather({}), discountTime: '15' }),
+    afterRainSky: null,
+  };
+  weatherInput.hourlyForecasts['15'].tempC = 30;
+  weatherInput.hourlyForecasts['16'].tempC = 28;
+  weatherInput.hourlyForecasts['18'].tempC = 24;
+  weatherInput.hourlyForecasts['15'].windMs = 2;
+  weatherInput.hourlyForecasts['18'].windMs = 5;
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
+  const info = getWeekdayBaseInfo(2, '15', resolvedWeather, '2026-04-01');
+  const guide = getBasisGuideDisplay({
+    date: '2026-04-01',
+    weekday: 2,
+    discountTime: '15',
+    weather: resolvedWeather,
+  });
+
+  try {
+    assert.equal(resolvedWeather.next18TempDropShift, -1);
+    assert.equal(resolvedWeather.next18WindWorsenShift, 0);
+    assert.equal(info.adjusted, '金土');
+    assert.ok(guide.weekdayCalcText?.includes('15時と18時の気温差が6度以上（18時が21〜25度） -1段'), 'weekdayCalcText に快適化の-1段がありません');
+    assert.ok(!guide.weekdayCalcText?.includes('風3m以上に強まる'), '快適な18時では風強まり補正を出さない');
+    console.log('PASS: 30度から24度に下がる場合は1段弱め、風強まりは加えない');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 30度から24度に下がる場合は1段弱め、風強まりは加えない');
+    console.error(error);
+    console.error('actual info =', info);
+    console.error('actual guide =', guide);
+    console.error('actual resolvedWeather =', resolvedWeather);
+    process.exitCode = 1;
+  }
+}
+
+{
+  const weatherInput: WeatherInput = {
+    hourlyForecasts: buildHourlyForecastsFromLegacy({ legacyWeather: weather({}), discountTime: '15' }),
+    afterRainSky: null,
+  };
+  weatherInput.hourlyForecasts['15'].tempC = 21;
+  weatherInput.hourlyForecasts['16'].tempC = 28;
+  weatherInput.hourlyForecasts['18'].tempC = 15;
+  weatherInput.hourlyForecasts['15'].windMs = 2;
+  weatherInput.hourlyForecasts['18'].windMs = 2;
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
+  const info = getWeekdayBaseInfo(5, '15', resolvedWeather, '2026-04-03');
+  const guide = getBasisGuideDisplay({
+    date: '2026-04-03',
+    weekday: 5,
+    discountTime: '15',
+    weather: resolvedWeather,
+  });
+
+  try {
+    assert.equal(resolvedWeather.next18TempDropShift, 1);
+    assert.equal(resolvedWeather.next18WindWorsenShift, 0);
+    assert.equal(info.adjusted, '火木');
+    assert.ok(guide.weekdayCalcText?.includes('15時と18時の気温差が6度以上（18時が15度以下） +1段'), 'weekdayCalcText に寒さの+1段がありません');
+    console.log('PASS: 18時が15度以下に下がる場合は気温差で1段強める');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 18時が15度以下に下がる場合は気温差で1段強める');
+    console.error(error);
+    console.error('actual info =', info);
+    console.error('actual guide =', guide);
+    console.error('actual resolvedWeather =', resolvedWeather);
+    process.exitCode = 1;
+  }
+}
+
+{
+  const weatherInput: WeatherInput = {
+    hourlyForecasts: buildHourlyForecastsFromLegacy({ legacyWeather: weather({}), discountTime: '15' }),
+    afterRainSky: null,
+  };
+  weatherInput.hourlyForecasts['15'].tempC = 21;
+  weatherInput.hourlyForecasts['16'].tempC = 28;
+  weatherInput.hourlyForecasts['18'].tempC = 15;
+  weatherInput.hourlyForecasts['15'].windMs = 2;
+  weatherInput.hourlyForecasts['18'].windMs = 3;
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
+  const info = getWeekdayBaseInfo(5, '15', resolvedWeather, '2026-04-03');
+  const guide = getBasisGuideDisplay({
+    date: '2026-04-03',
+    weekday: 5,
+    discountTime: '15',
+    weather: resolvedWeather,
+  });
+
+  try {
+    assert.equal(resolvedWeather.next18TempDropShift, 1);
+    assert.equal(resolvedWeather.next18WindWorsenShift, 1);
+    assert.equal(info.adjusted, '月水');
+    assert.ok(guide.weekdayCalcText?.includes('18時が15度以下で風3m以上に強まる +1段'), 'weekdayCalcText に寒い時の風強まり+1段がありません');
+    console.log('PASS: 寒い18時で風が3m以上に強まる場合だけ追加で1段強める');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 寒い18時で風が3m以上に強まる場合だけ追加で1段強める');
+    console.error(error);
+    console.error('actual info =', info);
+    console.error('actual guide =', guide);
+    console.error('actual resolvedWeather =', resolvedWeather);
+    process.exitCode = 1;
+  }
+}
+
+{
+  const weatherInput: WeatherInput = {
+    hourlyForecasts: buildHourlyForecastsFromLegacy({ legacyWeather: weather({}), discountTime: '15' }),
+    afterRainSky: null,
+  };
+  weatherInput.hourlyForecasts['15'].tempC = 21;
+  weatherInput.hourlyForecasts['16'].tempC = 28;
+  weatherInput.hourlyForecasts['18'].tempC = 15;
+  weatherInput.hourlyForecasts['15'].windMs = 1;
+  weatherInput.hourlyForecasts['18'].windMs = 2;
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
+  const info = getWeekdayBaseInfo(5, '15', resolvedWeather, '2026-04-03');
+
+  try {
+    assert.equal(resolvedWeather.next18TempDropShift, 1);
+    assert.equal(resolvedWeather.next18WindWorsenShift, 0);
+    assert.equal(info.adjusted, '火木');
+    console.log('PASS: 風が強まっても18時側が3m未満なら風強まり補正なし');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 風が強まっても18時側が3m未満なら風強まり補正なし');
+    console.error(error);
+    console.error('actual info =', info);
+    console.error('actual resolvedWeather =', resolvedWeather);
     process.exitCode = 1;
   }
 }
@@ -1130,7 +1269,7 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 17} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 21} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
