@@ -62,7 +62,8 @@ export type ResolvedWeatherInput = {
   windLevel: WindLevel;
   tempLevel: TempLevel;
   next18TempDropShift: -1 | 0 | 1;
-  next18WindWorsenShift: 0 | 1;
+  next18WindWorsenShift: 0 | 1 | 2;
+  next18WindWorsenKind: 'cold' | 'warm' | null;
   afterRainSky: AfterRainSky;
 };
 

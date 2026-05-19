@@ -171,14 +171,36 @@ export function resolveWeatherInputForDiscount(
         ? 1
         : 0
     : 0;
-  const next18WindWorsenShift: 0 | 1 =
+  const nearLowTempWindAlreadyCounted =
+    discountTime === '15' && nearEntry.tempC <= 15 && nearEntry.windMs >= 3;
+  const nearWarmWindAlreadyCounted =
+    discountTime === '15' && nearEntry.tempC > 15 && nearEntry.windMs >= 5;
+  const hasColdNext18WindWorsen =
     discountTime === '15' &&
     next18TempDropShift === 1 &&
+    !nearLowTempWindAlreadyCounted &&
     current18.tempC <= 15 &&
     current18.windMs >= 3 &&
-    current18.windMs > current15.windMs
+    current18.windMs > current15.windMs;
+  const hasWarmNext18WindWorsen =
+    discountTime === '15' &&
+    !hasColdNext18WindWorsen &&
+    !nearWarmWindAlreadyCounted &&
+    current18.tempC > 15 &&
+    current18.windMs >= 5 &&
+    current18.windMs > current15.windMs;
+  const next18WindWorsenShift: 0 | 1 | 2 = hasColdNext18WindWorsen
+    ? current18.windMs >= 5
+      ? 2
+      : 1
+    : hasWarmNext18WindWorsen
       ? 1
       : 0;
+  const next18WindWorsenKind: 'cold' | 'warm' | null = hasColdNext18WindWorsen
+    ? 'cold'
+    : hasWarmNext18WindWorsen
+      ? 'warm'
+      : null;
 
   return {
     nearTermWeather: toNearTermWeather(nearEntry.weather),
@@ -188,6 +210,7 @@ export function resolveWeatherInputForDiscount(
     tempLevel: toTempLevel(nearEntry.tempC),
     next18TempDropShift,
     next18WindWorsenShift,
+    next18WindWorsenKind,
     afterRainSky: weather.afterRainSky,
   };
 }

@@ -266,7 +266,18 @@ function isWindThresholdMet(tempLevel: TempLevel, windLevel: WindLevel): boolean
 }
 
 function getWindShift(tempLevel: TempLevel, windLevel: WindLevel): number {
-  return isWindThresholdMet(tempLevel, windLevel) ? 1 : 0;
+  if (!isWindThresholdMet(tempLevel, windLevel)) {
+    return 0;
+  }
+
+  const is15OrLess =
+    tempLevel === "5orLess" || tempLevel === "6to10" || tempLevel === "11to15";
+
+  if (is15OrLess && windLevel === "5orMore") {
+    return 2;
+  }
+
+  return 1;
 }
 
 function getWindShiftTerm(
@@ -280,8 +291,16 @@ function getWindShiftTerm(
   const is15OrLess =
     tempLevel === "5orLess" || tempLevel === "6to10" || tempLevel === "11to15";
 
+  if (is15OrLess) {
+    if (windLevel === "5orMore") {
+      return { label: "風 5m以上（15度以下）", value: 2 };
+    }
+
+    return { label: "風 3〜4m（15度以下）", value: 1 };
+  }
+
   return {
-    label: is15OrLess ? "風 3m以上（15度以下）" : "風 5m以上",
+    label: "風 5m以上",
     value: 1,
   };
 }
@@ -325,7 +344,15 @@ function getNext18WindWorsenShiftTerm(
     return undefined;
   }
 
-  return { label: "18時が15度以下で風3m以上に強まる", value: 1 };
+  if (weather.next18WindWorsenKind === "warm") {
+    return { label: "18時が16度以上で風5m以上に強まる", value: 1 };
+  }
+
+  if (weather.next18WindWorsenShift === 2) {
+    return { label: "18時が15度以下で風5m以上に強まる", value: 2 };
+  }
+
+  return { label: "18時が15度以下で風3〜4mに強まる", value: 1 };
 }
 
 function getLaterPrecipShift(weather: ResolvedWeatherInput): number {
