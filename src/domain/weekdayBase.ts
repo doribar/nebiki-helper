@@ -344,10 +344,6 @@ function getNext18WindWorsenShiftTerm(
     return undefined;
   }
 
-  if (weather.next18WindWorsenKind === "warm") {
-    return { label: "18時が16度以上で風5m以上に強まる", value: 1 };
-  }
-
   if (weather.next18WindWorsenShift === 2) {
     return { label: "18時が15度以下で風5m以上に強まる", value: 2 };
   }

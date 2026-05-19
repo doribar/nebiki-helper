@@ -680,14 +680,14 @@ let passed = 0;
 
   try {
     assert.equal(resolvedWeather.next18TempDropShift, -1);
-    assert.equal(resolvedWeather.next18WindWorsenShift, 1);
-    assert.equal(info.adjusted, '火木');
+    assert.equal(resolvedWeather.next18WindWorsenShift, 0);
+    assert.equal(info.adjusted, '金土');
     assert.ok(guide.weekdayCalcText?.includes('15時と18時の気温差が6度以上（18時が21〜25度） -1段'), 'weekdayCalcText に快適化の-1段がありません');
-    assert.ok(guide.weekdayCalcText?.includes('18時が16度以上で風5m以上に強まる +1段'), 'weekdayCalcText に暖かい日の風強まり+1段がありません');
-    console.log('PASS: 30度から24度に下がり18時風5m以上なら快適化と風強まりが相殺される');
+    assert.ok(!guide.weekdayCalcText?.includes('18時が16度以上で風5m以上に強まる'), '暖かい日の18時風強まり補正は出さない');
+    console.log('PASS: 30度から24度に下がり18時風5m以上でも18時風強まり補正はかけない');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 30度から24度に下がり18時風5m以上なら快適化と風強まりが相殺される');
+    console.error('FAIL: 30度から24度に下がり18時風5m以上でも18時風強まり補正はかけない');
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
