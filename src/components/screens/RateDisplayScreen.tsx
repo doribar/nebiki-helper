@@ -87,6 +87,8 @@ export function NoticeItems() {
     <div style={{ lineHeight: 1.8 }}>
       ・<strong>2個の商品</strong>は<strong>多いにしない</strong>
       <br />
+      ・<strong>多い・少ないの判断</strong>は、残り数だけでなく<strong>商品の減り方</strong>も含める
+      <br />
       ・<strong>少ない判定の商品</strong>は最終値引以外では<strong>引かない</strong>
       <br />
       ・<strong>見た目が悪い個別商品</strong>は表示値引率に<strong>+10%</strong>
