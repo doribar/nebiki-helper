@@ -8,6 +8,7 @@ import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/disco
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
+import { appendReview19RecordInMemory, normalizeReview19Result } from '../src/domain/review19.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
@@ -1447,7 +1448,39 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 25} checks passed.`);
+try {
+  const rawReview19 = {
+    date: '2026-05-09',
+    sessionStartedAt: '2026-05-09T08:00:00.000Z',
+    ratings: { bento_men: 'remained_slightly_too_much' },
+    recordedAt: '2026-05-09T10:00:00.000Z',
+    snapshot: {
+      version: 1,
+      capturedAt: '2026-05-09T10:00:00.000Z',
+      session: { date: '2026-05-09', discountTime: '17' },
+      areas: { bento_men: { rateText: '20%' } },
+    },
+  };
+  const normalized = normalizeReview19Result(rawReview19 as never);
+  assert.equal(normalized?.snapshot?.version, 1);
+  assert.equal(normalized?.snapshot?.areas.bento_men.rateText, '20%');
+
+  const records = appendReview19RecordInMemory({
+    currentRecords: [],
+    recordToAdd: normalized!,
+  });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].snapshot?.version, 1);
+  assert.equal(records[0].snapshot?.areas.bento_men.rateText, '20%');
+  console.log('PASS: 19時チェックは値引状況スナップショットを保持する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 19時チェックは値引状況スナップショットを保持する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 26} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

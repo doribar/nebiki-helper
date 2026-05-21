@@ -26,6 +26,21 @@ export type PersistedNebikiState = {
   dailyMessageState: DailyMessageState;
 };
 
+function cloneSkipRecord(record: NextSessionSkipRecord): NextSessionSkipRecord {
+  const cloned: NextSessionSkipRecord = {
+    date: record.date,
+    targetDiscountTime: record.targetDiscountTime,
+    areaId: record.areaId,
+  };
+
+  if (typeof record.previousRateText === "string") cloned.previousRateText = record.previousRateText;
+  if (typeof record.previousManyRateText === "string") cloned.previousManyRateText = record.previousManyRateText;
+  if (typeof record.previousManyNote === "string") cloned.previousManyNote = record.previousManyNote;
+  if (typeof record.previousNormalRateText === "string") cloned.previousNormalRateText = record.previousNormalRateText;
+
+  return cloned;
+}
+
 function safeParseJSON<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
 
@@ -51,13 +66,14 @@ export function clearCurrentSession(): void {
 
 export function loadNextSessionSkipRecords(): NextSessionSkipRecord[] {
   const raw = localStorage.getItem(STORAGE_KEYS.nextSessionSkipRecords);
-  return safeParseJSON<NextSessionSkipRecord[]>(raw, []);
+  const parsed = safeParseJSON<NextSessionSkipRecord[]>(raw, []);
+  return Array.isArray(parsed) ? parsed.map(cloneSkipRecord) : [];
 }
 
 export function saveNextSessionSkipRecords(records: NextSessionSkipRecord[]): void {
   localStorage.setItem(
     STORAGE_KEYS.nextSessionSkipRecords,
-    JSON.stringify(records)
+    JSON.stringify(records.map(cloneSkipRecord))
   );
 }
 
@@ -78,7 +94,7 @@ export function appendNextSessionSkipRecords(
     );
 
     if (!exists) {
-      merged.push(record);
+      merged.push(cloneSkipRecord(record));
     }
   }
 
@@ -105,7 +121,7 @@ export function consumeNextSessionSkipAreaIds(params: {
       )
   );
 
-  saveNextSessionSkipRecords(remaining);
+  saveNextSessionSkipRecords(remaining.map(cloneSkipRecord));
 
   return matched.map((r) => r.areaId);
 }
@@ -236,10 +252,10 @@ export function appendSkipRecordsInMemory(params: {
   recordsToAdd: NextSessionSkipRecord[];
 }): NextSessionSkipRecord[] {
   if (params.recordsToAdd.length === 0) {
-    return params.currentRecords.map((record) => ({ ...record }));
+    return params.currentRecords.map(cloneSkipRecord);
   }
 
-  const merged = params.currentRecords.map((record) => ({ ...record }));
+  const merged = params.currentRecords.map(cloneSkipRecord);
 
   for (const record of params.recordsToAdd) {
     const exists = merged.some(
@@ -250,7 +266,7 @@ export function appendSkipRecordsInMemory(params: {
     );
 
     if (!exists) {
-      merged.push({ ...record });
+      merged.push(cloneSkipRecord(record));
     }
   }
 
@@ -263,6 +279,7 @@ export function consumeSkipRecordsInMemory(params: {
   targetDiscountTime: "18" | "19";
 }): {
   skippedAreaIds: AreaId[];
+  skippedRecords: NextSessionSkipRecord[];
   remainingRecords: NextSessionSkipRecord[];
 } {
   const matched = params.currentRecords.filter(
@@ -279,10 +296,11 @@ export function consumeSkipRecordsInMemory(params: {
           record.targetDiscountTime === params.targetDiscountTime
         )
     )
-    .map((record) => ({ ...record }));
+    .map(cloneSkipRecord);
 
   return {
     skippedAreaIds: matched.map((record) => record.areaId),
+    skippedRecords: matched.map(cloneSkipRecord),
     remainingRecords,
   };
 }

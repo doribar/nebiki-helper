@@ -18,6 +18,10 @@ export type AreaId =
   date: string;
   targetDiscountTime: "18" | "19";
   areaId: AreaId;
+  previousRateText?: string;
+  previousManyRateText?: string;
+  previousManyNote?: string;
+  previousNormalRateText?: string;
 };
 
 export type AreaMaster = {
@@ -96,6 +100,14 @@ export type AreaProgress = {
   visitedAt?: string;
   completedAt?: string;
   skipReason?: "manual" | "few" | "late_time";
+  completedRateText?: string;
+  completedManyRateText?: string;
+  completedManyNote?: string;
+  completedNormalRateText?: string;
+  previousRateText?: string;
+  previousManyRateText?: string;
+  previousManyNote?: string;
+  previousNormalRateText?: string;
 };
 
 
@@ -218,11 +230,60 @@ export type Review19Rating =
   | "remained_slightly_too_much"
   | "remained_too_much";
 
+export type Review19AreaSnapshot = {
+  areaId: AreaId;
+  areaName: string;
+  status: AreaStatus;
+  statusText?: string;
+  areaJudge: AreaJudge;
+  judgeText: string;
+  rateText: string;
+  manyRateText?: string;
+  manyNote?: string;
+  normalRateText?: string;
+  visitedAt?: string;
+  completedAt?: string;
+  skipReason?: "manual" | "few" | "late_time";
+};
+
+export type Review19Snapshot = {
+  version: 1;
+  capturedAt: string;
+  session: {
+    date: string;
+    weekday: number;
+    discountTime: DiscountTime;
+    startedAt: string;
+    manualWeekdayOverride: boolean;
+    manualDiscountTimeOverride: boolean;
+    weather: WeatherInput;
+    resolvedWeather: ResolvedWeatherInput;
+  };
+  basis: {
+    originalWeekdayBase: WeekdayBaseLabel;
+    adjustedWeekdayBase: WeekdayBaseLabel;
+    weekdayShift: number;
+    baseRateBonus: number;
+    lateTimeBonus: number;
+    totalRateBonus: number;
+    baseRateBonusReason: string[];
+    noticeText?: string;
+    weekdaySummaryText?: string;
+    weekdayCalcText?: string;
+    weekdayResultText?: string;
+    bonusSummaryText?: string;
+    bonusCalcText?: string;
+    bonusResultText?: string;
+  };
+  areas: Record<AreaId, Review19AreaSnapshot>;
+};
+
 export type Review19Result = {
   date: string;
   sessionStartedAt: string;
   ratings: Record<AreaId, Review19Rating>;
   recordedAt?: string;
+  snapshot?: Review19Snapshot;
 };
 
 export type Review19AreaItem = {

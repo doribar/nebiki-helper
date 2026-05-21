@@ -56,6 +56,10 @@ export function normalizeReview19Result(raw?: Partial<Review19Result> | null): R
   return {
     ...base,
     recordedAt: typeof raw.recordedAt === 'string' ? raw.recordedAt : undefined,
+    snapshot:
+      raw.snapshot && typeof raw.snapshot === 'object'
+        ? JSON.parse(JSON.stringify(raw.snapshot))
+        : undefined,
   };
 }
 

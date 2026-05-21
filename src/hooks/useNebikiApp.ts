@@ -19,6 +19,7 @@ import type {
   NextSessionSkipRecord,
   Review19Rating,
   Review19Result,
+  Review19Snapshot,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -177,6 +178,63 @@ function getAreaStatusText(progress: AreaProgress): string | undefined {
   }
 }
 
+
+type CompletedRateSnapshot = Pick<
+  AreaProgress,
+  "completedRateText" | "completedManyRateText" | "completedManyNote" | "completedNormalRateText"
+>;
+
+function getProgressNormalRateText(progress: AreaProgress): string | undefined {
+  return progress.completedNormalRateText ?? progress.completedRateText;
+}
+
+function getProgressManyRateText(progress: AreaProgress): string | undefined {
+  return progress.completedManyRateText ?? progress.completedRateText;
+}
+
+function buildCompletedRateSnapshot(params: {
+  session: SessionData | null;
+  progress: AreaProgress;
+  weatherBonus: number;
+}): CompletedRateSnapshot {
+  const { session, progress, weatherBonus } = params;
+
+  if (!session || session.discountTime === "20" || !progress.areaJudge) {
+    return {};
+  }
+
+  const display = getNormalTimeRateDisplay({
+    discountTime: session.discountTime,
+    weatherBonus,
+    areaJudge: progress.areaJudge,
+    isSunday: session.weekday === 0 && session.discountTime === "15",
+  });
+
+  return {
+    completedRateText: display.normal.main,
+    completedManyRateText: display.many.main,
+    completedManyNote: display.many.note,
+    completedNormalRateText: display.normal.main,
+  };
+}
+
+function buildNextSessionSkipRecord(params: {
+  date: string;
+  targetDiscountTime: "18" | "19";
+  areaId: AreaId;
+  rateSnapshot: CompletedRateSnapshot;
+}): NextSessionSkipRecord {
+  return {
+    date: params.date,
+    targetDiscountTime: params.targetDiscountTime,
+    areaId: params.areaId,
+    previousRateText: params.rateSnapshot.completedRateText,
+    previousManyRateText: params.rateSnapshot.completedManyRateText,
+    previousManyNote: params.rateSnapshot.completedManyNote,
+    previousNormalRateText: params.rateSnapshot.completedNormalRateText,
+  };
+}
+
 function getNextUnstartedAreaId(
   areaProgressMap: Record<AreaId, AreaProgress>,
   referenceAreaId: AreaId
@@ -273,6 +331,38 @@ function normalizeAreaProgressMap(
         progress.skipReason === "few" ||
         progress.skipReason === "late_time"
           ? progress.skipReason
+          : undefined,
+      completedRateText:
+        typeof progress.completedRateText === "string"
+          ? progress.completedRateText
+          : undefined,
+      completedManyRateText:
+        typeof progress.completedManyRateText === "string"
+          ? progress.completedManyRateText
+          : undefined,
+      completedManyNote:
+        typeof progress.completedManyNote === "string"
+          ? progress.completedManyNote
+          : undefined,
+      completedNormalRateText:
+        typeof progress.completedNormalRateText === "string"
+          ? progress.completedNormalRateText
+          : undefined,
+      previousRateText:
+        typeof progress.previousRateText === "string"
+          ? progress.previousRateText
+          : undefined,
+      previousManyRateText:
+        typeof progress.previousManyRateText === "string"
+          ? progress.previousManyRateText
+          : undefined,
+      previousManyNote:
+        typeof progress.previousManyNote === "string"
+          ? progress.previousManyNote
+          : undefined,
+      previousNormalRateText:
+        typeof progress.previousNormalRateText === "string"
+          ? progress.previousNormalRateText
           : undefined,
     };
   }
@@ -497,30 +587,40 @@ function getNextSkipTargetDiscountTime(
 }
 
 function createAreaProgressMapWithAutoSkippedAreas(
-  skippedAreaIds: AreaId[]
+  skippedRecords: NextSessionSkipRecord[]
 ): Record<AreaId, AreaProgress> {
   const base = createInitialAreaProgressMap();
 
-  for (const areaId of skippedAreaIds) {
-    if (!isValidAreaId(areaId) || !base[areaId]) continue;
+  for (const record of skippedRecords) {
+    if (!isValidAreaId(record.areaId) || !base[record.areaId]) continue;
 
-    base[areaId] = {
-      ...base[areaId],
+    base[record.areaId] = {
+      ...base[record.areaId],
       status: "auto_skipped_late_time",
       skipReason: "late_time",
       completedAt: new Date().toISOString(),
+      previousRateText: record.previousRateText,
+      previousManyRateText: record.previousManyRateText,
+      previousManyNote: record.previousManyNote,
+      previousNormalRateText: record.previousNormalRateText,
     };
   }
 
   return base;
 }
 
-function buildAutoSkippedAreaNotice(skippedAreaIds: AreaId[]): string | null {
-  const validSkippedAreaIds = skippedAreaIds.filter(isValidAreaId);
-  if (validSkippedAreaIds.length === 0) return null;
+function buildAutoSkippedAreaNotice(skippedRecords: NextSessionSkipRecord[]): string | null {
+  const validSkippedRecords = skippedRecords.filter((record) => isValidAreaId(record.areaId));
+  if (validSkippedRecords.length === 0) return null;
 
-  const names = validSkippedAreaIds.map(getAreaName).join("、");
-  return `${names}は前回「次の値引の方が近くなったため+5%」で値引済みのため、この値引ではスキップしました。`;
+  const lines = validSkippedRecords.map((record) => {
+    const normalRate = record.previousNormalRateText ?? record.previousRateText;
+    const rateText = normalRate ? `（前回 ${normalRate}）` : "";
+    return `・${getAreaName(record.areaId)}${rateText}`;
+  });
+
+  return `前回「次の値引の方が近くなったため+5%」で値引済みのため、この値引では以下のエリアをスキップしました。
+${lines.join("\n")}`;
 }
 
 function mergeNoticeLines(...notices: Array<string | null | undefined>): string | null {
@@ -554,6 +654,78 @@ function refreshSessionDiscountTime(session: SessionData | null): {
   return {
     nextSession: session,
     timeSwitchNotice: null,
+  };
+}
+
+
+function createReview19Snapshot(params: {
+  capturedAt: string;
+  session: SessionData;
+  resolvedWeather: ReturnType<typeof resolveWeatherInputForDiscount>;
+  weekdayBaseInfo: ReturnType<typeof getWeekdayBaseInfo>;
+  basisGuide: ReturnType<typeof getBasisGuideDisplay>;
+  lateTimeBonus: number;
+  areaProgressMap: Record<AreaId, AreaProgress>;
+  doneSummaryItems: DoneSummaryItem[];
+}): Review19Snapshot {
+  const doneSummaryByArea = params.doneSummaryItems.reduce((acc, item) => {
+    acc[item.areaId] = item;
+    return acc;
+  }, {} as Record<AreaId, DoneSummaryItem>);
+
+  const areas = DONE_SUMMARY_ROUTE.reduce((acc, areaId) => {
+    const progress = params.areaProgressMap[areaId];
+    const summary = doneSummaryByArea[areaId];
+
+    acc[areaId] = {
+      areaId,
+      areaName: getAreaName(areaId),
+      status: progress?.status ?? "unstarted",
+      statusText: summary?.statusText,
+      areaJudge: progress?.areaJudge ?? null,
+      judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
+      rateText: summary?.rateText ?? "未完了",
+      manyRateText: summary?.manyRateText,
+      manyNote: summary?.manyNote,
+      normalRateText: summary?.normalRateText,
+      visitedAt: progress?.visitedAt,
+      completedAt: progress?.completedAt,
+      skipReason: progress?.skipReason,
+    };
+
+    return acc;
+  }, {} as Review19Snapshot["areas"]);
+
+  return {
+    version: 1,
+    capturedAt: params.capturedAt,
+    session: {
+      date: params.session.date,
+      weekday: params.session.weekday,
+      discountTime: params.session.discountTime,
+      startedAt: params.session.startedAt,
+      manualWeekdayOverride: params.session.manualWeekdayOverride,
+      manualDiscountTimeOverride: params.session.manualDiscountTimeOverride,
+      weather: JSON.parse(JSON.stringify(params.session.weather)),
+      resolvedWeather: JSON.parse(JSON.stringify(params.resolvedWeather)),
+    },
+    basis: {
+      originalWeekdayBase: params.weekdayBaseInfo.original,
+      adjustedWeekdayBase: params.weekdayBaseInfo.adjusted,
+      weekdayShift: params.weekdayBaseInfo.weekdayShift,
+      baseRateBonus: params.weekdayBaseInfo.baseRateBonus,
+      lateTimeBonus: params.lateTimeBonus,
+      totalRateBonus: params.weekdayBaseInfo.baseRateBonus + params.lateTimeBonus,
+      baseRateBonusReason: [...params.weekdayBaseInfo.baseRateBonusReason],
+      noticeText: params.basisGuide.noticeText,
+      weekdaySummaryText: params.basisGuide.weekdaySummaryText,
+      weekdayCalcText: params.basisGuide.weekdayCalcText,
+      weekdayResultText: params.basisGuide.weekdayResultText,
+      bonusSummaryText: params.basisGuide.bonusSummaryText,
+      bonusCalcText: params.basisGuide.bonusCalcText,
+      bonusResultText: params.basisGuide.bonusResultText,
+    },
+    areas,
   };
 }
 
@@ -1113,13 +1285,19 @@ const lateSkipNotice = useMemo(() => {
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
       if (progress?.status === "auto_skipped_late_time") {
+        const previousNormalRateText =
+          progress.previousNormalRateText ?? progress.previousRateText ?? "前回値引率不明";
+        const previousManyRateText =
+          progress.previousManyRateText ?? progress.previousRateText ?? "前回値引率不明";
+
         return {
           areaId,
           areaName: getAreaName(areaId),
           judgeText: "前回+5%済み",
-          rateText: "スキップ済み",
-          manyRateText: "スキップ済み",
-          normalRateText: "スキップ済み",
+          rateText: previousNormalRateText,
+          manyRateText: previousManyRateText,
+          manyNote: progress.previousManyNote,
+          normalRateText: previousNormalRateText,
           statusText,
         };
       }
@@ -1143,14 +1321,17 @@ const lateSkipNotice = useMemo(() => {
         isSunday: session.weekday === 0 && discountTime === "15",
       });
 
+      const completedNormalRateText = getProgressNormalRateText(progress) ?? display.normal.main;
+      const completedManyRateText = getProgressManyRateText(progress) ?? display.many.main;
+
       return {
         areaId,
         areaName: getAreaName(areaId),
         judgeText: getAreaJudgeText(progress.areaJudge),
-        rateText: display.normal.main,
-        manyRateText: display.many.main,
-        manyNote: display.many.note,
-        normalRateText: display.normal.main,
+        rateText: completedNormalRateText,
+        manyRateText: completedManyRateText,
+        manyNote: progress.completedManyNote ?? display.many.note,
+        normalRateText: completedNormalRateText,
         statusText,
       };
     });
@@ -1527,7 +1708,7 @@ const lateSkipNotice = useMemo(() => {
 
       if (timeSwitchTarget && prev.session) {
         let areaProgressMap = createInitialAreaProgressMap();
-        let consumedSkippedAreaIds: AreaId[] = [];
+        let consumedSkippedRecords: NextSessionSkipRecord[] = [];
 
         if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
           const consumed = consumeSkipRecordsInMemory({
@@ -1537,9 +1718,9 @@ const lateSkipNotice = useMemo(() => {
           });
 
           nextSkipRecords = consumed.remainingRecords;
-          consumedSkippedAreaIds = consumed.skippedAreaIds;
+          consumedSkippedRecords = consumed.skippedRecords;
           areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-            consumedSkippedAreaIds
+            consumedSkippedRecords
           );
         }
 
@@ -1567,7 +1748,7 @@ const lateSkipNotice = useMemo(() => {
           pendingDeferredAreaIds: [],
           timeSwitchNotice: mergeNoticeLines(
             buildTimeSwitchNotice(nextSession.discountTime),
-            buildAutoSkippedAreaNotice(consumedSkippedAreaIds)
+            buildAutoSkippedAreaNotice(consumedSkippedRecords)
           ),
           finalTimeStep: 0,
         };
@@ -1592,7 +1773,7 @@ const lateSkipNotice = useMemo(() => {
       }
 
       let areaProgressMap = createInitialAreaProgressMap();
-      let consumedSkippedAreaIds: AreaId[] = [];
+      let consumedSkippedRecords: NextSessionSkipRecord[] = [];
 
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
@@ -1602,9 +1783,9 @@ const lateSkipNotice = useMemo(() => {
         });
 
         nextSkipRecords = consumed.remainingRecords;
-        consumedSkippedAreaIds = consumed.skippedAreaIds;
+        consumedSkippedRecords = consumed.skippedRecords;
         areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-          consumedSkippedAreaIds
+          consumedSkippedRecords
         );
       }
 
@@ -1627,7 +1808,7 @@ const lateSkipNotice = useMemo(() => {
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
-        timeSwitchNotice: buildAutoSkippedAreaNotice(consumedSkippedAreaIds),
+        timeSwitchNotice: buildAutoSkippedAreaNotice(consumedSkippedRecords),
         finalTimeStep: 0,
       };
     });
@@ -1819,6 +2000,11 @@ const lateSkipNotice = useMemo(() => {
       if (!prev.currentAreaId) return prev;
       const currentAreaId = prev.currentAreaId;
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
+      const rateSnapshot = buildCompletedRateSnapshot({
+        session: prev.session,
+        progress: prev.areaProgressMap[currentAreaId],
+        weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+      });
 
       const updatedMap = {
         ...prev.areaProgressMap,
@@ -1826,6 +2012,7 @@ const lateSkipNotice = useMemo(() => {
           ...prev.areaProgressMap[currentAreaId],
           status: "completed" as const,
           completedAt: new Date().toISOString(),
+          ...rateSnapshot,
         },
       };
 
@@ -1843,11 +2030,12 @@ const lateSkipNotice = useMemo(() => {
           nextSkipRecords = appendSkipRecordsInMemory({
             currentRecords: nextSkipRecords,
             recordsToAdd: [
-              {
+              buildNextSessionSkipRecord({
                 date: prev.session.date,
                 targetDiscountTime,
                 areaId: currentAreaId,
-              },
+                rateSnapshot,
+              }),
             ],
           });
         }
@@ -1937,9 +2125,24 @@ const lateSkipNotice = useMemo(() => {
   function saveReview19() {
     if (state.screen !== "review19" || !state.review19) return;
 
+    const recordedAt = state.review19.recordedAt ?? new Date().toISOString();
+    const snapshot = state.session
+      ? createReview19Snapshot({
+          capturedAt: recordedAt,
+          session: state.session,
+          resolvedWeather: sessionSourceResolvedWeather,
+          weekdayBaseInfo,
+          basisGuide,
+          lateTimeBonus,
+          areaProgressMap: state.areaProgressMap,
+          doneSummaryItems,
+        })
+      : state.review19.snapshot;
+
     const recordedReview: Review19Result = {
       ...state.review19,
-      recordedAt: state.review19.recordedAt ?? new Date().toISOString(),
+      recordedAt,
+      snapshot,
     };
 
     appendReview19Record(recordedReview);
