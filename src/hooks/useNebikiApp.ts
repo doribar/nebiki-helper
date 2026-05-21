@@ -17,6 +17,8 @@ import type {
   ScreenName,
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
+  Review19Rating,
+  Review19Result,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -35,6 +37,7 @@ import {
   loadPersistedNebikiState,
   normalizeDailyMessageState,
   savePersistedNebikiState,
+  appendReview19Record,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -63,6 +66,12 @@ import {
   getNearTermWeatherForDiscount,
   resolveWeatherInputForDiscount,
 } from "../domain/hourlyWeather.ts";
+import {
+  createInitialReview19Result,
+  getReview19AreaItems,
+  normalizeReview19Result,
+  shouldAutoStartReview19,
+} from "../domain/review19.ts";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -284,6 +293,7 @@ function createInitialState(initialSessionDraft: SessionDraft = createInitialSes
     pendingDeferredAreaIds: [],
     timeSwitchNotice: null,
     finalTimeStep: 0,
+    review19: null,
   };
 }
 
@@ -468,6 +478,7 @@ function normalizeLoadedState(
       typeof (loaded as Partial<AppState>).finalTimeStep === "number"
         ? ((loaded as Partial<AppState>).finalTimeStep as AppState["finalTimeStep"])
         : 0,
+    review19: normalizeReview19Result((loaded as Partial<AppState>).review19),
   };
 }
 
@@ -706,6 +717,45 @@ export function useNebikiApp(): UseNebikiAppResult {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!shouldAutoStartReview19({
+      session: state.session,
+      screen: state.screen,
+      review19: state.review19,
+      now: new Date(nowMs),
+    })) {
+      return;
+    }
+
+    setUndoSnapshot(null);
+    setUndoNotice(null);
+
+    setState((prev) => {
+      if (!prev.session) return prev;
+      if (!shouldAutoStartReview19({
+        session: prev.session,
+        screen: prev.screen,
+        review19: prev.review19,
+        now: new Date(nowMs),
+      })) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        screen: "review19",
+        currentAreaId: null,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: null,
+        review19: createInitialReview19Result({
+          date: prev.session.date,
+          sessionStartedAt: prev.session.startedAt,
+        }),
+      };
+    });
+  }, [state.session, state.screen, state.review19, nowMs]);
 
   useEffect(() => {
     if (!state.session || state.session.manualDiscountTimeOverride) return;
@@ -1110,6 +1160,14 @@ const lateSkipNotice = useMemo(() => {
     weekdayBaseInfo.baseRateBonus,
     lateTimeBonus,
   ]);
+
+  const review19Items = useMemo(() => {
+    const ratings = state.review19?.ratings;
+    return getReview19AreaItems().map((item) => ({
+      ...item,
+      rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
+    }));
+  }, [state.review19]);
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
@@ -1859,6 +1917,45 @@ const lateSkipNotice = useMemo(() => {
     }));
   }
 
+  function updateReview19Rating(areaId: AreaId, rating: Review19Rating) {
+    setState((prev) => {
+      if (prev.screen !== "review19" || !prev.review19) return prev;
+
+      return {
+        ...prev,
+        review19: {
+          ...prev.review19,
+          ratings: {
+            ...prev.review19.ratings,
+            [areaId]: rating,
+          },
+        },
+      };
+    });
+  }
+
+  function saveReview19() {
+    if (state.screen !== "review19" || !state.review19) return;
+
+    const recordedReview: Review19Result = {
+      ...state.review19,
+      recordedAt: state.review19.recordedAt ?? new Date().toISOString(),
+    };
+
+    appendReview19Record(recordedReview);
+
+    setState((prev) => {
+      if (prev.screen !== "review19" || !prev.review19) return prev;
+      if (prev.review19.sessionStartedAt !== recordedReview.sessionStartedAt) return prev;
+
+      return {
+        ...prev,
+        screen: "done",
+        review19: recordedReview,
+      };
+    });
+  }
+
   function resetApp() {
     screenHistoryRef.current = [];
     previousRenderRef.current = null;
@@ -1901,6 +1998,7 @@ const lateSkipNotice = useMemo(() => {
   canChooseSkipTarget,
   skipTargetOptions,
   doneSummaryItems,
+  review19Items,
 },
     actions: {
       updateSessionDraft,
@@ -1915,6 +2013,8 @@ const lateSkipNotice = useMemo(() => {
       chooseSkipTargetArea,
       goToNextArea,
       advanceFinalTimeStep,
+      updateReview19Rating,
+      saveReview19,
       resetApp,
     },
   };

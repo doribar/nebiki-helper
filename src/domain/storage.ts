@@ -5,7 +5,9 @@ import type {
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
   SessionDraft,
+  Review19Result,
 } from "./types";
+import { appendReview19RecordInMemory, cloneReview19Records } from "./review19.ts";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
@@ -13,6 +15,7 @@ export const STORAGE_KEYS = {
   lastSessionWeather: "nebiki-helper/last-session-weather",
   lastUsedSessionDraft: "nebiki-helper/last-used-session-draft",
   dailyMessageState: "nebiki-helper/daily-message-state",
+  review19Records: "nebiki-helper/review19-records",
 } as const;
 
 export type PersistedNebikiState = {
@@ -168,6 +171,29 @@ export function saveDailyMessageState(state: DailyMessageState): void {
   localStorage.setItem(
     STORAGE_KEYS.dailyMessageState,
     JSON.stringify(normalizeDailyMessageState(state))
+  );
+}
+
+
+export function loadReview19Records(): Review19Result[] {
+  const raw = localStorage.getItem(STORAGE_KEYS.review19Records);
+  const parsed = safeParseJSON<Review19Result[]>(raw, []);
+  return cloneReview19Records(Array.isArray(parsed) ? parsed : []);
+}
+
+export function saveReview19Records(records: Review19Result[]): void {
+  localStorage.setItem(
+    STORAGE_KEYS.review19Records,
+    JSON.stringify(cloneReview19Records(records))
+  );
+}
+
+export function appendReview19Record(record: Review19Result): void {
+  saveReview19Records(
+    appendReview19RecordInMemory({
+      currentRecords: loadReview19Records(),
+      recordToAdd: record,
+    })
   );
 }
 

@@ -5,6 +5,7 @@ import { AreaJudgeScreen } from "../components/screens/AreaJudgeScreen";
 import { RateDisplayScreen } from "../components/screens/RateDisplayScreen";
 import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
+import { Review19Screen } from "../components/screens/Review19Screen";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -91,6 +92,15 @@ export function AppRouter({ app }: AppRouterProps) {
           onAdvance={actions.advanceFinalTimeStep}
           onBack={actions.goBackOneScreen}
           onBackToTop={actions.resetApp}
+        />
+      );
+
+    case "review19":
+      return (
+        <Review19Screen
+          items={derived.review19Items}
+          onChangeRating={actions.updateReview19Rating}
+          onSave={actions.saveReview19}
         />
       );
 

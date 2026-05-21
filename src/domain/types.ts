@@ -104,6 +104,7 @@ export type ScreenName =
   | "area_judge"
   | "rate_display"
   | "final_time"
+  | "review19"
   | "done";
 
 export type FlowMode = "normal" | "pending";
@@ -210,6 +211,26 @@ export type DailyMessageState = {
   rateNoticeShownDate: string | null;
 };
 
+export type Review19Rating =
+  | "decreased_too_much"
+  | "decreased_slightly_too_much"
+  | "just_right"
+  | "remained_slightly_too_much"
+  | "remained_too_much";
+
+export type Review19Result = {
+  date: string;
+  sessionStartedAt: string;
+  ratings: Record<AreaId, Review19Rating>;
+  recordedAt?: string;
+};
+
+export type Review19AreaItem = {
+  areaId: AreaId;
+  areaName: string;
+  rating: Review19Rating;
+};
+
 export type AppState = {
   screen: ScreenName;
   session: SessionData | null;
@@ -221,6 +242,7 @@ export type AppState = {
   pendingDeferredAreaIds: AreaId[];
   timeSwitchNotice: string | null;
   finalTimeStep: FinalTimeStep;
+  review19: Review19Result | null;
 };
 
 export type UseNebikiAppDerived = {
@@ -245,6 +267,7 @@ export type UseNebikiAppDerived = {
   canChooseSkipTarget: boolean;
   skipTargetOptions: SkipTargetOption[];
   doneSummaryItems: DoneSummaryItem[];
+  review19Items: Review19AreaItem[];
 };
 
 export type UseNebikiAppActions = {
@@ -261,6 +284,8 @@ export type UseNebikiAppActions = {
 
   goToNextArea: () => void;
   advanceFinalTimeStep: () => void;
+  updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
+  saveReview19: () => void;
   resetApp: () => void;
 };
 
