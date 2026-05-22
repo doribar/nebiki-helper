@@ -40,6 +40,8 @@ import {
   normalizeDailyMessageState,
   savePersistedNebikiState,
   appendReview19Record,
+  loadReview19Records,
+  saveReview19Records,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -73,6 +75,10 @@ import {
   getReview19AreaItems,
   normalizeReview19Result,
   shouldAutoStartReview19,
+  buildReview19ExportPayload,
+  getReview19ExportBatch,
+  getUnexportedReview19Records,
+  markReview19RecordsExportedInMemory,
 } from "../domain/review19.ts";
 
 function formatLocalDate(date = new Date()): string {
@@ -825,6 +831,7 @@ export function useNebikiApp(): UseNebikiAppResult {
   const [dailyMessageState, setDailyMessageState] = useState<DailyMessageState>(() =>
     normalizeDailyMessageState(initialPersistenceRef.current?.dailyMessageState ?? null)
   );
+  const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
 
   const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(null);
   const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(null);
@@ -1438,6 +1445,15 @@ const lateSkipNotice = useMemo(() => {
 
     return lines;
   }, [state.review19]);
+
+  const review19Export = (() => {
+    void review19RecordsVersion;
+    const unexportedCount = getUnexportedReview19Records(loadReview19Records()).length;
+    return {
+      unexportedCount,
+      canExportTen: unexportedCount >= 10,
+    };
+  })();
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
@@ -2252,6 +2268,7 @@ const lateSkipNotice = useMemo(() => {
     };
 
     appendReview19Record(recordedReview);
+    setReview19RecordsVersion((version) => version + 1);
 
     setState((prev) => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
@@ -2259,10 +2276,44 @@ const lateSkipNotice = useMemo(() => {
 
       return {
         ...prev,
-        screen: "done",
+        screen: "review19_done",
         review19: recordedReview,
       };
     });
+  }
+
+  function exportReview19Records() {
+    const currentRecords = loadReview19Records();
+    const batch = getReview19ExportBatch(currentRecords, 10);
+
+    if (batch.length < 10) return;
+
+    const exportedAt = new Date().toISOString();
+    const payload = buildReview19ExportPayload({ records: batch, exportedAt });
+    const firstDate = batch[0]?.date ?? 'unknown';
+    const lastDate = batch[batch.length - 1]?.date ?? firstDate;
+    const filename = `nebiki-review19-${firstDate}_${lastDate}.json`;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+
+    saveReview19Records(
+      markReview19RecordsExportedInMemory({
+        currentRecords,
+        recordsToMark: batch,
+        exportedAt,
+      })
+    );
+    setReview19RecordsVersion((version) => version + 1);
   }
 
   function resetApp() {
@@ -2309,6 +2360,7 @@ const lateSkipNotice = useMemo(() => {
   doneSummaryItems,
   review19Items,
   review19ReferenceLines,
+  review19Export,
 },
     actions: {
       updateSessionDraft,
@@ -2326,6 +2378,7 @@ const lateSkipNotice = useMemo(() => {
       updateReview19Rating,
       startReview19AfterWeather,
       saveReview19,
+      exportReview19Records,
       resetApp,
     },
   };

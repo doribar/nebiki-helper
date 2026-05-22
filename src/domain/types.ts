@@ -114,6 +114,7 @@ export type AreaProgress = {
 export type ScreenName =
   | "start"
   | "review19_weather"
+  | "review19_done"
   | "area_judge"
   | "rate_display"
   | "final_time"
@@ -307,6 +308,7 @@ export type Review19Result = {
   sessionStartedAt: string;
   ratings: Record<AreaId, Review19Rating>;
   recordedAt?: string;
+  exportedAt?: string;
   reference?: Review19Reference;
   snapshot?: Review19Snapshot;
 };
@@ -355,6 +357,10 @@ export type UseNebikiAppDerived = {
   doneSummaryItems: DoneSummaryItem[];
   review19Items: Review19AreaItem[];
   review19ReferenceLines: string[];
+  review19Export: {
+    unexportedCount: number;
+    canExportTen: boolean;
+  };
 };
 
 export type UseNebikiAppActions = {
@@ -374,6 +380,7 @@ export type UseNebikiAppActions = {
   updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
   startReview19AfterWeather: () => void;
   saveReview19: () => void;
+  exportReview19Records: () => void;
   resetApp: () => void;
 };
 

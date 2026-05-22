@@ -9,6 +9,9 @@ export const REVIEW19_RATINGS: Array<{ value: Review19Rating; label: string }> =
   { value: 'remained_too_much', label: '残りすぎ' },
 ];
 
+export const REVIEW19_EXPORT_BATCH_SIZE = 10;
+
+
 export function createDefaultReview19Ratings(): Record<AreaId, Review19Rating> {
   return NORMAL_ROUTE.reduce((acc, areaId) => {
     acc[areaId] = 'just_right';
@@ -67,6 +70,7 @@ export function normalizeReview19Result(raw?: Partial<Review19Result> | null): R
   return {
     ...base,
     recordedAt: typeof raw.recordedAt === 'string' ? raw.recordedAt : undefined,
+    exportedAt: typeof raw.exportedAt === 'string' ? raw.exportedAt : undefined,
     reference: cloneReview19Reference(raw.reference),
     snapshot:
       raw.snapshot && typeof raw.snapshot === 'object'
@@ -108,6 +112,55 @@ export function appendReview19RecordInMemory(params: {
   }
 
   return [...current, normalizedRecord];
+}
+
+
+function getReview19RecordKey(record: Review19Result): string {
+  return `${record.date}::${record.sessionStartedAt}`;
+}
+
+export function getUnexportedReview19Records(records: Review19Result[]): Review19Result[] {
+  return cloneReview19Records(records)
+    .filter((record) => Boolean(record.recordedAt) && !record.exportedAt)
+    .sort((a, b) => {
+      const recordedCompare = (a.recordedAt ?? '').localeCompare(b.recordedAt ?? '');
+      if (recordedCompare !== 0) return recordedCompare;
+      return getReview19RecordKey(a).localeCompare(getReview19RecordKey(b));
+    });
+}
+
+export function getReview19ExportBatch(records: Review19Result[], limit = REVIEW19_EXPORT_BATCH_SIZE): Review19Result[] {
+  return getUnexportedReview19Records(records).slice(0, limit);
+}
+
+export function buildReview19ExportPayload(params: {
+  records: Review19Result[];
+  exportedAt: string;
+}) {
+  const records = cloneReview19Records(params.records);
+  return {
+    format: 'nebiki-helper-review19-export',
+    version: 1,
+    exportedAt: params.exportedAt,
+    count: records.length,
+    records,
+  };
+}
+
+export function markReview19RecordsExportedInMemory(params: {
+  currentRecords: Review19Result[];
+  recordsToMark: Review19Result[];
+  exportedAt: string;
+}): Review19Result[] {
+  const targetKeys = new Set(params.recordsToMark.map(getReview19RecordKey));
+
+  return cloneReview19Records(params.currentRecords).map((record) => {
+    if (!targetKeys.has(getReview19RecordKey(record))) return record;
+    return {
+      ...record,
+      exportedAt: params.exportedAt,
+    };
+  });
 }
 
 export function shouldAutoStartReview19(params: {

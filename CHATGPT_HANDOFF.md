@@ -958,3 +958,40 @@ npm run build
 - `npm run check:logic` PASS（`65 / 65 checks passed` 表示後、既存の追加チェックも PASS）。
 - `npm run build` PASS。
 - `npm run lint` は既存 lint 指摘で失敗。今回変更範囲とは別の未使用変数・React Hooks 系の指摘が残っている。
+
+## 2026-05-22 変更: 19時売場チェック完了画面と10日分データ出力
+
+19時売場チェック終了後は値引作業の完了ではなく振り返りデータの保存完了であるため、通常の値引完了画面とは別の専用画面へ移行するようにした。
+
+### 仕様
+
+- 19時売場チェックで「記録して終了」を押した後、`done` ではなく `review19_done` へ移行する。
+- `review19_done` では「19時売場チェックを記録しました」と表示し、通常の「すべてのエリアの確認が終わりました」画面とは区別する。
+- 19時売場チェックの保存データには `exportedAt` を持たせ、未出力データと出力済みデータを区別する。
+- 未出力の19時売場チェックデータが10日分以上ある場合、振り返り完了画面に「10日分のデータを出力」ボタンを表示する。
+- ボタンを押すと、古い順に10日分を `nebiki-review19-開始日_終了日.json` として保存する。
+- 保存後、対象10日分に `exportedAt` を付けて出力済みにする。
+- 未出力が10日未満の場合は、未出力日数と「10日分たまると出力できる」旨だけを表示する。
+
+### 実装内容
+
+- `ScreenName` に `review19_done` を追加。
+- `Review19Result` に `exportedAt` を追加。
+- `Review19DoneScreen` を追加。
+- `review19.ts` に以下を追加。
+  - `REVIEW19_EXPORT_BATCH_SIZE`
+  - `getUnexportedReview19Records()`
+  - `getReview19ExportBatch()`
+  - `buildReview19ExportPayload()`
+  - `markReview19RecordsExportedInMemory()`
+- `useNebikiApp` に以下を追加。
+  - 未出力件数の算出。
+  - `exportReview19Records()`。
+  - 19時売場チェック保存後の `review19_done` 画面移行。
+- 10日分の未出力データを古い順に出力し、出力済みにできる回帰チェックを追加。
+
+### 確認結果
+
+- `npm run check:logic` PASS（`65 / 65 checks passed` 表示後、既存の追加チェックと今回追加チェックも PASS）。
+- `npm run build` PASS。
+- `npm run lint` は既存 lint 指摘で失敗。今回変更範囲とは別の未使用変数・React Hooks 系の指摘が残っている。

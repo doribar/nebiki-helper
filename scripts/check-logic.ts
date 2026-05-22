@@ -8,7 +8,15 @@ import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/disco
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
-import { appendReview19RecordInMemory, normalizeReview19Result, shouldAutoStartReview19 } from '../src/domain/review19.ts';
+import {
+  appendReview19RecordInMemory,
+  buildReview19ExportPayload,
+  getReview19ExportBatch,
+  getUnexportedReview19Records,
+  markReview19RecordsExportedInMemory,
+  normalizeReview19Result,
+  shouldAutoStartReview19,
+} from '../src/domain/review19.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
@@ -1945,6 +1953,55 @@ try {
   passed += 1;
 } catch (error) {
   console.error('FAIL: 少ない後回し済みエリアは値引率表示から再開する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+
+try {
+  const records = Array.from({ length: 12 }, (_, index) => ({
+    date: `2026-05-${`${index + 1}`.padStart(2, '0')}`,
+    sessionStartedAt: `2026-05-${`${index + 1}`.padStart(2, '0')}T17:00:00.000Z`,
+    recordedAt: `2026-05-${`${index + 1}`.padStart(2, '0')}T19:20:00.000Z`,
+    ratings: {
+      bento_men: 'just_right',
+      tempura: 'just_right',
+      croquette: 'just_right',
+      fry_chicken: 'just_right',
+      yakitori: 'just_right',
+      chuka_fish: 'just_right',
+      balance_bento: 'just_right',
+      onigiri: 'just_right',
+      sushi: 'just_right',
+      futomaki_chumaki: 'just_right',
+      inari: 'just_right',
+      hosomaki: 'just_right',
+    },
+  }));
+
+  const batch = getReview19ExportBatch(records, 10);
+  assert.equal(batch.length, 10);
+  assert.equal(batch[0]?.date, '2026-05-01');
+  assert.equal(batch[9]?.date, '2026-05-10');
+
+  const payload = buildReview19ExportPayload({
+    records: batch,
+    exportedAt: '2026-05-20T10:00:00.000Z',
+  });
+  assert.equal(payload.count, 10);
+  assert.equal(payload.format, 'nebiki-helper-review19-export');
+
+  const marked = markReview19RecordsExportedInMemory({
+    currentRecords: records,
+    recordsToMark: batch,
+    exportedAt: '2026-05-20T10:00:00.000Z',
+  });
+  assert.equal(getUnexportedReview19Records(marked).length, 2);
+  assert.equal(getUnexportedReview19Records(marked)[0]?.date, '2026-05-11');
+  console.log('PASS: 19時チェック未出力データは古い10日分を出力対象にして出力済みにできる');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 19時チェック未出力データは古い10日分を出力対象にして出力済みにできる');
   console.error(error);
   process.exitCode = 1;
 }

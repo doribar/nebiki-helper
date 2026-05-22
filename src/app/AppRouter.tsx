@@ -6,6 +6,7 @@ import { RateDisplayScreen } from "../components/screens/RateDisplayScreen";
 import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
 import { Review19Screen } from "../components/screens/Review19Screen";
+import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -115,6 +116,16 @@ export function AppRouter({ app }: AppRouterProps) {
           referenceLines={derived.review19ReferenceLines}
           onChangeRating={actions.updateReview19Rating}
           onSave={actions.saveReview19}
+        />
+      );
+
+    case "review19_done":
+      return (
+        <Review19DoneScreen
+          unexportedCount={derived.review19Export.unexportedCount}
+          canExportTen={derived.review19Export.canExportTen}
+          onExport={actions.exportReview19Records}
+          onReset={actions.resetApp}
         />
       );
 
