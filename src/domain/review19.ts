@@ -1,5 +1,5 @@
 import { NORMAL_ROUTE, getAreaName } from './area.ts';
-import type { AreaId, Review19Rating, Review19Result, SessionData, ScreenName } from './types.ts';
+import type { AreaId, Review19Rating, Review19Reference, Review19Result, SessionData, ScreenName } from './types.ts';
 
 export const REVIEW19_RATINGS: Array<{ value: Review19Rating; label: string }> = [
   { value: 'decreased_too_much', label: '減りすぎ' },
@@ -35,6 +35,17 @@ export function isValidReview19Rating(value: unknown): value is Review19Rating {
   return REVIEW19_RATINGS.some((rating) => rating.value === value);
 }
 
+function cloneReview19Reference(raw?: Partial<Review19Reference> | null): Review19Reference | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  if (raw.discountTime !== '19') return undefined;
+  if (typeof raw.date !== 'string' || typeof raw.weekday !== 'number') return undefined;
+  if (!raw.weather || typeof raw.weather !== 'object') return undefined;
+  if (!raw.resolvedWeather || typeof raw.resolvedWeather !== 'object') return undefined;
+  if (!raw.basis || typeof raw.basis !== 'object') return undefined;
+
+  return JSON.parse(JSON.stringify(raw)) as Review19Reference;
+}
+
 export function normalizeReview19Result(raw?: Partial<Review19Result> | null): Review19Result | null {
   if (!raw || typeof raw !== 'object') return null;
   if (typeof raw.date !== 'string' || typeof raw.sessionStartedAt !== 'string') return null;
@@ -56,6 +67,7 @@ export function normalizeReview19Result(raw?: Partial<Review19Result> | null): R
   return {
     ...base,
     recordedAt: typeof raw.recordedAt === 'string' ? raw.recordedAt : undefined,
+    reference: cloneReview19Reference(raw.reference),
     snapshot:
       raw.snapshot && typeof raw.snapshot === 'object'
         ? JSON.parse(JSON.stringify(raw.snapshot))
@@ -116,5 +128,5 @@ export function shouldAutoStartReview19(params: {
   if (currentDate !== session.date) return false;
 
   const minutes = now.getHours() * 60 + now.getMinutes();
-  return minutes >= 19 * 60;
+  return minutes >= 19 * 60 + 15;
 }

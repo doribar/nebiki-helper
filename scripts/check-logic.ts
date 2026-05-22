@@ -8,7 +8,7 @@ import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/disco
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
-import { appendReview19RecordInMemory, normalizeReview19Result } from '../src/domain/review19.ts';
+import { appendReview19RecordInMemory, normalizeReview19Result, shouldAutoStartReview19 } from '../src/domain/review19.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
@@ -1454,6 +1454,14 @@ try {
     sessionStartedAt: '2026-05-09T08:00:00.000Z',
     ratings: { bento_men: 'remained_slightly_too_much' },
     recordedAt: '2026-05-09T10:00:00.000Z',
+    reference: {
+      date: '2026-05-09',
+      weekday: 6,
+      discountTime: '19',
+      weather: { hourlyForecasts: {}, afterRainSky: null },
+      resolvedWeather: { nearTermWeather: 'other' },
+      basis: { originalWeekdayBase: '金土', adjustedWeekdayBase: '火木', weekdayShift: 1, baseRateBonus: 0, baseRateBonusReason: [] },
+    },
     snapshot: {
       version: 1,
       capturedAt: '2026-05-09T10:00:00.000Z',
@@ -1464,6 +1472,8 @@ try {
   const normalized = normalizeReview19Result(rawReview19 as never);
   assert.equal(normalized?.snapshot?.version, 1);
   assert.equal(normalized?.snapshot?.areas.bento_men.rateText, '20%');
+  assert.equal(normalized?.reference?.discountTime, '19');
+  assert.equal(normalized?.reference?.basis.adjustedWeekdayBase, '火木');
 
   const records = appendReview19RecordInMemory({
     currentRecords: [],
@@ -1480,7 +1490,45 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 26} checks passed.`);
+
+try {
+  const session = {
+    date: '2026-05-09',
+    weekday: 6,
+    discountTime: '17',
+    manualWeekdayOverride: false,
+    manualDiscountTimeOverride: false,
+    weather: { hourlyForecasts: {}, afterRainSky: null },
+    startedAt: '2026-05-09T08:00:00.000Z',
+  } as never;
+
+  assert.equal(
+    shouldAutoStartReview19({
+      session,
+      screen: 'done',
+      review19: null,
+      now: new Date('2026-05-09T19:14:00'),
+    }),
+    false
+  );
+  assert.equal(
+    shouldAutoStartReview19({
+      session,
+      screen: 'done',
+      review19: null,
+      now: new Date('2026-05-09T19:15:00'),
+    }),
+    true
+  );
+  console.log('PASS: 19時チェックは19:15以降に自動開始する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 19時チェックは19:15以降に自動開始する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 27} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

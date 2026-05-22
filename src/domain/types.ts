@@ -113,6 +113,7 @@ export type AreaProgress = {
 
 export type ScreenName =
   | "start"
+  | "review19_weather"
   | "area_judge"
   | "rate_display"
   | "final_time"
@@ -246,6 +247,28 @@ export type Review19AreaSnapshot = {
   skipReason?: "manual" | "few" | "late_time";
 };
 
+export type Review19Reference = {
+  date: string;
+  weekday: number;
+  discountTime: "19";
+  weather: WeatherInput;
+  resolvedWeather: ResolvedWeatherInput;
+  basis: {
+    originalWeekdayBase: WeekdayBaseLabel;
+    adjustedWeekdayBase: WeekdayBaseLabel;
+    weekdayShift: number;
+    baseRateBonus: number;
+    baseRateBonusReason: string[];
+    noticeText?: string;
+    weekdaySummaryText?: string;
+    weekdayCalcText?: string;
+    weekdayResultText?: string;
+    bonusSummaryText?: string;
+    bonusCalcText?: string;
+    bonusResultText?: string;
+  };
+};
+
 export type Review19Snapshot = {
   version: 1;
   capturedAt: string;
@@ -276,6 +299,7 @@ export type Review19Snapshot = {
     bonusResultText?: string;
   };
   areas: Record<AreaId, Review19AreaSnapshot>;
+  reviewReference?: Review19Reference;
 };
 
 export type Review19Result = {
@@ -283,6 +307,7 @@ export type Review19Result = {
   sessionStartedAt: string;
   ratings: Record<AreaId, Review19Rating>;
   recordedAt?: string;
+  reference?: Review19Reference;
   snapshot?: Review19Snapshot;
 };
 
@@ -329,6 +354,7 @@ export type UseNebikiAppDerived = {
   skipTargetOptions: SkipTargetOption[];
   doneSummaryItems: DoneSummaryItem[];
   review19Items: Review19AreaItem[];
+  review19ReferenceLines: string[];
 };
 
 export type UseNebikiAppActions = {
@@ -346,6 +372,7 @@ export type UseNebikiAppActions = {
   goToNextArea: () => void;
   advanceFinalTimeStep: () => void;
   updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
+  startReview19AfterWeather: () => void;
   saveReview19: () => void;
   resetApp: () => void;
 };

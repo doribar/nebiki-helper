@@ -922,3 +922,39 @@ npm run build
 - `npm run check:logic` PASS（`64 / 64 checks passed` 表示後、既存の追加チェックも PASS）。
 - `npm run build` PASS。
 - `npm run lint` は既存の lint 指摘で失敗。今回追加した `scripts/check-logic.ts` の lint 指摘は修正済み。
+
+## 2026-05-22 変更: 19時売場チェック前に19時30分用の天候入力を挟む
+
+19時売場チェックは、その時点の絶対量だけではなく「19時30分値引の基準から見て適切か」を判断する必要があるため、振り返り前に19時30分用の天候入力を行う流れに変更した。
+
+### 仕様
+
+- 17時値引完了後、以下をすべて満たす場合に自動で19時売場チェック用の天候入力へ移行する。
+  - 17時値引が完了済み。
+  - 画面が完了画面。
+  - 18時30分値引の天候入力へ進んでいない。
+  - その日の19時売場チェックが未記録。
+  - 現在時刻が19:15以降。
+- 19時売場チェックの前に、19時30分値引用の天候を入力する。
+- 天候入力後、確認画面を挟まずに19時売場チェックへ進む。
+- 19時売場チェック画面には、入力した19時30分基準の曜日基準・補正概要を表示する。
+- 実際の値引セッションは17時のまま保持し、19時30分値引を開始した扱いにはしない。
+- 保存する19時チェックには、19時30分用天候・解決後天候・曜日基準補正情報を `reference` および `snapshot.reviewReference` として残す。
+
+### 実装内容
+
+- `ScreenName` に `review19_weather` を追加。
+- `Review19Result` に `reference` を追加。
+- `Review19Snapshot` に `reviewReference` を追加。
+- `shouldAutoStartReview19()` の開始時刻を19:00以降から19:15以降へ変更。
+- `useNebikiApp` に以下を追加。
+  - 19時売場チェック用の19時30分天候入力画面への自動遷移。
+  - `startReview19AfterWeather()`。
+  - `review19ReferenceLines`。
+- `Review19Screen` に19時30分値引の基準表示を追加。
+
+### 確認結果
+
+- `npm run check:logic` PASS（`65 / 65 checks passed` 表示後、既存の追加チェックも PASS）。
+- `npm run build` PASS。
+- `npm run lint` は既存 lint 指摘で失敗。今回変更範囲とは別の未使用変数・React Hooks 系の指摘が残っている。

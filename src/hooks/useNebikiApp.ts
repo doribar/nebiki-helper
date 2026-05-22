@@ -20,6 +20,7 @@ import type {
   Review19Rating,
   Review19Result,
   Review19Snapshot,
+  Review19Reference,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -665,6 +666,7 @@ function createReview19Snapshot(params: {
   weekdayBaseInfo: ReturnType<typeof getWeekdayBaseInfo>;
   basisGuide: ReturnType<typeof getBasisGuideDisplay>;
   lateTimeBonus: number;
+  reviewReference?: Review19Reference;
   areaProgressMap: Record<AreaId, AreaProgress>;
   doneSummaryItems: DoneSummaryItem[];
 }): Review19Snapshot {
@@ -726,9 +728,73 @@ function createReview19Snapshot(params: {
       bonusResultText: params.basisGuide.bonusResultText,
     },
     areas,
+    reviewReference: params.reviewReference
+      ? JSON.parse(JSON.stringify(params.reviewReference)) as Review19Reference
+      : undefined,
   };
 }
 
+
+function createReview19Reference(draft: SessionDraft): Review19Reference {
+  const reviewDraft: SessionDraft = {
+    ...draft,
+    discountTime: "19",
+    manualDiscountTimeOverride: false,
+    weather: {
+      ...draft.weather,
+      hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
+    },
+  };
+  const resolvedWeather = resolveWeatherInputForDiscount(reviewDraft.weather, "19");
+  const weekdayBaseInfo = getWeekdayBaseInfo(
+    reviewDraft.weekday,
+    "19",
+    resolvedWeather,
+    reviewDraft.date
+  );
+  const basisGuide = getBasisGuideDisplay({
+    date: reviewDraft.date,
+    weekday: reviewDraft.weekday,
+    discountTime: "19",
+    weather: resolvedWeather,
+  });
+
+  return {
+    date: reviewDraft.date,
+    weekday: reviewDraft.weekday,
+    discountTime: "19",
+    weather: JSON.parse(JSON.stringify(reviewDraft.weather)) as WeatherInput,
+    resolvedWeather: JSON.parse(JSON.stringify(resolvedWeather)),
+    basis: {
+      originalWeekdayBase: weekdayBaseInfo.original,
+      adjustedWeekdayBase: weekdayBaseInfo.adjusted,
+      weekdayShift: weekdayBaseInfo.weekdayShift,
+      baseRateBonus: weekdayBaseInfo.baseRateBonus,
+      baseRateBonusReason: [...weekdayBaseInfo.baseRateBonusReason],
+      noticeText: basisGuide.noticeText,
+      weekdaySummaryText: basisGuide.weekdaySummaryText,
+      weekdayCalcText: basisGuide.weekdayCalcText,
+      weekdayResultText: basisGuide.weekdayResultText,
+      bonusSummaryText: basisGuide.bonusSummaryText,
+      bonusCalcText: basisGuide.bonusCalcText,
+      bonusResultText: basisGuide.bonusResultText,
+    },
+  };
+}
+
+function createReview19WeatherDraft(session: SessionData): SessionDraft {
+  return {
+    date: session.date,
+    weekday: session.weekday,
+    discountTime: "19",
+    manualWeekdayOverride: session.manualWeekdayOverride,
+    manualDiscountTimeOverride: false,
+    weather: {
+      ...session.weather,
+      hourlyForecasts: cloneHourlyForecasts(session.weather.hourlyForecasts),
+    },
+  };
+}
 export function useNebikiApp(): UseNebikiAppResult {
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
 
@@ -916,7 +982,8 @@ export function useNebikiApp(): UseNebikiAppResult {
 
       return {
         ...prev,
-        screen: "review19",
+        screen: "review19_weather",
+        sessionDraft: createReview19WeatherDraft(prev.session),
         currentAreaId: null,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
@@ -1348,6 +1415,28 @@ const lateSkipNotice = useMemo(() => {
       ...item,
       rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
     }));
+  }, [state.review19]);
+
+  const review19ReferenceLines = useMemo(() => {
+    const reference = state.review19?.reference;
+    if (!reference) return [];
+
+    const lines: string[] = [];
+    lines.push(`曜日基準：${reference.basis.originalWeekdayBase} → ${reference.basis.adjustedWeekdayBase}`);
+
+    if (reference.basis.bonusSummaryText) {
+      lines.push(reference.basis.bonusSummaryText);
+    }
+
+    if (reference.basis.weekdayResultText) {
+      lines.push(reference.basis.weekdayResultText);
+    }
+
+    if (reference.basis.bonusResultText) {
+      lines.push(reference.basis.bonusResultText);
+    }
+
+    return lines;
   }, [state.review19]);
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
@@ -2105,6 +2194,22 @@ const lateSkipNotice = useMemo(() => {
     }));
   }
 
+
+  function startReview19AfterWeather() {
+    setState((prev) => {
+      if (prev.screen !== "review19_weather" || !prev.session || !prev.review19) return prev;
+
+      return {
+        ...prev,
+        screen: "review19",
+        review19: {
+          ...prev.review19,
+          reference: createReview19Reference(prev.sessionDraft),
+        },
+      };
+    });
+  }
+
   function updateReview19Rating(areaId: AreaId, rating: Review19Rating) {
     setState((prev) => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
@@ -2134,6 +2239,7 @@ const lateSkipNotice = useMemo(() => {
           weekdayBaseInfo,
           basisGuide,
           lateTimeBonus,
+          reviewReference: state.review19.reference,
           areaProgressMap: state.areaProgressMap,
           doneSummaryItems,
         })
@@ -2202,6 +2308,7 @@ const lateSkipNotice = useMemo(() => {
   skipTargetOptions,
   doneSummaryItems,
   review19Items,
+  review19ReferenceLines,
 },
     actions: {
       updateSessionDraft,
@@ -2217,6 +2324,7 @@ const lateSkipNotice = useMemo(() => {
       goToNextArea,
       advanceFinalTimeStep,
       updateReview19Rating,
+      startReview19AfterWeather,
       saveReview19,
       resetApp,
     },

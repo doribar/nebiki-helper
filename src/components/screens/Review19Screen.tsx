@@ -38,11 +38,12 @@ function getRatingButtonStyle(selected: boolean): CSSProperties {
 
 type Review19ScreenProps = {
   items: Review19AreaItem[];
+  referenceLines: string[];
   onChangeRating: (areaId: AreaId, rating: Review19Rating) => void;
   onSave: () => void;
 };
 
-export function Review19Screen({ items, onChangeRating, onSave }: Review19ScreenProps) {
+export function Review19Screen({ items, referenceLines, onChangeRating, onSave }: Review19ScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 640, margin: "0 auto" }}>
       <section
@@ -57,11 +58,30 @@ export function Review19Screen({ items, onChangeRating, onSave }: Review19Screen
           19時売場チェック
         </div>
         <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7 }}>
-          15時・17時値引後の減り方を、エリアごとに記録します。
+19時30分値引の天候入力をふまえて、15時・17時値引後の減り方をエリアごとに記録します。
           <br />
           初期値はすべて「ちょうどいい」です。違うエリアだけ変更してください。
         </div>
       </section>
+
+      {referenceLines.length > 0 ? (
+        <section
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 16,
+            background: "#fafafa",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>19時30分値引の基準</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.7, color: "#444" }}>
+            {referenceLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section
         style={{
