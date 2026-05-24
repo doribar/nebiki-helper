@@ -135,6 +135,29 @@ function shouldOfferTimeSwitch(current: DiscountTime, next: DiscountTime): boole
   return getDiscountTimeRank(next) > getDiscountTimeRank(current);
 }
 
+function hasNoUnstartedReviewAreas(areaProgressMap: Record<AreaId, AreaProgress>): boolean {
+  return NORMAL_ROUTE.every((areaId) => areaProgressMap[areaId]?.status !== "unstarted");
+}
+
+function canStartReview19FromCurrentState(params: {
+  state: AppState;
+  now: Date;
+}): boolean {
+  const { state, now } = params;
+  const session = state.session;
+
+  if (!session) return false;
+  if (session.discountTime !== "17") return false;
+  if (formatLocalDate(now) !== session.date) return false;
+  if (state.review19?.date === session.date && state.review19.recordedAt) return false;
+
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes < 19 * 60 + 15) return false;
+
+  return hasNoUnstartedReviewAreas(state.areaProgressMap);
+}
+
+
 function buildTimeSwitchConfirmMessage(to: DiscountTime): string {
   return `${getBasisTimeText(to)}の値引に移動しますか？`;
 }
@@ -1052,6 +1075,8 @@ export function useNebikiApp(): UseNebikiAppResult {
     if (state.screen === "start") return;
 
     const now = new Date(nowMs);
+    if (canStartReview19FromCurrentState({ state, now })) return;
+
     const nowDiscountTime = resolveDiscountTime(now);
 
     if (!shouldOfferTimeSwitch(state.session.discountTime, nowDiscountTime)) {
@@ -1510,12 +1535,10 @@ const lateSkipNotice = useMemo(() => {
     };
   })();
 
-  const canStartReview19Manually = Boolean(
-    state.session &&
-    state.screen === "done" &&
-    state.session.discountTime === "17" &&
-    !(state.review19?.date === state.session.date && state.review19.recordedAt)
-  );
+  const canStartReview19Manually = canStartReview19FromCurrentState({
+    state,
+    now: new Date(nowMs),
+  });
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
@@ -2297,20 +2320,22 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
 
     setState((prev) => {
-      if (!prev.session || prev.screen !== "done" || prev.session.discountTime !== "17") return prev;
-      if (prev.review19?.date === prev.session.date && prev.review19.recordedAt) return prev;
+      if (prev.screen !== "done" && prev.screen !== "start") return prev;
+      if (!canStartReview19FromCurrentState({ state: prev, now: new Date(nowMs) })) return prev;
+      const session = prev.session;
+      if (!session) return prev;
 
       return {
         ...prev,
         screen: "review19_weather",
-        sessionDraft: createReview19WeatherDraft(prev.session),
+        sessionDraft: createReview19WeatherDraft(session),
         currentAreaId: null,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
         timeSwitchNotice: null,
         review19: createInitialReview19Result({
-          date: prev.session.date,
-          sessionStartedAt: prev.session.startedAt,
+          date: session.date,
+          sessionStartedAt: session.startedAt,
           excludedAreaIds: getReview19ExcludedAreaIdsForReview(prev),
         }),
       };

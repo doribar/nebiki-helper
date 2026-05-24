@@ -29,6 +29,8 @@ export function AppRouter({ app }: AppRouterProps) {
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startSession}
           startButtonLabel={derived.startButtonLabel}
+          canStartReview19={derived.canStartReview19Manually}
+          onStartReview19={actions.startReview19Manually}
         />
       );
 

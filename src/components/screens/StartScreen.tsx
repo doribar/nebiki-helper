@@ -27,6 +27,8 @@ type StartScreenProps = {
   onChangeSessionDraft: (patch: Partial<SessionDraft>) => void;
   onStart: () => void;
   startButtonLabel?: string;
+  canStartReview19?: boolean;
+  onStartReview19?: () => void;
 };
 
 const WEEKDAY_OPTIONS = [
@@ -333,6 +335,8 @@ export function StartScreen({
   onChangeSessionDraft,
   onStart,
   startButtonLabel,
+  canStartReview19 = false,
+  onStartReview19,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
   const startForecastHour = getInputStartForecastHour(sessionDraft.discountTime);
@@ -760,6 +764,12 @@ export function StartScreen({
       {startButtonLabel === "再開" ? (
         <div style={{ fontSize: 13, color: "#666", marginBottom: 10 }}>
           条件を見直した内容で元の流れに戻ります。
+        </div>
+      ) : null}
+
+      {canStartReview19 && onStartReview19 ? (
+        <div style={{ marginBottom: 10 }}>
+          <PrimaryButton onClick={onStartReview19}>19時売場チェックに入る</PrimaryButton>
         </div>
       ) : null}
 
