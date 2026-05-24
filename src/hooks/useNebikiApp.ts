@@ -39,6 +39,10 @@ import {
   loadPersistedNebikiState,
   normalizeDailyMessageState,
   savePersistedNebikiState,
+  saveWorkSessionCheckpoint,
+  clearWorkSessionCheckpoint,
+  saveRuntimeState,
+  clearRuntimeState,
   appendReview19Record,
   loadReview19Records,
   saveReview19Records,
@@ -459,11 +463,34 @@ function clonePersistedNebikiStateSnapshot(params: {
 }) {
   return {
     currentSession: cloneAppState(params.currentSession),
+    workSessionCheckpoint: null,
+    runtimeState: null,
     nextSessionSkipRecords: cloneSkipRecords(params.nextSessionSkipRecords),
     lastSessionWeather: cloneLastSessionWeatherRecord(params.lastSessionWeather),
     lastUsedSessionDraft: normalizeSessionDraft(params.lastUsedSessionDraft),
     dailyMessageState: normalizeDailyMessageState(params.dailyMessageState),
   };
+}
+
+function isSameDaySession(state: AppState | null, date: string): boolean {
+  return state?.session?.date === date;
+}
+
+function shouldUseCheckpointInsteadOfCurrent(params: {
+  currentSession: AppState | null;
+  checkpoint: AppState | null;
+  today: string;
+}): boolean {
+  const { currentSession, checkpoint, today } = params;
+  if (!isSameDaySession(checkpoint, today)) return false;
+
+  // 通常は現在セッションを優先する。
+  // ただし、再読み込みなどで開始画面・セッションなしに戻ってしまっている場合は、
+  // 最後の値引作業チェックポイントから復元する。
+  if (!currentSession?.session && currentSession?.screen === "start") return true;
+  if (!currentSession?.session && !currentSession) return true;
+
+  return false;
 }
 
 
@@ -877,12 +904,17 @@ export function useNebikiApp(): UseNebikiAppResult {
   const initialLastUsedSessionDraft = buildStartDefaultDraft(
     initialPersistenceRef.current?.lastUsedSessionDraft ?? null
   );
+  const initialToday = formatLocalDate(new Date());
+  const initialLoadedState = shouldUseCheckpointInsteadOfCurrent({
+    currentSession: initialPersistenceRef.current?.currentSession ?? null,
+    checkpoint: initialPersistenceRef.current?.workSessionCheckpoint ?? null,
+    today: initialToday,
+  })
+    ? initialPersistenceRef.current?.workSessionCheckpoint ?? null
+    : initialPersistenceRef.current?.currentSession ?? null;
 
   const [state, setState] = useState<AppState>(() =>
-    normalizeLoadedState(
-      initialPersistenceRef.current?.currentSession ?? null,
-      initialLastUsedSessionDraft
-    )
+    normalizeLoadedState(initialLoadedState, initialLastUsedSessionDraft)
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
@@ -899,14 +931,24 @@ export function useNebikiApp(): UseNebikiAppResult {
   );
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
 
-  const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(null);
-  const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(null);
-  const [timeSwitchTarget, setTimeSwitchTarget] = useState<DiscountTime | null>(null);
+  const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(
+    initialPersistenceRef.current?.runtimeState?.areaJudgeSelection ?? null
+  );
+  const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(
+    initialPersistenceRef.current?.runtimeState?.resumeTargetScreen ?? null
+  );
+  const [timeSwitchTarget, setTimeSwitchTarget] = useState<DiscountTime | null>(
+    initialPersistenceRef.current?.runtimeState?.timeSwitchTarget ?? null
+  );
   const dismissedTimeSwitchKeyRef = useRef<string | null>(null);
   const promptedTimeSwitchKeyRef = useRef<string | null>(null);
-  const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(null);
+  const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(
+    initialPersistenceRef.current?.runtimeState?.undoSnapshot ?? null
+  );
   const [undoNotice, setUndoNotice] = useState<string | null>(null);
-  const screenHistoryRef = useRef<NavigationSnapshot[]>([]);
+  const screenHistoryRef = useRef<NavigationSnapshot[]>(
+    initialPersistenceRef.current?.runtimeState?.screenHistory ?? []
+  );
 
   function buildNavigationSnapshot(baseState: AppState = state) {
     return createNavigationSnapshot({
@@ -941,6 +983,10 @@ export function useNebikiApp(): UseNebikiAppResult {
         dailyMessageState,
       })
     );
+
+    if (state.session) {
+      saveWorkSessionCheckpoint(cloneAppState(state));
+    }
   }, [
     state,
     nextSessionSkipRecords,
@@ -972,6 +1018,24 @@ export function useNebikiApp(): UseNebikiAppResult {
       lastSessionWeather: cloneLastSessionWeatherRecord(lastSessionWeather),
     });
   }, [nextSessionSkipRecords, lastSessionWeather]);
+
+  useEffect(() => {
+    saveRuntimeState({
+      areaJudgeSelection,
+      resumeTargetScreen,
+      timeSwitchTarget,
+      undoSnapshot,
+      screenHistory: screenHistoryRef.current,
+    });
+  }, [
+    state,
+    areaJudgeSelection,
+    resumeTargetScreen,
+    timeSwitchTarget,
+    undoSnapshot,
+    nextSessionSkipRecords,
+    lastSessionWeather,
+  ]);
 
   useEffect(() => {
     if (!undoNotice) return;
@@ -2456,6 +2520,8 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function resetApp() {
+    clearWorkSessionCheckpoint();
+    clearRuntimeState();
     screenHistoryRef.current = [];
     previousRenderRef.current = null;
     suppressHistoryPushRef.current = false;

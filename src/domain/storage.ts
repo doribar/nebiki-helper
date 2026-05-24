@@ -6,11 +6,16 @@ import type {
   NextSessionSkipRecord,
   SessionDraft,
   Review19Result,
+  AreaJudge,
+  ScreenName,
 } from "./types";
+import type { NavigationSnapshot } from "./navigationHistory";
 import { appendReview19RecordInMemory, cloneReview19Records } from "./review19.ts";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
+  workSessionCheckpoint: "nebiki-helper/work-session-checkpoint",
+  runtimeState: "nebiki-helper/runtime-state",
   nextSessionSkipRecords: "nebiki-helper/next-session-skip-records",
   lastSessionWeather: "nebiki-helper/last-session-weather",
   lastUsedSessionDraft: "nebiki-helper/last-used-session-draft",
@@ -18,8 +23,18 @@ export const STORAGE_KEYS = {
   review19Records: "nebiki-helper/review19-records",
 } as const;
 
+export type PersistedRuntimeState = {
+  areaJudgeSelection: AreaJudge;
+  resumeTargetScreen: ScreenName | null;
+  timeSwitchTarget: import("./types").DiscountTime | null;
+  undoSnapshot: NavigationSnapshot | null;
+  screenHistory: NavigationSnapshot[];
+};
+
 export type PersistedNebikiState = {
   currentSession: AppState | null;
+  workSessionCheckpoint: AppState | null;
+  runtimeState: PersistedRuntimeState | null;
   nextSessionSkipRecords: NextSessionSkipRecord[];
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft | null;
@@ -62,6 +77,62 @@ export function saveCurrentSession(state: AppState): void {
 
 export function clearCurrentSession(): void {
   localStorage.removeItem(STORAGE_KEYS.currentSession);
+}
+
+export function loadWorkSessionCheckpoint(): AppState | null {
+  const raw = localStorage.getItem(STORAGE_KEYS.workSessionCheckpoint);
+  return safeParseJSON<AppState | null>(raw, null);
+}
+
+export function saveWorkSessionCheckpoint(state: AppState): void {
+  localStorage.setItem(STORAGE_KEYS.workSessionCheckpoint, JSON.stringify(state));
+}
+
+export function clearWorkSessionCheckpoint(): void {
+  localStorage.removeItem(STORAGE_KEYS.workSessionCheckpoint);
+}
+
+function cloneRuntimeState(raw: PersistedRuntimeState | null): PersistedRuntimeState | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  return {
+    areaJudgeSelection:
+      raw.areaJudgeSelection === "many" ||
+      raw.areaJudgeSelection === "normal" ||
+      raw.areaJudgeSelection === "few"
+        ? raw.areaJudgeSelection
+        : null,
+    resumeTargetScreen:
+      typeof raw.resumeTargetScreen === "string" ? raw.resumeTargetScreen : null,
+    timeSwitchTarget:
+      raw.timeSwitchTarget === "15" ||
+      raw.timeSwitchTarget === "17" ||
+      raw.timeSwitchTarget === "18" ||
+      raw.timeSwitchTarget === "19" ||
+      raw.timeSwitchTarget === "20"
+        ? raw.timeSwitchTarget
+        : null,
+    undoSnapshot: raw.undoSnapshot ? JSON.parse(JSON.stringify(raw.undoSnapshot)) : null,
+    screenHistory: Array.isArray(raw.screenHistory)
+      ? JSON.parse(JSON.stringify(raw.screenHistory))
+      : [],
+  };
+}
+
+export function loadRuntimeState(): PersistedRuntimeState | null {
+  const raw = localStorage.getItem(STORAGE_KEYS.runtimeState);
+  return cloneRuntimeState(safeParseJSON<PersistedRuntimeState | null>(raw, null));
+}
+
+export function saveRuntimeState(state: PersistedRuntimeState): void {
+  localStorage.setItem(
+    STORAGE_KEYS.runtimeState,
+    JSON.stringify(cloneRuntimeState(state))
+  );
+}
+
+export function clearRuntimeState(): void {
+  localStorage.removeItem(STORAGE_KEYS.runtimeState);
 }
 
 export function loadNextSessionSkipRecords(): NextSessionSkipRecord[] {
@@ -216,6 +287,8 @@ export function appendReview19Record(record: Review19Result): void {
 export function loadPersistedNebikiState(): PersistedNebikiState {
   return {
     currentSession: loadCurrentSession(),
+    workSessionCheckpoint: loadWorkSessionCheckpoint(),
+    runtimeState: loadRuntimeState(),
     nextSessionSkipRecords: loadNextSessionSkipRecords(),
     lastSessionWeather: loadLastSessionWeather(),
     lastUsedSessionDraft: loadLastUsedSessionDraft(),

@@ -1134,3 +1134,34 @@ npm run build
 - `npm run check:logic` PASS（`66 / 66 checks passed` 表示後、既存の追加チェックも PASS）。
 - `npm run build` PASS。
 - `npm run lint` は既存 lint 指摘で失敗見込み。今回変更範囲とは別の未使用変数・React Hooks 系の指摘が残っている。
+
+## 2026-05-24 変更: 値引セッション状態を再読み込み・タブ閉じ後も復元できるように強化
+
+ページ更新やタブを閉じた後に、17時値引完了状態・+5%次回スキップ予約・19時売場チェック対象状態などが失われると実運用で危険なため、値引中の状態復元を強化した。
+
+### 仕様
+
+- アプリ操作中の現在状態は従来通り `nebiki-helper/current-session` に保存する。
+- それに加えて、値引セッションが存在する状態は `nebiki-helper/work-session-checkpoint` にチェックポイントとして保存する。
+- ページ更新後、通常の現在状態が開始画面・セッションなしに戻っていても、同日の値引チェックポイントが残っていればそこから自動復元する。
+- `nextSessionSkipRecords` は従来通り保存されるため、+5%値引済みエリアの次回自動スキップ予約も再読み込み後に残る。
+- 戻る履歴、直前操作の取り消し、編集中の復帰先などの一時的な操作状態も `nebiki-helper/runtime-state` に保存する。
+- `リセット` 操作をした場合は、作業チェックポイントと一時操作状態を明示的に削除する。
+
+### 実装内容
+
+- `src/domain/storage.ts` に以下を追加。
+  - `workSessionCheckpoint`
+  - `runtimeState`
+  - `loadWorkSessionCheckpoint()` / `saveWorkSessionCheckpoint()` / `clearWorkSessionCheckpoint()`
+  - `loadRuntimeState()` / `saveRuntimeState()` / `clearRuntimeState()`
+- `useNebikiApp` の初期化時、同日の作業チェックポイントがあり、現在状態が開始画面・セッションなしの場合は、チェックポイントを優先して復元するようにした。
+- `useNebikiApp` で `state.session` が存在する状態は作業チェックポイントにも保存するようにした。
+- `areaJudgeSelection`、`resumeTargetScreen`、`timeSwitchTarget`、`undoSnapshot`、`screenHistory` を runtime-state に保存し、再読み込み後に復元するようにした。
+- `resetApp()` で作業チェックポイントと runtime-state を削除するようにした。
+
+### 確認結果
+
+- `npm run check:logic` PASS（`66 / 66 checks passed` 表示後、既存の追加チェックも PASS）。
+- `npm run build` PASS。
+- `npm run lint` は既存 lint 指摘で失敗見込み。今回変更範囲とは別の未使用変数・React Hooks 系の指摘が残っている。
