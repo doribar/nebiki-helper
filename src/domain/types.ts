@@ -232,17 +232,26 @@ export type Review19Rating =
   | "remained_slightly_too_much"
   | "remained_too_much";
 
+export type Review19RatingScore = -2 | -1 | 0 | 1 | 2;
+
+export type Review19ExcludeReason = "few_at_15" | "few_at_15_and_17";
+
 export type Review19AreaSnapshot = {
   areaId: AreaId;
   areaName: string;
+  reviewExcluded?: boolean;
+  reviewExcludeReason?: Review19ExcludeReason;
   status: AreaStatus;
   statusText?: string;
   areaJudge: AreaJudge;
   judgeText: string;
   rateText: string;
+  ratePercent?: number;
   manyRateText?: string;
+  manyRatePercent?: number;
   manyNote?: string;
   normalRateText?: string;
+  normalRatePercent?: number;
   visitedAt?: string;
   completedAt?: string;
   skipReason?: "manual" | "few" | "late_time";
@@ -307,6 +316,9 @@ export type Review19Result = {
   date: string;
   sessionStartedAt: string;
   ratings: Record<AreaId, Review19Rating>;
+  ratingScores: Record<AreaId, Review19RatingScore>;
+  excludedAreaIds: AreaId[];
+  excludeReasons: Partial<Record<AreaId, Review19ExcludeReason>>;
   recordedAt?: string;
   exportedAt?: string;
   reference?: Review19Reference;
@@ -317,6 +329,8 @@ export type Review19AreaItem = {
   areaId: AreaId;
   areaName: string;
   rating: Review19Rating;
+  excluded: boolean;
+  excludeReasonText?: string;
 };
 
 export type AppState = {
@@ -331,6 +345,7 @@ export type AppState = {
   timeSwitchNotice: string | null;
   finalTimeStep: FinalTimeStep;
   review19: Review19Result | null;
+  review19ExcludedAreaIds: AreaId[];
 };
 
 export type UseNebikiAppDerived = {
@@ -361,6 +376,7 @@ export type UseNebikiAppDerived = {
     unexportedCount: number;
     canExportTen: boolean;
   };
+  canStartReview19Manually: boolean;
 };
 
 export type UseNebikiAppActions = {
@@ -381,6 +397,7 @@ export type UseNebikiAppActions = {
   startReview19AfterWeather: () => void;
   saveReview19: () => void;
   exportReview19Records: () => void;
+  startReview19Manually: () => void;
   resetApp: () => void;
 };
 

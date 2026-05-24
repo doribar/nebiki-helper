@@ -15,6 +15,15 @@ const areaNameStyle: CSSProperties = {
   fontWeight: 800,
 };
 
+const excludedTextStyle: CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  background: "#f5f5f5",
+  color: "#555",
+  fontSize: 13,
+  fontWeight: 800,
+};
+
 const ratingGridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
@@ -95,18 +104,24 @@ export function Review19Screen({ items, referenceLines, onChangeRating, onSave }
         {items.map((item) => (
           <div key={item.areaId} style={rowStyle}>
             <div style={areaNameStyle}>{item.areaName}</div>
-            <div style={ratingGridStyle}>
-              {REVIEW19_RATINGS.map((rating) => (
-                <button
-                  key={rating.value}
-                  type="button"
-                  onClick={() => onChangeRating(item.areaId, rating.value)}
-                  style={getRatingButtonStyle(item.rating === rating.value)}
-                >
-                  {rating.label}
-                </button>
-              ))}
-            </div>
+            {item.excluded ? (
+              <div style={excludedTextStyle}>
+                {item.excludeReasonText ?? "対象外"}
+              </div>
+            ) : (
+              <div style={ratingGridStyle}>
+                {REVIEW19_RATINGS.map((rating) => (
+                  <button
+                    key={rating.value}
+                    type="button"
+                    onClick={() => onChangeRating(item.areaId, rating.value)}
+                    style={getRatingButtonStyle(item.rating === rating.value)}
+                  >
+                    {rating.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </section>

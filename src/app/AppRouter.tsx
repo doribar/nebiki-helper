@@ -135,6 +135,8 @@ export function AppRouter({ app }: AppRouterProps) {
           summaryItems={derived.doneSummaryItems}
           onReset={actions.resetApp}
           onGoBack={actions.goBackOneScreen}
+          canStartReview19={derived.canStartReview19Manually}
+          onStartReview19={actions.startReview19Manually}
         />
       );
   }

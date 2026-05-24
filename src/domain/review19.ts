@@ -1,16 +1,61 @@
 import { NORMAL_ROUTE, getAreaName } from './area.ts';
-import type { AreaId, Review19Rating, Review19Reference, Review19Result, SessionData, ScreenName } from './types.ts';
+import type { AreaId, Review19AreaSnapshot, Review19Rating, Review19RatingScore, Review19Reference, Review19Result, Review19Snapshot, SessionData, ScreenName } from './types.ts';
 
-export const REVIEW19_RATINGS: Array<{ value: Review19Rating; label: string }> = [
-  { value: 'decreased_too_much', label: '減りすぎ' },
-  { value: 'decreased_slightly_too_much', label: 'やや減りすぎ' },
-  { value: 'just_right', label: 'ちょうどいい' },
-  { value: 'remained_slightly_too_much', label: 'やや残りすぎ' },
-  { value: 'remained_too_much', label: '残りすぎ' },
+export const REVIEW19_RATINGS: Array<{ value: Review19Rating; label: string; score: Review19RatingScore }> = [
+  { value: 'decreased_too_much', label: '減りすぎ', score: -2 },
+  { value: 'decreased_slightly_too_much', label: 'やや減りすぎ', score: -1 },
+  { value: 'just_right', label: 'ちょうどいい', score: 0 },
+  { value: 'remained_slightly_too_much', label: 'やや残りすぎ', score: 1 },
+  { value: 'remained_too_much', label: '残りすぎ', score: 2 },
 ];
 
 export const REVIEW19_EXPORT_BATCH_SIZE = 10;
 
+export const REVIEW19_EXCLUDE_REASON_TEXT: Record<string, string> = {
+  few_at_15: '対象外：15時・17時ともに「少ない」判定',
+  few_at_15_and_17: '対象外：15時・17時ともに「少ない」判定',
+};
+
+function normalizeExcludedAreaIds(raw: unknown): AreaId[] {
+  if (!Array.isArray(raw)) return [];
+
+  const unique = new Set<AreaId>();
+  for (const value of raw) {
+    if (NORMAL_ROUTE.includes(value as AreaId)) {
+      unique.add(value as AreaId);
+    }
+  }
+
+  return [...unique];
+}
+
+function createExcludeReasons(areaIds: AreaId[]): Partial<Record<AreaId, 'few_at_15_and_17'>> {
+  return areaIds.reduce((acc, areaId) => {
+    acc[areaId] = 'few_at_15_and_17';
+    return acc;
+  }, {} as Partial<Record<AreaId, 'few_at_15_and_17'>>);
+}
+
+function normalizeExcludeReason(raw: unknown) {
+  if (raw === 'few_at_15' || raw === 'few_at_15_and_17') {
+    return 'few_at_15_and_17' as const;
+  }
+
+  return undefined;
+}
+
+export function getReview19RatingScore(rating: Review19Rating): Review19RatingScore {
+  return REVIEW19_RATINGS.find((item) => item.value === rating)?.score ?? 0;
+}
+
+export function createReview19RatingScores(
+  ratings: Record<AreaId, Review19Rating>
+): Record<AreaId, Review19RatingScore> {
+  return NORMAL_ROUTE.reduce((acc, areaId) => {
+    acc[areaId] = getReview19RatingScore(ratings[areaId]);
+    return acc;
+  }, {} as Record<AreaId, Review19RatingScore>);
+}
 
 export function createDefaultReview19Ratings(): Record<AreaId, Review19Rating> {
   return NORMAL_ROUTE.reduce((acc, areaId) => {
@@ -22,11 +67,18 @@ export function createDefaultReview19Ratings(): Record<AreaId, Review19Rating> {
 export function createInitialReview19Result(params: {
   date: string;
   sessionStartedAt: string;
+  excludedAreaIds?: AreaId[];
 }): Review19Result {
+  const ratings = createDefaultReview19Ratings();
+  const excludedAreaIds = normalizeExcludedAreaIds(params.excludedAreaIds ?? []);
+
   return {
     date: params.date,
     sessionStartedAt: params.sessionStartedAt,
-    ratings: createDefaultReview19Ratings(),
+    ratings,
+    ratingScores: createReview19RatingScores(ratings),
+    excludedAreaIds,
+    excludeReasons: createExcludeReasons(excludedAreaIds),
   };
 }
 
@@ -36,6 +88,42 @@ export function getReview19AreaItems(): Array<{ areaId: AreaId; areaName: string
 
 export function isValidReview19Rating(value: unknown): value is Review19Rating {
   return REVIEW19_RATINGS.some((rating) => rating.value === value);
+}
+
+
+export function parseReview19RatePercent(text?: string): number | undefined {
+  if (!text) return undefined;
+  if (text === '引かない') return 0;
+
+  const match = text.match(/(-?\d+)\s*%/);
+  if (!match) return undefined;
+
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeReview19AreaSnapshot(area: Review19AreaSnapshot): Review19AreaSnapshot {
+  return {
+    ...area,
+    reviewExcluded: area.reviewExcluded === true,
+    reviewExcludeReason: normalizeExcludeReason(area.reviewExcludeReason),
+    ratePercent: area.ratePercent ?? parseReview19RatePercent(area.rateText),
+    manyRatePercent: area.manyRatePercent ?? parseReview19RatePercent(area.manyRateText),
+    normalRatePercent: area.normalRatePercent ?? parseReview19RatePercent(area.normalRateText),
+  };
+}
+
+function normalizeReview19Snapshot(raw?: Partial<Review19Snapshot> | null): Review19Snapshot | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const cloned = JSON.parse(JSON.stringify(raw)) as Review19Snapshot;
+  if (!cloned.areas || typeof cloned.areas !== 'object') return cloned;
+
+  for (const areaId of Object.keys(cloned.areas) as AreaId[]) {
+    cloned.areas[areaId] = normalizeReview19AreaSnapshot(cloned.areas[areaId]);
+  }
+
+  return cloned;
 }
 
 function cloneReview19Reference(raw?: Partial<Review19Reference> | null): Review19Reference | undefined {
@@ -53,9 +141,11 @@ export function normalizeReview19Result(raw?: Partial<Review19Result> | null): R
   if (!raw || typeof raw !== 'object') return null;
   if (typeof raw.date !== 'string' || typeof raw.sessionStartedAt !== 'string') return null;
 
+  const rawExcludedAreaIds = normalizeExcludedAreaIds((raw as Partial<Review19Result>).excludedAreaIds);
   const base = createInitialReview19Result({
     date: raw.date,
     sessionStartedAt: raw.sessionStartedAt,
+    excludedAreaIds: rawExcludedAreaIds,
   });
 
   const sourceRatings = raw.ratings && typeof raw.ratings === 'object' ? raw.ratings : {};
@@ -69,13 +159,13 @@ export function normalizeReview19Result(raw?: Partial<Review19Result> | null): R
 
   return {
     ...base,
+    ratingScores: createReview19RatingScores(base.ratings),
+    excludedAreaIds: base.excludedAreaIds,
+    excludeReasons: base.excludeReasons,
     recordedAt: typeof raw.recordedAt === 'string' ? raw.recordedAt : undefined,
     exportedAt: typeof raw.exportedAt === 'string' ? raw.exportedAt : undefined,
     reference: cloneReview19Reference(raw.reference),
-    snapshot:
-      raw.snapshot && typeof raw.snapshot === 'object'
-        ? JSON.parse(JSON.stringify(raw.snapshot))
-        : undefined,
+    snapshot: normalizeReview19Snapshot(raw.snapshot),
   };
 }
 
@@ -175,7 +265,6 @@ export function shouldAutoStartReview19(params: {
   if (screen !== 'done') return false;
   if (session.discountTime !== '17') return false;
   if (review19?.date === session.date && review19.recordedAt) return false;
-  if (review19?.date === session.date && !review19.recordedAt) return false;
 
   const currentDate = `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}-${`${now.getDate()}`.padStart(2, '0')}`;
   if (currentDate !== session.date) return false;

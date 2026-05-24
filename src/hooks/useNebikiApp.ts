@@ -72,13 +72,16 @@ import {
 } from "../domain/hourlyWeather.ts";
 import {
   createInitialReview19Result,
+  createReview19RatingScores,
   getReview19AreaItems,
+  parseReview19RatePercent,
   normalizeReview19Result,
   shouldAutoStartReview19,
   buildReview19ExportPayload,
   getReview19ExportBatch,
   getUnexportedReview19Records,
   markReview19RecordsExportedInMemory,
+  REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
 
 function formatLocalDate(date = new Date()): string {
@@ -312,6 +315,35 @@ function isValidAreaJudge(value: unknown): value is AreaJudge {
   return value === "many" || value === "normal" || value === "few" || value === null;
 }
 
+function normalizeReview19ExcludedAreaIds(raw: unknown): AreaId[] {
+  if (!Array.isArray(raw)) return [];
+
+  const unique = new Set<AreaId>();
+  for (const value of raw) {
+    if (isValidAreaId(value)) {
+      unique.add(value);
+    }
+  }
+
+  return [...unique];
+}
+
+function addReview19ExcludedAreaId(current: AreaId[], areaId: AreaId): AreaId[] {
+  return current.includes(areaId) ? current : [...current, areaId];
+}
+
+function removeReview19ExcludedAreaId(current: AreaId[], areaId: AreaId): AreaId[] {
+  return current.filter((currentAreaId) => currentAreaId !== areaId);
+}
+
+function getReview19ExcludedAreaIdsForReview(state: AppState): AreaId[] {
+  return normalizeReview19ExcludedAreaIds(
+    state.review19ExcludedAreaIds.filter(
+      (areaId) => state.areaProgressMap[areaId]?.areaJudge === "few"
+    )
+  );
+}
+
 function normalizeAreaProgressMap(
   raw?: Partial<Record<string, AreaProgress>> | null
 ): Record<AreaId, AreaProgress> {
@@ -391,6 +423,7 @@ function createInitialState(initialSessionDraft: SessionDraft = createInitialSes
     timeSwitchNotice: null,
     finalTimeStep: 0,
     review19: null,
+    review19ExcludedAreaIds: [],
   };
 }
 
@@ -576,6 +609,7 @@ function normalizeLoadedState(
         ? ((loaded as Partial<AppState>).finalTimeStep as AppState["finalTimeStep"])
         : 0,
     review19: normalizeReview19Result((loaded as Partial<AppState>).review19),
+    review19ExcludedAreaIds: normalizeReview19ExcludedAreaIds((loaded as Partial<AppState>).review19ExcludedAreaIds),
   };
 }
 
@@ -665,6 +699,8 @@ function refreshSessionDiscountTime(session: SessionData | null): {
 }
 
 
+
+
 function createReview19Snapshot(params: {
   capturedAt: string;
   session: SessionData;
@@ -673,6 +709,7 @@ function createReview19Snapshot(params: {
   basisGuide: ReturnType<typeof getBasisGuideDisplay>;
   lateTimeBonus: number;
   reviewReference?: Review19Reference;
+  excludedAreaIds: AreaId[];
   areaProgressMap: Record<AreaId, AreaProgress>;
   doneSummaryItems: DoneSummaryItem[];
 }): Review19Snapshot {
@@ -680,6 +717,7 @@ function createReview19Snapshot(params: {
     acc[item.areaId] = item;
     return acc;
   }, {} as Record<AreaId, DoneSummaryItem>);
+  const excludedAreaIdSet = new Set(params.excludedAreaIds);
 
   const areas = DONE_SUMMARY_ROUTE.reduce((acc, areaId) => {
     const progress = params.areaProgressMap[areaId];
@@ -688,14 +726,19 @@ function createReview19Snapshot(params: {
     acc[areaId] = {
       areaId,
       areaName: getAreaName(areaId),
+      reviewExcluded: excludedAreaIdSet.has(areaId),
+      reviewExcludeReason: excludedAreaIdSet.has(areaId) ? "few_at_15_and_17" : undefined,
       status: progress?.status ?? "unstarted",
       statusText: summary?.statusText,
       areaJudge: progress?.areaJudge ?? null,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
       rateText: summary?.rateText ?? "未完了",
+      ratePercent: parseReview19RatePercent(summary?.rateText),
       manyRateText: summary?.manyRateText,
+      manyRatePercent: parseReview19RatePercent(summary?.manyRateText),
       manyNote: summary?.manyNote,
       normalRateText: summary?.normalRateText,
+      normalRatePercent: parseReview19RatePercent(summary?.normalRateText),
       visitedAt: progress?.visitedAt,
       completedAt: progress?.completedAt,
       skipReason: progress?.skipReason,
@@ -998,6 +1041,7 @@ export function useNebikiApp(): UseNebikiAppResult {
         review19: createInitialReview19Result({
           date: prev.session.date,
           sessionStartedAt: prev.session.startedAt,
+          excludedAreaIds: getReview19ExcludedAreaIdsForReview(prev),
         }),
       };
     });
@@ -1418,10 +1462,21 @@ const lateSkipNotice = useMemo(() => {
 
   const review19Items = useMemo(() => {
     const ratings = state.review19?.ratings;
-    return getReview19AreaItems().map((item) => ({
-      ...item,
-      rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
-    }));
+    const excludedAreaIdSet = new Set(state.review19?.excludedAreaIds ?? []);
+
+    return getReview19AreaItems().map((item) => {
+      const excluded = excludedAreaIdSet.has(item.areaId);
+      const excludeReason = state.review19?.excludeReasons?.[item.areaId];
+
+      return {
+        ...item,
+        rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
+        excluded,
+        excludeReasonText: excluded
+          ? REVIEW19_EXCLUDE_REASON_TEXT[excludeReason ?? "few_at_15_and_17"]
+          : undefined,
+      };
+    });
   }, [state.review19]);
 
   const review19ReferenceLines = useMemo(() => {
@@ -1454,6 +1509,13 @@ const lateSkipNotice = useMemo(() => {
       canExportTen: unexportedCount >= 10,
     };
   })();
+
+  const canStartReview19Manually = Boolean(
+    state.session &&
+    state.screen === "done" &&
+    state.session.discountTime === "17" &&
+    !(state.review19?.date === state.session.date && state.review19.recordedAt)
+  );
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
@@ -1683,6 +1745,9 @@ const lateSkipNotice = useMemo(() => {
         screen: "rate_display",
         timeSwitchNotice: null,
         finalTimeStep: 0,
+        review19ExcludedAreaIds: prev.session?.discountTime === "17"
+          ? removeReview19ExcludedAreaId(prev.review19ExcludedAreaIds, currentAreaId)
+          : prev.review19ExcludedAreaIds,
         areaProgressMap: {
           ...prev.areaProgressMap,
           [currentAreaId]: {
@@ -1697,6 +1762,9 @@ const lateSkipNotice = useMemo(() => {
     const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
     const currentVisitedAt = new Date().toISOString();
+    const nextReview19ExcludedAreaIds = prev.session?.discountTime === "15"
+      ? addReview19ExcludedAreaId(prev.review19ExcludedAreaIds, currentAreaId)
+      : prev.review19ExcludedAreaIds;
     const judgedCurrentMap = {
       ...prev.areaProgressMap,
       [currentAreaId]: {
@@ -1722,6 +1790,7 @@ const lateSkipNotice = useMemo(() => {
         ...prev,
         session: nextSession,
         timeSwitchNotice,
+        review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
         areaProgressMap: updatedMap,
         currentAreaId: null,
         lastReferenceAreaId: currentAreaId,
@@ -1737,6 +1806,7 @@ const lateSkipNotice = useMemo(() => {
         ...prev,
         session: nextSession,
         timeSwitchNotice,
+        review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
         areaProgressMap: judgedCurrentMap,
         currentAreaId,
         lastReferenceAreaId: currentAreaId,
@@ -1765,6 +1835,7 @@ const lateSkipNotice = useMemo(() => {
         ...prev,
         session: nextSession,
         timeSwitchNotice,
+        review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
         areaProgressMap: updatedMap,
         currentAreaId: nextAreaId,
         lastReferenceAreaId: currentAreaId,
@@ -1833,6 +1904,15 @@ const lateSkipNotice = useMemo(() => {
           nextSession.discountTime === "20"
             ? null
             : getFirstAvailableAreaId(areaProgressMap);
+        const nextReview19ExcludedAreaIds =
+          prev.session.discountTime === "15" && nextSession.discountTime === "17"
+            ? normalizeReview19ExcludedAreaIds([
+                ...prev.review19ExcludedAreaIds,
+                ...NORMAL_ROUTE.filter((areaId) => prev.areaProgressMap[areaId]?.areaJudge === "few"),
+              ])
+            : nextSession.discountTime === "15"
+            ? []
+            : prev.review19ExcludedAreaIds;
 
         return {
           ...prev,
@@ -1855,6 +1935,7 @@ const lateSkipNotice = useMemo(() => {
             buildTimeSwitchNotice(nextSession.discountTime),
             buildAutoSkippedAreaNotice(consumedSkippedRecords)
           ),
+          review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
           finalTimeStep: 0,
         };
       }
@@ -2211,6 +2292,31 @@ const lateSkipNotice = useMemo(() => {
   }
 
 
+  function startReview19Manually() {
+    setUndoSnapshot(null);
+    setUndoNotice(null);
+
+    setState((prev) => {
+      if (!prev.session || prev.screen !== "done" || prev.session.discountTime !== "17") return prev;
+      if (prev.review19?.date === prev.session.date && prev.review19.recordedAt) return prev;
+
+      return {
+        ...prev,
+        screen: "review19_weather",
+        sessionDraft: createReview19WeatherDraft(prev.session),
+        currentAreaId: null,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: null,
+        review19: createInitialReview19Result({
+          date: prev.session.date,
+          sessionStartedAt: prev.session.startedAt,
+          excludedAreaIds: getReview19ExcludedAreaIdsForReview(prev),
+        }),
+      };
+    });
+  }
+
   function startReview19AfterWeather() {
     setState((prev) => {
       if (prev.screen !== "review19_weather" || !prev.session || !prev.review19) return prev;
@@ -2238,6 +2344,10 @@ const lateSkipNotice = useMemo(() => {
             ...prev.review19.ratings,
             [areaId]: rating,
           },
+          ratingScores: createReview19RatingScores({
+            ...prev.review19.ratings,
+            [areaId]: rating,
+          }),
         },
       };
     });
@@ -2256,6 +2366,7 @@ const lateSkipNotice = useMemo(() => {
           basisGuide,
           lateTimeBonus,
           reviewReference: state.review19.reference,
+          excludedAreaIds: state.review19.excludedAreaIds,
           areaProgressMap: state.areaProgressMap,
           doneSummaryItems,
         })
@@ -2263,6 +2374,9 @@ const lateSkipNotice = useMemo(() => {
 
     const recordedReview: Review19Result = {
       ...state.review19,
+      ratingScores: createReview19RatingScores(state.review19.ratings),
+      excludedAreaIds: state.review19.excludedAreaIds,
+      excludeReasons: state.review19.excludeReasons,
       recordedAt,
       snapshot,
     };
@@ -2361,6 +2475,7 @@ const lateSkipNotice = useMemo(() => {
   review19Items,
   review19ReferenceLines,
   review19Export,
+  canStartReview19Manually,
 },
     actions: {
       updateSessionDraft,
@@ -2379,6 +2494,7 @@ const lateSkipNotice = useMemo(() => {
       startReview19AfterWeather,
       saveReview19,
       exportReview19Records,
+      startReview19Manually,
       resetApp,
     },
   };

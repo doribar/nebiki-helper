@@ -11,6 +11,7 @@ import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/ar
 import {
   appendReview19RecordInMemory,
   buildReview19ExportPayload,
+  createInitialReview19Result,
   getReview19ExportBatch,
   getUnexportedReview19Records,
   markReview19RecordsExportedInMemory,
@@ -1474,12 +1475,17 @@ try {
       version: 1,
       capturedAt: '2026-05-09T10:00:00.000Z',
       session: { date: '2026-05-09', discountTime: '17' },
-      areas: { bento_men: { rateText: '20%' } },
+      areas: { bento_men: { rateText: '20%', manyRateText: '30%', normalRateText: '引かない' } },
     },
   };
   const normalized = normalizeReview19Result(rawReview19 as never);
   assert.equal(normalized?.snapshot?.version, 1);
   assert.equal(normalized?.snapshot?.areas.bento_men.rateText, '20%');
+  assert.equal(normalized?.snapshot?.areas.bento_men.ratePercent, 20);
+  assert.equal(normalized?.snapshot?.areas.bento_men.manyRatePercent, 30);
+  assert.equal(normalized?.snapshot?.areas.bento_men.normalRatePercent, 0);
+  assert.equal(normalized?.ratingScores.bento_men, 1);
+  assert.equal(normalized?.ratingScores.tempura, 0);
   assert.equal(normalized?.reference?.discountTime, '19');
   assert.equal(normalized?.reference?.basis.adjustedWeekdayBase, '火木');
 
@@ -1490,14 +1496,59 @@ try {
   assert.equal(records.length, 1);
   assert.equal(records[0].snapshot?.version, 1);
   assert.equal(records[0].snapshot?.areas.bento_men.rateText, '20%');
-  console.log('PASS: 19時チェックは値引状況スナップショットを保持する');
+  assert.equal(records[0].snapshot?.areas.bento_men.ratePercent, 20);
+  assert.equal(records[0].ratingScores.bento_men, 1);
+  console.log('PASS: 19時チェックは値引状況スナップショット・点数・値引率数値を保持する');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: 19時チェックは値引状況スナップショットを保持する');
+  console.error('FAIL: 19時チェックは値引状況スナップショット・点数・値引率数値を保持する');
   console.error(error);
   process.exitCode = 1;
 }
 
+
+try {
+  const review = createInitialReview19Result({
+    date: '2026-05-10',
+    sessionStartedAt: '2026-05-10T08:00:00.000Z',
+    excludedAreaIds: ['bento_men', 'tempura', 'bento_men'],
+  });
+
+  assert.deepEqual(review.excludedAreaIds, ['bento_men', 'tempura']);
+  assert.equal(review.excludeReasons.bento_men, 'few_at_15_and_17');
+
+  const normalized = normalizeReview19Result({
+    ...review,
+    snapshot: {
+      version: 1,
+      capturedAt: '2026-05-10T10:00:00.000Z',
+      session: { date: '2026-05-10', discountTime: '17' },
+      areas: {
+        bento_men: {
+          areaId: 'bento_men',
+          areaName: '弁当・麺類',
+          reviewExcluded: true,
+          reviewExcludeReason: 'few_at_15',
+          status: 'completed',
+          areaJudge: 'few',
+          judgeText: '少ない',
+          rateText: '引かない',
+        },
+      },
+    } as never,
+  });
+
+  assert.equal(normalized?.excludedAreaIds.includes('bento_men'), true);
+  assert.equal(normalized?.snapshot?.areas.bento_men.reviewExcluded, true);
+  assert.equal(normalized?.snapshot?.areas.bento_men.reviewExcludeReason, 'few_at_15_and_17');
+
+  console.log('PASS: 15時・17時ともに少ない判定したエリアは19時チェック対象外として保存できる');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 15時・17時ともに少ない判定したエリアは19時チェック対象外として保存できる');
+  console.error(error);
+  process.exitCode = 1;
+}
 
 try {
   const session = {
@@ -1528,6 +1579,18 @@ try {
     }),
     true
   );
+  assert.equal(
+    shouldAutoStartReview19({
+      session,
+      screen: 'done',
+      review19: createInitialReview19Result({
+        date: '2026-05-09',
+        sessionStartedAt: '2026-05-09T08:00:00.000Z',
+      }),
+      now: new Date('2026-05-09T19:15:00'),
+    }),
+    true
+  );
   console.log('PASS: 19時チェックは19:15以降に自動開始する');
   passed += 1;
 } catch (error) {
@@ -1536,7 +1599,7 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 27} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 28} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
