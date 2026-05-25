@@ -86,6 +86,7 @@ import {
   getUnexportedReview19Records,
   markReview19RecordsExportedInMemory,
   REVIEW19_EXCLUDE_REASON_TEXT,
+  shouldStartReview19From19DiscountStart,
 } from "../domain/review19.ts";
 
 function formatLocalDate(date = new Date()): string {
@@ -1968,6 +1969,42 @@ const lateSkipNotice = useMemo(() => {
         },
         startedAt: prev.session?.startedAt ?? startedAt,
       };
+
+      if (shouldStartReview19From19DiscountStart({
+        session: prev.session,
+        nextDiscountTime: nextSession.discountTime,
+        currentDate,
+        review19: prev.review19,
+        areaProgressMap: prev.areaProgressMap,
+      })) {
+        return {
+          ...prev,
+          screen: "review19",
+          sessionDraft: {
+            date: nextSession.date,
+            weekday: nextSession.weekday,
+            discountTime: "19",
+            manualWeekdayOverride: nextSession.manualWeekdayOverride,
+            manualDiscountTimeOverride: nextSession.manualDiscountTimeOverride,
+            weather: {
+              ...nextSession.weather,
+              hourlyForecasts: cloneHourlyForecasts(nextSession.weather.hourlyForecasts),
+            },
+          },
+          currentAreaId: null,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          timeSwitchNotice: null,
+          review19: {
+            ...createInitialReview19Result({
+              date: prev.session!.date,
+              sessionStartedAt: prev.session!.startedAt,
+              excludedAreaIds: getReview19ExcludedAreaIdsForReview(prev),
+            }),
+            reference: createReview19Reference(nextSession),
+          },
+        };
+      }
 
       if (timeSwitchTarget && prev.session) {
         let areaProgressMap = createInitialAreaProgressMap();

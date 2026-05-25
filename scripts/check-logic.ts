@@ -17,6 +17,7 @@ import {
   markReview19RecordsExportedInMemory,
   normalizeReview19Result,
   shouldAutoStartReview19,
+  shouldStartReview19From19DiscountStart,
 } from '../src/domain/review19.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
@@ -1599,7 +1600,68 @@ try {
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 28} checks passed.`);
+
+try {
+  const session = {
+    date: '2026-05-09',
+    weekday: 6,
+    discountTime: '17',
+    manualWeekdayOverride: false,
+    manualDiscountTimeOverride: false,
+    weather: { hourlyForecasts: {}, afterRainSky: null },
+    startedAt: '2026-05-09T08:00:00.000Z',
+  } as never;
+  const completedProgress = NORMAL_ROUTE.reduce((acc, areaId) => {
+    acc[areaId] = { areaId, status: 'completed', areaJudge: 'normal' };
+    return acc;
+  }, {} as Record<AreaId, AppState['areaProgressMap'][AreaId]>);
+
+  assert.equal(
+    shouldStartReview19From19DiscountStart({
+      session,
+      nextDiscountTime: '19',
+      currentDate: '2026-05-09',
+      review19: null,
+      areaProgressMap: completedProgress,
+    }),
+    true
+  );
+  assert.equal(
+    shouldStartReview19From19DiscountStart({
+      session: { ...session, discountTime: '18' } as never,
+      nextDiscountTime: '19',
+      currentDate: '2026-05-09',
+      review19: null,
+      areaProgressMap: completedProgress,
+    }),
+    false
+  );
+  assert.equal(
+    shouldStartReview19From19DiscountStart({
+      session,
+      nextDiscountTime: '19',
+      currentDate: '2026-05-09',
+      review19: {
+        ...createInitialReview19Result({
+          date: '2026-05-09',
+          sessionStartedAt: '2026-05-09T08:00:00.000Z',
+        }),
+        recordedAt: '2026-05-09T19:20:00.000Z',
+      },
+      areaProgressMap: completedProgress,
+    }),
+    false
+  );
+
+  console.log('PASS: 18時30分未開始で19時30分値引を始めようとしたら19時チェックへ差し込む');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 18時30分未開始で19時30分値引を始めようとしたら19時チェックへ差し込む');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 29} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

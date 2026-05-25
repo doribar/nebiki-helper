@@ -1,5 +1,5 @@
 import { NORMAL_ROUTE, getAreaName } from './area.ts';
-import type { AreaId, Review19AreaSnapshot, Review19Rating, Review19RatingScore, Review19Reference, Review19Result, Review19Snapshot, SessionData, ScreenName } from './types.ts';
+import type { AreaId, AreaProgress, DiscountTime, Review19AreaSnapshot, Review19Rating, Review19RatingScore, Review19Reference, Review19Result, Review19Snapshot, SessionData, ScreenName } from './types.ts';
 
 export const REVIEW19_RATINGS: Array<{ value: Review19Rating; label: string; score: Review19RatingScore }> = [
   { value: 'decreased_too_much', label: '減りすぎ', score: -2 },
@@ -251,6 +251,25 @@ export function markReview19RecordsExportedInMemory(params: {
       exportedAt: params.exportedAt,
     };
   });
+}
+
+
+export function shouldStartReview19From19DiscountStart(params: {
+  session: SessionData | null;
+  nextDiscountTime: DiscountTime;
+  currentDate: string;
+  review19: Review19Result | null;
+  areaProgressMap: Record<AreaId, AreaProgress>;
+}): boolean {
+  const { session, nextDiscountTime, currentDate, review19, areaProgressMap } = params;
+
+  if (!session) return false;
+  if (session.discountTime !== '17') return false;
+  if (nextDiscountTime !== '19') return false;
+  if (session.date !== currentDate) return false;
+  if (review19?.date === session.date && review19.recordedAt) return false;
+
+  return NORMAL_ROUTE.every((areaId) => areaProgressMap[areaId]?.status !== 'unstarted');
 }
 
 export function shouldAutoStartReview19(params: {
