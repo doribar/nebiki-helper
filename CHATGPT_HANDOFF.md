@@ -1523,3 +1523,22 @@ ChatGPT は作業開始時に、今回の依頼が以下に当てはまるか確
 - `npm run check:logic`: PASS（48 / 48 checks passed。加えて後続の個別チェックもPASS）
 - `npm run build`: PASS
 - `npm run lint`: 既存 lint 指摘で失敗。今回変更範囲とは別の既存指摘が残っている。
+
+## 2026-05-26 追記：nebiki-helper(8).zip の軽量化確認
+
+ユーザーアップロード版 `nebiki-helper(8).zip` には、配布ZIPに含めない方針の `.git/`、`node_modules/`、`dist/`、`tsc*.txt` が含まれていた。
+
+今回、配布用ZIPは以下を除外して作り直した。
+
+- `.git/`
+- `node_modules/`
+- `dist/`
+- `.env` 系
+- `tsc*.txt` などの一時ログ
+
+確認結果:
+
+- 初回の `npm run build` は、同梱 `node_modules` の実行権限と Linux 用 optional native dependency 不足により失敗。
+- `node_modules` を削除して `npm ci` し直した後、`npm run check:logic` PASS（48 / 48 checks passed。加えて後続の個別チェックもPASS）。
+- `npm run build` PASS。
+- `npm ci` 時に `npm audit` 警告（5 vulnerabilities: 2 moderate, 3 high）は出るが、今回の軽量化範囲では未対応。

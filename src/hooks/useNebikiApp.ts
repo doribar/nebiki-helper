@@ -121,24 +121,6 @@ function getBasisTimeText(discountTime: DiscountTime): string {
   }
 }
 
-function getDiscountTimeRank(discountTime: DiscountTime): number {
-  switch (discountTime) {
-    case "15":
-      return 0;
-    case "17":
-      return 1;
-    case "18":
-      return 2;
-    case "19":
-      return 3;
-    case "20":
-      return 4;
-  }
-}
-
-function shouldOfferTimeSwitch(current: DiscountTime, next: DiscountTime): boolean {
-  return getDiscountTimeRank(next) > getDiscountTimeRank(current);
-}
 
 function hasNoUnstartedReviewAreas(areaProgressMap: Record<AreaId, AreaProgress>): boolean {
   return NORMAL_ROUTE.every((areaId) => areaProgressMap[areaId]?.status !== "unstarted");
@@ -162,10 +144,6 @@ function canStartReview19FromCurrentState(params: {
   return hasNoUnstartedReviewAreas(state.areaProgressMap);
 }
 
-
-function buildTimeSwitchConfirmMessage(to: DiscountTime): string {
-  return `${getBasisTimeText(to)}の値引に移動しますか？`;
-}
 
 function buildTimeSwitchNotice(to: DiscountTime): string {
   if (to === "20") {
@@ -741,8 +719,8 @@ function refreshSessionDiscountTime(session: SessionData | null): {
   nextSession: SessionData | null;
   timeSwitchNotice: string | null;
 } {
-  // 実時間が次の値引帯に入っていても、ユーザーの許可なしに打ち切って移動しない。
-  // 自動判定は別の effect で確認ダイアログを出し、許可された場合だけ天候入力へ移動する。
+  // 実時間が次の値引帯に入っても、自動で打ち切り・移動しない。
+  // 必要な場合はユーザーが開始画面から値引時刻を選び直す。
   return {
     nextSession: session,
     timeSwitchNotice: null,
@@ -938,11 +916,7 @@ export function useNebikiApp(): UseNebikiAppResult {
   const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(
     initialPersistenceRef.current?.runtimeState?.resumeTargetScreen ?? null
   );
-  const [timeSwitchTarget, setTimeSwitchTarget] = useState<DiscountTime | null>(
-    initialPersistenceRef.current?.runtimeState?.timeSwitchTarget ?? null
-  );
-  const dismissedTimeSwitchKeyRef = useRef<string | null>(null);
-  const promptedTimeSwitchKeyRef = useRef<string | null>(null);
+  const [timeSwitchTarget, setTimeSwitchTarget] = useState<DiscountTime | null>(null);
   const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(
     initialPersistenceRef.current?.runtimeState?.undoSnapshot ?? null
   );
@@ -1136,68 +1110,6 @@ export function useNebikiApp(): UseNebikiAppResult {
   }, [state.session, state.screen, state.review19, nowMs]);
 
   useEffect(() => {
-    if (!state.session || state.session.manualDiscountTimeOverride) return;
-    if (state.screen === "start") return;
-
-    const now = new Date(nowMs);
-    if (canStartReview19FromCurrentState({ state, now })) return;
-
-    const nowDiscountTime = resolveDiscountTime(now);
-
-    if (!shouldOfferTimeSwitch(state.session.discountTime, nowDiscountTime)) {
-      dismissedTimeSwitchKeyRef.current = null;
-      promptedTimeSwitchKeyRef.current = null;
-      return;
-    }
-
-    const switchKey = `${state.session.startedAt}:${state.session.discountTime}->${nowDiscountTime}`;
-    if (dismissedTimeSwitchKeyRef.current === switchKey) return;
-    if (promptedTimeSwitchKeyRef.current === switchKey) return;
-
-    promptedTimeSwitchKeyRef.current = switchKey;
-    const ok = window.confirm(buildTimeSwitchConfirmMessage(nowDiscountTime));
-
-    if (!ok) {
-      dismissedTimeSwitchKeyRef.current = switchKey;
-      return;
-    }
-
-    dismissedTimeSwitchKeyRef.current = null;
-    setTimeSwitchTarget(nowDiscountTime);
-    setResumeTargetScreen(null);
-    setAreaJudgeSelection(null);
-    setUndoSnapshot(null);
-    setUndoNotice(null);
-
-    setState((prev) => {
-      if (!prev.session || prev.session.manualDiscountTimeOverride) return prev;
-
-      const nextNow = new Date(nowMs);
-      const nextDiscountTime = resolveDiscountTime(nextNow);
-      if (!shouldOfferTimeSwitch(prev.session.discountTime, nextDiscountTime)) return prev;
-
-      const nextDraft = syncAfterRainSelection(normalizeSessionDraft(prev.session), lastSessionWeather);
-      return {
-        ...prev,
-        screen: "start",
-        sessionDraft: {
-          ...nextDraft,
-          date: formatLocalDate(nextNow),
-          weekday: nextNow.getDay(),
-          discountTime: nextDiscountTime,
-          manualWeekdayOverride: false,
-          manualDiscountTimeOverride: false,
-          weather: {
-            ...nextDraft.weather,
-            hourlyForecasts: cloneHourlyForecasts(nextDraft.weather.hourlyForecasts),
-          },
-        },
-        timeSwitchNotice: null,
-      };
-    });
-  }, [state.session, state.screen, nowMs, lastSessionWeather]);
-
-  useEffect(() => {
   if (state.screen !== "start") return;
 
   const syncDraftTime = () => {
@@ -1357,19 +1269,19 @@ export function useNebikiApp(): UseNebikiAppResult {
     return minutes >= 16 * 60 ? 5 : 0;
   }
 
-  // 17時基準の値引中に18時を超えた。18時15分以降は18時30分値引へ切り替える。
+  // 17時基準の値引中に18時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
   if (state.session.discountTime === "17") {
-    return minutes >= 18 * 60 && minutes < 18 * 60 + 15 ? 5 : 0;
+    return minutes >= 18 * 60 ? 5 : 0;
   }
 
-  // 18時30分基準の値引中に19時を超えた。19時15分以降は19時30分値引へ切り替える。
+  // 18時30分基準の値引中に19時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
   if (state.session.discountTime === "18") {
-    return minutes >= 19 * 60 && minutes < 19 * 60 + 15 ? 5 : 0;
+    return minutes >= 19 * 60 ? 5 : 0;
   }
 
-  // 19時30分基準の値引中に20時を超えた。20時15分以降は20時30分の最終値引へ切り替える。
+  // 19時30分基準の値引中に20時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
   if (state.session.discountTime === "19") {
-    return minutes >= 20 * 60 && minutes < 20 * 60 + 15 ? 5 : 0;
+    return minutes >= 20 * 60 ? 5 : 0;
   }
 
   return 0;
@@ -1383,15 +1295,15 @@ const lateTimeBonusNotice = useMemo(() => {
   }
 
   if (state.session.discountTime === "17") {
-    return "18時を過ぎたため値引率を5%上げています。18時15分を過ぎたら17時値引を打ち切ります。";
+    return "18時を過ぎたため値引率を5%上げています。";
   }
 
   if (state.session.discountTime === "18") {
-    return "19時を過ぎたため値引率を5%上げています。19時15分を過ぎたら18時30分値引を打ち切ります。";
+    return "19時を過ぎたため値引率を5%上げています。";
   }
 
   if (state.session.discountTime === "19") {
-    return "20時を過ぎたため値引率を5%上げています。20時15分を過ぎたら19時30分値引を打ち切り、最終値引を開始します。";
+    return "20時を過ぎたため値引率を5%上げています。";
   }
 
   return null;
@@ -2126,8 +2038,6 @@ const lateSkipNotice = useMemo(() => {
     setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
     setResumeTargetScreen(null);
     setTimeSwitchTarget(null);
-    promptedTimeSwitchKeyRef.current = null;
-    dismissedTimeSwitchKeyRef.current = null;
     setUndoSnapshot(null);
     setUndoNotice(null);
   }
@@ -2576,8 +2486,6 @@ const lateSkipNotice = useMemo(() => {
     setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
     setResumeTargetScreen(null);
     setTimeSwitchTarget(null);
-    promptedTimeSwitchKeyRef.current = null;
-    dismissedTimeSwitchKeyRef.current = null;
     setUndoSnapshot(null);
     setUndoNotice(null);
   }
@@ -2626,8 +2534,6 @@ const lateSkipNotice = useMemo(() => {
     setAreaJudgeSelection(null);
     setResumeTargetScreen(null);
     setTimeSwitchTarget(null);
-    promptedTimeSwitchKeyRef.current = null;
-    dismissedTimeSwitchKeyRef.current = null;
     setUndoSnapshot(null);
     setUndoNotice(null);
   }
