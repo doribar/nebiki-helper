@@ -206,6 +206,67 @@ function buildBonusSummaryText(totalBonus: number): string {
   return `値引率補正：${formatSignedPercentCompact(totalBonus)}`;
 }
 
+function getBaseTempShift(tempLevel: TempLevel): number {
+  switch (tempLevel) {
+    case "5orLess":
+      return 2;
+    case "6to10":
+      return 1;
+    case "11to15":
+      return 0;
+    case "16to20":
+      return -1;
+    case "21to25":
+      return -2;
+    case "26to27":
+    case "26to30":
+      return -1;
+    case "28to30":
+      return 0;
+    case "31to35":
+      return 1;
+    case "36orMore":
+      return 2;
+  }
+}
+
+function getTempLevelText(tempLevel: TempLevel): string {
+  switch (tempLevel) {
+    case "5orLess":
+      return "5度以下";
+    case "6to10":
+      return "6〜10度";
+    case "11to15":
+      return "11〜15度";
+    case "16to20":
+      return "16〜20度";
+    case "21to25":
+      return "21〜25度";
+    case "26to27":
+      return "26〜27度";
+    case "26to30":
+      return "26〜30度";
+    case "28to30":
+      return "28〜30度";
+    case "31to35":
+      return "31〜35度";
+    case "36orMore":
+      return "36度以上";
+  }
+}
+
+function getBaseTempShiftTerm(weather: ResolvedWeatherInput, discountTime: DiscountTime): ShiftTerm | undefined {
+  const value = getBaseTempShift(weather.tempLevel);
+  if (value === 0) {
+    return undefined;
+  }
+
+  return {
+    label: `${getNearForecastHourText(discountTime)}気温 ${getTempLevelText(weather.tempLevel)}`,
+    value,
+  };
+}
+
 function getWeatherPointShift(weather: ResolvedWeatherInput): number {
   return weather.weatherPointShift;
 }
@@ -216,7 +277,7 @@ function getWeatherPointShiftTerm(weather: ResolvedWeatherInput): ShiftTerm | un
   }
 
   return {
-    label: `天候ポイント ${formatSignedValue(weather.weatherPointScore, "pt")}（${weather.weatherPointRangeText}）`,
+    label: `未来天候ポイント ${formatSignedValue(weather.weatherPointScore, "pt")}（${weather.weatherPointRangeText}）`,
     value: weather.weatherPointShift,
   };
 }
@@ -278,57 +339,6 @@ function getAfterRainRecoveryShift(_weather: ResolvedWeatherInput): number {
 
 function getAfterRainRecoveryShiftTerm(_weather: ResolvedWeatherInput): ShiftTerm | undefined {
   return undefined;
-}
-
-function getLaterPrecipShift(weather: ResolvedWeatherInput): number {
-
-  if (!weather.hasLaterPrecip) {
-    return 0;
-  }
-
-  switch (weather.laterPrecipType) {
-    case "rain":
-      return 1;
-    case "snow":
-      return 2;
-    default:
-      return 0;
-  }
-}
-
-function getLaterPrecipRangeText(discountTime: DiscountTime): string {
-  switch (discountTime) {
-    case "15":
-      return "17〜21時";
-    case "17":
-      return "19〜21時";
-    case "18":
-      return "20〜21時";
-    case "19":
-      return "21時";
-    case "20":
-      return "21時";
-  }
-}
-
-function getLaterPrecipShiftTerm(
-  weather: ResolvedWeatherInput,
-  discountTime: DiscountTime
-): ShiftTerm | undefined {
-  if (!weather.hasLaterPrecip) {
-    return undefined;
-  }
-
-  const rangeText = getLaterPrecipRangeText(discountTime);
-
-  switch (weather.laterPrecipType) {
-    case "rain":
-      return { label: `${rangeText}に雨`, value: 1 };
-    case "snow":
-      return { label: `${rangeText}に雪`, value: 2 };
-    default:
-      return undefined;
-  }
 }
 
 function getNearTermPercentBonus(weather: ResolvedWeatherInput): number {
@@ -668,9 +678,9 @@ function resolveWeatherEffect(params: {
   const noticeText = holidayAdjusted.noticeText;
 
   const shiftTerms = [
-    getWeatherPointShiftTerm(params.weather),
+    getBaseTempShiftTerm(params.weather, params.discountTime),
     getWindShiftTerm(params.weather.tempLevel, params.weather.windLevel),
-    getLaterPrecipShiftTerm(params.weather, params.discountTime),
+    getWeatherPointShiftTerm(params.weather),
     getAfterRainRecoveryShiftTerm(params.weather),
     getGoldenWeekAfterPeakShiftTerm({
       date: params.date,
@@ -679,9 +689,9 @@ function resolveWeatherEffect(params: {
   ].filter((value): value is ShiftTerm => Boolean(value));
 
   const totalShift =
-    getWeatherPointShift(params.weather) +
+    getBaseTempShift(params.weather.tempLevel) +
     getWindShift(params.weather.tempLevel, params.weather.windLevel) +
-    getLaterPrecipShift(params.weather) +
+    getWeatherPointShift(params.weather) +
     getAfterRainRecoveryShift(params.weather) +
     (isDayAfterGoldenWeekThirdConsecutiveHoliday(params.date)
       ? getGoldenWeekAfterPeakShift(params.discountTime)
@@ -799,9 +809,9 @@ export function getBasisGuideDisplay(params: {
 export function getWeatherGuideText(): WeatherGuideText {
   return {
     nearTermWeatherGuide: "30分〜1時間後に雨マーク（もしくは雪）があるか",
-    laterPrecipGuide: "1時間30分後〜23時に雨マーク（もしくは雪）があるか",
-    laterPrecipTypeGuide: "ある場合それは雨と雪のどちらか",
+    laterPrecipGuide: "1時間30分後以降の天候は未来天候ポイントで加減算",
+    laterPrecipTypeGuide: "未来の雨・雪・風もポイントに含める",
     windGuide: "30分〜1時間後の風速を選択",
-    tempGuide: "16時以降の気温を選択",
+    tempGuide: "30分〜1時間後はベース、以降はポイントとして使う",
   };
 }

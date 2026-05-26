@@ -142,11 +142,7 @@ function getLaterForecastHours(discountTime: DiscountTime): ForecastHourKey[] {
 }
 
 function getWeatherPointHours(discountTime: DiscountTime): ForecastHourKey[] {
-  if (discountTime === '20') {
-    return [];
-  }
-
-  return [getNearForecastHour(discountTime), ...getLaterForecastHours(discountTime)];
+  return getLaterForecastHours(discountTime);
 }
 
 function getWeatherPointRangeText(hours: ForecastHourKey[]): string | null {
@@ -168,6 +164,35 @@ function getTempWeatherPoint(tempC: number): number {
   if (tempC <= 30) return 0;
   if (tempC <= 35) return -1;
   return -2;
+}
+
+function getPrecipWeatherPoint(weather: ForecastWeatherKind): number {
+  switch (weather) {
+    case 'rain':
+      return -1;
+    case 'snow':
+      return -2;
+    default:
+      return 0;
+  }
+}
+
+function getWindWeatherPoint(entry: HourlyForecastEntry): number {
+  if (entry.tempC <= 15) {
+    if (entry.windMs >= 5) return -2;
+    if (entry.windMs >= 3) return -1;
+    return 0;
+  }
+
+  return entry.windMs >= 5 ? -1 : 0;
+}
+
+function getFutureWeatherPoint(entry: HourlyForecastEntry): number {
+  return (
+    getTempWeatherPoint(entry.tempC) +
+    getPrecipWeatherPoint(entry.weather) +
+    getWindWeatherPoint(entry)
+  );
 }
 
 function getWeatherPointShift(score: number): -2 | -1 | 0 | 1 | 2 {
@@ -200,7 +225,7 @@ export function resolveWeatherInputForDiscount(
 
   const weatherPointHours = getWeatherPointHours(discountTime);
   const weatherPointScore = weatherPointHours.reduce(
-    (sum, hour) => sum + getTempWeatherPoint(weather.hourlyForecasts[hour].tempC),
+    (sum, hour) => sum + getFutureWeatherPoint(weather.hourlyForecasts[hour]),
     0,
   );
   const weatherPointShift = getWeatherPointShift(weatherPointScore);
