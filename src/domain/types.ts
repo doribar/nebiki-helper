@@ -400,6 +400,7 @@ export type UseNebikiAppActions = {
   updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
   startReview19AfterWeather: () => void;
   saveReview19: () => void;
+  start19DiscountAfterReview: () => void;
   exportReview19Records: () => void;
   startReview19Manually: () => void;
   resetApp: () => void;

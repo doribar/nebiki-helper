@@ -156,8 +156,9 @@ function getWeatherPointRangeText(hours: ForecastHourKey[]): string | null {
 }
 
 function getTempWeatherPoint(tempC: number): number {
-  if (tempC <= 10) return -2;
-  if (tempC <= 15) return -1;
+  if (tempC <= 5) return -2;
+  if (tempC <= 10) return -1;
+  if (tempC <= 15) return 0;
   if (tempC <= 20) return 1;
   if (tempC <= 25) return 2;
   if (tempC <= 27) return 1;

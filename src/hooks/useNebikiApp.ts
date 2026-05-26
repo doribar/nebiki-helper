@@ -157,7 +157,7 @@ function canStartReview19FromCurrentState(params: {
   if (state.review19?.date === session.date && state.review19.recordedAt) return false;
 
   const minutes = now.getHours() * 60 + now.getMinutes();
-  if (minutes < 19 * 60 + 15) return false;
+  if (minutes < 19 * 60) return false;
 
   return hasNoUnstartedReviewAreas(state.areaProgressMap);
 }
@@ -1997,9 +1997,9 @@ const lateSkipNotice = useMemo(() => {
           timeSwitchNotice: null,
           review19: {
             ...createInitialReview19Result({
-              date: prev.session!.date,
-              sessionStartedAt: prev.session!.startedAt,
-              excludedAreaIds: getReview19ExcludedAreaIdsForReview(prev),
+              date: prev.session?.date ?? nextSession.date,
+              sessionStartedAt: prev.session?.startedAt ?? nextSession.startedAt,
+              excludedAreaIds: prev.session ? getReview19ExcludedAreaIdsForReview(prev) : [],
             }),
             reference: createReview19Reference(nextSession),
           },
@@ -2479,8 +2479,8 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function saveReview19() {
-    if (state.screen !== "review19" || !state.review19) return;
+  function buildRecordedReview19Result(): Review19Result | null {
+    if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
 
     const recordedAt = state.review19.recordedAt ?? new Date().toISOString();
     const snapshot = state.session
@@ -2498,7 +2498,7 @@ const lateSkipNotice = useMemo(() => {
         })
       : state.review19.snapshot;
 
-    const recordedReview: Review19Result = {
+    return {
       ...state.review19,
       ratingScores: createReview19RatingScores(state.review19.ratings),
       excludedAreaIds: state.review19.excludedAreaIds,
@@ -2506,6 +2506,11 @@ const lateSkipNotice = useMemo(() => {
       recordedAt,
       snapshot,
     };
+  }
+
+  function saveReview19() {
+    const recordedReview = buildRecordedReview19Result();
+    if (!recordedReview) return;
 
     appendReview19Record(recordedReview);
     setReview19RecordsVersion((version) => version + 1);
@@ -2520,6 +2525,61 @@ const lateSkipNotice = useMemo(() => {
         review19: recordedReview,
       };
     });
+  }
+
+  function start19DiscountAfterReview() {
+    const now = new Date();
+    const startedAt = now.toISOString();
+    let nextSkipRecords = nextSessionSkipRecords;
+
+    setState((prev) => {
+      if (prev.screen !== "review19" && prev.screen !== "review19_done") return prev;
+
+      const draft = normalizeSessionDraft({
+        ...prev.sessionDraft,
+        discountTime: "19",
+      });
+      const nextSession: SessionData = {
+        ...draft,
+        discountTime: "19",
+        weather: {
+          ...draft.weather,
+          hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
+        },
+        startedAt,
+      };
+
+      const consumed = consumeSkipRecordsInMemory({
+        currentRecords: nextSkipRecords,
+        date: nextSession.date,
+        targetDiscountTime: "19",
+      });
+
+      nextSkipRecords = consumed.remainingRecords;
+      const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedRecords);
+      const firstAreaId = getFirstAvailableAreaId(areaProgressMap);
+
+      return {
+        ...prev,
+        screen: firstAreaId ? "area_judge" : "done",
+        session: nextSession,
+        areaProgressMap,
+        currentAreaId: firstAreaId,
+        lastReferenceAreaId: firstAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: buildAutoSkippedAreaNotice(consumed.skippedRecords),
+        finalTimeStep: 0,
+      };
+    });
+
+    setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
+    setResumeTargetScreen(null);
+    setTimeSwitchTarget(null);
+    promptedTimeSwitchKeyRef.current = null;
+    dismissedTimeSwitchKeyRef.current = null;
+    setUndoSnapshot(null);
+    setUndoNotice(null);
   }
 
   function exportReview19Records() {
@@ -2621,6 +2681,7 @@ const lateSkipNotice = useMemo(() => {
       updateReview19Rating,
       startReview19AfterWeather,
       saveReview19,
+      start19DiscountAfterReview,
       exportReview19Records,
       startReview19Manually,
       resetApp,

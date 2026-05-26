@@ -108,7 +108,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 5,
-      weekdayCalcIncludes: ['16時気温 6〜10度 +1段', '風 5m以上（15度以下） +2段', '未来天候ポイント -20pt（17〜21時） +2段'],
+      weekdayCalcIncludes: ['16時気温 6〜10度 +1段', '風 5m以上（15度以下） +2段', '未来天候ポイント -15pt（17〜21時） +2段'],
       bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
     },
   },
@@ -466,21 +466,45 @@ let passed = 0;
 }
 
 {
+  const weatherInput = toWeatherInput('15', weather({ tempLevel: '11to15' }));
+  const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
+  const info = getWeekdayBaseInfo(2, '15', resolvedWeather, '2026-04-01');
+  const guide = getBasisGuideDisplay({ date: '2026-04-01', weekday: 2, discountTime: '15', weather: resolvedWeather });
+
+  try {
+    assert.equal(resolvedWeather.weatherPointScore, 0);
+    assert.equal(resolvedWeather.weatherPointShift, 0);
+    assert.equal(info.adjusted, '火木');
+    assert.ok(guide.weekdayCalcText?.includes('16時気温 11〜15度 0段') || !guide.weekdayCalcText?.includes('16時気温 11〜15度'));
+    assert.ok(!guide.weekdayCalcText?.includes('未来天候ポイント'));
+    console.log('PASS: 未来11〜15度は未来天候ポイントでマイナスにしない');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 未来11〜15度は未来天候ポイントでマイナスにしない');
+    console.error(error);
+    console.error('actual info =', info);
+    console.error('actual guide =', guide);
+    console.error('actual resolvedWeather =', resolvedWeather);
+    process.exitCode = 1;
+  }
+}
+
+{
   const weatherInput = toWeatherInput('15', weather({ tempLevel: '6to10' }));
   const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
   const info = getWeekdayBaseInfo(5, '15', resolvedWeather, '2026-04-03');
   const guide = getBasisGuideDisplay({ date: '2026-04-03', weekday: 5, discountTime: '15', weather: resolvedWeather });
 
   try {
-    assert.equal(resolvedWeather.weatherPointScore, -10);
-    assert.equal(resolvedWeather.weatherPointShift, 2);
+    assert.equal(resolvedWeather.weatherPointScore, -5);
+    assert.equal(resolvedWeather.weatherPointShift, 1);
     assert.equal(info.adjusted, '月水');
     assert.ok(guide.weekdayCalcText?.includes('16時気温 6〜10度 +1段'));
-    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント -10pt（17〜21時） +2段'));
-    console.log('PASS: 直近6〜10度と未来6〜10度ならベースと未来ポイントで強める');
+    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント -5pt（17〜21時） +1段'));
+    console.log('PASS: 直近6〜10度と未来6〜10度ならベースと未来ポイントで1段強める');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 16〜21時が6〜10度なら天候ポイントで2段強める');
+    console.error('FAIL: 16〜21時が6〜10度なら天候ポイントで1段強める');
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
@@ -522,19 +546,19 @@ let passed = 0;
   const weatherInput = toWeatherInput('15', weather({ tempLevel: '28to30' }));
   weatherInput.hourlyForecasts['16'].tempC = 28;
   weatherInput.hourlyForecasts['17'].tempC = 15;
-  weatherInput.hourlyForecasts['18'].tempC = 13;
-  weatherInput.hourlyForecasts['19'].tempC = 10;
-  weatherInput.hourlyForecasts['20'].tempC = 9;
-  weatherInput.hourlyForecasts['21'].tempC = 8;
+  weatherInput.hourlyForecasts['18'].tempC = 10;
+  weatherInput.hourlyForecasts['19'].tempC = 5;
+  weatherInput.hourlyForecasts['20'].tempC = 4;
+  weatherInput.hourlyForecasts['21'].tempC = 3;
   const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, '15');
   const info = getWeekdayBaseInfo(5, '15', resolvedWeather, '2026-04-03');
   const guide = getBasisGuideDisplay({ date: '2026-04-03', weekday: 5, discountTime: '15', weather: resolvedWeather });
 
   try {
-    assert.equal(resolvedWeather.weatherPointScore, -8);
+    assert.equal(resolvedWeather.weatherPointScore, -7);
     assert.equal(resolvedWeather.weatherPointShift, 2);
     assert.equal(info.adjusted, '月水');
-    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント -8pt（17〜21時） +2段'));
+    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント -7pt（17〜21時） +2段'));
     console.log('PASS: 夕方以降に冷え込む日は未来天候ポイントで2段強める');
     passed += 1;
   } catch (error) {
@@ -1142,7 +1166,7 @@ try {
       session,
       screen: 'done',
       review19: null,
-      now: new Date('2026-05-09T19:14:00'),
+      now: new Date('2026-05-09T18:59:00'),
     }),
     false
   );
@@ -1151,7 +1175,7 @@ try {
       session,
       screen: 'done',
       review19: null,
-      now: new Date('2026-05-09T19:15:00'),
+      now: new Date('2026-05-09T19:00:00'),
     }),
     true
   );
@@ -1163,14 +1187,14 @@ try {
         date: '2026-05-09',
         sessionStartedAt: '2026-05-09T08:00:00.000Z',
       }),
-      now: new Date('2026-05-09T19:15:00'),
+      now: new Date('2026-05-09T19:00:00'),
     }),
     true
   );
-  console.log('PASS: 19時チェックは19:15以降に自動開始する');
+  console.log('PASS: 19時チェックは19:00以降に自動開始する');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: 19時チェックは19:15以降に自動開始する');
+  console.error('FAIL: 19時チェックは19:00以降に自動開始する');
   console.error(error);
   process.exitCode = 1;
 }
@@ -1209,7 +1233,7 @@ try {
       review19: null,
       areaProgressMap: completedProgress,
     }),
-    false
+    true
   );
   assert.equal(
     shouldStartReview19From19DiscountStart({
@@ -1227,16 +1251,26 @@ try {
     }),
     false
   );
+  assert.equal(
+    shouldStartReview19From19DiscountStart({
+      session: null,
+      nextDiscountTime: '19',
+      currentDate: '2026-05-09',
+      review19: null,
+      areaProgressMap: completedProgress,
+    }),
+    true
+  );
 
-  console.log('PASS: 18時30分未開始で19時30分値引を始めようとしたら19時チェックへ差し込む');
+  console.log('PASS: 19時30分値引を始めようとしたら振り返りへ差し込む');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: 18時30分未開始で19時30分値引を始めようとしたら19時チェックへ差し込む');
+  console.error('FAIL: 19時30分値引を始めようとしたら振り返りへ差し込む');
   console.error(error);
   process.exitCode = 1;
 }
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 25} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 26} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

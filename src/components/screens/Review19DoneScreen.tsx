@@ -5,6 +5,7 @@ type Review19DoneScreenProps = {
   unexportedCount: number;
   canExportTen: boolean;
   onExport: () => void;
+  onStart19: () => void;
   onReset: () => void;
 };
 
@@ -20,6 +21,7 @@ export function Review19DoneScreen({
   unexportedCount,
   canExportTen,
   onExport,
+  onStart19,
   onReset,
 }: Review19DoneScreenProps) {
   return (
@@ -63,8 +65,24 @@ export function Review19DoneScreen({
         )}
       </section>
 
-      <div style={{ marginTop: 20 }}>
-        <PrimaryButton onClick={onReset}>最初の画面に戻る</PrimaryButton>
+      <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
+        <PrimaryButton onClick={onStart19}>19時30分の値引に進む</PrimaryButton>
+        <button
+          type="button"
+          onClick={onReset}
+          style={{
+            width: "100%",
+            padding: "14px 16px",
+            borderRadius: 12,
+            border: "1px solid #ccc",
+            background: "#fff",
+            fontSize: 16,
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          最初の画面に戻る
+        </button>
       </div>
     </main>
   );
