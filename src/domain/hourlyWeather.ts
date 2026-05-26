@@ -141,6 +141,43 @@ function getLaterForecastHours(discountTime: DiscountTime): ForecastHourKey[] {
   }
 }
 
+function getWeatherPointHours(discountTime: DiscountTime): ForecastHourKey[] {
+  if (discountTime === '20') {
+    return [];
+  }
+
+  return [getNearForecastHour(discountTime), ...getLaterForecastHours(discountTime)];
+}
+
+function getWeatherPointRangeText(hours: ForecastHourKey[]): string | null {
+  if (hours.length === 0) {
+    return null;
+  }
+
+  const first = hours[0];
+  const last = hours[hours.length - 1];
+  return first === last ? `${first}時` : `${first}〜${last}時`;
+}
+
+function getTempWeatherPoint(tempC: number): number {
+  if (tempC <= 10) return -2;
+  if (tempC <= 15) return -1;
+  if (tempC <= 20) return 1;
+  if (tempC <= 25) return 2;
+  if (tempC <= 27) return 1;
+  if (tempC <= 30) return 0;
+  if (tempC <= 35) return -1;
+  return -2;
+}
+
+function getWeatherPointShift(score: number): -2 | -1 | 0 | 1 | 2 {
+  if (score >= 7) return -2;
+  if (score >= 4) return -1;
+  if (score <= -7) return 2;
+  if (score <= -4) return 1;
+  return 0;
+}
+
 export function resolveWeatherInputForDiscount(
   weather: WeatherInput,
   discountTime: DiscountTime,
@@ -161,31 +198,17 @@ export function resolveWeatherInputForDiscount(
     }
   }
 
-  const current15 = weather.hourlyForecasts['15'];
-  const current18 = weather.hourlyForecasts['18'];
-  const hasNext18TempDrop = discountTime === '15' && current18.tempC <= current15.tempC - 6;
-  const next18TempDropShift: -1 | 0 | 1 = hasNext18TempDrop
-    ? current18.tempC >= 21 && current18.tempC <= 25
-      ? -1
-      : current18.tempC <= 15
-        ? 1
-        : 0
-    : 0;
-  const nearLowTempWindAlreadyCounted =
-    discountTime === '15' && nearEntry.tempC <= 15 && nearEntry.windMs >= 3;
-  const hasColdNext18WindWorsen =
-    discountTime === '15' &&
-    next18TempDropShift === 1 &&
-    !nearLowTempWindAlreadyCounted &&
-    current18.tempC <= 15 &&
-    current18.windMs >= 3 &&
-    current18.windMs > current15.windMs;
-  const next18WindWorsenShift: 0 | 1 | 2 = hasColdNext18WindWorsen
-    ? current18.windMs >= 5
-      ? 2
-      : 1
-    : 0;
-  const next18WindWorsenKind: 'cold' | null = hasColdNext18WindWorsen ? 'cold' : null;
+  const weatherPointHours = getWeatherPointHours(discountTime);
+  const weatherPointScore = weatherPointHours.reduce(
+    (sum, hour) => sum + getTempWeatherPoint(weather.hourlyForecasts[hour].tempC),
+    0,
+  );
+  const weatherPointShift = getWeatherPointShift(weatherPointScore);
+  const weatherPointRangeText = getWeatherPointRangeText(weatherPointHours);
+
+  const next18TempDropShift: -1 | 0 | 1 = 0;
+  const next18WindWorsenShift: 0 | 1 | 2 = 0;
+  const next18WindWorsenKind: 'cold' | null = null;
 
   return {
     nearTermWeather: toNearTermWeather(nearEntry.weather),
@@ -193,6 +216,9 @@ export function resolveWeatherInputForDiscount(
     laterPrecipType,
     windLevel: toWindLevel(nearEntry.windMs),
     tempLevel: toTempLevel(nearEntry.tempC),
+    weatherPointScore,
+    weatherPointShift,
+    weatherPointRangeText,
     next18TempDropShift,
     next18WindWorsenShift,
     next18WindWorsenKind,

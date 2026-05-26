@@ -206,52 +206,19 @@ function buildBonusSummaryText(totalBonus: number): string {
   return `値引率補正：${formatSignedPercentCompact(totalBonus)}`;
 }
 
-function getTempShift(tempLevel: TempLevel): number {
-  switch (tempLevel) {
-    case "5orLess":
-      return 2;
-    case "6to10":
-      return 1;
-    case "11to15":
-      return 0;
-    case "16to20":
-      return -1;
-    case "21to25":
-      return -2;
-    case "26to27":
-      return -1;
-    case "28to30":
-    case "26to30":
-      return 0;
-    case "31to35":
-      return 1;
-    case "36orMore":
-      return 2;
-  }
+function getWeatherPointShift(weather: ResolvedWeatherInput): number {
+  return weather.weatherPointShift;
 }
 
-function getTempShiftTerm(tempLevel: TempLevel): ShiftTerm | undefined {
-  switch (tempLevel) {
-    case "5orLess":
-      return { label: "気温 5度以下", value: 2 };
-    case "6to10":
-      return { label: "気温 6〜10度", value: 1 };
-    case "16to20":
-      return { label: "気温 16〜20度", value: -1 };
-    case "21to25":
-      return { label: "気温 21〜25度", value: -2 };
-    case "26to27":
-      return { label: "気温 26〜27度", value: -1 };
-    case "28to30":
-    case "26to30":
-      return undefined;
-    case "31to35":
-      return { label: "気温 31〜35度", value: 1 };
-    case "36orMore":
-      return { label: "気温 36度以上", value: 2 };
-    default:
-      return undefined;
+function getWeatherPointShiftTerm(weather: ResolvedWeatherInput): ShiftTerm | undefined {
+  if (weather.weatherPointShift === 0 || weather.weatherPointRangeText === null) {
+    return undefined;
   }
+
+  return {
+    label: `天候ポイント ${formatSignedValue(weather.weatherPointScore, "pt")}（${weather.weatherPointRangeText}）`,
+    value: weather.weatherPointShift,
+  };
 }
 
 function isWindThresholdMet(tempLevel: TempLevel, windLevel: WindLevel): boolean {
@@ -311,44 +278,6 @@ function getAfterRainRecoveryShift(_weather: ResolvedWeatherInput): number {
 
 function getAfterRainRecoveryShiftTerm(_weather: ResolvedWeatherInput): ShiftTerm | undefined {
   return undefined;
-}
-
-function getNext18TempDropShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {
-  return discountTime === "15" ? weather.next18TempDropShift : 0;
-}
-
-function getNext18TempDropShiftTerm(
-  weather: ResolvedWeatherInput,
-  discountTime: DiscountTime
-): ShiftTerm | undefined {
-  if (getNext18TempDropShift(weather, discountTime) === 0) {
-    return undefined;
-  }
-
-  if (weather.next18TempDropShift < 0) {
-    return { label: "15時と18時の気温差が6度以上（18時が21〜25度）", value: -1 };
-  }
-
-  return { label: "15時と18時の気温差が6度以上（18時が15度以下）", value: 1 };
-}
-
-function getNext18WindWorsenShift(weather: ResolvedWeatherInput, discountTime: DiscountTime): number {
-  return discountTime === "15" ? weather.next18WindWorsenShift : 0;
-}
-
-function getNext18WindWorsenShiftTerm(
-  weather: ResolvedWeatherInput,
-  discountTime: DiscountTime
-): ShiftTerm | undefined {
-  if (getNext18WindWorsenShift(weather, discountTime) === 0) {
-    return undefined;
-  }
-
-  if (weather.next18WindWorsenShift === 2) {
-    return { label: "18時が15度以下で風5m以上に強まる", value: 2 };
-  }
-
-  return { label: "18時が15度以下で風3〜4mに強まる", value: 1 };
 }
 
 function getLaterPrecipShift(weather: ResolvedWeatherInput): number {
@@ -739,12 +668,10 @@ function resolveWeatherEffect(params: {
   const noticeText = holidayAdjusted.noticeText;
 
   const shiftTerms = [
-    getTempShiftTerm(params.weather.tempLevel),
+    getWeatherPointShiftTerm(params.weather),
     getWindShiftTerm(params.weather.tempLevel, params.weather.windLevel),
     getLaterPrecipShiftTerm(params.weather, params.discountTime),
     getAfterRainRecoveryShiftTerm(params.weather),
-    getNext18TempDropShiftTerm(params.weather, params.discountTime),
-    getNext18WindWorsenShiftTerm(params.weather, params.discountTime),
     getGoldenWeekAfterPeakShiftTerm({
       date: params.date,
       discountTime: params.discountTime,
@@ -752,12 +679,10 @@ function resolveWeatherEffect(params: {
   ].filter((value): value is ShiftTerm => Boolean(value));
 
   const totalShift =
-    getTempShift(params.weather.tempLevel) +
+    getWeatherPointShift(params.weather) +
     getWindShift(params.weather.tempLevel, params.weather.windLevel) +
     getLaterPrecipShift(params.weather) +
     getAfterRainRecoveryShift(params.weather) +
-    getNext18TempDropShift(params.weather, params.discountTime) +
-    getNext18WindWorsenShift(params.weather, params.discountTime) +
     (isDayAfterGoldenWeekThirdConsecutiveHoliday(params.date)
       ? getGoldenWeekAfterPeakShift(params.discountTime)
       : 0);
@@ -877,6 +802,6 @@ export function getWeatherGuideText(): WeatherGuideText {
     laterPrecipGuide: "1時間30分後〜23時に雨マーク（もしくは雪）があるか",
     laterPrecipTypeGuide: "ある場合それは雨と雪のどちらか",
     windGuide: "30分〜1時間後の風速を選択",
-    tempGuide: "30分〜1時間後の気温を選択",
+    tempGuide: "16時以降の気温を選択",
   };
 }

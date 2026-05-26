@@ -65,6 +65,10 @@ export type ResolvedWeatherInput = {
   laterPrecipType: LaterPrecipType;
   windLevel: WindLevel;
   tempLevel: TempLevel;
+  weatherPointScore: number;
+  weatherPointShift: -2 | -1 | 0 | 1 | 2;
+  weatherPointRangeText: string | null;
+  // legacy compatibility: old 15時→18時の単発補正は天候ポイント制へ移行済み
   next18TempDropShift: -1 | 0 | 1;
   next18WindWorsenShift: 0 | 1 | 2;
   next18WindWorsenKind: 'cold' | null;

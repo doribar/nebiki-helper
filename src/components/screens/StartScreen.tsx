@@ -51,7 +51,7 @@ const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
 
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
 const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
-const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS;
+const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS.filter((hour) => hour !== "15");
 const FORECAST_WEATHER_ORDER: ForecastWeatherKind[] = ["sunny", "rain", "snow"];
 
 function stepForecastWeather(current: ForecastWeatherKind, delta: 1 | -1): ForecastWeatherKind {
@@ -306,7 +306,7 @@ function isHourAtOrAfter(hour: ForecastHourKey, startHour: ForecastHourKey) {
 function getInputStartForecastHour(discountTime: DiscountTime): ForecastHourKey {
   switch (discountTime) {
     case "15":
-      return "15";
+      return "16";
     case "17":
       return "18";
     case "18":
