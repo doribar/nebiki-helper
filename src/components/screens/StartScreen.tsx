@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DiscountTime,
   ForecastHourKey,
@@ -100,6 +100,10 @@ function cycleIndex(length: number, currentIndex: number, delta: number): number
 
 function getWheelStep(deltaY: number): 1 | -1 {
   return deltaY > 0 ? 1 : -1;
+}
+
+function StartSectionLabel({ children }: { children: ReactNode }) {
+  return <div style={{ fontWeight: 800, marginBottom: 8 }}>{children}</div>;
 }
 
 function ForecastNumberStepper(props: {
@@ -490,7 +494,7 @@ export function StartScreen({
       />
 
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>曜日</div>
+        <StartSectionLabel>曜日</StartSectionLabel>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
           <div
             onWheel={(e) => {
@@ -561,7 +565,7 @@ export function StartScreen({
       </div>
 
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>時刻</div>
+        <StartSectionLabel>時刻</StartSectionLabel>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
           <div
             onWheel={(e) => {
@@ -632,7 +636,7 @@ export function StartScreen({
 
 {!isFinalTime ? (
         <>
-      <div style={{ fontWeight: 800, marginBottom: 8 }}>天候</div>
+      <StartSectionLabel>天候</StartSectionLabel>
       <section
         style={{
           border: "1px solid #ddd",
