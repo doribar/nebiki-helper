@@ -771,15 +771,22 @@ export function StartScreen({
         </div>
       ) : null}
 
-      {canStartReview19 && onStartReview19 ? (
-        <div style={{ marginBottom: 10 }}>
-          <PrimaryButton onClick={onStartReview19}>19時売場チェックに入る</PrimaryButton>
-        </div>
-      ) : null}
-
       <PrimaryButton buttonRef={startButtonRef} onClick={onStart} disabled={!allRequiredInputsConfirmed}>
         {startButtonLabel ?? (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
       </PrimaryButton>
+
+      {onStartReview19 ? (
+        <div style={{ marginTop: 10 }}>
+          <PrimaryButton onClick={onStartReview19} disabled={!canStartReview19}>
+            19時売場チェックに入る
+          </PrimaryButton>
+          {!canStartReview19 ? (
+            <div style={{ fontSize: 13, color: "#666", marginTop: 6, textAlign: "center" }}>
+              19時以降に開始できます。
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </main>
   );
 }

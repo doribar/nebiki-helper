@@ -80,13 +80,11 @@ import {
   getReview19AreaItems,
   parseReview19RatePercent,
   normalizeReview19Result,
-  shouldAutoStartReview19,
   buildReview19ExportPayload,
   getReview19ExportBatch,
   getUnexportedReview19Records,
   markReview19RecordsExportedInMemory,
   REVIEW19_EXCLUDE_REASON_TEXT,
-  shouldStartReview19From19DiscountStart,
 } from "../domain/review19.ts";
 
 function formatLocalDate(date = new Date()): string {
@@ -122,8 +120,9 @@ function getBasisTimeText(discountTime: DiscountTime): string {
 }
 
 
-function hasNoUnstartedReviewAreas(areaProgressMap: Record<AreaId, AreaProgress>): boolean {
-  return NORMAL_ROUTE.every((areaId) => areaProgressMap[areaId]?.status !== "unstarted");
+function isAtOrAfterReview19StartTime(now: Date): boolean {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  return minutes >= 19 * 60;
 }
 
 function canStartReview19FromCurrentState(params: {
@@ -131,17 +130,13 @@ function canStartReview19FromCurrentState(params: {
   now: Date;
 }): boolean {
   const { state, now } = params;
-  const session = state.session;
 
-  if (!session) return false;
-  if (session.discountTime !== "17") return false;
-  if (formatLocalDate(now) !== session.date) return false;
-  if (state.review19?.date === session.date && state.review19.recordedAt) return false;
+  if (!isAtOrAfterReview19StartTime(now)) return false;
 
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  if (minutes < 19 * 60) return false;
+  const currentDate = formatLocalDate(now);
+  if (state.review19?.date === currentDate && state.review19.recordedAt) return false;
 
-  return hasNoUnstartedReviewAreas(state.areaProgressMap);
+  return true;
 }
 
 
@@ -1068,46 +1063,6 @@ export function useNebikiApp(): UseNebikiAppResult {
     };
   }, []);
 
-  useEffect(() => {
-    if (!shouldAutoStartReview19({
-      session: state.session,
-      screen: state.screen,
-      review19: state.review19,
-      now: new Date(nowMs),
-    })) {
-      return;
-    }
-
-    setUndoSnapshot(null);
-    setUndoNotice(null);
-
-    setState((prev) => {
-      if (!prev.session) return prev;
-      if (!shouldAutoStartReview19({
-        session: prev.session,
-        screen: prev.screen,
-        review19: prev.review19,
-        now: new Date(nowMs),
-      })) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        screen: "review19_weather",
-        sessionDraft: createReview19WeatherDraft(prev.session),
-        currentAreaId: null,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        timeSwitchNotice: null,
-        review19: createInitialReview19Result({
-          date: prev.session.date,
-          sessionStartedAt: prev.session.startedAt,
-          excludedAreaIds: getReview19ExcludedAreaIdsForReview(prev),
-        }),
-      };
-    });
-  }, [state.session, state.screen, state.review19, nowMs]);
 
   useEffect(() => {
   if (state.screen !== "start") return;
@@ -1882,41 +1837,6 @@ const lateSkipNotice = useMemo(() => {
         startedAt: prev.session?.startedAt ?? startedAt,
       };
 
-      if (shouldStartReview19From19DiscountStart({
-        session: prev.session,
-        nextDiscountTime: nextSession.discountTime,
-        currentDate,
-        review19: prev.review19,
-        areaProgressMap: prev.areaProgressMap,
-      })) {
-        return {
-          ...prev,
-          screen: "review19",
-          sessionDraft: {
-            date: nextSession.date,
-            weekday: nextSession.weekday,
-            discountTime: "19",
-            manualWeekdayOverride: nextSession.manualWeekdayOverride,
-            manualDiscountTimeOverride: nextSession.manualDiscountTimeOverride,
-            weather: {
-              ...nextSession.weather,
-              hourlyForecasts: cloneHourlyForecasts(nextSession.weather.hourlyForecasts),
-            },
-          },
-          currentAreaId: null,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          timeSwitchNotice: null,
-          review19: {
-            ...createInitialReview19Result({
-              date: prev.session?.date ?? nextSession.date,
-              sessionStartedAt: prev.session?.startedAt ?? nextSession.startedAt,
-              excludedAreaIds: prev.session ? getReview19ExcludedAreaIdsForReview(prev) : [],
-            }),
-            reference: createReview19Reference(nextSession),
-          },
-        };
-      }
 
       if (timeSwitchTarget && prev.session) {
         let areaProgressMap = createInitialAreaProgressMap();
@@ -2332,12 +2252,29 @@ const lateSkipNotice = useMemo(() => {
 
     setState((prev) => {
       if (prev.screen !== "done" && prev.screen !== "start") return prev;
-      if (!canStartReview19FromCurrentState({ state: prev, now: new Date(nowMs) })) return prev;
-      const session = prev.session;
-      if (!session) return prev;
+      const now = new Date(nowMs);
+      if (!canStartReview19FromCurrentState({ state: prev, now })) return prev;
+
+      const currentDate = formatLocalDate(now);
+      const currentWeekday = now.getDay();
+      const existingSession = prev.session?.date === currentDate ? prev.session : null;
+      const session: SessionData = existingSession ?? {
+        ...prev.sessionDraft,
+        date: currentDate,
+        weekday: prev.sessionDraft.manualWeekdayOverride
+          ? prev.sessionDraft.weekday
+          : currentWeekday,
+        discountTime: "17",
+        weather: {
+          ...prev.sessionDraft.weather,
+          hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
+        },
+        startedAt: now.toISOString(),
+      };
 
       return {
         ...prev,
+        session,
         screen: "review19_weather",
         sessionDraft: createReview19WeatherDraft(session),
         currentAreaId: null,
@@ -2347,7 +2284,7 @@ const lateSkipNotice = useMemo(() => {
         review19: createInitialReview19Result({
           date: session.date,
           sessionStartedAt: session.startedAt,
-          excludedAreaIds: getReview19ExcludedAreaIdsForReview(prev),
+          excludedAreaIds: existingSession ? getReview19ExcludedAreaIdsForReview(prev) : [],
         }),
       };
     });

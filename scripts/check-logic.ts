@@ -16,8 +16,6 @@ import {
   getUnexportedReview19Records,
   markReview19RecordsExportedInMemory,
   normalizeReview19Result,
-  shouldAutoStartReview19,
-  shouldStartReview19From19DiscountStart,
 } from '../src/domain/review19.ts';
 import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
@@ -1150,127 +1148,8 @@ try {
   process.exitCode = 1;
 }
 
-try {
-  const session = {
-    date: '2026-05-09',
-    weekday: 6,
-    discountTime: '17',
-    manualWeekdayOverride: false,
-    manualDiscountTimeOverride: false,
-    weather: { hourlyForecasts: {}, afterRainSky: null },
-    startedAt: '2026-05-09T08:00:00.000Z',
-  } as never;
 
-  assert.equal(
-    shouldAutoStartReview19({
-      session,
-      screen: 'done',
-      review19: null,
-      now: new Date('2026-05-09T18:59:00'),
-    }),
-    false
-  );
-  assert.equal(
-    shouldAutoStartReview19({
-      session,
-      screen: 'done',
-      review19: null,
-      now: new Date('2026-05-09T19:00:00'),
-    }),
-    true
-  );
-  assert.equal(
-    shouldAutoStartReview19({
-      session,
-      screen: 'done',
-      review19: createInitialReview19Result({
-        date: '2026-05-09',
-        sessionStartedAt: '2026-05-09T08:00:00.000Z',
-      }),
-      now: new Date('2026-05-09T19:00:00'),
-    }),
-    true
-  );
-  console.log('PASS: 19時チェックは19:00以降に自動開始する');
-  passed += 1;
-} catch (error) {
-  console.error('FAIL: 19時チェックは19:00以降に自動開始する');
-  console.error(error);
-  process.exitCode = 1;
-}
-
-
-try {
-  const session = {
-    date: '2026-05-09',
-    weekday: 6,
-    discountTime: '17',
-    manualWeekdayOverride: false,
-    manualDiscountTimeOverride: false,
-    weather: { hourlyForecasts: {}, afterRainSky: null },
-    startedAt: '2026-05-09T08:00:00.000Z',
-  } as never;
-  const completedProgress = NORMAL_ROUTE.reduce((acc, areaId) => {
-    acc[areaId] = { areaId, status: 'completed', areaJudge: 'normal' };
-    return acc;
-  }, {} as Record<AreaId, AppState['areaProgressMap'][AreaId]>);
-
-  assert.equal(
-    shouldStartReview19From19DiscountStart({
-      session,
-      nextDiscountTime: '19',
-      currentDate: '2026-05-09',
-      review19: null,
-      areaProgressMap: completedProgress,
-    }),
-    true
-  );
-  assert.equal(
-    shouldStartReview19From19DiscountStart({
-      session: { ...session, discountTime: '18' } as never,
-      nextDiscountTime: '19',
-      currentDate: '2026-05-09',
-      review19: null,
-      areaProgressMap: completedProgress,
-    }),
-    true
-  );
-  assert.equal(
-    shouldStartReview19From19DiscountStart({
-      session,
-      nextDiscountTime: '19',
-      currentDate: '2026-05-09',
-      review19: {
-        ...createInitialReview19Result({
-          date: '2026-05-09',
-          sessionStartedAt: '2026-05-09T08:00:00.000Z',
-        }),
-        recordedAt: '2026-05-09T19:20:00.000Z',
-      },
-      areaProgressMap: completedProgress,
-    }),
-    false
-  );
-  assert.equal(
-    shouldStartReview19From19DiscountStart({
-      session: null,
-      nextDiscountTime: '19',
-      currentDate: '2026-05-09',
-      review19: null,
-      areaProgressMap: completedProgress,
-    }),
-    true
-  );
-
-  console.log('PASS: 19時30分値引を始めようとしたら振り返りへ差し込む');
-  passed += 1;
-} catch (error) {
-  console.error('FAIL: 19時30分値引を始めようとしたら振り返りへ差し込む');
-  console.error(error);
-  process.exitCode = 1;
-}
-
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 26} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 24} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

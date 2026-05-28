@@ -6,8 +6,6 @@ type DoneScreenProps = {
   onReset: () => void;
   onGoBack: () => void;
   summaryItems: DoneSummaryItem[];
-  canStartReview19: boolean;
-  onStartReview19: () => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -31,7 +29,7 @@ const summaryRowStyle: CSSProperties = {
   fontSize: 13,
 };
 
-export function DoneScreen({ onReset, onGoBack, summaryItems, canStartReview19, onStartReview19 }: DoneScreenProps) {
+export function DoneScreen({ onReset, onGoBack, summaryItems }: DoneScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 12 }}>
@@ -60,9 +58,6 @@ export function DoneScreen({ onReset, onGoBack, summaryItems, canStartReview19, 
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
-          {canStartReview19 ? (
-            <PrimaryButton onClick={onStartReview19}>19時売場チェックに入る</PrimaryButton>
-          ) : null}
           <PrimaryButton onClick={onReset}>最初の画面に戻る</PrimaryButton>
         </div>
       </section>

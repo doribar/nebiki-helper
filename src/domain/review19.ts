@@ -1,16 +1,12 @@
 import { NORMAL_ROUTE, getAreaName } from "./area.ts";
 import type {
   AreaId,
-  AreaProgress,
-  DiscountTime,
   Review19AreaSnapshot,
   Review19Rating,
   Review19RatingScore,
   Review19Reference,
   Review19Result,
   Review19Snapshot,
-  SessionData,
-  ScreenName,
 } from "./types.ts";
 
 export const REVIEW19_RATINGS: Array<{
@@ -317,55 +313,3 @@ export function markReview19RecordsExportedInMemory(params: {
   });
 }
 
-export function shouldStartReview19From19DiscountStart(params: {
-  session: SessionData | null;
-  nextDiscountTime: DiscountTime;
-  currentDate: string;
-  review19: Review19Result | null;
-  areaProgressMap: Record<AreaId, AreaProgress>;
-}): boolean {
-  const { session, nextDiscountTime, currentDate, review19, areaProgressMap } =
-    params;
-
-  if (nextDiscountTime !== "19") return false;
-  if (review19?.date === currentDate && review19.recordedAt) return false;
-
-  // 19時30分値引へ直接入る入口は作らない。
-  // 18時30分値引を開始済みの場合も、いったん19時売場チェックへ入れ、
-  // そこからユーザーが手動で19時30分値引へ進む。
-  if (session && session.date !== currentDate) return false;
-  if (session?.discountTime === "19" || session?.discountTime === "20") return false;
-
-  // 17時セッションが残っている場合は、少なくとも何らかの進行がある時だけ差し込む。
-  if (session?.discountTime === "17") {
-    const hasAnyProgress = NORMAL_ROUTE.some(
-      (areaId) => areaProgressMap[areaId]?.status !== "unstarted",
-    );
-    return hasAnyProgress;
-  }
-
-  // 18時30分セッション、または再読み込み等でセッションが残っていない状態でも、
-  // 19時30分値引の前に振り返りへ入れる。
-  return true;
-}
-
-
-export function shouldAutoStartReview19(params: {
-  session: SessionData | null;
-  screen: ScreenName;
-  review19: Review19Result | null;
-  now: Date;
-}): boolean {
-  const { session, screen, review19, now } = params;
-
-  if (!session) return false;
-  if (screen !== "done") return false;
-  if (session.discountTime !== "17") return false;
-  if (review19?.date === session.date && review19.recordedAt) return false;
-
-  const currentDate = `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}-${`${now.getDate()}`.padStart(2, "0")}`;
-  if (currentDate !== session.date) return false;
-
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  return minutes >= 19 * 60;
-}
