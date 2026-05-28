@@ -1,9 +1,11 @@
 import type { CSSProperties } from "react";
-import type { DoneSummaryItem } from "../../domain/types";
+import type { DoneNextSessionInfo, DoneSummaryItem } from "../../domain/types";
 
 type DoneScreenProps = {
   onGoBack: () => void;
+  onStartNextSession: () => void;
   summaryItems: DoneSummaryItem[];
+  nextSessionInfo: DoneNextSessionInfo | null;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -27,7 +29,14 @@ const summaryRowStyle: CSSProperties = {
   fontSize: 13,
 };
 
-export function DoneScreen({ onGoBack, summaryItems }: DoneScreenProps) {
+export function DoneScreen({
+  onGoBack,
+  onStartNextSession,
+  summaryItems,
+  nextSessionInfo,
+}: DoneScreenProps) {
+  const canStartNextSession = nextSessionInfo?.canStart ?? false;
+
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 12 }}>
@@ -55,6 +64,34 @@ export function DoneScreen({ onGoBack, summaryItems }: DoneScreenProps) {
           値引作業は完了です。
         </div>
 
+        {nextSessionInfo ? (
+          <>
+            <button
+              type="button"
+              onClick={canStartNextSession ? onStartNextSession : undefined}
+              disabled={!canStartNextSession}
+              style={{
+                width: "100%",
+                border: 0,
+                borderRadius: 14,
+                padding: "14px 16px",
+                background: canStartNextSession ? "#111" : "#ddd",
+                color: canStartNextSession ? "#fff" : "#777",
+                fontSize: 16,
+                fontWeight: 800,
+                cursor: canStartNextSession ? "pointer" : "not-allowed",
+              }}
+            >
+              {nextSessionInfo.label}
+            </button>
+
+            {!canStartNextSession && nextSessionInfo.unlockText ? (
+              <div style={{ marginTop: 8, fontSize: 13, color: "#777" }}>
+                {nextSessionInfo.unlockText}
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </section>
 
       {summaryItems.length > 0 ? (

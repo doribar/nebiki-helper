@@ -5,6 +5,7 @@ import type {
   DailyMessageState,
   AreaProgress,
   DoneSummaryItem,
+  DoneNextSessionInfo,
   DiscountTime,
   PendingBannerInfo,
   PendingReason,
@@ -122,6 +123,55 @@ function getBasisTimeText(discountTime: DiscountTime): string {
   }
 }
 
+
+
+function getNextDoneDiscountInfo(
+  discountTime: DiscountTime,
+  now: Date
+): DoneNextSessionInfo | null {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+
+  const infoByTime: Partial<
+    Record<
+      DiscountTime,
+      {
+        label: string;
+        unlockMinutes: number;
+        unlockText: string;
+      }
+    >
+  > = {
+    "15": {
+      label: "17時の値引に進む",
+      unlockMinutes: 16 * 60 + 40,
+      unlockText: "16:40からタップできます",
+    },
+    "17": {
+      label: "18時30分の値引に進む",
+      unlockMinutes: 18 * 60 + 25,
+      unlockText: "18:25からタップできます",
+    },
+    "18": {
+      label: "19時30分の値引に進む",
+      unlockMinutes: 19 * 60 + 25,
+      unlockText: "19:25からタップできます",
+    },
+    "19": {
+      label: "20時30分の最終値引に進む",
+      unlockMinutes: 20 * 60 + 25,
+      unlockText: "20:25からタップできます",
+    },
+  };
+
+  const info = infoByTime[discountTime];
+  if (!info) return null;
+
+  return {
+    label: info.label,
+    canStart: minutes >= info.unlockMinutes,
+    unlockText: minutes >= info.unlockMinutes ? null : info.unlockText,
+  };
+}
 
 function isAtOrAfterReview19StartTime(now: Date): boolean {
   const minutes = now.getHours() * 60 + now.getMinutes();
@@ -1475,6 +1525,11 @@ const lateSkipNotice = useMemo(() => {
     now: new Date(nowMs),
   });
 
+
+  const doneNextSessionInfo = state.session
+    ? getNextDoneDiscountInfo(state.session.discountTime, new Date(nowMs))
+    : null;
+
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
 
@@ -2519,6 +2574,7 @@ const lateSkipNotice = useMemo(() => {
   canChooseSkipTarget,
   skipTargetOptions,
   doneSummaryItems,
+  doneNextSessionInfo,
   review19Items,
   review19ReferenceLines,
   review19Export,

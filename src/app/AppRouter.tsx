@@ -133,7 +133,9 @@ export function AppRouter({ app }: AppRouterProps) {
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
+          nextSessionInfo={derived.doneNextSessionInfo}
           onGoBack={actions.goBackOneScreen}
+          onStartNextSession={actions.resetApp}
         />
       );
   }

@@ -208,6 +208,12 @@ export type DoneSummaryItem = {
   statusText?: string;
 };
 
+export type DoneNextSessionInfo = {
+  label: string;
+  canStart: boolean;
+  unlockText: string | null;
+};
+
 export type WeatherGuideText = {
   nearTermWeatherGuide: string;
   laterPrecipGuide: string;
@@ -374,6 +380,7 @@ export type UseNebikiAppDerived = {
   canChooseSkipTarget: boolean;
   skipTargetOptions: SkipTargetOption[];
   doneSummaryItems: DoneSummaryItem[];
+  doneNextSessionInfo: DoneNextSessionInfo | null;
   review19Items: Review19AreaItem[];
   review19ReferenceLines: string[];
   review19Export: {
