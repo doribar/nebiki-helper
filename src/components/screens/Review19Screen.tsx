@@ -50,10 +50,9 @@ type Review19ScreenProps = {
   referenceLines: string[];
   onChangeRating: (areaId: AreaId, rating: Review19Rating) => void;
   onSave: () => void;
-  onStart19: () => void;
 };
 
-export function Review19Screen({ items, referenceLines, onChangeRating, onSave, onStart19 }: Review19ScreenProps) {
+export function Review19Screen({ items, referenceLines, onChangeRating, onSave }: Review19ScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 640, margin: "0 auto" }}>
       <section
@@ -129,22 +128,6 @@ export function Review19Screen({ items, referenceLines, onChangeRating, onSave, 
 
       <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
         <PrimaryButton onClick={onSave}>記録して終了</PrimaryButton>
-        <button
-          type="button"
-          onClick={onStart19}
-          style={{
-            width: "100%",
-            padding: "14px 16px",
-            borderRadius: 12,
-            border: "1px solid #ccc",
-            background: "#fff",
-            fontSize: 16,
-            fontWeight: 800,
-            cursor: "pointer",
-          }}
-        >
-          19時30分の値引に進む
-        </button>
       </div>
     </main>
   );

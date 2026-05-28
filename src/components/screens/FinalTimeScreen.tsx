@@ -11,7 +11,6 @@ type FinalTimeScreenProps = {
   finalStep: FinalTimeStep;
   onAdvance: () => void;
   onBack: () => void;
-  onBackToTop: () => void;
 };
 
 
@@ -34,7 +33,6 @@ export function FinalTimeScreen({
   finalStep,
   onAdvance,
   onBack,
-  onBackToTop,
 }: FinalTimeScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
@@ -139,9 +137,6 @@ export function FinalTimeScreen({
               本日の値引きは以上です。
             </div>
 
-            <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={onBackToTop}>トップに戻る</PrimaryButton>
-            </div>
           </>
         ) : null}
       </section>

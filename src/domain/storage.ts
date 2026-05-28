@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   lastUsedSessionDraft: "nebiki-helper/last-used-session-draft",
   dailyMessageState: "nebiki-helper/daily-message-state",
   review19Records: "nebiki-helper/review19-records",
+  review19SourceState: "nebiki-helper/review19-source-state",
 } as const;
 
 export type PersistedRuntimeState = {
@@ -282,6 +283,20 @@ export function appendReview19Record(record: Review19Result): void {
       recordToAdd: record,
     })
   );
+}
+
+
+export function loadReview19SourceState(): AppState | null {
+  const raw = localStorage.getItem(STORAGE_KEYS.review19SourceState);
+  return safeParseJSON<AppState | null>(raw, null);
+}
+
+export function saveReview19SourceState(state: AppState): void {
+  localStorage.setItem(STORAGE_KEYS.review19SourceState, JSON.stringify(state));
+}
+
+export function clearReview19SourceState(): void {
+  localStorage.removeItem(STORAGE_KEYS.review19SourceState);
 }
 
 export function loadPersistedNebikiState(): PersistedNebikiState {

@@ -107,7 +107,6 @@ export function AppRouter({ app }: AppRouterProps) {
           finalStep={state.finalTimeStep}
           onAdvance={actions.advanceFinalTimeStep}
           onBack={actions.goBackOneScreen}
-          onBackToTop={actions.resetApp}
         />
       );
 
@@ -118,7 +117,6 @@ export function AppRouter({ app }: AppRouterProps) {
           referenceLines={derived.review19ReferenceLines}
           onChangeRating={actions.updateReview19Rating}
           onSave={actions.saveReview19}
-          onStart19={actions.start19DiscountAfterReview}
         />
       );
 
@@ -128,8 +126,6 @@ export function AppRouter({ app }: AppRouterProps) {
           unexportedCount={derived.review19Export.unexportedCount}
           canExportTen={derived.review19Export.canExportTen}
           onExport={actions.exportReview19Records}
-          onStart19={actions.start19DiscountAfterReview}
-          onReset={actions.resetApp}
         />
       );
 
@@ -137,7 +133,6 @@ export function AppRouter({ app }: AppRouterProps) {
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
-          onReset={actions.resetApp}
           onGoBack={actions.goBackOneScreen}
         />
       );

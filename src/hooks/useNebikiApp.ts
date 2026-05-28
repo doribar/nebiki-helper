@@ -46,6 +46,9 @@ import {
   appendReview19Record,
   loadReview19Records,
   saveReview19Records,
+  loadReview19SourceState,
+  saveReview19SourceState,
+  clearReview19SourceState,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -2257,8 +2260,11 @@ const lateSkipNotice = useMemo(() => {
 
       const currentDate = formatLocalDate(now);
       const currentWeekday = now.getDay();
-      const existingSession = prev.session?.date === currentDate ? prev.session : null;
-      const session: SessionData = existingSession ?? {
+      const sourceState = prev.session?.date === currentDate
+        ? prev
+        : normalizeLoadedState(loadReview19SourceState(), prev.sessionDraft);
+      const sourceSession = sourceState.session?.date === currentDate ? sourceState.session : null;
+      const session: SessionData = sourceSession ?? {
         ...prev.sessionDraft,
         date: currentDate,
         weekday: prev.sessionDraft.manualWeekdayOverride
@@ -2271,12 +2277,15 @@ const lateSkipNotice = useMemo(() => {
         },
         startedAt: now.toISOString(),
       };
+      const sourceStateForReview = sourceSession ? sourceState : prev;
 
       return {
         ...prev,
         session,
         screen: "review19_weather",
         sessionDraft: createReview19WeatherDraft(session),
+        areaProgressMap: sourceStateForReview.areaProgressMap,
+        review19ExcludedAreaIds: sourceStateForReview.review19ExcludedAreaIds,
         currentAreaId: null,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
@@ -2284,7 +2293,7 @@ const lateSkipNotice = useMemo(() => {
         review19: createInitialReview19Result({
           date: session.date,
           sessionStartedAt: session.startedAt,
-          excludedAreaIds: existingSession ? getReview19ExcludedAreaIdsForReview(prev) : [],
+          excludedAreaIds: sourceSession ? getReview19ExcludedAreaIdsForReview(sourceStateForReview) : [],
         }),
       };
     });
@@ -2360,6 +2369,7 @@ const lateSkipNotice = useMemo(() => {
     if (!recordedReview) return;
 
     appendReview19Record(recordedReview);
+    clearReview19SourceState();
     setReview19RecordsVersion((version) => version + 1);
 
     setState((prev) => {
@@ -2462,6 +2472,12 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function resetApp() {
+    const now = new Date();
+    const currentDate = formatLocalDate(now);
+    if (state.session?.date === currentDate && state.session.discountTime === "17") {
+      saveReview19SourceState(cloneAppState(state));
+    }
+
     clearWorkSessionCheckpoint();
     clearRuntimeState();
     screenHistoryRef.current = [];

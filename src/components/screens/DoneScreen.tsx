@@ -1,9 +1,7 @@
 import type { CSSProperties } from "react";
 import type { DoneSummaryItem } from "../../domain/types";
-import { PrimaryButton } from "../layout/PrimaryButton";
 
 type DoneScreenProps = {
-  onReset: () => void;
   onGoBack: () => void;
   summaryItems: DoneSummaryItem[];
 };
@@ -29,7 +27,7 @@ const summaryRowStyle: CSSProperties = {
   fontSize: 13,
 };
 
-export function DoneScreen({ onReset, onGoBack, summaryItems }: DoneScreenProps) {
+export function DoneScreen({ onGoBack, summaryItems }: DoneScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 12 }}>
@@ -57,9 +55,6 @@ export function DoneScreen({ onReset, onGoBack, summaryItems }: DoneScreenProps)
           値引作業は完了です。
         </div>
 
-        <div style={{ display: "grid", gap: 10 }}>
-          <PrimaryButton onClick={onReset}>最初の画面に戻る</PrimaryButton>
-        </div>
       </section>
 
       {summaryItems.length > 0 ? (
