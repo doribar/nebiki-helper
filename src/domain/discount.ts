@@ -21,8 +21,25 @@ export function getBaseRate(discountTime: DiscountTime): number {
   }
 }
 
-function capNormalDiscountRate(rawRate: number): number {
-  return Math.min(rawRate, 30);
+function getNormalTimeRateCap(discountTime: Exclude<DiscountTime, "20">): number {
+  switch (discountTime) {
+    case "15":
+      return 20;
+    case "17":
+    case "18":
+      return 30;
+    case "19":
+      return 40;
+  }
+}
+
+function capNormalDiscountRate(
+  rawRate: number,
+  discountTime: Exclude<DiscountTime, "20">,
+  ignoreTimeRateCap: boolean
+): number {
+  if (ignoreTimeRateCap) return rawRate;
+  return Math.min(rawRate, getNormalTimeRateCap(discountTime));
 }
 
 function toRateLine(main: string, note?: string): RateLine {
@@ -30,20 +47,32 @@ function toRateLine(main: string, note?: string): RateLine {
 }
 
 
-function getManyTenOrMoreNote(manyRate: number): string | undefined {
-  const tenOrMoreRate = capNormalDiscountRate(manyRate + 10);
+function getManyTenOrMoreNote(params: {
+  manyRate: number;
+  discountTime: Exclude<DiscountTime, "20">;
+  ignoreTimeRateCap: boolean;
+}): string | undefined {
+  const tenOrMoreRate = capNormalDiscountRate(
+    params.manyRate + 10,
+    params.discountTime,
+    params.ignoreTimeRateCap
+  );
 
-  if (tenOrMoreRate === manyRate) {
+  if (tenOrMoreRate === params.manyRate) {
     return undefined;
   }
 
   return `多いのうち10個以上は ${tenOrMoreRate}%`;
 }
 
-function buildManyNote(manyRate: number): string {
+function buildManyNote(params: {
+  manyRate: number;
+  discountTime: Exclude<DiscountTime, "20">;
+  ignoreTimeRateCap: boolean;
+}): string {
   const notes: string[] = [];
 
-  const tenOrMoreNote = getManyTenOrMoreNote(manyRate);
+  const tenOrMoreNote = getManyTenOrMoreNote(params);
 
   if (tenOrMoreNote) {
     notes.push(tenOrMoreNote);
@@ -57,7 +86,9 @@ export function getNormalTimeRateDisplay(params: {
   weatherBonus: number;
   areaJudge: Exclude<AreaJudge, null>;
   isSunday?: boolean;
+  ignoreTimeRateCap?: boolean;
 }): RateDisplayData {
+  const ignoreTimeRateCap = params.ignoreTimeRateCap ?? false;
   const base = getBaseRate(params.discountTime) + params.weatherBonus;
 
   let areaAdjustedBase = base;
@@ -67,11 +98,26 @@ export function getNormalTimeRateDisplay(params: {
     areaAdjustedBase = base - 5;
   }
 
-  const manyRate = capNormalDiscountRate(areaAdjustedBase + 10);
-  const normalRate = capNormalDiscountRate(areaAdjustedBase);
+  const manyRate = capNormalDiscountRate(
+    areaAdjustedBase + 10,
+    params.discountTime,
+    ignoreTimeRateCap
+  );
+  const normalRate = capNormalDiscountRate(
+    areaAdjustedBase,
+    params.discountTime,
+    ignoreTimeRateCap
+  );
 
   return {
-    many: toRateLine(`${manyRate}%`, buildManyNote(manyRate)),
+    many: toRateLine(
+      `${manyRate}%`,
+      buildManyNote({
+        manyRate,
+        discountTime: params.discountTime,
+        ignoreTimeRateCap,
+      })
+    ),
     few: toRateLine("引かない"),
     normal: toRateLine(`${normalRate}%`),
   };

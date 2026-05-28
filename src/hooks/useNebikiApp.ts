@@ -14,6 +14,7 @@ import type {
   SessionDraft,
   UseNebikiAppResult,
   WeatherInput,
+  ResolvedWeatherInput,
   AreaJudge,
   ScreenName,
   LastSessionWeatherRecord,
@@ -262,6 +263,10 @@ function getProgressManyRateText(progress: AreaProgress): string | undefined {
   return progress.completedManyRateText ?? progress.completedRateText;
 }
 
+function shouldIgnoreNormalTimeRateCap(weather: ResolvedWeatherInput): boolean {
+  return weather.nearTermWeather === "rain" || weather.nearTermWeather === "snow";
+}
+
 function buildCompletedRateSnapshot(params: {
   session: SessionData | null;
   progress: AreaProgress;
@@ -273,11 +278,14 @@ function buildCompletedRateSnapshot(params: {
     return {};
   }
 
+  const resolvedWeather = resolveWeatherInputForDiscount(session.weather, session.discountTime);
+
   const display = getNormalTimeRateDisplay({
     discountTime: session.discountTime,
     weatherBonus,
     areaJudge: progress.areaJudge,
     isSunday: session.weekday === 0 && session.discountTime === "15",
+    ignoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
   });
 
   return {
@@ -1378,6 +1386,8 @@ const lateSkipNotice = useMemo(() => {
   sessionSource.date,
 ]);
 
+  const ignoreNormalTimeRateCap = shouldIgnoreNormalTimeRateCap(sessionSourceResolvedWeather);
+
   const weatherGuideText = useMemo(() => {
     return getWeatherGuideText();
   }, []);
@@ -1400,12 +1410,14 @@ const lateSkipNotice = useMemo(() => {
       weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
       areaJudge: currentAreaProgress.areaJudge,
       isSunday: state.session.weekday === 0 && state.session.discountTime === "15",
+      ignoreTimeRateCap: ignoreNormalTimeRateCap,
     });
   }, [
   state.session,
   currentAreaProgress,
   weekdayBaseInfo.baseRateBonus,
   lateTimeBonus,
+  ignoreNormalTimeRateCap,
 ]);
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
@@ -1463,6 +1475,7 @@ const lateSkipNotice = useMemo(() => {
         weatherBonus,
         areaJudge: progress.areaJudge,
         isSunday: session.weekday === 0 && discountTime === "15",
+        ignoreTimeRateCap: ignoreNormalTimeRateCap,
       });
 
       const completedNormalRateText = getProgressNormalRateText(progress) ?? display.normal.main;
@@ -1484,6 +1497,7 @@ const lateSkipNotice = useMemo(() => {
     state.areaProgressMap,
     weekdayBaseInfo.baseRateBonus,
     lateTimeBonus,
+    ignoreNormalTimeRateCap,
   ]);
 
   const review19Items = useMemo(() => {

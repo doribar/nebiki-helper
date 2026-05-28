@@ -350,6 +350,7 @@ type ManyTenOrMoreNoteCase = {
   discountTime: Exclude<DiscountTime, '20'>;
   weatherBonus: number;
   isSunday?: boolean;
+  ignoreTimeRateCap?: boolean;
   expectedNoteIncludes?: string[];
   expectedNoteExcludes?: string[];
 };
@@ -383,10 +384,17 @@ const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
     ],
   },
   {
-    name: '30%上限に当たる場合は多い10個以上の同率注記を表示しない',
+    name: '19時30分は40%上限に当たる場合は多い10個以上の同率注記を表示しない',
     discountTime: '19',
     weatherBonus: 0,
-    expectedNoteExcludes: ['多いのうち10個以上は 30%'],
+    expectedNoteExcludes: ['多いのうち10個以上は 40%'],
+  },
+  {
+    name: '雨雪補正中は時刻別上限を外して多い10個以上の目安も上げる',
+    discountTime: '19',
+    weatherBonus: 20,
+    ignoreTimeRateCap: true,
+    expectedNoteIncludes: ['多いのうち10個以上は 70%'],
   },
 ];
 
@@ -895,6 +903,7 @@ for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
     weatherBonus: manyTenOrMoreCase.weatherBonus,
     areaJudge: 'normal',
     isSunday: manyTenOrMoreCase.isSunday,
+    ignoreTimeRateCap: manyTenOrMoreCase.ignoreTimeRateCap,
   });
 
   try {
@@ -917,6 +926,49 @@ for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
   }
 }
 
+
+
+try {
+  const capped15 = getNormalTimeRateDisplay({
+    discountTime: '15',
+    weatherBonus: 15,
+    areaJudge: 'many',
+  });
+  assert.equal(capped15.normal.main, '20%');
+  assert.equal(capped15.many.main, '20%');
+
+  const capped17 = getNormalTimeRateDisplay({
+    discountTime: '17',
+    weatherBonus: 10,
+    areaJudge: 'many',
+  });
+  assert.equal(capped17.normal.main, '30%');
+  assert.equal(capped17.many.main, '30%');
+
+  const capped19 = getNormalTimeRateDisplay({
+    discountTime: '19',
+    weatherBonus: 10,
+    areaJudge: 'normal',
+  });
+  assert.equal(capped19.normal.main, '40%');
+  assert.equal(capped19.many.main, '40%');
+
+  const uncappedRainOrSnow = getNormalTimeRateDisplay({
+    discountTime: '19',
+    weatherBonus: 20,
+    areaJudge: 'many',
+    ignoreTimeRateCap: true,
+  });
+  assert.equal(uncappedRainOrSnow.normal.main, '60%');
+  assert.equal(uncappedRainOrSnow.many.main, '70%');
+
+  console.log('PASS: 通常時は時刻別上限、雨雪補正中は上限なし');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 通常時は時刻別上限、雨雪補正中は上限なし');
+  console.error(error);
+  process.exitCode = 1;
+}
 
 const holidayWeekdayBaseCases = [
   {
@@ -1149,7 +1201,7 @@ try {
 }
 
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 24} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 25} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
