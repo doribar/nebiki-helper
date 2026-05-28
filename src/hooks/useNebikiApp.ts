@@ -138,6 +138,7 @@ function getNextDoneDiscountInfo(
         label: string;
         unlockMinutes: number;
         unlockText: string;
+        targetDiscountTime: DiscountTime;
       }
     >
   > = {
@@ -145,21 +146,25 @@ function getNextDoneDiscountInfo(
       label: "17時の値引に進む",
       unlockMinutes: 16 * 60 + 40,
       unlockText: "16:40からタップできます",
+      targetDiscountTime: "17",
     },
     "17": {
       label: "18時30分の値引に進む",
       unlockMinutes: 18 * 60 + 25,
       unlockText: "18:25からタップできます",
+      targetDiscountTime: "18",
     },
     "18": {
       label: "19時30分の値引に進む",
       unlockMinutes: 19 * 60 + 25,
       unlockText: "19:25からタップできます",
+      targetDiscountTime: "19",
     },
     "19": {
       label: "20時30分の最終値引に進む",
       unlockMinutes: 20 * 60 + 25,
       unlockText: "20:25からタップできます",
+      targetDiscountTime: "20",
     },
   };
 
@@ -170,6 +175,7 @@ function getNextDoneDiscountInfo(
     label: info.label,
     canStart: minutes >= info.unlockMinutes,
     unlockText: minutes >= info.unlockMinutes ? null : info.unlockText,
+    targetDiscountTime: info.targetDiscountTime,
   };
 }
 
@@ -2492,6 +2498,69 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
+  function startNextDoneSession() {
+    if (state.screen !== "done" || !state.session) return;
+
+    const nextInfo = getNextDoneDiscountInfo(state.session.discountTime, new Date(nowMs));
+    if (!nextInfo?.canStart) return;
+
+    if (nextInfo.targetDiscountTime !== "20") {
+      resetApp();
+      return;
+    }
+
+    const now = new Date();
+    const currentDate = formatLocalDate(now);
+    const currentWeekday = now.getDay();
+    const startedAt = now.toISOString();
+
+    setState((prev) => {
+      if (prev.screen !== "done" || !prev.session) return prev;
+
+      const nextSession: SessionData = {
+        ...prev.sessionDraft,
+        date: currentDate,
+        weekday: prev.sessionDraft.manualWeekdayOverride
+          ? prev.sessionDraft.weekday
+          : currentWeekday,
+        discountTime: "20",
+        weather: {
+          ...prev.sessionDraft.weather,
+          hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
+        },
+        startedAt,
+      };
+
+      return {
+        ...prev,
+        screen: "final_time",
+        session: nextSession,
+        sessionDraft: {
+          ...prev.sessionDraft,
+          date: currentDate,
+          weekday: nextSession.weekday,
+          discountTime: "20",
+          weather: {
+            ...nextSession.weather,
+            hourlyForecasts: cloneHourlyForecasts(nextSession.weather.hourlyForecasts),
+          },
+        },
+        areaProgressMap: createInitialAreaProgressMap(),
+        currentAreaId: null,
+        lastReferenceAreaId: null,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: null,
+        finalTimeStep: 0,
+      };
+    });
+
+    setResumeTargetScreen(null);
+    setTimeSwitchTarget(null);
+    setUndoSnapshot(null);
+    setUndoNotice(null);
+  }
+
   function exportReview19Records() {
     const currentRecords = loadReview19Records();
     const batch = getReview19ExportBatch(currentRecords, 10);
@@ -2597,6 +2666,7 @@ const lateSkipNotice = useMemo(() => {
       startReview19AfterWeather,
       saveReview19,
       start19DiscountAfterReview,
+      startNextDoneSession,
       exportReview19Records,
       startReview19Manually,
       resetApp,

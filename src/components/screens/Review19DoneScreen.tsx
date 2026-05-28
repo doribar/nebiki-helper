@@ -5,6 +5,7 @@ type Review19DoneScreenProps = {
   unexportedCount: number;
   canExportTen: boolean;
   onExport: () => void;
+  onReturnHome: () => void;
 };
 
 const cardStyle: CSSProperties = {
@@ -19,6 +20,7 @@ export function Review19DoneScreen({
   unexportedCount,
   canExportTen,
   onExport,
+  onReturnHome,
 }: Review19DoneScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
@@ -60,6 +62,10 @@ export function Review19DoneScreen({
           </div>
         )}
       </section>
+
+      <div style={{ marginTop: 16 }}>
+        <PrimaryButton onClick={onReturnHome}>トップ画面に戻る</PrimaryButton>
+      </div>
 
     </main>
   );

@@ -212,6 +212,7 @@ export type DoneNextSessionInfo = {
   label: string;
   canStart: boolean;
   unlockText: string | null;
+  targetDiscountTime: DiscountTime;
 };
 
 export type WeatherGuideText = {
@@ -408,6 +409,7 @@ export type UseNebikiAppActions = {
   startReview19AfterWeather: () => void;
   saveReview19: () => void;
   start19DiscountAfterReview: () => void;
+  startNextDoneSession: () => void;
   exportReview19Records: () => void;
   startReview19Manually: () => void;
   resetApp: () => void;

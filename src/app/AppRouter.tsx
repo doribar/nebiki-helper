@@ -107,6 +107,7 @@ export function AppRouter({ app }: AppRouterProps) {
           finalStep={state.finalTimeStep}
           onAdvance={actions.advanceFinalTimeStep}
           onBack={actions.goBackOneScreen}
+          onReturnHome={actions.resetApp}
         />
       );
 
@@ -126,6 +127,7 @@ export function AppRouter({ app }: AppRouterProps) {
           unexportedCount={derived.review19Export.unexportedCount}
           canExportTen={derived.review19Export.canExportTen}
           onExport={actions.exportReview19Records}
+          onReturnHome={actions.resetApp}
         />
       );
 
@@ -135,7 +137,7 @@ export function AppRouter({ app }: AppRouterProps) {
           summaryItems={derived.doneSummaryItems}
           nextSessionInfo={derived.doneNextSessionInfo}
           onGoBack={actions.goBackOneScreen}
-          onStartNextSession={actions.resetApp}
+          onStartNextSession={actions.startNextDoneSession}
         />
       );
   }
