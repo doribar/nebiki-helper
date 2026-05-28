@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { UseNebikiAppResult } from "../domain/types";
 import { StartScreen } from "../components/screens/StartScreen";
 import { AreaJudgeScreen } from "../components/screens/AreaJudgeScreen";
+import { AutoSkipNoticeScreen } from "../components/screens/AutoSkipNoticeScreen";
 import { RateDisplayScreen } from "../components/screens/RateDisplayScreen";
 import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
@@ -66,6 +67,20 @@ export function AppRouter({ app }: AppRouterProps) {
           canChooseSkipTarget={derived.canChooseSkipTarget}
           skipTargetOptions={derived.skipTargetOptions}
           onChooseSkipTarget={actions.chooseSkipTargetArea}
+        />
+      );
+
+
+    case "auto_skip_notice":
+      if (!derived.currentAreaName) return null;
+
+      return (
+        <AutoSkipNoticeScreen
+          weekdayText={derived.weekdayText}
+          timeText={derived.timeText}
+          areaName={derived.currentAreaName}
+          onConfirm={actions.acknowledgeAutoSkippedArea}
+          onGoBack={actions.goBackOneScreen}
         />
       );
 

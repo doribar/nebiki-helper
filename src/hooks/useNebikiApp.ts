@@ -305,28 +305,57 @@ function buildNextSessionSkipRecord(params: {
   };
 }
 
-function getNextUnstartedAreaId(
-  areaProgressMap: Record<AreaId, AreaProgress>,
-  referenceAreaId: AreaId
-): AreaId | null {
-  const currentIndex = NORMAL_ROUTE.indexOf(referenceAreaId);
-  const afterCurrent =
-    currentIndex >= 0 ? NORMAL_ROUTE.slice(currentIndex + 1) : NORMAL_ROUTE;
 
+function isAutoSkipNoticePending(progress: AreaProgress | undefined): boolean {
+  return progress?.status === "auto_skipped_late_time" && !progress.visitedAt;
+}
+
+function isNormalFlowWorkArea(progress: AreaProgress | undefined): boolean {
+  return progress?.status === "unstarted" || isAutoSkipNoticePending(progress);
+}
+
+function getNormalFlowScreenForArea(
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  areaId: AreaId
+): "area_judge" | "auto_skip_notice" {
+  return isAutoSkipNoticePending(areaProgressMap[areaId])
+    ? "auto_skip_notice"
+    : "area_judge";
+}
+
+function getFirstNormalFlowAreaId(
+  areaProgressMap: Record<AreaId, AreaProgress>
+): AreaId | null {
+  return NORMAL_ROUTE.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ?? null;
+}
+
+function getNextNormalFlowAreaId(
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  currentAreaId: AreaId
+): AreaId | null {
+  const currentIndex = NORMAL_ROUTE.indexOf(currentAreaId);
+  const afterCurrent = currentIndex >= 0 ? NORMAL_ROUTE.slice(currentIndex + 1) : NORMAL_ROUTE;
+
+  return afterCurrent.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ?? null;
+}
+
+function getNextNormalFlowAreaIdWithWrap(
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  currentAreaId: AreaId
+): AreaId | null {
   return (
-    afterCurrent.find((areaId) => areaProgressMap[areaId]?.status === "unstarted") ??
-    NORMAL_ROUTE.find((areaId) => areaProgressMap[areaId]?.status === "unstarted") ??
+    getNextNormalFlowAreaId(areaProgressMap, currentAreaId) ??
+    NORMAL_ROUTE.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ??
     null
   );
 }
 
-
-function hasRemainingUnstartedArea(
+function hasRemainingNormalFlowArea(
   areaProgressMap: Record<AreaId, AreaProgress>,
   currentAreaId: AreaId
 ): boolean {
   return Object.values(areaProgressMap).some((progress) => {
-    return progress.areaId !== currentAreaId && progress.status === "unstarted";
+    return progress.areaId !== currentAreaId && isNormalFlowWorkArea(progress);
   });
 }
 
@@ -731,25 +760,6 @@ function createAreaProgressMapWithAutoSkippedAreas(
   }
 
   return base;
-}
-
-function buildAutoSkippedAreaNotice(skippedRecords: NextSessionSkipRecord[]): string | null {
-  const validSkippedRecords = skippedRecords.filter((record) => isValidAreaId(record.areaId));
-  if (validSkippedRecords.length === 0) return null;
-
-  const lines = validSkippedRecords.map((record) => {
-    const normalRate = record.previousNormalRateText ?? record.previousRateText;
-    const rateText = normalRate ? `（前回 ${normalRate}）` : "";
-    return `・${getAreaName(record.areaId)}${rateText}`;
-  });
-
-  return `前回「次の値引の方が近くなったため+5%」で値引済みのため、この値引では以下のエリアをスキップしました。
-${lines.join("\n")}`;
-}
-
-function mergeNoticeLines(...notices: Array<string | null | undefined>): string | null {
-  const lines = notices.filter((notice): notice is string => Boolean(notice));
-  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 function getFirstAvailableAreaId(
@@ -1606,23 +1616,23 @@ const lateSkipNotice = useMemo(() => {
     });
 
     if (!nextCandidate) {
-      const nextUnstartedAreaId = getNextUnstartedAreaId(
+      const nextNormalFlowAreaId = getNextNormalFlowAreaIdWithWrap(
         params.updatedMap,
         params.referenceAreaId
       );
 
-      if (nextUnstartedAreaId) {
+      if (nextNormalFlowAreaId) {
         return {
           ...params.prev,
           session: params.nextSession,
           timeSwitchNotice: params.timeSwitchNotice,
           areaProgressMap: params.updatedMap,
-          currentAreaId: nextUnstartedAreaId,
+          currentAreaId: nextNormalFlowAreaId,
           lastReferenceAreaId: params.referenceAreaId,
           currentFlow: "normal",
           pendingDeferredAreaIds: [],
           finalTimeStep: 0,
-          screen: "area_judge",
+          screen: getNormalFlowScreenForArea(params.updatedMap, nextNormalFlowAreaId),
         };
       }
 
@@ -1820,7 +1830,7 @@ const lateSkipNotice = useMemo(() => {
       };
     }
 
-    if (!hasRemainingUnstartedArea(judgedCurrentMap, currentAreaId)) {
+    if (!hasRemainingNormalFlowArea(judgedCurrentMap, currentAreaId)) {
       return {
         ...prev,
         session: nextSession,
@@ -1847,7 +1857,7 @@ const lateSkipNotice = useMemo(() => {
       });
     }
 
-    const nextAreaId = getNextNormalArea(currentAreaId);
+    const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
 
     if (nextAreaId) {
       return {
@@ -1860,7 +1870,7 @@ const lateSkipNotice = useMemo(() => {
         lastReferenceAreaId: currentAreaId,
         pendingDeferredAreaIds: [],
         finalTimeStep: 0,
-        screen: "area_judge",
+        screen: getNormalFlowScreenForArea(updatedMap, nextAreaId),
       };
     }
 
@@ -1904,8 +1914,6 @@ const lateSkipNotice = useMemo(() => {
 
       if (timeSwitchTarget && prev.session) {
         let areaProgressMap = createInitialAreaProgressMap();
-        let consumedSkippedRecords: NextSessionSkipRecord[] = [];
-
         if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
           const consumed = consumeSkipRecordsInMemory({
             currentRecords: nextSkipRecords,
@@ -1914,16 +1922,15 @@ const lateSkipNotice = useMemo(() => {
           });
 
           nextSkipRecords = consumed.remainingRecords;
-          consumedSkippedRecords = consumed.skippedRecords;
           areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-            consumedSkippedRecords
+            consumed.skippedRecords
           );
         }
 
         const firstAreaId =
           nextSession.discountTime === "20"
             ? null
-            : getFirstAvailableAreaId(areaProgressMap);
+            : getFirstNormalFlowAreaId(areaProgressMap);
         const nextReview19ExcludedAreaIds =
           prev.session.discountTime === "15" && nextSession.discountTime === "17"
             ? normalizeReview19ExcludedAreaIds([
@@ -1940,7 +1947,7 @@ const lateSkipNotice = useMemo(() => {
             nextSession.discountTime === "20"
               ? "final_time"
               : firstAreaId
-              ? "area_judge"
+              ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
               : "done",
           session: {
             ...nextSession,
@@ -1951,10 +1958,7 @@ const lateSkipNotice = useMemo(() => {
           lastReferenceAreaId: firstAreaId,
           currentFlow: "normal",
           pendingDeferredAreaIds: [],
-          timeSwitchNotice: mergeNoticeLines(
-            buildTimeSwitchNotice(nextSession.discountTime),
-            buildAutoSkippedAreaNotice(consumedSkippedRecords)
-          ),
+          timeSwitchNotice: buildTimeSwitchNotice(nextSession.discountTime),
           review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
           finalTimeStep: 0,
         };
@@ -1979,8 +1983,6 @@ const lateSkipNotice = useMemo(() => {
       }
 
       let areaProgressMap = createInitialAreaProgressMap();
-      let consumedSkippedRecords: NextSessionSkipRecord[] = [];
-
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
           currentRecords: nextSessionSkipRecords,
@@ -1989,16 +1991,15 @@ const lateSkipNotice = useMemo(() => {
         });
 
         nextSkipRecords = consumed.remainingRecords;
-        consumedSkippedRecords = consumed.skippedRecords;
         areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-          consumedSkippedRecords
+          consumed.skippedRecords
         );
       }
 
       const firstAreaId =
         nextSession.discountTime === "20"
           ? null
-          : getFirstAvailableAreaId(areaProgressMap);
+          : getFirstNormalFlowAreaId(areaProgressMap);
 
       return {
         ...prev,
@@ -2006,7 +2007,7 @@ const lateSkipNotice = useMemo(() => {
           nextSession.discountTime === "20"
             ? "final_time"
             : firstAreaId
-            ? "area_judge"
+            ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
             : "done",
         session: nextSession,
         areaProgressMap,
@@ -2014,7 +2015,7 @@ const lateSkipNotice = useMemo(() => {
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
-        timeSwitchNotice: buildAutoSkippedAreaNotice(consumedSkippedRecords),
+        timeSwitchNotice: null,
         finalTimeStep: 0,
       };
     });
@@ -2139,7 +2140,7 @@ const lateSkipNotice = useMemo(() => {
         };
       }
 
-      const nextAreaId = getNextNormalArea(currentAreaId);
+      const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
 
       if (nextAreaId) {
         return {
@@ -2151,7 +2152,7 @@ const lateSkipNotice = useMemo(() => {
           lastReferenceAreaId: currentAreaId,
           pendingDeferredAreaIds: [],
           finalTimeStep: 0,
-          screen: "area_judge",
+          screen: getNormalFlowScreenForArea(updatedMap, nextAreaId),
         };
       }
 
@@ -2270,7 +2271,7 @@ const lateSkipNotice = useMemo(() => {
         };
       }
 
-      const nextAreaId = getNextNormalArea(currentAreaId);
+      const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
 
       if (nextAreaId) {
         return {
@@ -2282,7 +2283,7 @@ const lateSkipNotice = useMemo(() => {
           lastReferenceAreaId: currentAreaId,
           pendingDeferredAreaIds: [],
           finalTimeStep: 0,
-          screen: "area_judge",
+          screen: getNormalFlowScreenForArea(updatedMap, nextAreaId),
         };
       }
 
@@ -2296,6 +2297,53 @@ const lateSkipNotice = useMemo(() => {
     });
 
     setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
+  }
+
+  function acknowledgeAutoSkippedArea() {
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
+
+    setState((prev) => {
+      if (!prev.currentAreaId) return prev;
+      const currentAreaId = prev.currentAreaId;
+      const currentProgress = prev.areaProgressMap[currentAreaId];
+
+      if (currentProgress?.status !== "auto_skipped_late_time") return prev;
+
+      const acknowledgedAt = new Date().toISOString();
+      const updatedMap = {
+        ...prev.areaProgressMap,
+        [currentAreaId]: {
+          ...currentProgress,
+          visitedAt: currentProgress.visitedAt ?? acknowledgedAt,
+          completedAt: currentProgress.completedAt ?? acknowledgedAt,
+        },
+      };
+
+      const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
+
+      if (nextAreaId) {
+        return {
+          ...prev,
+          areaProgressMap: updatedMap,
+          currentAreaId: nextAreaId,
+          lastReferenceAreaId: currentAreaId,
+          currentFlow: "normal",
+          pendingDeferredAreaIds: [],
+          timeSwitchNotice: null,
+          finalTimeStep: 0,
+          screen: getNormalFlowScreenForArea(updatedMap, nextAreaId),
+        };
+      }
+
+      return moveToNextPendingOrDone({
+        prev,
+        updatedMap,
+        referenceAreaId: currentAreaId,
+        nextSession: prev.session,
+        timeSwitchNotice: null,
+      });
+    });
   }
 
   function advanceFinalTimeStep() {
@@ -2475,18 +2523,18 @@ const lateSkipNotice = useMemo(() => {
 
       nextSkipRecords = consumed.remainingRecords;
       const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedRecords);
-      const firstAreaId = getFirstAvailableAreaId(areaProgressMap);
+      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
 
       return {
         ...prev,
-        screen: firstAreaId ? "area_judge" : "done",
+        screen: firstAreaId ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId) : "done",
         session: nextSession,
         areaProgressMap,
         currentAreaId: firstAreaId,
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
-        timeSwitchNotice: buildAutoSkippedAreaNotice(consumed.skippedRecords),
+        timeSwitchNotice: null,
         finalTimeStep: 0,
       };
     });
@@ -2661,6 +2709,7 @@ const lateSkipNotice = useMemo(() => {
       skipCurrentArea,
       chooseSkipTargetArea,
       goToNextArea,
+      acknowledgeAutoSkippedArea,
       advanceFinalTimeStep,
       updateReview19Rating,
       startReview19AfterWeather,

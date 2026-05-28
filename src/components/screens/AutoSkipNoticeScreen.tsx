@@ -1,0 +1,80 @@
+import type { CSSProperties } from "react";
+import { ScreenHeader } from "../layout/ScreenHeader";
+
+type AutoSkipNoticeScreenProps = {
+  weekdayText: string;
+  timeText: string;
+  areaName: string;
+  onConfirm: () => void;
+  onGoBack: () => void;
+};
+
+const subActionButtonStyle: CSSProperties = {
+  minWidth: 88,
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid #ccc",
+  background: "#fff",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+export function AutoSkipNoticeScreen({
+  weekdayText,
+  timeText,
+  areaName,
+  onConfirm,
+  onGoBack,
+}: AutoSkipNoticeScreenProps) {
+  return (
+    <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
+      <ScreenHeader
+        weekdayText={weekdayText}
+        timeText={timeText}
+        areaName={areaName}
+        rightAction={
+          <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+            戻る
+          </button>
+        }
+      />
+
+      <section
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 14,
+          padding: 20,
+          background: "#fff",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.7, marginBottom: 18 }}>
+          {areaName}エリアは
+          <br />
+          前回の値引で+5%で値引きしているため
+          <br />
+          今回はスキップします。
+        </div>
+
+        <button
+          type="button"
+          onClick={onConfirm}
+          style={{
+            width: "100%",
+            border: 0,
+            borderRadius: 14,
+            padding: "14px 16px",
+            background: "#111",
+            color: "#fff",
+            fontSize: 16,
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          OK
+        </button>
+      </section>
+    </main>
+  );
+}

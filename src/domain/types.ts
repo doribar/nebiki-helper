@@ -120,6 +120,7 @@ export type ScreenName =
   | "review19_weather"
   | "review19_done"
   | "area_judge"
+  | "auto_skip_notice"
   | "rate_display"
   | "final_time"
   | "review19"
@@ -404,6 +405,7 @@ export type UseNebikiAppActions = {
   chooseSkipTargetArea: (areaId: AreaId) => void;
 
   goToNextArea: () => void;
+  acknowledgeAutoSkippedArea: () => void;
   advanceFinalTimeStep: () => void;
   updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
   startReview19AfterWeather: () => void;
