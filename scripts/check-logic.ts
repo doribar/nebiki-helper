@@ -92,7 +92,7 @@ const cases: Case[] = [
     discountTime: '15',
     weatherSpec: weather({ tempLevel: '21to25' }),
     expected: {
-      adjusted: '日',
+      adjusted: '金土',
       baseRateBonus: -10,
       weekdayCalcIncludes: ['16時気温 21〜25度 -2段', '未来天候ポイント +10pt（17〜21時） -2段'],
       bonusCalcIncludes: ['曜日基準で補正しきれない分 -10%'],
@@ -147,12 +147,12 @@ const cases: Case[] = [
     },
   },
   {
-    name: '15時の下方向2段あふれは -10%',
+    name: '15時の金土日基準で下方向2段あふれは -10%',
     weekday: 0,
     discountTime: '15',
     weatherSpec: weather({ tempLevel: '21to25' }),
     expected: {
-      adjusted: '日',
+      adjusted: '金土',
       baseRateBonus: -10,
       bonusCalcIncludes: ['曜日基準で補正しきれない分 -10%'],
       bonusResultIncludes: ['値引率補正は-10%'],
@@ -193,13 +193,13 @@ const cases: Case[] = [
     },
   },
   {
-    name: 'GW連休3日目の翌日15時は曜日基準を1段強める',
+    name: 'GW連休3日目の翌日15時は金土日基準から1段強める',
     date: '2026-05-05',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({}),
     expected: {
-      adjusted: '金土',
+      adjusted: '火木',
       baseRateBonus: 0,
       weekdayCalcIncludes: ['GW連休3日目の翌日 +1段'],
     },
@@ -327,7 +327,7 @@ const scenarioCases: ScenarioCase[] = [
     },
   },
   {
-    name: '運用シナリオ: 15時に直近温暖で未来も温暖寄り',
+    name: '運用シナリオ: 15時に直近温暖で未来も温暖寄り（金土日統合後は余り-5%）',
     weekday: 5,
     discountTime: '15',
     weatherSpec: weather({
@@ -337,8 +337,8 @@ const scenarioCases: ScenarioCase[] = [
       next18WindLevel: '5orMore',
     }),
     expected: {
-      weekdaySummary: '曜日基準補正：金土→日',
-      bonusSummary: '値引率補正：なし',
+      weekdaySummary: '曜日基準補正：なし',
+      bonusSummary: '値引率補正：-5％',
       finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },
@@ -432,7 +432,7 @@ let passed = 0;
   try {
     assert.equal(resolvedWeather.weatherPointScore, 10);
     assert.equal(resolvedWeather.weatherPointShift, -2);
-    assert.equal(info.adjusted, '日');
+    assert.equal(info.adjusted, '金土');
     assert.ok(guide.weekdayCalcText?.includes('16時気温 21〜25度 -2段'));
     assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント +10pt（17〜21時） -2段'));
     console.log('PASS: 直近21〜25度と未来21〜25度ならベースと未来ポイントで緩める');
@@ -456,7 +456,7 @@ let passed = 0;
   try {
     assert.equal(resolvedWeather.weatherPointScore, 5);
     assert.equal(resolvedWeather.weatherPointShift, -1);
-    assert.equal(info.adjusted, '日');
+    assert.equal(info.adjusted, '金土');
     assert.ok(guide.weekdayCalcText?.includes('16時気温 26〜27度 -1段'));
     assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント +5pt（17〜21時） -1段'));
     console.log('PASS: 直近26〜27度と未来26〜27度ならベースと未来ポイントで緩める');
@@ -534,7 +534,7 @@ let passed = 0;
   try {
     assert.equal(resolvedWeather.weatherPointScore, 9);
     assert.equal(resolvedWeather.weatherPointShift, -2);
-    assert.equal(info.adjusted, '日');
+    assert.equal(info.adjusted, '金土');
     assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント +9pt（17〜21時） -2段'));
     console.log('PASS: 暑さが抜けて夜が快適な日は未来天候ポイントで2段緩める');
     passed += 1;
@@ -972,12 +972,12 @@ try {
 
 const holidayWeekdayBaseCases = [
   {
-    name: '祝日の15時は日曜日基準を使う',
+    name: '祝日の15時は金土日基準を使う',
     date: '2026-01-01',
     weekday: 4,
     discountTime: '15' as DiscountTime,
-    expectedAdjusted: '日',
-    expectedNotice: '祝日の15時は日曜日の基準',
+    expectedAdjusted: '金土',
+    expectedNotice: '祝日の15時は金曜・土曜・日曜の基準',
   },
   {
     name: '祝日17時以降で翌日も休日なら金土基準を使う',

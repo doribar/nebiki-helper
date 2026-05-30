@@ -8,7 +8,11 @@ import type {
   WeekdayBaseLabel,
   WindLevel,
 } from "./types";
-import { addDaysToDateString, isJapaneseHolidayOrObserved, isJapaneseHolidayOrWeekend } from "./japaneseHoliday.ts";
+import {
+  addDaysToDateString,
+  isJapaneseHolidayOrObserved,
+  isJapaneseHolidayOrWeekend,
+} from "./japaneseHoliday.ts";
 
 type ShiftTerm = {
   label: string;
@@ -37,8 +41,8 @@ function getBasisTimeText(discountTime: DiscountTime): string {
 
 function getWeekdayBaseRank(label: WeekdayBaseLabel): number {
   switch (label) {
+    // 旧データ互換: 以前の「日」基準は、現在は15時の金土日基準に統合する。
     case "日":
-      return 0;
     case "金土":
       return 1;
     case "火木":
@@ -49,9 +53,7 @@ function getWeekdayBaseRank(label: WeekdayBaseLabel): number {
 }
 
 function rankToWeekdayBase(rank: number): WeekdayBaseLabel {
-  switch (Math.max(0, Math.min(rank, 3))) {
-    case 0:
-      return "日";
+  switch (Math.max(1, Math.min(rank, 3))) {
     case 1:
       return "金土";
     case 2:
@@ -66,7 +68,6 @@ function rankToWeekdayBase(rank: number): WeekdayBaseLabel {
 export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
   switch (weekday) {
     case 0:
-      return "日";
     case 5:
     case 6:
       return "金土";
@@ -95,13 +96,15 @@ function getHolidayAdjustedWeekdayBase(params: {
   weekday: number;
   discountTime: DiscountTime;
 }): { original: WeekdayBaseLabel; noticeText?: string } {
-  const isHoliday = Boolean(params.date && isJapaneseHolidayOrObserved(params.date));
+  const isHoliday = Boolean(
+    params.date && isJapaneseHolidayOrObserved(params.date),
+  );
 
   if (isHoliday) {
     if (params.discountTime === "15") {
       return {
-        original: "日",
-        noticeText: "祝日の15時は日曜日の基準を使います。",
+        original: "金土",
+        noticeText: "祝日の15時は金曜・土曜・日曜の基準を使います。",
       };
     }
 
@@ -110,13 +113,15 @@ function getHolidayAdjustedWeekdayBase(params: {
       if (isJapaneseHolidayOrWeekend(nextDate)) {
         return {
           original: "金土",
-          noticeText: "祝日の17時以降で翌日も休日・祝日のため、金曜・土曜の基準を使います。",
+          noticeText:
+            "祝日の17時以降で翌日も休日・祝日のため、金曜・土曜の基準を使います。",
         };
       }
 
       return {
         original: "火木",
-        noticeText: "祝日の17時以降で翌日が平日のため、火曜・木曜の基準を使います。",
+        noticeText:
+          "祝日の17時以降で翌日が平日のため、火曜・木曜の基準を使います。",
       };
     }
   }
@@ -124,23 +129,43 @@ function getHolidayAdjustedWeekdayBase(params: {
   if (params.weekday === 0 && isNightFloorTime(params.discountTime)) {
     return {
       original: "火木",
-      noticeText: "日曜日の17時以降は客足が減るため、火曜・木曜の基準を使います。",
+      noticeText:
+        "日曜日の17時以降は客足が減るため、火曜・木曜の基準を使います。",
     };
   }
 
   return { original: getOriginalWeekdayBase(params.weekday) };
 }
 
-function getRelaxFloor(discountTime: DiscountTime): WeekdayBaseLabel {
-  return isNightFloorTime(discountTime) ? "金土" : "日";
+function getRelaxFloor(_discountTime: DiscountTime): WeekdayBaseLabel {
+  return "金土";
 }
 
-function toWeekdayGroupText(label: WeekdayBaseLabel): string {
+function getWeekdayBaseDisplayLabel(
+  label: WeekdayBaseLabel,
+  discountTime: DiscountTime,
+): string {
   switch (label) {
+    // 旧データ互換: 以前の「日」基準は、現在は15時の金土日基準に統合する。
     case "日":
-      return "日曜日";
     case "金土":
-      return "金曜・土曜";
+      return discountTime === "15" ? "金土日" : "金土";
+    case "火木":
+      return "火木";
+    case "月水":
+      return "月水";
+  }
+}
+
+function toWeekdayGroupText(
+  label: WeekdayBaseLabel,
+  discountTime: DiscountTime,
+): string {
+  switch (label) {
+    // 旧データ互換: 以前の「日」基準は、現在は15時の金土日基準に統合する。
+    case "日":
+    case "金土":
+      return discountTime === "15" ? "金曜・土曜・日曜" : "金曜・土曜";
     case "火木":
       return "火曜・木曜";
     case "月水":
@@ -187,15 +212,22 @@ function formatSignedPercentCompact(value: number): string {
     return `${value}％`;
   }
 
-  return '0％';
+  return "0％";
 }
 
-function buildWeekdaySummaryText(original: WeekdayBaseLabel, adjusted: WeekdayBaseLabel): string {
+function buildWeekdaySummaryText(
+  original: WeekdayBaseLabel,
+  adjusted: WeekdayBaseLabel,
+  discountTime: DiscountTime,
+): string {
   if (original === adjusted) {
     return "曜日基準補正：なし";
   }
 
-  return `曜日基準補正：${original}→${adjusted}`;
+  return `曜日基準補正：${getWeekdayBaseDisplayLabel(
+    original,
+    discountTime,
+  )}→${getWeekdayBaseDisplayLabel(adjusted, discountTime)}`;
 }
 
 function buildBonusSummaryText(totalBonus: number): string {
@@ -255,7 +287,10 @@ function getTempLevelText(tempLevel: TempLevel): string {
   }
 }
 
-function getBaseTempShiftTerm(weather: ResolvedWeatherInput, discountTime: DiscountTime): ShiftTerm | undefined {
+function getBaseTempShiftTerm(
+  weather: ResolvedWeatherInput,
+  discountTime: DiscountTime,
+): ShiftTerm | undefined {
   const value = getBaseTempShift(weather.tempLevel);
   if (value === 0) {
     return undefined;
@@ -271,8 +306,13 @@ function getWeatherPointShift(weather: ResolvedWeatherInput): number {
   return weather.weatherPointShift;
 }
 
-function getWeatherPointShiftTerm(weather: ResolvedWeatherInput): ShiftTerm | undefined {
-  if (weather.weatherPointShift === 0 || weather.weatherPointRangeText === null) {
+function getWeatherPointShiftTerm(
+  weather: ResolvedWeatherInput,
+): ShiftTerm | undefined {
+  if (
+    weather.weatherPointShift === 0 ||
+    weather.weatherPointRangeText === null
+  ) {
     return undefined;
   }
 
@@ -282,7 +322,10 @@ function getWeatherPointShiftTerm(weather: ResolvedWeatherInput): ShiftTerm | un
   };
 }
 
-function isWindThresholdMet(tempLevel: TempLevel, windLevel: WindLevel): boolean {
+function isWindThresholdMet(
+  tempLevel: TempLevel,
+  windLevel: WindLevel,
+): boolean {
   const is15OrLess =
     tempLevel === "5orLess" || tempLevel === "6to10" || tempLevel === "11to15";
 
@@ -310,7 +353,7 @@ function getWindShift(tempLevel: TempLevel, windLevel: WindLevel): number {
 
 function getWindShiftTerm(
   tempLevel: TempLevel,
-  windLevel: WindLevel
+  windLevel: WindLevel,
 ): ShiftTerm | undefined {
   if (!isWindThresholdMet(tempLevel, windLevel)) {
     return undefined;
@@ -337,7 +380,9 @@ function getAfterRainRecoveryShift(_weather: ResolvedWeatherInput): number {
   return 0;
 }
 
-function getAfterRainRecoveryShiftTerm(_weather: ResolvedWeatherInput): ShiftTerm | undefined {
+function getAfterRainRecoveryShiftTerm(
+  _weather: ResolvedWeatherInput,
+): ShiftTerm | undefined {
   return undefined;
 }
 
@@ -369,7 +414,7 @@ function getNearForecastHourText(discountTime: DiscountTime): string {
 
 function getNearTermPercentTerm(
   weather: ResolvedWeatherInput,
-  discountTime: DiscountTime
+  discountTime: DiscountTime,
 ): PercentTerm | undefined {
   const hourText = getNearForecastHourText(discountTime);
 
@@ -383,7 +428,9 @@ function getNearTermPercentTerm(
   }
 }
 
-function parseMonthDay(dateString: string): { month: number; day: number } | null {
+function parseMonthDay(
+  dateString: string,
+): { month: number; day: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
   if (!match) return null;
 
@@ -424,7 +471,9 @@ function isThirdDayOfConsecutiveHolidayOrWeekend(dateString: string): boolean {
   );
 }
 
-function isDayAfterGoldenWeekThirdConsecutiveHoliday(dateString?: string): boolean {
+function isDayAfterGoldenWeekThirdConsecutiveHoliday(
+  dateString?: string,
+): boolean {
   if (!dateString) {
     return false;
   }
@@ -568,13 +617,14 @@ function buildWeekdayResultText(params: {
   adjusted: WeekdayBaseLabel;
   totalShift: number;
   overflowDirection: "up" | "down" | null;
+  discountTime: DiscountTime;
 }): string | undefined {
   if (params.totalShift === 0) {
     return buildResultText({
       label: "曜日基準補正",
       total: 0,
       unit: "段",
-      suffix: `${toWeekdayGroupText(params.original)}の基準のままです`,
+      suffix: `${toWeekdayGroupText(params.original, params.discountTime)}の基準のままです`,
     });
   }
 
@@ -583,7 +633,10 @@ function buildWeekdayResultText(params: {
       label: "曜日基準補正",
       total: params.totalShift,
       unit: "段",
-      suffix: `上限に当たるため${toWeekdayGroupText(params.adjusted)}の基準を使用します`,
+      suffix: `上限に当たるため${toWeekdayGroupText(
+        params.adjusted,
+        params.discountTime,
+      )}の基準を使用します`,
     });
   }
 
@@ -592,7 +645,10 @@ function buildWeekdayResultText(params: {
       label: "曜日基準補正",
       total: params.totalShift,
       unit: "段",
-      suffix: `下限に当たるため${toWeekdayGroupText(params.adjusted)}の基準を使用します`,
+      suffix: `下限に当たるため${toWeekdayGroupText(
+        params.adjusted,
+        params.discountTime,
+      )}の基準を使用します`,
     });
   }
 
@@ -600,8 +656,12 @@ function buildWeekdayResultText(params: {
     label: "曜日基準補正",
     total: params.totalShift,
     unit: "段",
-    suffix: `${toWeekdayGroupText(params.original)}ではなく${toWeekdayGroupText(
-      params.adjusted
+    suffix: `${toWeekdayGroupText(
+      params.original,
+      params.discountTime,
+    )}ではなく${toWeekdayGroupText(
+      params.adjusted,
+      params.discountTime,
     )}の基準を使用します`,
   });
 }
@@ -617,7 +677,7 @@ function buildPercentResultText(totalBonus: number): string | undefined {
 
 function buildDetailLines<T extends ShiftTerm | PercentTerm>(
   terms: T[],
-  formatter: (term: T) => string
+  formatter: (term: T) => string,
 ): string[] | undefined {
   if (terms.length === 0) {
     return undefined;
@@ -637,12 +697,19 @@ export function buildMergedBonusDisplay(params: {
   extraBonusTerms?: PercentTerm[];
 }): Pick<
   BasisGuideDisplay,
-  "bonusSummaryText" | "bonusDetailLines" | "bonusCalcText" | "bonusResultText" | "bonusCalcParts" | "bonusTotal"
+  | "bonusSummaryText"
+  | "bonusDetailLines"
+  | "bonusCalcText"
+  | "bonusResultText"
+  | "bonusCalcParts"
+  | "bonusTotal"
 > {
   const parts = [...(params.baseBonusParts ?? [])];
 
   if (params.lateTimeBonus !== 0) {
-    parts.push(`次の基準時刻が近い ${formatSignedValue(params.lateTimeBonus, "%")}`);
+    parts.push(
+      `次の基準時刻が近い ${formatSignedValue(params.lateTimeBonus, "%")}`,
+    );
   }
 
   const extraBonusTerms = params.extraBonusTerms ?? [];
@@ -650,7 +717,10 @@ export function buildMergedBonusDisplay(params: {
     parts.push(toPercentCalcPart(term));
   }
 
-  const extraBonusTotal = extraBonusTerms.reduce((sum, term) => sum + term.value, 0);
+  const extraBonusTotal = extraBonusTerms.reduce(
+    (sum, term) => sum + term.value,
+    0,
+  );
   const total = params.baseRateBonus + params.lateTimeBonus + extraBonusTotal;
 
   return {
@@ -659,7 +729,8 @@ export function buildMergedBonusDisplay(params: {
     bonusCalcParts: parts,
     bonusTotal: total,
     bonusCalcText: joinBonusCalculationParts(parts),
-    bonusResultText: parts.length > 0 ? buildPercentResultText(total) : undefined,
+    bonusResultText:
+      parts.length > 0 ? buildPercentResultText(total) : undefined,
   };
 }
 
@@ -714,11 +785,15 @@ function resolveWeatherEffect(params: {
   ].filter((value): value is PercentTerm => Boolean(value));
 
   const baseRateBonus = percentTerms.reduce((sum, term) => sum + term.value, 0);
-  const weekdaySummaryText = buildWeekdaySummaryText(original, shifted.adjusted);
+  const weekdaySummaryText = buildWeekdaySummaryText(
+    original,
+    shifted.adjusted,
+    params.discountTime,
+  );
   const weekdayDetailLines = buildDetailLines(shiftTerms, toShiftCalcPart);
   const weekdayCalcText = buildCalcText(
     "曜日基準補正の内訳",
-    shiftTerms.map(toShiftCalcPart)
+    shiftTerms.map(toShiftCalcPart),
   );
   const weekdayResultText =
     shiftTerms.length > 0
@@ -727,6 +802,7 @@ function resolveWeatherEffect(params: {
           adjusted: shifted.adjusted,
           totalShift,
           overflowDirection: shifted.overflowDirection,
+          discountTime: params.discountTime,
         })
       : undefined;
   const bonusCalcParts = percentTerms.map(toPercentCalcPart);
@@ -734,7 +810,9 @@ function resolveWeatherEffect(params: {
   const bonusDetailLines = buildDetailLines(percentTerms, toPercentCalcPart);
   const bonusCalcText = joinBonusCalculationParts(bonusCalcParts);
   const bonusResultText =
-    bonusCalcParts.length > 0 ? buildPercentResultText(baseRateBonus) : undefined;
+    bonusCalcParts.length > 0
+      ? buildPercentResultText(baseRateBonus)
+      : undefined;
 
   return {
     original,
@@ -758,7 +836,7 @@ export function getWeekdayBaseInfo(
   weekday: number,
   discountTime: DiscountTime,
   weather: ResolvedWeatherInput,
-  date?: string
+  date?: string,
 ): WeekdayBaseInfo {
   const resolved = resolveWeatherEffect({
     date,
@@ -800,9 +878,10 @@ export function getBasisGuideDisplay(params: {
     bonusResultText: resolved.bonusResultText,
     bonusCalcParts: resolved.bonusCalcParts,
     bonusTotal: resolved.baseRateBonus,
-    referenceText: `${toWeekdayGroupText(resolved.adjusted)}の${getBasisTimeText(
-      params.discountTime
-    )}を基準に考えて`,
+    referenceText: `${toWeekdayGroupText(
+      resolved.adjusted,
+      params.discountTime,
+    )}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
   };
 }
 
