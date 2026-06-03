@@ -36,6 +36,7 @@ type RateDisplayScreenProps = {
   onNextArea: () => void;
   onSkip: () => void;
   onGoBack: () => void;
+  onReturnHome: () => void;
   canChooseSkipTarget?: boolean;
   skipTargetOptions?: SkipTargetOption[];
   onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
@@ -134,6 +135,7 @@ export function RateDisplayScreen({
   onNextArea,
   onSkip,
   onGoBack,
+  onReturnHome,
   canChooseSkipTarget = false,
   skipTargetOptions = [],
   onChooseSkipTarget,
@@ -175,9 +177,14 @@ export function RateDisplayScreen({
           timeText={timeText}
           areaName={areaName}
           rightAction={
-            <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
-              戻る
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
+                トップに戻る
+              </button>
+              <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+                戻る
+              </button>
+            </div>
           }
         />
 
@@ -198,9 +205,14 @@ export function RateDisplayScreen({
         timeText={timeText}
         areaName={areaName}
         rightAction={
-          <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
-            戻る
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
+              トップに戻る
+            </button>
+            <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+              戻る
+            </button>
+          </div>
         }
       />
 

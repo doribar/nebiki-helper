@@ -25,6 +25,7 @@ type AreaJudgeScreenProps = {
   onJudge: (judge: Exclude<AreaJudge, null>) => void;
   onSkip: () => void;
   onGoBack: () => void;
+  onReturnHome: () => void;
   canChooseSkipTarget?: boolean;
   skipTargetOptions?: SkipTargetOption[];
   onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
@@ -96,6 +97,7 @@ export function AreaJudgeScreen({
   onJudge,
   onSkip,
   onGoBack,
+  onReturnHome,
   canChooseSkipTarget = false,
   skipTargetOptions = [],
   onChooseSkipTarget,
@@ -149,9 +151,14 @@ export function AreaJudgeScreen({
         timeText={timeText}
         areaName={areaName}
         rightAction={
-          <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
-            戻る
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
+              トップに戻る
+            </button>
+            <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+              戻る
+            </button>
+          </div>
         }
       />
 

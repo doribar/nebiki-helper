@@ -50,11 +50,31 @@ type Review19ScreenProps = {
   referenceLines: string[];
   onChangeRating: (areaId: AreaId, rating: Review19Rating) => void;
   onSave: () => void;
+  onReturnHome: () => void;
 };
 
-export function Review19Screen({ items, referenceLines, onChangeRating, onSave }: Review19ScreenProps) {
+export function Review19Screen({ items, referenceLines, onChangeRating, onSave, onReturnHome }: Review19ScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 640, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <button
+          type="button"
+          onClick={onReturnHome}
+          style={{
+            minWidth: 104,
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid #ccc",
+            background: "#fff",
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          トップに戻る
+        </button>
+      </div>
+
       <section
         style={{
           border: "1px solid #ddd",

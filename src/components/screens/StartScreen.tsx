@@ -29,6 +29,7 @@ type StartScreenProps = {
   startButtonLabel?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
+  onReturnHome?: () => void;
 };
 
 const WEEKDAY_OPTIONS = [
@@ -341,6 +342,7 @@ export function StartScreen({
   startButtonLabel,
   canStartReview19 = false,
   onStartReview19,
+  onReturnHome,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
   const startForecastHour = getInputStartForecastHour(sessionDraft.discountTime);
@@ -491,6 +493,24 @@ export function StartScreen({
             </div>
           </>
         }
+        rightAction={onReturnHome ? (
+          <button
+            type="button"
+            onClick={onReturnHome}
+            style={{
+              minWidth: 104,
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid #ccc",
+              background: "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            トップに戻る
+          </button>
+        ) : null}
       />
 
       <div style={{ marginBottom: 14 }}>

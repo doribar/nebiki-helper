@@ -4,6 +4,7 @@ import type { DoneNextSessionInfo, DoneSummaryItem } from "../../domain/types";
 type DoneScreenProps = {
   onGoBack: () => void;
   onStartNextSession: () => void;
+  onReturnHome: () => void;
   summaryItems: DoneSummaryItem[];
   nextSessionInfo: DoneNextSessionInfo | null;
 };
@@ -32,6 +33,7 @@ const summaryRowStyle: CSSProperties = {
 export function DoneScreen({
   onGoBack,
   onStartNextSession,
+  onReturnHome,
   summaryItems,
   nextSessionInfo,
 }: DoneScreenProps) {
@@ -39,7 +41,10 @@ export function DoneScreen({
 
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 16, marginBottom: 12 }}>
+        <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
+          トップに戻る
+        </button>
         <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
           戻る
         </button>

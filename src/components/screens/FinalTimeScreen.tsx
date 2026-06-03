@@ -43,9 +43,14 @@ export function FinalTimeScreen({
         timeText={timeText}
         areaName={null}
         rightAction={
-          <button type="button" onClick={onBack} style={subActionButtonStyle}>
-            戻る
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
+              トップに戻る
+            </button>
+            <button type="button" onClick={onBack} style={subActionButtonStyle}>
+              戻る
+            </button>
+          </div>
         }
       />
 

@@ -45,6 +45,7 @@ export function AppRouter({ app }: AppRouterProps) {
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startReview19AfterWeather}
           startButtonLabel="19時売場チェックへ進む"
+          onReturnHome={actions.resetApp}
         />
       );
 
@@ -64,6 +65,7 @@ export function AppRouter({ app }: AppRouterProps) {
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
+          onReturnHome={actions.resetApp}
           canChooseSkipTarget={derived.canChooseSkipTarget}
           skipTargetOptions={derived.skipTargetOptions}
           onChooseSkipTarget={actions.chooseSkipTargetArea}
@@ -81,6 +83,7 @@ export function AppRouter({ app }: AppRouterProps) {
           areaName={derived.currentAreaName}
           onConfirm={actions.acknowledgeAutoSkippedArea}
           onGoBack={actions.goBackOneScreen}
+          onReturnHome={actions.resetApp}
         />
       );
 
@@ -104,6 +107,7 @@ export function AppRouter({ app }: AppRouterProps) {
           onNextArea={actions.goToNextArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
+          onReturnHome={actions.resetApp}
           canChooseSkipTarget={derived.canChooseSkipTarget}
           skipTargetOptions={derived.skipTargetOptions}
           onChooseSkipTarget={actions.chooseSkipTargetArea}
@@ -133,6 +137,7 @@ export function AppRouter({ app }: AppRouterProps) {
           referenceLines={derived.review19ReferenceLines}
           onChangeRating={actions.updateReview19Rating}
           onSave={actions.saveReview19}
+          onReturnHome={actions.resetApp}
         />
       );
 
@@ -153,6 +158,7 @@ export function AppRouter({ app }: AppRouterProps) {
           nextSessionInfo={derived.doneNextSessionInfo}
           onGoBack={actions.goBackOneScreen}
           onStartNextSession={actions.startNextDoneSession}
+          onReturnHome={actions.resetApp}
         />
       );
   }

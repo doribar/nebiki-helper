@@ -7,6 +7,7 @@ type AutoSkipNoticeScreenProps = {
   areaName: string;
   onConfirm: () => void;
   onGoBack: () => void;
+  onReturnHome: () => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -26,6 +27,7 @@ export function AutoSkipNoticeScreen({
   areaName,
   onConfirm,
   onGoBack,
+  onReturnHome,
 }: AutoSkipNoticeScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
@@ -34,9 +36,14 @@ export function AutoSkipNoticeScreen({
         timeText={timeText}
         areaName={areaName}
         rightAction={
-          <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
-            戻る
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
+              トップに戻る
+            </button>
+            <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+              戻る
+            </button>
+          </div>
         }
       />
 
