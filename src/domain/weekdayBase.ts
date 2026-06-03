@@ -386,7 +386,12 @@ function getAfterRainRecoveryShiftTerm(
   return undefined;
 }
 
-function getNearTermPercentBonus(weather: ResolvedWeatherInput): number {
+function getPrecipitationRateBonus(weather: ResolvedWeatherInput): number {
+  if (typeof weather.precipitationRateBonus === "number") {
+    return weather.precipitationRateBonus;
+  }
+
+  // 旧データ互換: 以前のResolvedWeatherInputには直近1枠の雨雪だけが入っていた。
   switch (weather.nearTermWeather) {
     case "rain":
       return 10;
@@ -412,17 +417,26 @@ function getNearForecastHourText(discountTime: DiscountTime): string {
   }
 }
 
-function getNearTermPercentTerm(
+function getPrecipitationRateBonusTerm(
   weather: ResolvedWeatherInput,
   discountTime: DiscountTime,
 ): PercentTerm | undefined {
-  const hourText = getNearForecastHourText(discountTime);
+  const value = getPrecipitationRateBonus(weather);
+  if (value === 0) {
+    return undefined;
+  }
 
+  if (weather.precipitationRateBonusLabel) {
+    return { label: weather.precipitationRateBonusLabel, value };
+  }
+
+  // 旧データ互換: 以前のResolvedWeatherInputには直近1枠の雨雪だけが入っていた。
+  const hourText = getNearForecastHourText(discountTime);
   switch (weather.nearTermWeather) {
     case "rain":
-      return { label: `${hourText}に雨`, value: 10 };
+      return { label: `${hourText}に雨`, value };
     case "snow":
-      return { label: `${hourText}に雪`, value: 20 };
+      return { label: `${hourText}に雪`, value };
     default:
       return undefined;
   }
@@ -775,12 +789,12 @@ function resolveWeatherEffect(params: {
   });
 
   const percentTerms = [
-    getNearTermPercentTerm(params.weather, params.discountTime),
+    getPrecipitationRateBonusTerm(params.weather, params.discountTime),
     getOverflowBonusTerm({
       discountTime: params.discountTime,
       overflowDirection: shifted.overflowDirection,
       overflowSteps: shifted.overflowSteps,
-      hasNearTermPercentBonus: getNearTermPercentBonus(params.weather) > 0,
+      hasNearTermPercentBonus: getPrecipitationRateBonus(params.weather) > 0,
     }),
   ].filter((value): value is PercentTerm => Boolean(value));
 
@@ -887,7 +901,7 @@ export function getBasisGuideDisplay(params: {
 
 export function getWeatherGuideText(): WeatherGuideText {
   return {
-    nearTermWeatherGuide: "30分〜1時間後に雨マーク（もしくは雪）があるか",
+    nearTermWeatherGuide: "近い時間帯の雨雪回数で値引率を補正（雨1回+5%、雨2回以上+10%、雪+20%）",
     laterPrecipGuide: "1時間30分後以降の天候は未来天候ポイントで加減算",
     laterPrecipTypeGuide: "未来の雨・雪・風もポイントに含める",
     windGuide: "30分〜1時間後の風速を選択",

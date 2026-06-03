@@ -126,6 +126,88 @@ function getNearForecastHour(discountTime: DiscountTime): ForecastHourKey {
   }
 }
 
+type DirectPrecipForecastEntry = {
+  hourText: string;
+  weather: ForecastWeatherKind;
+};
+
+function getDirectPrecipForecastEntries(
+  weather: WeatherInput,
+  discountTime: DiscountTime,
+): DirectPrecipForecastEntry[] {
+  switch (discountTime) {
+    case '15':
+      return (['16', '17', '18'] as ForecastHourKey[]).map((hour) => ({
+        hourText: `${hour}時`,
+        weather: weather.hourlyForecasts[hour].weather,
+      }));
+    case '17':
+      return (['18', '19', '20'] as ForecastHourKey[]).map((hour) => ({
+        hourText: `${hour}時`,
+        weather: weather.hourlyForecasts[hour].weather,
+      }));
+    case '18':
+      return (['19', '20', '21'] as ForecastHourKey[]).map((hour) => ({
+        hourText: `${hour}時`,
+        weather: weather.hourlyForecasts[hour].weather,
+      }));
+    case '19': {
+      const hour20Weather = weather.hourlyForecasts['20'].weather;
+      const virtual22Weather = hour20Weather === 'rain' || hour20Weather === 'snow'
+        ? hour20Weather
+        : 'sunny';
+
+      return [
+        { hourText: '20時', weather: hour20Weather },
+        { hourText: '21時', weather: weather.hourlyForecasts['21'].weather },
+        { hourText: '22時扱い', weather: virtual22Weather },
+      ];
+    }
+    case '20':
+      return [{ hourText: '21時', weather: weather.hourlyForecasts['21'].weather }];
+  }
+}
+
+function getDirectPrecipRangeText(
+  entries: DirectPrecipForecastEntry[],
+  discountTime: DiscountTime,
+): string {
+  if (discountTime === '19') {
+    return '20〜22時扱い';
+  }
+
+  if (entries.length === 1) {
+    return entries[0].hourText;
+  }
+
+  const first = entries[0].hourText.replace('時', '');
+  const last = entries[entries.length - 1].hourText.replace('時', '');
+  return `${first}〜${last}時`;
+}
+
+function getDirectPrecipRateBonus(params: {
+  entries: DirectPrecipForecastEntry[];
+  discountTime: DiscountTime;
+}): { value: number; label: string | null } {
+  const hasSnow = params.entries.some((entry) => entry.weather === 'snow');
+  const rainCount = params.entries.filter((entry) => entry.weather === 'rain').length;
+  const rangeText = getDirectPrecipRangeText(params.entries, params.discountTime);
+
+  if (hasSnow) {
+    return { value: 20, label: `${rangeText}に雪` };
+  }
+
+  if (rainCount >= 2) {
+    return { value: 10, label: `${rangeText}に雨2回以上` };
+  }
+
+  if (rainCount === 1) {
+    return { value: 5, label: `${rangeText}に雨1回` };
+  }
+
+  return { value: 0, label: null };
+}
+
 function getLaterForecastHours(discountTime: DiscountTime): ForecastHourKey[] {
   switch (discountTime) {
     case '15':
@@ -210,6 +292,10 @@ export function resolveWeatherInputForDiscount(
 ): ResolvedWeatherInput {
   const nearEntry = weather.hourlyForecasts[getNearForecastHour(discountTime)];
   const laterEntries = getLaterForecastHours(discountTime).map((hour) => weather.hourlyForecasts[hour]);
+  const directPrecipRateBonus = getDirectPrecipRateBonus({
+    entries: getDirectPrecipForecastEntries(weather, discountTime),
+    discountTime,
+  });
 
   let laterPrecipType: LaterPrecipType = null;
   for (const entry of laterEntries) {
@@ -240,6 +326,8 @@ export function resolveWeatherInputForDiscount(
     nearTermWeather: toNearTermWeather(nearEntry.weather),
     hasLaterPrecip: laterPrecipType !== null,
     laterPrecipType,
+    precipitationRateBonus: directPrecipRateBonus.value,
+    precipitationRateBonusLabel: directPrecipRateBonus.label,
     windLevel: toWindLevel(nearEntry.windMs),
     tempLevel: toTempLevel(nearEntry.tempC),
     weatherPointScore,

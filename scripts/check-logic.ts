@@ -111,26 +111,51 @@ const cases: Case[] = [
     },
   },
   {
-    name: '直近16時の雨は値引率補正に残す',
+    name: '対象時間帯の雨1回は +5%',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ nearTermWeather: 'rain' }),
     expected: {
       adjusted: '火木',
+      baseRateBonus: 5,
+      bonusCalcIncludes: ['16〜18時に雨1回 +5%'],
+      bonusResultIncludes: ['値引率補正は+5%'],
+    },
+  },
+  {
+    name: '対象時間帯の雨2回以上は +10%',
+    weekday: 2,
+    discountTime: '15',
+    weatherSpec: weather({ nearTermWeather: 'rain', hasLaterPrecip: true, laterPrecipType: 'rain' }),
+    expected: {
+      adjusted: '火木',
       baseRateBonus: 10,
-      bonusCalcIncludes: ['16時に雨 +10%'],
+      bonusCalcIncludes: ['16〜18時に雨2回以上 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
   {
-    name: '未来の雪1時間だけならポイントは入るが閾値未満で曜日基準は変えない',
+    name: '19時30分は20時雨なら22時も雨扱いで +10%',
+    weekday: 2,
+    discountTime: '19',
+    weatherSpec: weather({ nearTermWeather: 'rain' }),
+    expected: {
+      adjusted: '火木',
+      baseRateBonus: 10,
+      bonusCalcIncludes: ['20〜22時扱いに雨2回以上 +10%'],
+      bonusResultIncludes: ['値引率補正は+10%'],
+    },
+  },
+  {
+    name: '対象時間帯の雪1時間は +20%',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ hasLaterPrecip: true, laterPrecipType: 'snow' }),
     expected: {
       adjusted: '火木',
-      baseRateBonus: 0,
-      bonusCalcAbsent: true,
+      baseRateBonus: 20,
+      bonusCalcIncludes: ['16〜18時に雪 +20%'],
+      bonusResultIncludes: ['値引率補正は+20%'],
     },
   },
   {
@@ -177,7 +202,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '火木',
       baseRateBonus: 20,
-      bonusCalcIncludes: ['16時に雪 +20%'],
+      bonusCalcIncludes: ['16〜18時に雪 +20%'],
       bonusResultIncludes: ['値引率補正は+20%'],
     },
   },
@@ -271,13 +296,13 @@ type ScenarioCase = {
 
 const scenarioCases: ScenarioCase[] = [
   {
-    name: '運用シナリオ: 水曜日17時・18時に雨あり',
+    name: '運用シナリオ: 水曜日17時・18時に雨1回あり',
     weekday: 3,
     discountTime: '17',
     weatherSpec: weather({ nearTermWeather: 'rain' }),
     expected: {
       weekdaySummary: '曜日基準補正：なし',
-      bonusSummary: '値引率補正：+10％',
+      bonusSummary: '値引率補正：+5％',
       finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },
@@ -322,7 +347,7 @@ const scenarioCases: ScenarioCase[] = [
     lateTimeBonus: 5,
     expected: {
       weekdaySummary: '曜日基準補正：なし',
-      bonusSummary: '値引率補正：+15％',
+      bonusSummary: '値引率補正：+10％',
       finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },

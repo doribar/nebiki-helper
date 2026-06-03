@@ -264,6 +264,11 @@ function getProgressManyRateText(progress: AreaProgress): string | undefined {
 }
 
 function shouldIgnoreNormalTimeRateCap(weather: ResolvedWeatherInput): boolean {
+  if (typeof weather.precipitationRateBonus === "number") {
+    return weather.precipitationRateBonus > 0;
+  }
+
+  // 旧データ互換: 以前のResolvedWeatherInputには直近1枠の雨雪だけが入っていた。
   return weather.nearTermWeather === "rain" || weather.nearTermWeather === "snow";
 }
 

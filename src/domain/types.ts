@@ -63,6 +63,8 @@ export type ResolvedWeatherInput = {
   nearTermWeather: NearTermWeather;
   hasLaterPrecip: boolean;
   laterPrecipType: LaterPrecipType;
+  precipitationRateBonus: number;
+  precipitationRateBonusLabel: string | null;
   windLevel: WindLevel;
   tempLevel: TempLevel;
   weatherPointScore: number;
