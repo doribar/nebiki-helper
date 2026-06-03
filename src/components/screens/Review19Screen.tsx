@@ -56,25 +56,6 @@ type Review19ScreenProps = {
 export function Review19Screen({ items, referenceLines, onChangeRating, onSave, onReturnHome }: Review19ScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 640, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <button
-          type="button"
-          onClick={onReturnHome}
-          style={{
-            minWidth: 104,
-            padding: "10px 14px",
-            borderRadius: 12,
-            border: "1px solid #ccc",
-            background: "#fff",
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          トップに戻る
-        </button>
-      </div>
-
       <section
         style={{
           border: "1px solid #ddd",
@@ -148,6 +129,25 @@ export function Review19Screen({ items, referenceLines, onChangeRating, onSave, 
 
       <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
         <PrimaryButton onClick={onSave}>記録して終了</PrimaryButton>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <button
+          type="button"
+          onClick={onReturnHome}
+          style={{
+            width: "100%",
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid #ccc",
+            background: "#fff",
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          トップに戻る
+        </button>
       </div>
     </main>
   );

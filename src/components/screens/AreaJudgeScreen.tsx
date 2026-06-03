@@ -151,14 +151,9 @@ export function AreaJudgeScreen({
         timeText={timeText}
         areaName={areaName}
         rightAction={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
-              トップに戻る
-            </button>
-            <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
-              戻る
-            </button>
-          </div>
+          <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
+            戻る
+          </button>
         }
       />
 
@@ -314,6 +309,12 @@ export function AreaJudgeScreen({
           </div>
         </div>
       </section>
+
+      <div style={{ marginTop: 16 }}>
+        <button type="button" onClick={onReturnHome} style={{ ...subActionButtonStyle, width: "100%" }}>
+          トップに戻る
+        </button>
+      </div>
     </main>
   );
 }

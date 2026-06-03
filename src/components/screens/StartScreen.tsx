@@ -493,24 +493,7 @@ export function StartScreen({
             </div>
           </>
         }
-        rightAction={onReturnHome ? (
-          <button
-            type="button"
-            onClick={onReturnHome}
-            style={{
-              minWidth: 104,
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid #ccc",
-              background: "#fff",
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            トップに戻る
-          </button>
-        ) : null}
+rightAction={null}
       />
 
       <div style={{ marginBottom: 14 }}>
@@ -805,6 +788,27 @@ export function StartScreen({
               19時以降に開始できます。
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {onReturnHome ? (
+        <div style={{ marginTop: 16 }}>
+          <button
+            type="button"
+            onClick={onReturnHome}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid #ccc",
+              background: "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            トップに戻る
+          </button>
         </div>
       ) : null}
     </main>

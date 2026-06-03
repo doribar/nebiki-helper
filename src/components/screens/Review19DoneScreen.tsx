@@ -64,7 +64,7 @@ export function Review19DoneScreen({
       </section>
 
       <div style={{ marginTop: 16 }}>
-        <PrimaryButton onClick={onReturnHome}>トップ画面に戻る</PrimaryButton>
+        <PrimaryButton onClick={onReturnHome}>トップに戻る</PrimaryButton>
       </div>
 
     </main>

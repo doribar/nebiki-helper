@@ -43,14 +43,9 @@ export function FinalTimeScreen({
         timeText={timeText}
         areaName={null}
         rightAction={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
-              トップに戻る
-            </button>
-            <button type="button" onClick={onBack} style={subActionButtonStyle}>
-              戻る
-            </button>
-          </div>
+          <button type="button" onClick={onBack} style={subActionButtonStyle}>
+            戻る
+          </button>
         }
       />
 
@@ -144,12 +139,15 @@ export function FinalTimeScreen({
               本日の値引きは以上です。
             </div>
 
-            <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={onReturnHome}>トップ画面に戻る</PrimaryButton>
-            </div>
           </>
         ) : null}
       </section>
+
+      <div style={{ marginTop: 16 }}>
+        <button type="button" onClick={onReturnHome} style={{ ...subActionButtonStyle, width: "100%" }}>
+          トップに戻る
+        </button>
+      </div>
 
     </main>
   );

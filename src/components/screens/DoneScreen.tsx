@@ -42,9 +42,6 @@ export function DoneScreen({
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 16, marginBottom: 12 }}>
-        <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
-          トップに戻る
-        </button>
         <button type="button" onClick={onGoBack} style={subActionButtonStyle}>
           戻る
         </button>
@@ -163,6 +160,12 @@ export function DoneScreen({
           ))}
         </section>
       ) : null}
+
+      <div style={{ marginTop: 16 }}>
+        <button type="button" onClick={onReturnHome} style={{ ...subActionButtonStyle, width: "100%" }}>
+          トップに戻る
+        </button>
+      </div>
     </main>
   );
 }
