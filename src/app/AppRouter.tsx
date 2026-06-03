@@ -16,6 +16,16 @@ type AppRouterProps = {
 export function AppRouter({ app }: AppRouterProps) {
   const { state, derived, actions } = app;
 
+  const handleReturnHome = () => {
+    const ok = window.confirm(
+      "トップ画面に戻りますか？\n現在の画面を離れます。必要ならキャンセルしてください。"
+    );
+
+    if (!ok) return;
+
+    actions.resetApp();
+  };
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [state.screen, state.currentAreaId, state.finalTimeStep]);
@@ -45,7 +55,7 @@ export function AppRouter({ app }: AppRouterProps) {
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startReview19AfterWeather}
           startButtonLabel="19時売場チェックへ進む"
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
         />
       );
 
@@ -65,7 +75,7 @@ export function AppRouter({ app }: AppRouterProps) {
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
           canChooseSkipTarget={derived.canChooseSkipTarget}
           skipTargetOptions={derived.skipTargetOptions}
           onChooseSkipTarget={actions.chooseSkipTargetArea}
@@ -83,7 +93,7 @@ export function AppRouter({ app }: AppRouterProps) {
           areaName={derived.currentAreaName}
           onConfirm={actions.acknowledgeAutoSkippedArea}
           onGoBack={actions.goBackOneScreen}
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
         />
       );
 
@@ -107,7 +117,7 @@ export function AppRouter({ app }: AppRouterProps) {
           onNextArea={actions.goToNextArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
           canChooseSkipTarget={derived.canChooseSkipTarget}
           skipTargetOptions={derived.skipTargetOptions}
           onChooseSkipTarget={actions.chooseSkipTargetArea}
@@ -126,7 +136,7 @@ export function AppRouter({ app }: AppRouterProps) {
           finalStep={state.finalTimeStep}
           onAdvance={actions.advanceFinalTimeStep}
           onBack={actions.goBackOneScreen}
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
         />
       );
 
@@ -137,7 +147,7 @@ export function AppRouter({ app }: AppRouterProps) {
           referenceLines={derived.review19ReferenceLines}
           onChangeRating={actions.updateReview19Rating}
           onSave={actions.saveReview19}
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
         />
       );
 
@@ -147,7 +157,7 @@ export function AppRouter({ app }: AppRouterProps) {
           unexportedCount={derived.review19Export.unexportedCount}
           canExportTen={derived.review19Export.canExportTen}
           onExport={actions.exportReview19Records}
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
         />
       );
 
@@ -158,7 +168,7 @@ export function AppRouter({ app }: AppRouterProps) {
           nextSessionInfo={derived.doneNextSessionInfo}
           onGoBack={actions.goBackOneScreen}
           onStartNextSession={actions.startNextDoneSession}
-          onReturnHome={actions.resetApp}
+          onReturnHome={handleReturnHome}
         />
       );
   }
