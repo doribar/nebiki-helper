@@ -1542,3 +1542,11 @@ ChatGPT は作業開始時に、今回の依頼が以下に当てはまるか確
 - `node_modules` を削除して `npm ci` し直した後、`npm run check:logic` PASS（48 / 48 checks passed。加えて後続の個別チェックもPASS）。
 - `npm run build` PASS。
 - `npm ci` 時に `npm audit` 警告（5 vulnerabilities: 2 moderate, 3 high）は出るが、今回の軽量化範囲では未対応。
+
+## 2026-06-03 19時売場チェックの天候入力廃止
+
+- 19時売場チェックへ入る時に、19時30分用の天候入力画面を挟まないように変更。
+- トップ画面の「19時売場チェックに入る」ボタンを押すと、直接 `review19` 画面へ進む。
+- 売場チェック画面に表示する「19時30分値引の基準」は、17時値引時点で入力した天気予報を `discountTime: "19"` として読み替え、`createReview19Reference(createReview19WeatherDraft(session))` で作る。
+- 目的は「19時に再入力した天候」ではなく、「17時時点の予報に即した値引ができていたか」を振り返ること。
+- 旧データ互換のため `review19_weather` は型とルーター上には残しているが、正規導線では使わない。旧状態で復元された場合も `normalizeLoadedState` で `review19` に寄せ、天候入力画面を表示しない。

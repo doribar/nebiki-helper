@@ -46,19 +46,6 @@ export function AppRouter({ app }: AppRouterProps) {
       );
 
 
-    case "review19_weather":
-      return (
-        <StartScreen
-          sessionDraft={state.sessionDraft}
-          weatherGuideText={derived.weatherGuideText}
-          showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
-          onChangeSessionDraft={actions.updateSessionDraft}
-          onStart={actions.startReview19AfterWeather}
-          startButtonLabel="19時売場チェックへ進む"
-          onReturnHome={handleReturnHome}
-        />
-      );
-
     case "area_judge":
       if (!derived.currentAreaName) return null;
 
@@ -140,6 +127,7 @@ export function AppRouter({ app }: AppRouterProps) {
         />
       );
 
+    case "review19_weather":
     case "review19":
       return (
         <Review19Screen

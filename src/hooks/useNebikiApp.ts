@@ -717,11 +717,23 @@ function normalizeLoadedState(
   const rawPendingDeferredAreaIds =
     (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [];
   const pendingDeferredAreaIds = rawPendingDeferredAreaIds.filter(isValidAreaId);
+  const session = normalizeSessionData(loaded.session);
+  const sessionDraft = normalizeSessionDraft(loaded.sessionDraft);
+  const normalizedReview19 = normalizeReview19Result((loaded as Partial<AppState>).review19);
+  const screen = loaded.screen === "review19_weather" ? "review19" : loaded.screen;
+  const review19 =
+    loaded.screen === "review19_weather" && session && normalizedReview19 && !normalizedReview19.reference
+      ? {
+          ...normalizedReview19,
+          reference: createReview19Reference(createReview19WeatherDraft(session)),
+        }
+      : normalizedReview19;
 
   return {
     ...loaded,
-    session: normalizeSessionData(loaded.session),
-    sessionDraft: normalizeSessionDraft(loaded.sessionDraft),
+    screen,
+    session,
+    sessionDraft,
     areaProgressMap,
     currentAreaId,
     lastReferenceAreaId,
@@ -733,7 +745,7 @@ function normalizeLoadedState(
       typeof (loaded as Partial<AppState>).finalTimeStep === "number"
         ? ((loaded as Partial<AppState>).finalTimeStep as AppState["finalTimeStep"])
         : 0,
-    review19: normalizeReview19Result((loaded as Partial<AppState>).review19),
+    review19,
     review19ExcludedAreaIds: normalizeReview19ExcludedAreaIds((loaded as Partial<AppState>).review19ExcludedAreaIds),
   };
 }
@@ -2407,22 +2419,28 @@ const lateSkipNotice = useMemo(() => {
       };
       const sourceStateForReview = sourceSession ? sourceState : prev;
 
+      const reviewDraft = createReview19WeatherDraft(session);
+      const initialReview19 = createInitialReview19Result({
+        date: session.date,
+        sessionStartedAt: session.startedAt,
+        excludedAreaIds: sourceSession ? getReview19ExcludedAreaIdsForReview(sourceStateForReview) : [],
+      });
+
       return {
         ...prev,
         session,
-        screen: "review19_weather",
-        sessionDraft: createReview19WeatherDraft(session),
+        screen: "review19",
+        sessionDraft: reviewDraft,
         areaProgressMap: sourceStateForReview.areaProgressMap,
         review19ExcludedAreaIds: sourceStateForReview.review19ExcludedAreaIds,
         currentAreaId: null,
         currentFlow: "normal",
         pendingDeferredAreaIds: [],
         timeSwitchNotice: null,
-        review19: createInitialReview19Result({
-          date: session.date,
-          sessionStartedAt: session.startedAt,
-          excludedAreaIds: sourceSession ? getReview19ExcludedAreaIdsForReview(sourceStateForReview) : [],
-        }),
+        review19: {
+          ...initialReview19,
+          reference: createReview19Reference(reviewDraft),
+        },
       };
     });
   }
