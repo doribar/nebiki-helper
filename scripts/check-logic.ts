@@ -17,7 +17,7 @@ import {
   markReview19RecordsExportedInMemory,
   normalizeReview19Result,
 } from '../src/domain/review19.ts';
-import { buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
+import { createDefaultHourlyForecasts, buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
   cloneNavigationSnapshot,
@@ -111,26 +111,26 @@ const cases: Case[] = [
     },
   },
   {
-    name: '対象時間帯の雨1回は +5%',
+    name: '起点時刻の雨は +5%',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ nearTermWeather: 'rain' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 5,
-      bonusCalcIncludes: ['16〜18時に雨1回 +5%'],
+      bonusCalcIncludes: ['16時に雨 +5%'],
       bonusResultIncludes: ['値引率補正は+5%'],
     },
   },
   {
-    name: '対象時間帯の雨2回以上は +10%',
+    name: '起点雨かつその後も雨は +10%',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ nearTermWeather: 'rain', hasLaterPrecip: true, laterPrecipType: 'rain' }),
     expected: {
       adjusted: '火木',
       baseRateBonus: 10,
-      bonusCalcIncludes: ['16〜18時に雨2回以上 +10%'],
+      bonusCalcIncludes: ['16時に雨、その後も雨 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
@@ -142,20 +142,19 @@ const cases: Case[] = [
     expected: {
       adjusted: '火木',
       baseRateBonus: 10,
-      bonusCalcIncludes: ['20〜22時扱いに雨2回以上 +10%'],
+      bonusCalcIncludes: ['20時に雨、その後も雨 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
   {
-    name: '対象時間帯の雪1時間は +20%',
+    name: '起点以外の雪は直接値引率補正にしない',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ hasLaterPrecip: true, laterPrecipType: 'snow' }),
     expected: {
       adjusted: '火木',
-      baseRateBonus: 20,
-      bonusCalcIncludes: ['16〜18時に雪 +20%'],
-      bonusResultIncludes: ['値引率補正は+20%'],
+      baseRateBonus: 0,
+      bonusCalcAbsent: true,
     },
   },
   {
@@ -202,7 +201,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '火木',
       baseRateBonus: 20,
-      bonusCalcIncludes: ['16〜18時に雪 +20%'],
+      bonusCalcIncludes: ['16時に雪 +20%'],
       bonusResultIncludes: ['値引率補正は+20%'],
     },
   },
@@ -653,6 +652,53 @@ for (const testCase of cases) {
     console.error('actual guide =', guide);
     process.exitCode = 1;
   }
+}
+
+
+try {
+  const hourlyForecasts = createDefaultHourlyForecasts();
+  hourlyForecasts['19'].weather = 'rain';
+  hourlyForecasts['20'].weather = 'rain';
+  const resolvedWeather = resolveWeatherInputForDiscount({ hourlyForecasts, afterRainSky: null }, '17');
+  const info = getWeekdayBaseInfo(2, '17', resolvedWeather, '2026-04-07');
+  const guide = getBasisGuideDisplay({
+    date: '2026-04-07',
+    weekday: 2,
+    discountTime: '17',
+    weather: resolvedWeather,
+  });
+
+  assert.equal(info.baseRateBonus, 0);
+  assert.equal(guide.bonusCalcText, undefined);
+  console.log('PASS: 17時は18時が雨でなければ19時・20時が雨でも直接補正しない');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 17時は18時が雨でなければ19時・20時が雨でも直接補正しない');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const hourlyForecasts = createDefaultHourlyForecasts();
+  hourlyForecasts['18'].weather = 'rain';
+  hourlyForecasts['20'].weather = 'rain';
+  const resolvedWeather = resolveWeatherInputForDiscount({ hourlyForecasts, afterRainSky: null }, '17');
+  const info = getWeekdayBaseInfo(2, '17', resolvedWeather, '2026-04-07');
+  const guide = getBasisGuideDisplay({
+    date: '2026-04-07',
+    weekday: 2,
+    discountTime: '17',
+    weather: resolvedWeather,
+  });
+
+  assert.equal(info.baseRateBonus, 10);
+  assert.ok(guide.bonusCalcText?.includes('18時に雨、その後も雨 +10%'));
+  console.log('PASS: 17時は18時雨を起点に19時か20時も雨なら +10%');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 17時は18時雨を起点に19時か20時も雨なら +10%');
+  console.error(error);
+  process.exitCode = 1;
 }
 
 try {
@@ -1226,7 +1272,7 @@ try {
 }
 
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 25} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 27} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

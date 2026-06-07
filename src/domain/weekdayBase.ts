@@ -901,7 +901,7 @@ export function getBasisGuideDisplay(params: {
 
 export function getWeatherGuideText(): WeatherGuideText {
   return {
-    nearTermWeatherGuide: "近い時間帯の雨雪回数で値引率を補正（雨1回+5%、雨2回以上+10%、雪+20%）",
+    nearTermWeatherGuide: "起点時刻の雨雪で値引率を補正（雨+5%、起点雨かつその後も雨+10%、雪+20%）",
     laterPrecipGuide: "1時間30分後以降の天候は未来天候ポイントで加減算",
     laterPrecipTypeGuide: "未来の雨・雪・風もポイントに含める",
     windGuide: "30分〜1時間後の風速を選択",

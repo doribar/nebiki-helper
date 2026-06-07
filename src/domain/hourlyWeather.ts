@@ -168,44 +168,29 @@ function getDirectPrecipForecastEntries(
   }
 }
 
-function getDirectPrecipRangeText(
-  entries: DirectPrecipForecastEntry[],
-  discountTime: DiscountTime,
-): string {
-  if (discountTime === '19') {
-    return '20〜22時扱い';
-  }
-
-  if (entries.length === 1) {
-    return entries[0].hourText;
-  }
-
-  const first = entries[0].hourText.replace('時', '');
-  const last = entries[entries.length - 1].hourText.replace('時', '');
-  return `${first}〜${last}時`;
-}
-
 function getDirectPrecipRateBonus(params: {
   entries: DirectPrecipForecastEntry[];
   discountTime: DiscountTime;
 }): { value: number; label: string | null } {
-  const hasSnow = params.entries.some((entry) => entry.weather === 'snow');
-  const rainCount = params.entries.filter((entry) => entry.weather === 'rain').length;
-  const rangeText = getDirectPrecipRangeText(params.entries, params.discountTime);
-
-  if (hasSnow) {
-    return { value: 20, label: `${rangeText}に雪` };
+  const origin = params.entries[0];
+  if (!origin) {
+    return { value: 0, label: null };
   }
 
-  if (rainCount >= 2) {
-    return { value: 10, label: `${rangeText}に雨2回以上` };
+  if (origin.weather === 'snow') {
+    return { value: 20, label: `${origin.hourText}に雪` };
   }
 
-  if (rainCount === 1) {
-    return { value: 5, label: `${rangeText}に雨1回` };
+  if (origin.weather !== 'rain') {
+    return { value: 0, label: null };
   }
 
-  return { value: 0, label: null };
+  const hasFollowUpRain = params.entries.slice(1).some((entry) => entry.weather === 'rain');
+  if (hasFollowUpRain) {
+    return { value: 10, label: `${origin.hourText}に雨、その後も雨` };
+  }
+
+  return { value: 5, label: `${origin.hourText}に雨` };
 }
 
 function getLaterForecastHours(discountTime: DiscountTime): ForecastHourKey[] {
