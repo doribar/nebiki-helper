@@ -178,7 +178,12 @@ function getDirectPrecipRateBonus(params: {
   }
 
   if (origin.weather === 'snow') {
-    return { value: 20, label: `${origin.hourText}に雪` };
+    const hasFollowUpSnow = params.entries.slice(1).some((entry) => entry.weather === 'snow');
+    if (hasFollowUpSnow) {
+      return { value: 20, label: `${origin.hourText}に雪、その後も雪` };
+    }
+
+    return { value: 15, label: `${origin.hourText}に雪` };
   }
 
   if (origin.weather !== 'rain') {
