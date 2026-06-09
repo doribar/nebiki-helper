@@ -6,7 +6,8 @@ export type AreaId =
   | "futomaki_chumaki"
   | "sushi"
   | "onigiri"
-  | "balance_bento"
+  | "balance_bento" // legacy: older saved data
+  | "ryomi"
   | "chuka_fish"
   | "yakitori"
   | "fry_chicken"
