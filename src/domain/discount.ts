@@ -4,6 +4,7 @@ import type {
   RateDisplayData,
   RateLine,
   AreaJudge,
+  WeekdayBaseLabel,
 } from "./types";
 
 export function getBaseRate(discountTime: DiscountTime): number {
@@ -47,10 +48,24 @@ function toRateLine(main: string, note?: string): RateLine {
 }
 
 
+function getManyPlus10Threshold(weekdayBase: WeekdayBaseLabel | undefined): number {
+  switch (weekdayBase) {
+    case "月水":
+      return 8;
+    case "金土":
+    case "日": // legacy: 旧「日」基準は現在の金土日相当として扱う
+      return 12;
+    case "火木":
+    default:
+      return 10;
+  }
+}
+
 function getManyTenOrMoreNote(params: {
   manyRate: number;
   discountTime: Exclude<DiscountTime, "20">;
   ignoreTimeRateCap: boolean;
+  weekdayBase?: WeekdayBaseLabel;
 }): string | undefined {
   const tenOrMoreRate = capNormalDiscountRate(
     params.manyRate + 10,
@@ -62,13 +77,16 @@ function getManyTenOrMoreNote(params: {
     return undefined;
   }
 
-  return `多いのうち10個以上は ${tenOrMoreRate}%`;
+  const threshold = getManyPlus10Threshold(params.weekdayBase);
+
+  return `多いのうち${threshold}個以上は ${tenOrMoreRate}%`;
 }
 
 function buildManyNote(params: {
   manyRate: number;
   discountTime: Exclude<DiscountTime, "20">;
   ignoreTimeRateCap: boolean;
+  weekdayBase?: WeekdayBaseLabel;
 }): string {
   const notes: string[] = [];
 
@@ -87,6 +105,7 @@ export function getNormalTimeRateDisplay(params: {
   areaJudge: Exclude<AreaJudge, null>;
   isSunday?: boolean;
   ignoreTimeRateCap?: boolean;
+  weekdayBase?: WeekdayBaseLabel;
 }): RateDisplayData {
   const ignoreTimeRateCap = params.ignoreTimeRateCap ?? false;
   const base = getBaseRate(params.discountTime) + params.weatherBonus;
@@ -116,6 +135,7 @@ export function getNormalTimeRateDisplay(params: {
         manyRate,
         discountTime: params.discountTime,
         ignoreTimeRateCap,
+        weekdayBase: params.weekdayBase,
       })
     ),
     few: toRateLine("引かない"),

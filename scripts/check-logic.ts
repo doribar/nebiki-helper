@@ -32,6 +32,7 @@ import type {
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
   WeatherInput,
+  WeekdayBaseLabel,
 } from '../src/domain/types.ts';
 
 type LegacyWeatherSpec = Record<string, unknown> & { afterRainSky?: 'cloudy' | 'sunny' | null };
@@ -387,46 +388,49 @@ type ManyTenOrMoreNoteCase = {
   weatherBonus: number;
   isSunday?: boolean;
   ignoreTimeRateCap?: boolean;
+  weekdayBase?: WeekdayBaseLabel;
   expectedNoteIncludes?: string[];
   expectedNoteExcludes?: string[];
 };
 
 const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
   {
-    name: '多いが引かないでも10個以上は10%目安を表示する',
+    name: '火木基準は10個以上を+10%目安として表示する',
     discountTime: '15',
     weatherBonus: -10,
     expectedNoteIncludes: ['多いのうち10個以上は 10%'],
   },
   {
-    name: '多いが5%なら10個以上は15%目安を表示する',
+    name: '火木基準で多いが5%なら10個以上は15%目安を表示する',
     discountTime: '15',
     weatherBonus: -5,
     expectedNoteIncludes: ['多いのうち10個以上は 15%'],
   },
   {
-    name: '15時でも多い10個以上の+10%目安を表示する',
+    name: '月水基準は8個以上を+10%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
-    expectedNoteIncludes: ['多いのうち10個以上は 20%'],
+    weekdayBase: '月水',
+    expectedNoteIncludes: ['多いのうち8個以上は 20%'],
   },
   {
-    name: '日曜15時はやや多いを出さず10個以上補足だけを表示する',
+    name: '金土日基準は12個以上を+10%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
     isSunday: true,
+    weekdayBase: '金土',
     expectedNoteIncludes: [
-      '多いのうち10個以上は 20%',
+      '多いのうち12個以上は 20%',
     ],
   },
   {
-    name: '19時30分は40%上限に当たる場合は多い10個以上の同率注記を表示しない',
+    name: '19時30分は40%上限に当たる場合は多い個数目安の同率注記を表示しない',
     discountTime: '19',
     weatherBonus: 0,
     expectedNoteExcludes: ['多いのうち10個以上は 40%'],
   },
   {
-    name: '雨雪補正中は時刻別上限を外して多い10個以上の目安も上げる',
+    name: '雨雪補正中は時刻別上限を外して多い個数目安も上げる',
     discountTime: '19',
     weatherBonus: 20,
     ignoreTimeRateCap: true,
@@ -987,6 +991,7 @@ for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
     areaJudge: 'normal',
     isSunday: manyTenOrMoreCase.isSunday,
     ignoreTimeRateCap: manyTenOrMoreCase.ignoreTimeRateCap,
+    weekdayBase: manyTenOrMoreCase.weekdayBase,
   });
 
   try {
@@ -1326,11 +1331,12 @@ const sundayRateDisplay = getNormalTimeRateDisplay({
   weatherBonus: 0,
   areaJudge: 'normal',
   isSunday: true,
+  weekdayBase: '金土',
 });
 assert.equal(sundayRateDisplay.many.main, '10%');
 assert.equal(Object.hasOwn(sundayRateDisplay, 'slightlyMany'), false);
 assert.ok(!(sundayRateDisplay.many.note ?? '').includes('多いのうち5個以上'));
-assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち10個以上は 20%'));
+assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち12個以上は 20%'));
 
 const nonSundayRateDisplay = getNormalTimeRateDisplay({
   discountTime: '15',
@@ -1351,7 +1357,7 @@ assert.equal(sundayEveningRateDisplay.normal.main, '10%');
 assert.equal(Object.hasOwn(sundayEveningRateDisplay, 'slightlyMany'), false);
 assert.equal(sundayEveningRateDisplay.many.main, '20%');
 
-console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず10個以上補足だけを表示する');
+console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず12個以上補足だけを表示する');
 
 
 

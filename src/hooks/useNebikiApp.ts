@@ -23,6 +23,7 @@ import type {
   Review19Result,
   Review19Snapshot,
   Review19Reference,
+  WeekdayBaseLabel,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -276,6 +277,7 @@ function buildCompletedRateSnapshot(params: {
   session: SessionData | null;
   progress: AreaProgress;
   weatherBonus: number;
+  weekdayBase: WeekdayBaseLabel;
 }): CompletedRateSnapshot {
   const { session, progress, weatherBonus } = params;
 
@@ -291,6 +293,7 @@ function buildCompletedRateSnapshot(params: {
     areaJudge: progress.areaJudge,
     isSunday: session.weekday === 0 && session.discountTime === "15",
     ignoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
+    weekdayBase: params.weekdayBase,
   });
 
   return {
@@ -1428,6 +1431,7 @@ const lateSkipNotice = useMemo(() => {
       areaJudge: currentAreaProgress.areaJudge,
       isSunday: state.session.weekday === 0 && state.session.discountTime === "15",
       ignoreTimeRateCap: ignoreNormalTimeRateCap,
+      weekdayBase: weekdayBaseInfo.adjusted,
     });
   }, [
   state.session,
@@ -1435,6 +1439,7 @@ const lateSkipNotice = useMemo(() => {
   weekdayBaseInfo.baseRateBonus,
   lateTimeBonus,
   ignoreNormalTimeRateCap,
+  weekdayBaseInfo.adjusted,
 ]);
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
@@ -1493,6 +1498,7 @@ const lateSkipNotice = useMemo(() => {
         areaJudge: progress.areaJudge,
         isSunday: session.weekday === 0 && discountTime === "15",
         ignoreTimeRateCap: ignoreNormalTimeRateCap,
+        weekdayBase: weekdayBaseInfo.adjusted,
       });
 
       const completedNormalRateText = getProgressNormalRateText(progress) ?? display.normal.main;
@@ -1515,6 +1521,7 @@ const lateSkipNotice = useMemo(() => {
     weekdayBaseInfo.baseRateBonus,
     lateTimeBonus,
     ignoreNormalTimeRateCap,
+    weekdayBaseInfo.adjusted,
   ]);
 
   const review19Items = useMemo(() => {
@@ -2240,6 +2247,7 @@ const lateSkipNotice = useMemo(() => {
         session: prev.session,
         progress: prev.areaProgressMap[currentAreaId],
         weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+        weekdayBase: weekdayBaseInfo.adjusted,
       });
 
       const updatedMap = {
