@@ -382,7 +382,7 @@ const scenarioCases: ScenarioCase[] = [
 ];
 
 
-type ManyTenOrMoreNoteCase = {
+type ManyThresholdPlus5NoteCase = {
   name: string;
   discountTime: Exclude<DiscountTime, '20'>;
   weatherBonus: number;
@@ -393,34 +393,34 @@ type ManyTenOrMoreNoteCase = {
   expectedNoteExcludes?: string[];
 };
 
-const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
+const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
   {
-    name: '火木基準は10個以上を+10%目安として表示する',
+    name: '火木基準は10個以上を+5%目安として表示する',
     discountTime: '15',
     weatherBonus: -10,
+    expectedNoteIncludes: ['多いのうち10個以上は 5%'],
+  },
+  {
+    name: '火木基準で多いが5%なら10個以上は10%目安を表示する',
+    discountTime: '15',
+    weatherBonus: -5,
     expectedNoteIncludes: ['多いのうち10個以上は 10%'],
   },
   {
-    name: '火木基準で多いが5%なら10個以上は15%目安を表示する',
-    discountTime: '15',
-    weatherBonus: -5,
-    expectedNoteIncludes: ['多いのうち10個以上は 15%'],
-  },
-  {
-    name: '月水基準は8個以上を+10%目安として表示する',
+    name: '月水基準は8個以上を+5%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
     weekdayBase: '月水',
-    expectedNoteIncludes: ['多いのうち8個以上は 20%'],
+    expectedNoteIncludes: ['多いのうち8個以上は 15%'],
   },
   {
-    name: '金土日基準は12個以上を+10%目安として表示する',
+    name: '金土日基準は12個以上を+5%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
     isSunday: true,
     weekdayBase: '金土',
     expectedNoteIncludes: [
-      '多いのうち12個以上は 20%',
+      '多いのうち12個以上は 15%',
     ],
   },
   {
@@ -434,7 +434,7 @@ const manyTenOrMoreNoteCases: ManyTenOrMoreNoteCase[] = [
     discountTime: '19',
     weatherBonus: 20,
     ignoreTimeRateCap: true,
-    expectedNoteIncludes: ['多いのうち10個以上は 70%'],
+    expectedNoteIncludes: ['多いのうち10個以上は 65%'],
   },
 ];
 
@@ -984,31 +984,31 @@ for (const scenarioCase of scenarioCases) {
 }
 
 
-for (const manyTenOrMoreCase of manyTenOrMoreNoteCases) {
+for (const manyThresholdPlus5Case of manyThresholdPlus5NoteCases) {
   const display = getNormalTimeRateDisplay({
-    discountTime: manyTenOrMoreCase.discountTime,
-    weatherBonus: manyTenOrMoreCase.weatherBonus,
+    discountTime: manyThresholdPlus5Case.discountTime,
+    weatherBonus: manyThresholdPlus5Case.weatherBonus,
     areaJudge: 'normal',
-    isSunday: manyTenOrMoreCase.isSunday,
-    ignoreTimeRateCap: manyTenOrMoreCase.ignoreTimeRateCap,
-    weekdayBase: manyTenOrMoreCase.weekdayBase,
+    isSunday: manyThresholdPlus5Case.isSunday,
+    ignoreTimeRateCap: manyThresholdPlus5Case.ignoreTimeRateCap,
+    weekdayBase: manyThresholdPlus5Case.weekdayBase,
   });
 
   try {
     const note = display.many.note ?? '';
 
-    for (const expected of manyTenOrMoreCase.expectedNoteIncludes ?? []) {
+    for (const expected of manyThresholdPlus5Case.expectedNoteIncludes ?? []) {
       assert.ok(note.includes(expected), `missing expected note text: ${expected}`);
     }
 
-    for (const unexpected of manyTenOrMoreCase.expectedNoteExcludes ?? []) {
+    for (const unexpected of manyThresholdPlus5Case.expectedNoteExcludes ?? []) {
       assert.ok(!note.includes(unexpected), `unexpected note text remained: ${unexpected}`);
     }
 
-    console.log(`PASS: ${manyTenOrMoreCase.name}`);
+    console.log(`PASS: ${manyThresholdPlus5Case.name}`);
     passed += 1;
   } catch (error) {
-    console.error(`FAIL: ${manyTenOrMoreCase.name}`);
+    console.error(`FAIL: ${manyThresholdPlus5Case.name}`);
     console.error(error);
     process.exitCode = 1;
   }
@@ -1289,7 +1289,7 @@ try {
 }
 
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyTenOrMoreNoteCases.length + 27} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyThresholdPlus5NoteCases.length + 27} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
@@ -1336,7 +1336,7 @@ const sundayRateDisplay = getNormalTimeRateDisplay({
 assert.equal(sundayRateDisplay.many.main, '10%');
 assert.equal(Object.hasOwn(sundayRateDisplay, 'slightlyMany'), false);
 assert.ok(!(sundayRateDisplay.many.note ?? '').includes('多いのうち5個以上'));
-assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち12個以上は 20%'));
+assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち12個以上は 15%'));
 
 const nonSundayRateDisplay = getNormalTimeRateDisplay({
   discountTime: '15',

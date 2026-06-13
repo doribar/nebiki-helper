@@ -48,7 +48,7 @@ function toRateLine(main: string, note?: string): RateLine {
 }
 
 
-function getManyPlus10Threshold(weekdayBase: WeekdayBaseLabel | undefined): number {
+function getManyPlus5Threshold(weekdayBase: WeekdayBaseLabel | undefined): number {
   switch (weekdayBase) {
     case "月水":
       return 8;
@@ -61,14 +61,14 @@ function getManyPlus10Threshold(weekdayBase: WeekdayBaseLabel | undefined): numb
   }
 }
 
-function getManyTenOrMoreNote(params: {
+function getManyThresholdPlus5Note(params: {
   manyRate: number;
   discountTime: Exclude<DiscountTime, "20">;
   ignoreTimeRateCap: boolean;
   weekdayBase?: WeekdayBaseLabel;
 }): string | undefined {
   const tenOrMoreRate = capNormalDiscountRate(
-    params.manyRate + 10,
+    params.manyRate + 5,
     params.discountTime,
     params.ignoreTimeRateCap
   );
@@ -77,7 +77,7 @@ function getManyTenOrMoreNote(params: {
     return undefined;
   }
 
-  const threshold = getManyPlus10Threshold(params.weekdayBase);
+  const threshold = getManyPlus5Threshold(params.weekdayBase);
 
   return `多いのうち${threshold}個以上は ${tenOrMoreRate}%`;
 }
@@ -90,7 +90,7 @@ function buildManyNote(params: {
 }): string {
   const notes: string[] = [];
 
-  const tenOrMoreNote = getManyTenOrMoreNote(params);
+  const tenOrMoreNote = getManyThresholdPlus5Note(params);
 
   if (tenOrMoreNote) {
     notes.push(tenOrMoreNote);
