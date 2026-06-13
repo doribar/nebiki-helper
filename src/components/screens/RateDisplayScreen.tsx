@@ -86,6 +86,8 @@ function RateRow({
 export function NoticeItems() {
   return (
     <div style={{ lineHeight: 1.8 }}>
+      ・<strong>残り1個</strong>の商品は<strong>「少ない」にする</strong>
+      <br />
       ・<strong>残り2個</strong>の商品は<strong>「多い」にしない</strong>
       <br />
       ・<strong>多い・少ないの判断</strong>は、残り数だけでなく<strong>商品の減り方</strong>も含める
