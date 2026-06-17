@@ -34,6 +34,7 @@ import {
 } from "../domain/weekdayBase";
 import {
   getFinalTimeGuide,
+  getManyPlus5Threshold,
   getNormalTimeRateDisplay,
 } from "../domain/discount";
 import {
@@ -92,6 +93,13 @@ import {
   markReview19RecordsExportedInMemory,
   REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
+import type { AreaCountRecord } from "../domain/areaCountHistory.ts";
+import {
+  cloneAreaCountRecords,
+  getAreaCountRecommendation as buildAreaCountRecommendation,
+  isAreaCountAssistDiscountTime,
+  upsertAreaCountRecord,
+} from "../domain/areaCountHistory.ts";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -466,6 +474,10 @@ function normalizeAreaProgressMap(
       ...base[area.id],
       status: isValidAreaStatus(progress.status) ? progress.status : "unstarted",
       areaJudge: isValidAreaJudge(progress.areaJudge) ? progress.areaJudge : null,
+      areaCount:
+        typeof progress.areaCount === "number" && Number.isFinite(progress.areaCount) && progress.areaCount >= 0
+          ? Math.round(progress.areaCount)
+          : undefined,
       visitedAt:
         typeof progress.visitedAt === "string" ? progress.visitedAt : undefined,
       completedAt:
@@ -538,6 +550,7 @@ function clonePersistedNebikiStateSnapshot(params: {
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft;
   dailyMessageState: DailyMessageState;
+  areaCountRecords: AreaCountRecord[];
 }) {
   return {
     currentSession: cloneAppState(params.currentSession),
@@ -547,6 +560,7 @@ function clonePersistedNebikiStateSnapshot(params: {
     lastSessionWeather: cloneLastSessionWeatherRecord(params.lastSessionWeather),
     lastUsedSessionDraft: normalizeSessionDraft(params.lastUsedSessionDraft),
     dailyMessageState: normalizeDailyMessageState(params.dailyMessageState),
+    areaCountRecords: cloneAreaCountRecords(params.areaCountRecords),
   };
 }
 
@@ -852,6 +866,7 @@ function createReview19Snapshot(params: {
       status: progress?.status ?? "unstarted",
       statusText: summary?.statusText,
       areaJudge: progress?.areaJudge ?? null,
+      areaCount: progress?.areaCount,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
       rateText: summary?.rateText ?? "未完了",
       ratePercent: parseReview19RatePercent(summary?.rateText),
@@ -1000,6 +1015,9 @@ export function useNebikiApp(): UseNebikiAppResult {
   const [dailyMessageState, setDailyMessageState] = useState<DailyMessageState>(() =>
     normalizeDailyMessageState(initialPersistenceRef.current?.dailyMessageState ?? null)
   );
+  const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
+    cloneAreaCountRecords(initialPersistenceRef.current?.areaCountRecords ?? [])
+  );
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
 
   const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(
@@ -1048,6 +1066,7 @@ export function useNebikiApp(): UseNebikiAppResult {
         lastSessionWeather,
         lastUsedSessionDraft,
         dailyMessageState,
+        areaCountRecords,
       })
     );
 
@@ -1060,6 +1079,7 @@ export function useNebikiApp(): UseNebikiAppResult {
     lastSessionWeather,
     lastUsedSessionDraft,
     dailyMessageState,
+    areaCountRecords,
   ]);
 
 
@@ -1801,7 +1821,8 @@ const lateSkipNotice = useMemo(() => {
 
   function applyAreaJudgeSelection(
     prev: AppState,
-    selection: Exclude<AreaJudge, null>
+    selection: Exclude<AreaJudge, null>,
+    areaCount?: number | null
   ): AppState {
     if (!prev.currentAreaId) return prev;
     const currentAreaId = prev.currentAreaId;
@@ -1820,6 +1841,7 @@ const lateSkipNotice = useMemo(() => {
           [currentAreaId]: {
             ...prev.areaProgressMap[currentAreaId],
             areaJudge: selection,
+            areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
             visitedAt: new Date().toISOString(),
           },
         },
@@ -1837,6 +1859,7 @@ const lateSkipNotice = useMemo(() => {
       [currentAreaId]: {
         ...prev.areaProgressMap[currentAreaId],
         areaJudge: "few" as const,
+        areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
         visitedAt: currentVisitedAt,
       },
     };
@@ -1846,6 +1869,7 @@ const lateSkipNotice = useMemo(() => {
       [currentAreaId]: {
         ...prev.areaProgressMap[currentAreaId],
         areaJudge: "few" as const,
+        areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
         status: "postponed_few" as const,
         skipReason: "few" as const,
         visitedAt: currentVisitedAt,
@@ -2065,6 +2089,26 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
+  const areaCountAssistEnabled = Boolean(
+    state.session &&
+    state.currentAreaId &&
+    isAreaCountAssistDiscountTime(state.session.discountTime)
+  );
+
+  const areaCountSameItemLimit = areaCountAssistEnabled
+    ? getManyPlus5Threshold(weekdayBaseInfo.adjusted)
+    : null;
+
+  function getCurrentAreaCountRecommendation(count: number) {
+    return buildAreaCountRecommendation({
+      records: areaCountRecords,
+      areaId: state.currentAreaId,
+      discountTime: state.session?.discountTime,
+      weekdayBase: weekdayBaseInfo.adjusted,
+      count,
+    });
+  }
+
   function markBentoJudgeGuideShown() {
     const shownDate = activeSessionDate;
 
@@ -2092,12 +2136,38 @@ const lateSkipNotice = useMemo(() => {
   }
 
 
-  function judgeCurrentArea(judge: Exclude<AreaJudge, null>) {
+  function judgeCurrentArea(judge: Exclude<AreaJudge, null>, areaCount?: number | null) {
     setAreaJudgeSelection(judge);
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
-    setState((prev) => applyAreaJudgeSelection(prev, judge));
+    const roundedAreaCount =
+      typeof areaCount === "number" && Number.isFinite(areaCount) && areaCount >= 0
+        ? Math.round(areaCount)
+        : null;
+
+    if (
+      roundedAreaCount !== null &&
+      state.session &&
+      state.currentAreaId &&
+      isAreaCountAssistDiscountTime(state.session.discountTime)
+    ) {
+      const recordedAt = new Date().toISOString();
+      const nextRecord: AreaCountRecord = {
+        date: state.session.date,
+        sessionStartedAt: state.session.startedAt,
+        recordedAt,
+        areaId: state.currentAreaId,
+        discountTime: state.session.discountTime,
+        weekdayBase: weekdayBaseInfo.adjusted,
+        count: roundedAreaCount,
+        userJudge: judge,
+      };
+
+      setAreaCountRecords((current) => upsertAreaCountRecord(current, nextRecord));
+    }
+
+    setState((prev) => applyAreaJudgeSelection(prev, judge, roundedAreaCount));
   }
 
   function goBackOneScreen() {
@@ -2723,6 +2793,8 @@ const lateSkipNotice = useMemo(() => {
   lateSkipNotice,
   showAfterRainRecoverySelector,
   showBentoJudgeGuide,
+  areaCountAssistEnabled,
+  areaCountSameItemLimit,
   showDailyNoticeBeforeRate,
   areaJudgeSelection,
   isResuming: resumeTargetScreen !== null,
@@ -2751,6 +2823,7 @@ const lateSkipNotice = useMemo(() => {
       markBentoJudgeGuideShown,
       confirmDailyNotice,
       judgeCurrentArea,
+      getCurrentAreaCountRecommendation,
       skipCurrentArea,
       chooseSkipTargetArea,
       goToNextArea,

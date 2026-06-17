@@ -59,6 +59,9 @@ export function AppRouter({ app }: AppRouterProps) {
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
           timeSwitchNotice={derived.timeSwitchNotice}
+          areaCountAssistEnabled={derived.areaCountAssistEnabled}
+          areaCountSameItemLimit={derived.areaCountSameItemLimit}
+          getAreaCountRecommendation={actions.getCurrentAreaCountRecommendation}
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}

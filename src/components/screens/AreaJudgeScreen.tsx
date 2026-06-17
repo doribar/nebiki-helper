@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AreaJudge, SkipTargetOption } from "../../domain/types";
+import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
@@ -22,7 +23,10 @@ type AreaJudgeScreenProps = {
     reason: "manual" | "few";
   } | null;
   timeSwitchNotice?: string | null;
-  onJudge: (judge: Exclude<AreaJudge, null>) => void;
+  areaCountAssistEnabled?: boolean;
+  areaCountSameItemLimit?: number | null;
+  getAreaCountRecommendation?: (count: number) => AreaCountRecommendation;
+  onJudge: (judge: Exclude<AreaJudge, null>, areaCount?: number | null) => void;
   onSkip: () => void;
   onGoBack: () => void;
   onReturnHome: () => void;
@@ -87,6 +91,20 @@ function JudgeOptionButton({
   );
 }
 
+
+function parseAreaCount(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed);
+}
+
+function getRecommendationColor(judge: Exclude<AreaJudge, null> | undefined): string {
+  if (judge === "many") return "#b71c1c";
+  if (judge === "few") return "#0d47a1";
+  return "#1b5e20";
+}
+
 export function AreaJudgeScreen({
   weekdayText,
   timeText,
@@ -94,6 +112,9 @@ export function AreaJudgeScreen({
   showJudgeGuide = false,
   basisGuide,
   timeSwitchNotice,
+  areaCountAssistEnabled = false,
+  areaCountSameItemLimit = null,
+  getAreaCountRecommendation,
   onJudge,
   onSkip,
   onGoBack,
@@ -107,6 +128,7 @@ export function AreaJudgeScreen({
   const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: onSkip });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [displayJudgeGuide, setDisplayJudgeGuide] = useState(showJudgeGuide);
+  const [areaCountText, setAreaCountText] = useState("");
   const previousAreaNameRef = useRef(areaName);
   const skipTargetGroups = [
     {
@@ -128,6 +150,7 @@ export function AreaJudgeScreen({
       previousAreaNameRef.current = areaName;
       setShowSkipTargetPicker(false);
       setDisplayJudgeGuide(showJudgeGuide);
+      setAreaCountText("");
       return;
     }
 
@@ -140,6 +163,18 @@ export function AreaJudgeScreen({
     if (!displayJudgeGuide) return;
     onJudgeGuideShown?.();
   }, [displayJudgeGuide, onJudgeGuideShown]);
+
+  const parsedAreaCount = parseAreaCount(areaCountText);
+  const areaCountRecommendation =
+    areaCountAssistEnabled && parsedAreaCount !== null && getAreaCountRecommendation
+      ? getAreaCountRecommendation(parsedAreaCount)
+      : null;
+  const recommendedJudge =
+    areaCountRecommendation?.status === "ready" ? areaCountRecommendation.suggestedJudge : undefined;
+
+  const handleJudge = (judge: Exclude<AreaJudge, null>) => {
+    onJudge(judge, parsedAreaCount);
+  };
 
   return (
     <main
@@ -220,14 +255,91 @@ export function AreaJudgeScreen({
           </div>
         ) : null}
 
+        {areaCountAssistEnabled ? (
+          <section
+            style={{
+              border: "1px solid #cfd8dc",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 14,
+              background: "#f7fbff",
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>エリア残数判定（検証用）</div>
+            <label style={{ display: "grid", gap: 6, fontSize: 14, fontWeight: 700 }}>
+              エリア全体の商品数
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={areaCountText}
+                onChange={(event) => setAreaCountText(event.target.value)}
+                placeholder="例：23"
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: "1px solid #bbb",
+                  fontSize: 16,
+                }}
+              />
+            </label>
+
+            {areaCountSameItemLimit !== null ? (
+              <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
+                同じ商品が極端に多い場合は、{areaCountSameItemLimit}個までとして数えてください。超えた分は個別に多い商品として判断します。
+              </div>
+            ) : null}
+
+            {areaCountText.trim() && parsedAreaCount === null ? (
+              <div style={{ marginTop: 8, color: "#b71c1c", fontWeight: 700 }}>
+                0以上の数字を入力してください。
+              </div>
+            ) : null}
+
+            {parsedAreaCount !== null && areaCountRecommendation ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 10,
+                  borderRadius: 10,
+                  background: "#fff",
+                  border: "1px solid #e0e0e0",
+                  lineHeight: 1.7,
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 900,
+                    color: getRecommendationColor(areaCountRecommendation.suggestedJudge),
+                  }}
+                >
+                  {areaCountRecommendation.summaryText}
+                </div>
+                {areaCountRecommendation.detailLines.map((line) => (
+                  <div key={line} style={{ fontSize: 13, color: "#444" }}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
+                18時30分以降の検証用です。入力すると、過去の同じエリア・同じ時刻・同じ曜日基準と比較します。
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <div style={{ display: "grid", gap: 10 }}>
-          <JudgeOptionButton label="多い" selected={false} onClick={() => onJudge("many")} />
-          <JudgeOptionButton label="どちらでもない" selected={false} onClick={() => onJudge("normal")} />
+          <JudgeOptionButton label="多い" selected={recommendedJudge === "many"} onClick={() => handleJudge("many")} />
+          <JudgeOptionButton label="どちらでもない" selected={recommendedJudge === "normal"} onClick={() => handleJudge("normal")} />
           <JudgeOptionButton
             label="少ない"
             subLabel="後回しします"
-            selected={false}
-            onClick={() => onJudge("few")}
+            selected={recommendedJudge === "few"}
+            onClick={() => handleJudge("few")}
           />
         </div>
       </section>

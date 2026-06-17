@@ -9,6 +9,8 @@ import type {
   AreaJudge,
   ScreenName,
 } from "./types";
+import type { AreaCountRecord } from "./areaCountHistory.ts";
+import { cloneAreaCountRecords, normalizeAreaCountRecords } from "./areaCountHistory.ts";
 import type { NavigationSnapshot } from "./navigationHistory";
 import { appendReview19RecordInMemory, cloneReview19Records } from "./review19.ts";
 
@@ -22,6 +24,7 @@ export const STORAGE_KEYS = {
   dailyMessageState: "nebiki-helper/daily-message-state",
   review19Records: "nebiki-helper/review19-records",
   review19SourceState: "nebiki-helper/review19-source-state",
+  areaCountRecords: "nebiki-helper/area-count-records",
 } as const;
 
 export type PersistedRuntimeState = {
@@ -40,6 +43,7 @@ export type PersistedNebikiState = {
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft | null;
   dailyMessageState: DailyMessageState;
+  areaCountRecords: AreaCountRecord[];
 };
 
 function cloneSkipRecord(record: NextSessionSkipRecord): NextSessionSkipRecord {
@@ -228,6 +232,19 @@ export function clearLastUsedSessionDraft(): void {
   localStorage.removeItem(STORAGE_KEYS.lastUsedSessionDraft);
 }
 
+
+export function loadAreaCountRecords(): AreaCountRecord[] {
+  const raw = localStorage.getItem(STORAGE_KEYS.areaCountRecords);
+  return normalizeAreaCountRecords(safeParseJSON<unknown>(raw, []));
+}
+
+export function saveAreaCountRecords(records: AreaCountRecord[]): void {
+  localStorage.setItem(
+    STORAGE_KEYS.areaCountRecords,
+    JSON.stringify(cloneAreaCountRecords(records))
+  );
+}
+
 const defaultDailyMessageState: DailyMessageState = {
   bentoJudgeGuideShownDate: null,
   rateNoticeShownDate: null,
@@ -308,6 +325,7 @@ export function loadPersistedNebikiState(): PersistedNebikiState {
     lastSessionWeather: loadLastSessionWeather(),
     lastUsedSessionDraft: loadLastUsedSessionDraft(),
     dailyMessageState: loadDailyMessageState(),
+    areaCountRecords: loadAreaCountRecords(),
   };
 }
 
@@ -333,6 +351,7 @@ export function savePersistedNebikiState(state: PersistedNebikiState): void {
   }
 
   saveDailyMessageState(state.dailyMessageState);
+  saveAreaCountRecords(state.areaCountRecords);
 }
 
 export function appendSkipRecordsInMemory(params: {

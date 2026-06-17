@@ -48,7 +48,7 @@ function toRateLine(main: string, note?: string): RateLine {
 }
 
 
-function getManyPlus5Threshold(weekdayBase: WeekdayBaseLabel | undefined): number {
+export function getManyPlus5Threshold(weekdayBase: WeekdayBaseLabel | undefined): number {
   switch (weekdayBase) {
     case "月水":
       return 8;

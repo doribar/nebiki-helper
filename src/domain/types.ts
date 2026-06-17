@@ -1,3 +1,4 @@
+import type { AreaCountRecommendation } from "./areaCountHistory.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 
 export type AreaId =
@@ -104,6 +105,7 @@ export type AreaProgress = {
   areaId: AreaId;
   status: AreaStatus;
   areaJudge: AreaJudge;
+  areaCount?: number;
   visitedAt?: string;
   completedAt?: string;
   skipReason?: "manual" | "few" | "late_time";
@@ -259,6 +261,7 @@ export type Review19AreaSnapshot = {
   status: AreaStatus;
   statusText?: string;
   areaJudge: AreaJudge;
+  areaCount?: number;
   judgeText: string;
   rateText: string;
   ratePercent?: number;
@@ -376,6 +379,8 @@ export type UseNebikiAppDerived = {
   lateSkipNotice: string | null;
   showAfterRainRecoverySelector: boolean;
   showBentoJudgeGuide: boolean;
+  areaCountAssistEnabled: boolean;
+  areaCountSameItemLimit: number | null;
   showDailyNoticeBeforeRate: boolean;
   areaJudgeSelection: AreaJudge;
   isResuming: boolean;
@@ -403,7 +408,8 @@ export type UseNebikiAppActions = {
   undoLastAction: () => void;
   markBentoJudgeGuideShown: () => void;
   confirmDailyNotice: () => void;
-  judgeCurrentArea: (judge: Exclude<AreaJudge, null>) => void;
+  judgeCurrentArea: (judge: Exclude<AreaJudge, null>, areaCount?: number | null) => void;
+  getCurrentAreaCountRecommendation: (count: number) => AreaCountRecommendation;
   skipCurrentArea: () => void;
   chooseSkipTargetArea: (areaId: AreaId) => void;
 
