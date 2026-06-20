@@ -5,7 +5,6 @@ import type {
   ForecastWeatherKind,
   SessionDraft,
 } from "../../domain/types";
-import type { TrainingStepConfig } from "../../domain/trainingMode";
 import {
   cloneHourlyForecasts,
   FORECAST_HOUR_KEYS,
@@ -27,7 +26,6 @@ type StartScreenProps = {
   showAfterRainRecoverySelector: boolean;
   onChangeSessionDraft: (patch: Partial<SessionDraft>) => void;
   onStart: () => void;
-  trainingStepConfig: TrainingStepConfig;
   startButtonLabel?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
@@ -341,7 +339,6 @@ export function StartScreen({
   weatherGuideText: _weatherGuideText,
   onChangeSessionDraft,
   onStart,
-  trainingStepConfig,
   startButtonLabel,
   canStartReview19 = false,
   onStartReview19,
@@ -498,22 +495,6 @@ export function StartScreen({
         }
 rightAction={null}
       />
-
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 12,
-          marginBottom: 14,
-          background: "#fafafa",
-          lineHeight: 1.6,
-        }}
-      >
-        <div style={{ fontWeight: 900 }}>{trainingStepConfig.label}</div>
-        <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-          {trainingStepConfig.description}
-        </div>
-      </section>
 
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>曜日</StartSectionLabel>

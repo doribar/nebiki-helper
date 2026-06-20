@@ -39,7 +39,6 @@ export function AppRouter({ app }: AppRouterProps) {
           showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startSession}
-          trainingStepConfig={derived.trainingStepConfig}
           startButtonLabel={derived.startButtonLabel}
           canStartReview19={derived.canStartReview19Manually}
           onStartReview19={actions.startReview19Manually}
@@ -96,13 +95,13 @@ export function AppRouter({ app }: AppRouterProps) {
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
           areaName={derived.currentAreaName}
+          trainingStepConfig={derived.trainingStepConfig}
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
           timeSwitchNotice={derived.timeSwitchNotice}
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
-          trainingStepConfig={derived.trainingStepConfig}
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           onConfirmDailyNotice={actions.confirmDailyNotice}
           finalGuide={derived.finalGuide ?? undefined}
@@ -158,8 +157,8 @@ export function AppRouter({ app }: AppRouterProps) {
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
-          nextSessionInfo={derived.doneNextSessionInfo}
           trainingStepConfig={derived.trainingStepConfig}
+          nextSessionInfo={derived.doneNextSessionInfo}
           onGoBack={actions.goBackOneScreen}
           onStartNextSession={actions.startNextDoneSession}
           onReturnHome={handleReturnHome}
