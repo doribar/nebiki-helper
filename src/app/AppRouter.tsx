@@ -39,6 +39,7 @@ export function AppRouter({ app }: AppRouterProps) {
           showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startSession}
+          trainingStepConfig={derived.trainingStepConfig}
           startButtonLabel={derived.startButtonLabel}
           canStartReview19={derived.canStartReview19Manually}
           onStartReview19={actions.startReview19Manually}
@@ -101,6 +102,7 @@ export function AppRouter({ app }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
+          trainingStepConfig={derived.trainingStepConfig}
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           onConfirmDailyNotice={actions.confirmDailyNotice}
           finalGuide={derived.finalGuide ?? undefined}
@@ -157,6 +159,7 @@ export function AppRouter({ app }: AppRouterProps) {
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
           nextSessionInfo={derived.doneNextSessionInfo}
+          trainingStepConfig={derived.trainingStepConfig}
           onGoBack={actions.goBackOneScreen}
           onStartNextSession={actions.startNextDoneSession}
           onReturnHome={handleReturnHome}

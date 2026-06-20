@@ -1,6 +1,6 @@
 import type { AreaId, AreaJudge, DiscountTime, WeekdayBaseLabel } from "./types";
 
-export type AreaCountDiscountTime = Extract<DiscountTime, "18" | "19">;
+export type AreaCountDiscountTime = DiscountTime;
 
 export type AreaCountRecord = {
   date: string;
@@ -34,7 +34,28 @@ const MAX_REFERENCE_RECORDS = 20;
 export function isAreaCountAssistDiscountTime(
   discountTime: DiscountTime | undefined | null,
 ): discountTime is AreaCountDiscountTime {
-  return discountTime === "18" || discountTime === "19";
+  return (
+    discountTime === "15" ||
+    discountTime === "17" ||
+    discountTime === "18" ||
+    discountTime === "19" ||
+    discountTime === "20"
+  );
+}
+
+export function isAreaCountAssistTarget(params: {
+  areaId: AreaId | null | undefined;
+  discountTime: DiscountTime | undefined | null;
+}): params is { areaId: AreaId; discountTime: AreaCountDiscountTime } {
+  if (!params.areaId || !isAreaCountAssistDiscountTime(params.discountTime)) return false;
+
+  // 寿司は15時・17時も含めて通常値引の全時間帯で検証する。
+  // 20時30分は最終値引画面でエリア判定を行わないため、ここでは対象外にする。
+  if (params.areaId === "sushi") {
+    return params.discountTime !== "20";
+  }
+
+  return params.discountTime === "18" || params.discountTime === "19";
 }
 
 function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
@@ -145,9 +166,11 @@ export function getAreaCountRecommendation(params: {
   const count = Math.max(0, Math.round(params.count));
 
   if (
-    !params.areaId ||
-    !isAreaCountAssistDiscountTime(params.discountTime) ||
-    !params.weekdayBase
+    !params.weekdayBase ||
+    !isAreaCountAssistTarget({
+      areaId: params.areaId,
+      discountTime: params.discountTime,
+    })
   ) {
     return {
       status: "disabled",
@@ -155,8 +178,8 @@ export function getAreaCountRecommendation(params: {
       sampleSize: 0,
       requiredSampleSize,
       matchedRecords: [],
-      summaryText: "この時刻ではエリア残数判定は使いません。",
-      detailLines: ["18時30分・19時30分の検証用機能です。"],
+      summaryText: "このエリア・時刻ではエリア残数判定は使いません。",
+      detailLines: ["通常は18時30分・19時30分、寿司エリアは15時・17時も検証対象です。"],
     };
   }
 

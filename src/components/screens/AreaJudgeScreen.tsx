@@ -326,7 +326,7 @@ export function AreaJudgeScreen({
               </div>
             ) : (
               <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
-                18時30分以降の検証用です。入力すると、過去の同じエリア・同じ時刻・同じ曜日基準と比較します。
+                入力すると、過去の同じエリア・同じ時刻・同じ曜日基準と比較します。
               </div>
             )}
           </section>

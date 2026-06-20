@@ -94,10 +94,12 @@ import {
   REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
 import type { AreaCountRecord } from "../domain/areaCountHistory.ts";
+import type { TrainingStep } from "../domain/trainingMode.ts";
+import { getTrainingStepConfig } from "../domain/trainingMode.ts";
 import {
   cloneAreaCountRecords,
   getAreaCountRecommendation as buildAreaCountRecommendation,
-  isAreaCountAssistDiscountTime,
+  isAreaCountAssistTarget,
   upsertAreaCountRecord,
 } from "../domain/areaCountHistory.ts";
 
@@ -980,7 +982,9 @@ function createReview19WeatherDraft(session: SessionData): SessionDraft {
     },
   };
 }
-export function useNebikiApp(): UseNebikiAppResult {
+export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebikiAppResult {
+  const trainingStep = params?.trainingStep ?? "step5";
+  const trainingStepConfig = getTrainingStepConfig(trainingStep);
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
 
   if (!initialPersistenceRef.current) {
@@ -1286,6 +1290,7 @@ export function useNebikiApp(): UseNebikiAppResult {
     dailyMessageState.bentoJudgeGuideShownDate !== activeSessionDate;
 
   const showDailyNoticeBeforeRate =
+    trainingStepConfig.noticeItemIds.length > 0 &&
     state.screen === "rate_display" &&
     state.session?.discountTime !== "20" &&
     dailyMessageState.rateNoticeShownDate !== activeSessionDate;
@@ -2091,8 +2096,10 @@ const lateSkipNotice = useMemo(() => {
 
   const areaCountAssistEnabled = Boolean(
     state.session &&
-    state.currentAreaId &&
-    isAreaCountAssistDiscountTime(state.session.discountTime)
+    isAreaCountAssistTarget({
+      areaId: state.currentAreaId,
+      discountTime: state.session.discountTime,
+    })
   );
 
   const areaCountSameItemLimit = areaCountAssistEnabled
@@ -2150,7 +2157,10 @@ const lateSkipNotice = useMemo(() => {
       roundedAreaCount !== null &&
       state.session &&
       state.currentAreaId &&
-      isAreaCountAssistDiscountTime(state.session.discountTime)
+      isAreaCountAssistTarget({
+        areaId: state.currentAreaId,
+        discountTime: state.session.discountTime,
+      })
     ) {
       const recordedAt = new Date().toISOString();
       const nextRecord: AreaCountRecord = {
@@ -2781,6 +2791,8 @@ const lateSkipNotice = useMemo(() => {
   return {
     state,
     derived: {
+  trainingStep,
+  trainingStepConfig,
   currentAreaName,
   weekdayText,
   timeText,

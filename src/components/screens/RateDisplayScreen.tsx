@@ -1,10 +1,11 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   DiscountTime,
   FinalGuideData,
   RateDisplayData,
   SkipTargetOption,
 } from "../../domain/types";
+import type { NoticeItemId, TrainingStepConfig } from "../../domain/trainingMode";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { PrimaryButton } from "../layout/PrimaryButton";
@@ -30,6 +31,7 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
+  trainingStepConfig: TrainingStepConfig;
   showDailyNotice?: boolean;
   onConfirmDailyNotice?: () => void;
   finalGuide?: FinalGuideData;
@@ -83,29 +85,78 @@ function RateRow({
   );
 }
 
-export function NoticeItems() {
+const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
+  oneLeftFew: {
+    content: (
+      <>
+        <strong>残り1個</strong>の商品は<strong>「少ない」にする</strong>
+      </>
+    ),
+  },
+  twoLeftNotMany: {
+    content: (
+      <>
+        <strong>残り2個</strong>の商品は<strong>「多い」にしない</strong>
+      </>
+    ),
+  },
+  judgeIncludesTrend: {
+    content: (
+      <>
+        <strong>多い・少ないの判断</strong>は、残り数だけでなく<strong>商品の減り方</strong>も含める
+      </>
+    ),
+  },
+  fewNoDiscountExceptFinal: {
+    content: (
+      <>
+        <strong>少ない判定</strong>の商品は、<strong>最終値引以外では引かない</strong>
+      </>
+    ),
+  },
+  badAppearancePlus: {
+    content: (
+      <>
+        <strong>見た目が悪い個別商品</strong>は、表示値引率に<strong>+10%</strong>
+      </>
+    ),
+  },
+  unpopularPlus: {
+    content: (
+      <>
+        <strong>不人気な商品</strong>は、表示値引率に<strong>+10%</strong>
+      </>
+    ),
+  },
+  steadyStandardMinus: {
+    content: (
+      <>
+        <strong>売れ方が順調な定番・広告商品</strong>は、表示値引率から<strong>-10%</strong>
+      </>
+    ),
+  },
+  nightSellerMinus: {
+    content: (
+      <>
+        <strong>夜によく売れる商品</strong>は、表示値引率から<strong>-10%</strong>
+      </>
+    ),
+  },
+};
+
+export function NoticeItems({ itemIds }: { itemIds: NoticeItemId[] }) {
   return (
     <div style={{ lineHeight: 1.8 }}>
-      ・<strong>残り1個</strong>の商品は<strong>「少ない」にする</strong>
-      <br />
-      ・<strong>残り2個</strong>の商品は<strong>「多い」にしない</strong>
-      <br />
-      ・<strong>多い・少ないの判断</strong>は、残り数だけでなく<strong>商品の減り方</strong>も含める
-      <br />
-      ・<strong>少ない判定</strong>の商品は、<strong>最終値引以外では引かない</strong>
-      <br />
-      ・<strong>見た目が悪い個別商品</strong>は、表示値引率に<strong>+10%</strong>
-      <br />
-      ・<strong>不人気な商品</strong>は、表示値引率に<strong>+10%</strong>
-      <br />
-      ・<strong>売れ方が順調な定番・広告商品</strong>は、表示値引率から<strong>-10%</strong>
-      <br />
-      ・<strong>夜によく売れる商品</strong>は、表示値引率から<strong>-10%</strong>
+      {itemIds.map((itemId) => (
+        <div key={itemId}>・{NOTICE_ITEMS[itemId].content}</div>
+      ))}
     </div>
   );
 }
 
-function NoticeSection() {
+function NoticeSection({ itemIds }: { itemIds: NoticeItemId[] }) {
+  if (itemIds.length === 0) return null;
+
   return (
     <section
       style={{
@@ -117,7 +168,7 @@ function NoticeSection() {
       }}
     >
       <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
-      <NoticeItems />
+      <NoticeItems itemIds={itemIds} />
     </section>
   );
 }
@@ -131,6 +182,7 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
+  trainingStepConfig,
   showDailyNotice = false,
   onConfirmDailyNotice,
   finalGuide,
@@ -169,7 +221,10 @@ export function RateDisplayScreen({
 
   const manyColor = "#ff0000";
   const normalColor = "#008000";
+  const fewColor = "#0000ff";
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
+  const showManyProductRate = trainingStepConfig.showManyProductRate;
+  const showFewProductRule = trainingStepConfig.showFewProductRule;
 
   if (showDailyNotice) {
     return (
@@ -185,7 +240,7 @@ export function RateDisplayScreen({
           }
         />
 
-        <NoticeSection />
+        <NoticeSection itemIds={trainingStepConfig.noticeItemIds} />
 
         <PrimaryButton onClick={onConfirmDailyNotice ?? (() => {})}>OK</PrimaryButton>
 
@@ -270,25 +325,46 @@ export function RateDisplayScreen({
               <span style={{ fontWeight: 800 }}>{referencePrefix}</span>
               <span>を基準に考えて</span>
               <br />
-              <span>各商品の量が「</span>
-              <span style={{ color: "#ff0000", fontWeight: 700 }}>多い</span>
-              <span>・</span>
-              <span style={{ color: "#0000ff", fontWeight: 700 }}>少ない</span>
-              <span>・</span>
-              <span style={{ color: "#008000", fontWeight: 700 }}>どちらでもない</span>
-              <span>」のどれかを確認し、</span>
-              <br />
-              <span>完了したら以下の値引率で値引きをしてください。</span>
+              {!showManyProductRate ? (
+                <span>このエリアの商品は、表示値引率で一律に値引きしてください。</span>
+              ) : showFewProductRule ? (
+                <>
+                  <span>各商品の量が「</span>
+                  <span style={{ color: "#ff0000", fontWeight: 700 }}>多い</span>
+                  <span>・</span>
+                  <span style={{ color: "#0000ff", fontWeight: 700 }}>少ない</span>
+                  <span>・</span>
+                  <span style={{ color: "#008000", fontWeight: 700 }}>どちらでもない</span>
+                  <span>」のどれかを確認し、</span>
+                  <br />
+                  <span>完了したら以下の値引率で値引きをしてください。</span>
+                </>
+              ) : (
+                <>
+                  <span>多い商品だけ表示値引率より強めます。</span>
+                  <br />
+                  <span>多くない商品は表示値引率で値引きしてください。</span>
+                </>
+              )}
             </div>
 
             {rateDisplay ? (
               <>
-                <RateRow label="多い" line={rateDisplay.many} color={manyColor} />
-                <RateRow
-                  label="どちらでもない"
-                  line={rateDisplay.normal}
-                  color={normalColor}
-                />
+                {!showManyProductRate ? (
+                  <RateRow label="表示値引率" line={rateDisplay.normal} color={normalColor} />
+                ) : (
+                  <>
+                    <RateRow label="多い" line={rateDisplay.many} color={manyColor} />
+                    <RateRow
+                      label={showFewProductRule ? "どちらでもない" : "多くない"}
+                      line={rateDisplay.normal}
+                      color={normalColor}
+                    />
+                    {showFewProductRule ? (
+                      <RateRow label="少ない" line={rateDisplay.few} color={fewColor} />
+                    ) : null}
+                  </>
+                )}
               </>
             ) : null}
           </>
@@ -404,7 +480,7 @@ export function RateDisplayScreen({
         </div>
       </section>
 
-      {!isFinalTime ? <NoticeSection /> : null}
+      {!isFinalTime ? <NoticeSection itemIds={trainingStepConfig.noticeItemIds} /> : null}
 
       <div style={{ marginTop: 16 }}>
         <button type="button" onClick={onReturnHome} style={{ ...subActionButtonStyle, width: "100%" }}>

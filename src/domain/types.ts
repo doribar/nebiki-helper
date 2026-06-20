@@ -1,4 +1,5 @@
 import type { AreaCountRecommendation } from "./areaCountHistory.ts";
+import type { TrainingStep, TrainingStepConfig } from "./trainingMode.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 
 export type AreaId =
@@ -367,6 +368,8 @@ export type AppState = {
 };
 
 export type UseNebikiAppDerived = {
+  trainingStep: TrainingStep;
+  trainingStepConfig: TrainingStepConfig;
   currentAreaName: string | null;
   weekdayText: string;
   timeText: string;
