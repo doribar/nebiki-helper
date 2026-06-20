@@ -49,10 +49,11 @@ export function isAreaCountAssistTarget(params: {
 }): params is { areaId: AreaId; discountTime: AreaCountDiscountTime } {
   if (!params.areaId || !isAreaCountAssistDiscountTime(params.discountTime)) return false;
 
-  // 寿司は15時・17時も含めて通常値引の全時間帯で検証する。
+  // 寿司は17時も含めて検証する。
+  // 15時〜16時40分は売場に追加する可能性があるため、15時は対象外にする。
   // 20時30分は最終値引画面でエリア判定を行わないため、ここでは対象外にする。
   if (params.areaId === "sushi") {
-    return params.discountTime !== "20";
+    return params.discountTime === "17" || params.discountTime === "18" || params.discountTime === "19";
   }
 
   return params.discountTime === "18" || params.discountTime === "19";
@@ -179,7 +180,7 @@ export function getAreaCountRecommendation(params: {
       requiredSampleSize,
       matchedRecords: [],
       summaryText: "このエリア・時刻ではエリア残数判定は使いません。",
-      detailLines: ["通常は18時30分・19時30分、寿司エリアは15時・17時も検証対象です。"],
+      detailLines: ["通常は18時30分・19時30分、寿司エリアは17時も検証対象です。"],
     };
   }
 
