@@ -133,20 +133,49 @@ export function getAreaCountFallbackWeekdayGroup(params: {
   return getActualWeekdayGroup(params.weekday);
 }
 
-export function getAreaCountSameItemLimit(params: {
+function getBaseSameItemLimitLevel(params: {
   weekday: number;
   discountTime: AreaCountDiscountTime;
 }): number {
   const group = getAreaCountFallbackWeekdayGroup(params);
   switch (group) {
     case "月水":
-      return 8;
+      return 0;
     case "金土日":
-      return 12;
+      return 2;
     case "火木":
+    default:
+      return 1;
+  }
+}
+
+function sameItemLimitLevelToCount(level: number): number {
+  switch (clamp(level, 0, 2)) {
+    case 0:
+      return 8;
+    case 2:
+      return 12;
+    case 1:
     default:
       return 10;
   }
+}
+
+export function getAreaCountSameItemLimit(params: {
+  weekday: number;
+  discountTime: AreaCountDiscountTime;
+  weather?: WeatherInput | null;
+}): number {
+  const baseLevel = getBaseSameItemLimitLevel(params);
+  const comfortPoint = params.weather
+    ? getComfortPoint({ weather: params.weather, discountTime: params.discountTime }).point
+    : 0;
+
+  // 同じ商品のカウント上限は、実際の曜日・時刻を基本にする。
+  // ただし、かなり快適なら1段階だけ上げ、かなり売れにくい天候なら1段階だけ下げる。
+  // 8/10/12個の範囲に収めて、快適度が効きすぎないようにする。
+  const comfortShift = comfortPoint <= -1 ? 1 : comfortPoint >= 2 ? -1 : 0;
+  return sameItemLimitLevelToCount(baseLevel + comfortShift);
 }
 
 function legacyWeekdayBaseToActualWeekdayGroup(weekdayBase: WeekdayBaseLabel | undefined): ActualWeekdayGroup | null {

@@ -25,6 +25,7 @@ import {
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
 import { appendSkipRecordsInMemory } from '../src/domain/storage.ts';
+import { getAreaCountSameItemLimit } from '../src/domain/areaCountHistory.ts';
 import type {
   AreaId,
   AppState,
@@ -439,6 +440,28 @@ const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
 ];
 
 let passed = 0;
+
+{
+  const comfortableWeather = toWeatherInput('15', weather({ tempLevel: '21to25', windLevel: '2orLess' }));
+  const badWeather = toWeatherInput('15', weather({ nearTermWeather: 'rain', hasLaterPrecip: true, laterPrecipType: 'rain' }));
+  const badSunday17Weather = toWeatherInput('17', weather({ nearTermWeather: 'rain', hasLaterPrecip: true, laterPrecipType: 'rain' }));
+
+  try {
+    assert.equal(getAreaCountSameItemLimit({ weekday: 1, discountTime: '15' }), 8);
+    assert.equal(getAreaCountSameItemLimit({ weekday: 1, discountTime: '15', weather: comfortableWeather }), 10);
+    assert.equal(getAreaCountSameItemLimit({ weekday: 5, discountTime: '15' }), 12);
+    assert.equal(getAreaCountSameItemLimit({ weekday: 5, discountTime: '15', weather: badWeather }), 10);
+    assert.equal(getAreaCountSameItemLimit({ weekday: 0, discountTime: '15' }), 12);
+    assert.equal(getAreaCountSameItemLimit({ weekday: 0, discountTime: '17' }), 10);
+    assert.equal(getAreaCountSameItemLimit({ weekday: 0, discountTime: '17', weather: badSunday17Weather }), 8);
+    console.log('PASS: 同じ商品カウント上限は曜日時刻を基本に快適度で1段階だけ補正する');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 同じ商品カウント上限は曜日時刻を基本に快適度で1段階だけ補正する');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
 
 {
   const weatherInput = toWeatherInput('15', weather({ tempLevel: '28to30' }));
@@ -1289,7 +1312,7 @@ try {
 }
 
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyThresholdPlus5NoteCases.length + 27} checks passed.`);
+console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyThresholdPlus5NoteCases.length + 28} checks passed.`);
 
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,

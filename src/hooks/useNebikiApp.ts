@@ -2149,6 +2149,7 @@ const lateSkipNotice = useMemo(() => {
     ? getAreaCountSameItemLimit({
         weekday: state.session.weekday,
         discountTime: state.session.discountTime,
+        weather: state.session.weather,
       })
     : null;
 
