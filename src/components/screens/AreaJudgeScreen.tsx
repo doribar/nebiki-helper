@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { AreaCountEvaluation, AreaJudge, SkipTargetOption } from "../../domain/types";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
@@ -114,7 +114,6 @@ export function AreaJudgeScreen({
   weekdayText,
   timeText,
   areaName,
-  showJudgeGuide = false,
   basisGuide,
   timeSwitchNotice,
   areaCountAssistEnabled = false,
@@ -127,14 +126,10 @@ export function AreaJudgeScreen({
   canChooseSkipTarget = false,
   skipTargetOptions = [],
   onChooseSkipTarget,
-  onJudgeGuideShown,
 }: AreaJudgeScreenProps) {
-  const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
   const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: onSkip });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
-  const [displayJudgeGuide, setDisplayJudgeGuide] = useState(showJudgeGuide);
   const [areaCountText, setAreaCountText] = useState("");
-  const previousAreaNameRef = useRef(areaName);
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -151,23 +146,9 @@ export function AreaJudgeScreen({
   ].filter((group) => group.options.length > 0);
 
   useEffect(() => {
-    if (previousAreaNameRef.current !== areaName) {
-      previousAreaNameRef.current = areaName;
-      setShowSkipTargetPicker(false);
-      setDisplayJudgeGuide(showJudgeGuide);
-      setAreaCountText("");
-      return;
-    }
-
-    if (showJudgeGuide) {
-      setDisplayJudgeGuide(true);
-    }
-  }, [areaName, showJudgeGuide]);
-
-  useEffect(() => {
-    if (!displayJudgeGuide) return;
-    onJudgeGuideShown?.();
-  }, [displayJudgeGuide, onJudgeGuideShown]);
+    setShowSkipTargetPicker(false);
+    setAreaCountText("");
+  }, [areaName]);
 
   const parsedAreaCount = parseAreaCount(areaCountText);
   const areaCountRecommendation =
@@ -242,42 +223,14 @@ export function AreaJudgeScreen({
             fontSize: 18,
             marginBottom: 14,
             lineHeight: 1.7,
+            fontWeight: 800,
           }}
         >
-          <span style={{ fontWeight: 800 }}>{referencePrefix}</span>
-          <span>を基準に考えて</span>
-          <br />
-          <span>このエリア全体の商品数は？</span>
+          このエリア全体の商品数は？
         </div>
 
-        {displayJudgeGuide ? (
-          <div
-            style={{
-              border: "1px solid #f0d38a",
-              borderRadius: 12,
-              padding: 12,
-              marginBottom: 14,
-              background: "#fffaf0",
-              fontSize: 14,
-              lineHeight: 1.7,
-            }}
-          >
-            まずエリアが多いかどうかを確認し、当てはまれば「多い」を選択してください。
-            多くなければ次に少ないかどうかを確認し、当てはまれば「少ない」を選択してください。
-            どちらにも当てはまらない場合は「どちらでもない」を選択してください。
-          </div>
-        ) : null}
-
         {areaCountAssistEnabled ? (
-          <section
-            style={{
-              border: "1px solid #cfd8dc",
-              borderRadius: 12,
-              padding: 12,
-              marginBottom: 14,
-              background: "#f7fbff",
-            }}
-          >
+          <section style={{ marginBottom: 14 }}>
             <div style={{ fontWeight: 800, marginBottom: 8 }}>エリア残数判定</div>
             <label style={{ display: "grid", gap: 6, fontSize: 14, fontWeight: 700 }}>
               エリア全体の商品数
@@ -458,28 +411,6 @@ export function AreaJudgeScreen({
         ) : null}
       </div>
 
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
-        <div style={{ lineHeight: 1.8 }}>
-          <div>実際の曜日が</div>
-          <div>
-            月・水・火・木
-            <span style={{ color: "#e65100", fontWeight: 700 }}>➡多い側に寄せる</span>
-          </div>
-          <div>
-            金・土・日
-            <span style={{ color: "#e65100", fontWeight: 700 }}>➡少ない側に寄せる</span>
-          </div>
-        </div>
-      </section>
 
       <div style={{ marginTop: 16 }}>
         <button type="button" onClick={onReturnHome} style={{ ...subActionButtonStyle, width: "100%" }}>
