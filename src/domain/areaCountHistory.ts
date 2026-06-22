@@ -133,49 +133,51 @@ export function getAreaCountFallbackWeekdayGroup(params: {
   return getActualWeekdayGroup(params.weekday);
 }
 
-function getBaseSameItemLimitLevel(params: {
-  weekday: number;
-  discountTime: AreaCountDiscountTime;
-}): number {
-  const group = getAreaCountFallbackWeekdayGroup(params);
-  switch (group) {
+function weekdayBaseToSameItemLimit(weekdayBase: WeekdayBaseLabel): number {
+  switch (weekdayBase) {
     case "月水":
-      return 0;
-    case "金土日":
-      return 2;
+      return 8;
+    case "金土":
+    case "日":
+      return 12;
     case "火木":
     default:
-      return 1;
+      return 10;
   }
 }
 
-function sameItemLimitLevelToCount(level: number): number {
-  switch (clamp(level, 0, 2)) {
-    case 0:
+function fallbackWeekdayGroupToSameItemLimit(group: ActualWeekdayGroup): number {
+  switch (group) {
+    case "月水":
       return 8;
-    case 2:
+    case "金土日":
       return 12;
-    case 1:
+    case "火木":
     default:
       return 10;
   }
 }
 
 export function getAreaCountSameItemLimit(params: {
-  weekday: number;
-  discountTime: AreaCountDiscountTime;
-  weather?: WeatherInput | null;
+  weekdayBase?: WeekdayBaseLabel;
+  weekday?: number;
+  discountTime?: AreaCountDiscountTime;
 }): number {
-  const baseLevel = getBaseSameItemLimitLevel(params);
-  const comfortPoint = params.weather
-    ? getComfortPoint({ weather: params.weather, discountTime: params.discountTime }).point
-    : 0;
+  // エリア残数入力の「同じ商品は〇個まで」は、画面上の曜日基準と揃える。
+  // 天候による快適度補正は、曜日基準補正側に反映済みなのでここでは二重にかけない。
+  if (params.weekdayBase) {
+    return weekdayBaseToSameItemLimit(params.weekdayBase);
+  }
 
-  // 同じ商品のカウント上限は、実際の曜日・時刻を基本にする。
-  // ただし、かなり快適なら1段階だけ上げ、かなり売れにくい天候なら1段階だけ下げる。
-  // 8/10/12個の範囲に収めて、快適度が効きすぎないようにする。
-  const comfortShift = comfortPoint <= -1 ? 1 : comfortPoint >= 2 ? -1 : 0;
-  return sameItemLimitLevelToCount(baseLevel + comfortShift);
+  // 旧呼び出し・テスト互換。通常の画面表示では weekdayBase を渡す。
+  if (typeof params.weekday === "number" && params.discountTime) {
+    return fallbackWeekdayGroupToSameItemLimit(getAreaCountFallbackWeekdayGroup({
+      weekday: params.weekday,
+      discountTime: params.discountTime,
+    }));
+  }
+
+  return 10;
 }
 
 function legacyWeekdayBaseToActualWeekdayGroup(weekdayBase: WeekdayBaseLabel | undefined): ActualWeekdayGroup | null {

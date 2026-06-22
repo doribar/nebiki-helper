@@ -2147,9 +2147,7 @@ const lateSkipNotice = useMemo(() => {
 
   const areaCountSameItemLimit = areaCountAssistEnabled && state.session
     ? getAreaCountSameItemLimit({
-        weekday: state.session.weekday,
-        discountTime: state.session.discountTime,
-        weather: state.session.weather,
+        weekdayBase: weekdayBaseInfo.adjusted,
       })
     : null;
 

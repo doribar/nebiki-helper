@@ -442,22 +442,17 @@ const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
 let passed = 0;
 
 {
-  const comfortableWeather = toWeatherInput('15', weather({ tempLevel: '21to25', windLevel: '2orLess' }));
-  const badWeather = toWeatherInput('15', weather({ nearTermWeather: 'rain', hasLaterPrecip: true, laterPrecipType: 'rain' }));
-  const badSunday17Weather = toWeatherInput('17', weather({ nearTermWeather: 'rain', hasLaterPrecip: true, laterPrecipType: 'rain' }));
-
   try {
+    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '月水' }), 8);
+    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '火木' }), 10);
+    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '金土' }), 12);
+    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '日' }), 12);
     assert.equal(getAreaCountSameItemLimit({ weekday: 1, discountTime: '15' }), 8);
-    assert.equal(getAreaCountSameItemLimit({ weekday: 1, discountTime: '15', weather: comfortableWeather }), 10);
-    assert.equal(getAreaCountSameItemLimit({ weekday: 5, discountTime: '15' }), 12);
-    assert.equal(getAreaCountSameItemLimit({ weekday: 5, discountTime: '15', weather: badWeather }), 10);
-    assert.equal(getAreaCountSameItemLimit({ weekday: 0, discountTime: '15' }), 12);
     assert.equal(getAreaCountSameItemLimit({ weekday: 0, discountTime: '17' }), 10);
-    assert.equal(getAreaCountSameItemLimit({ weekday: 0, discountTime: '17', weather: badSunday17Weather }), 8);
-    console.log('PASS: 同じ商品カウント上限は曜日時刻を基本に快適度で1段階だけ補正する');
+    console.log('PASS: 同じ商品カウント上限は表示中の曜日基準で決める');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 同じ商品カウント上限は曜日時刻を基本に快適度で1段階だけ補正する');
+    console.error('FAIL: 同じ商品カウント上限は表示中の曜日基準で決める');
     console.error(error);
     process.exitCode = 1;
   }
