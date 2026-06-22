@@ -1,5 +1,6 @@
 import type {
   ActualWeekdayGroup,
+  ActualWeekdayLabel,
   AreaCountEvaluation,
   AreaId,
   AreaJudge,
@@ -18,8 +19,11 @@ export type AreaCountRecord = {
   recordedAt: string;
   areaId: AreaId;
   discountTime: AreaCountDiscountTime;
-  /** legacy: 旧版の比較キー。新しいエリア判定では actualWeekdayGroup を使う。 */
+  /** legacy: 旧版の比較キー。 */
   weekdayBase?: WeekdayBaseLabel;
+  /** 新しい比較キー。実際の曜日ごとの履歴を優先して使う。 */
+  actualWeekday?: ActualWeekdayLabel;
+  /** fallback/legacy: 実曜日の記録が足りない時の暫定グループ。 */
   actualWeekdayGroup: ActualWeekdayGroup;
   count: number;
   /** legacy/manual fallback: 旧3段階の選択。 */
@@ -49,7 +53,9 @@ export type AreaCountRecommendation = {
   sampleSize: number;
   requiredSampleSize: number;
   matchedRecords: AreaCountRecord[];
+  actualWeekday?: ActualWeekdayLabel;
   actualWeekdayGroup?: ActualWeekdayGroup;
+  comparisonMode?: "weekday" | "fallback_group";
   medianCount?: number;
   comfortPoint?: number;
   comfortAdjustedMedianCount?: number;
@@ -82,6 +88,26 @@ const NO_AFTERNOON_ADD_AREA_IDS = new Set<AreaId>([
   "hosomaki",
 ]);
 
+export function getActualWeekdayLabel(weekday: number): ActualWeekdayLabel {
+  switch (weekday) {
+    case 0:
+      return "日";
+    case 1:
+      return "月";
+    case 2:
+      return "火";
+    case 3:
+      return "水";
+    case 4:
+      return "木";
+    case 5:
+      return "金";
+    case 6:
+    default:
+      return "土";
+  }
+}
+
 export function getActualWeekdayGroup(weekday: number): ActualWeekdayGroup {
   switch (weekday) {
     case 1:
@@ -98,7 +124,20 @@ export function getActualWeekdayGroup(weekday: number): ActualWeekdayGroup {
   }
 }
 
-export function getAreaCountSameItemLimitForWeekdayGroup(group: ActualWeekdayGroup): number {
+export function getAreaCountFallbackWeekdayGroup(params: {
+  weekday: number;
+  discountTime: AreaCountDiscountTime;
+}): ActualWeekdayGroup {
+  // 日曜は、15時は製造量・売場作りに合わせて金土日寄り、17時以降は売れ方に合わせて火木寄りにする。
+  if (params.weekday === 0 && params.discountTime !== "15") return "火木";
+  return getActualWeekdayGroup(params.weekday);
+}
+
+export function getAreaCountSameItemLimit(params: {
+  weekday: number;
+  discountTime: AreaCountDiscountTime;
+}): number {
+  const group = getAreaCountFallbackWeekdayGroup(params);
   switch (group) {
     case "月水":
       return 8;
@@ -154,6 +193,7 @@ function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
     areaId: record.areaId,
     discountTime: record.discountTime,
     weekdayBase: record.weekdayBase,
+    actualWeekday: record.actualWeekday,
     actualWeekdayGroup: record.actualWeekdayGroup,
     count: record.count,
     userJudge: record.userJudge,
@@ -185,6 +225,16 @@ function isActualWeekdayGroup(value: unknown): value is ActualWeekdayGroup {
   return value === "月水" || value === "火木" || value === "金土日";
 }
 
+function isActualWeekdayLabel(value: unknown): value is ActualWeekdayLabel {
+  return value === "日" || value === "月" || value === "火" || value === "水" || value === "木" || value === "金" || value === "土";
+}
+
+function inferWeekdayLabelFromDate(dateText: string): ActualWeekdayLabel | undefined {
+  const date = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return getActualWeekdayLabel(date.getDay());
+}
+
 export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
   if (!Array.isArray(raw)) return [];
 
@@ -206,6 +256,9 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
       record.weekdayBase === "月水"
         ? record.weekdayBase
         : undefined;
+    const actualWeekday = isActualWeekdayLabel(record.actualWeekday)
+      ? record.actualWeekday
+      : inferWeekdayLabelFromDate(record.date);
     const actualWeekdayGroup = isActualWeekdayGroup(record.actualWeekdayGroup)
       ? record.actualWeekdayGroup
       : legacyWeekdayBaseToActualWeekdayGroup(legacyWeekdayBase);
@@ -225,6 +278,7 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
         areaId: record.areaId as AreaId,
         discountTime: record.discountTime,
         weekdayBase: legacyWeekdayBase,
+        actualWeekday,
         actualWeekdayGroup,
         count: Math.round(record.count),
         userJudge,
@@ -505,26 +559,75 @@ function getLatestRecord(records: AreaCountRecord[], params: {
   date: string;
   areaId: AreaId;
   discountTime: AreaCountDiscountTime;
-  actualWeekdayGroup: ActualWeekdayGroup;
 }): AreaCountRecord | null {
   const matches = records.filter((record) => {
     return (
       record.date === params.date &&
       record.areaId === params.areaId &&
-      record.discountTime === params.discountTime &&
-      record.actualWeekdayGroup === params.actualWeekdayGroup
+      record.discountTime === params.discountTime
     );
   });
 
   return matches.sort((a, b) => a.recordedAt.localeCompare(b.recordedAt)).at(-1) ?? null;
 }
 
+function getReferenceRecords(params: {
+  records: AreaCountRecord[];
+  areaId: AreaId;
+  discountTime: AreaCountDiscountTime;
+  actualWeekday: ActualWeekdayLabel;
+  fallbackWeekdayGroup: ActualWeekdayGroup;
+}): {
+  matchedRecords: AreaCountRecord[];
+  comparisonMode: "weekday" | "fallback_group";
+  weekdaySampleSize: number;
+  fallbackSampleSize: number;
+} {
+  const sameWeekdayRecords = params.records
+    .filter((record) => {
+      return (
+        record.areaId === params.areaId &&
+        record.discountTime === params.discountTime &&
+        record.actualWeekday === params.actualWeekday
+      );
+    })
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    .slice(-MAX_REFERENCE_RECORDS);
+
+  if (sameWeekdayRecords.length >= REQUIRED_SAMPLE_SIZE) {
+    return {
+      matchedRecords: sameWeekdayRecords,
+      comparisonMode: "weekday",
+      weekdaySampleSize: sameWeekdayRecords.length,
+      fallbackSampleSize: 0,
+    };
+  }
+
+  const fallbackRecords = params.records
+    .filter((record) => {
+      return (
+        record.areaId === params.areaId &&
+        record.discountTime === params.discountTime &&
+        record.actualWeekdayGroup === params.fallbackWeekdayGroup
+      );
+    })
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    .slice(-MAX_REFERENCE_RECORDS);
+
+  return {
+    matchedRecords: fallbackRecords,
+    comparisonMode: "fallback_group",
+    weekdaySampleSize: sameWeekdayRecords.length,
+    fallbackSampleSize: fallbackRecords.length,
+  };
+}
+
 function getDecreaseRecommendation(params: {
   records: AreaCountRecord[];
+  referenceCurrentRecords: AreaCountRecord[];
   date: string;
   areaId: AreaId;
   discountTime: DiscountTime;
-  actualWeekdayGroup: ActualWeekdayGroup;
   count: number;
 }): DecreaseRecommendation {
   const requiredSampleSize = REQUIRED_SAMPLE_SIZE;
@@ -547,7 +650,6 @@ function getDecreaseRecommendation(params: {
     date: params.date,
     areaId: params.areaId,
     discountTime: previousDiscountTime,
-    actualWeekdayGroup: params.actualWeekdayGroup,
   });
 
   if (!previousRecord || previousRecord.count <= 0) {
@@ -562,24 +664,14 @@ function getDecreaseRecommendation(params: {
   }
 
   const currentDecreaseRate = (previousRecord.count - params.count) / previousRecord.count;
-  const currentRecords = params.records
-    .filter((record) => {
-      return (
-        record.areaId === params.areaId &&
-        record.discountTime === params.discountTime &&
-        record.actualWeekdayGroup === params.actualWeekdayGroup
-      );
-    })
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
 
-  const historicalRates = currentRecords.flatMap((record): number[] => {
+  const historicalRates = params.referenceCurrentRecords.flatMap((record): number[] => {
     if (record.date === params.date) return [];
 
     const pairedPreviousRecord = getLatestRecord(params.records, {
       date: record.date,
       areaId: params.areaId,
       discountTime: previousDiscountTime,
-      actualWeekdayGroup: params.actualWeekdayGroup,
     });
 
     if (!pairedPreviousRecord || pairedPreviousRecord.count <= 0) return [];
@@ -666,19 +758,22 @@ export function getAreaCountRecommendation(params: {
   }
 
   const areaId = params.areaId as AreaId;
-  const discountTime = params.discountTime as DiscountTime;
+  const discountTime = params.discountTime as AreaCountDiscountTime;
   const weather = params.weather as WeatherInput;
   const date = params.date as string;
-  const actualWeekdayGroup = getActualWeekdayGroup(params.weekday);
-  const matchedRecords = params.records
-    .filter((record) => {
-      return (
-        record.areaId === areaId &&
-        record.discountTime === discountTime &&
-        record.actualWeekdayGroup === actualWeekdayGroup
-      );
-    })
-    .slice(-MAX_REFERENCE_RECORDS);
+  const actualWeekday = getActualWeekdayLabel(params.weekday);
+  const actualWeekdayGroup = getAreaCountFallbackWeekdayGroup({
+    weekday: params.weekday,
+    discountTime,
+  });
+  const reference = getReferenceRecords({
+    records: params.records,
+    areaId,
+    discountTime,
+    actualWeekday,
+    fallbackWeekdayGroup: actualWeekdayGroup,
+  });
+  const { matchedRecords, comparisonMode } = reference;
 
   if (matchedRecords.length < requiredSampleSize) {
     return {
@@ -687,10 +782,15 @@ export function getAreaCountRecommendation(params: {
       sampleSize: matchedRecords.length,
       requiredSampleSize,
       matchedRecords,
+      actualWeekday,
       actualWeekdayGroup,
+      comparisonMode,
       summaryText: `過去データ ${matchedRecords.length}/${requiredSampleSize}件`,
       detailLines: [
-        "同じエリア・同じ時刻・同じ実際の曜日グループの記録が3件たまると判定します。",
+        `実際の曜日：${actualWeekday}`,
+        `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+        `暫定グループ（${actualWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
+        "同じエリア・同じ時刻・同じ実際の曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
         `今回の${count}個も、判定後に履歴へ保存されます。`,
       ],
     };
@@ -705,10 +805,10 @@ export function getAreaCountRecommendation(params: {
   });
   const decreaseRecommendation = getDecreaseRecommendation({
     records: params.records,
+    referenceCurrentRecords: matchedRecords,
     date,
     areaId,
     discountTime,
-    actualWeekdayGroup,
     count,
   });
 
@@ -727,7 +827,9 @@ export function getAreaCountRecommendation(params: {
     sampleSize: matchedRecords.length,
     requiredSampleSize,
     matchedRecords,
+    actualWeekday,
     actualWeekdayGroup,
+    comparisonMode,
     medianCount,
     comfortPoint: comfort.point,
     comfortAdjustedMedianCount,
@@ -744,7 +846,11 @@ export function getAreaCountRecommendation(params: {
     decreaseRecommendation,
     summaryText: `おすすめ：${evaluationText(suggestedEvaluation)}（表示値引率 ${formatRateAdjustment(areaRateAdjustment)}）`,
     detailLines: [
-      `実際の曜日グループ：${actualWeekdayGroup}`,
+      `実際の曜日：${actualWeekday}`,
+      comparisonMode === "weekday"
+        ? `比較条件：同じ曜日（${actualWeekday}）`
+        : `比較条件：暫定グループ（${actualWeekdayGroup}）`,
+      `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
       `過去中央値：${medianCount}個（同条件${matchedRecords.length}件）`,
       `快適度ポイント：${comfort.point}（${comfort.detailText}）`,
       `快適度補正後の基準：${comfortAdjustedMedianCount}個`,

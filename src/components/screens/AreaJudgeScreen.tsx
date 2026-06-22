@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { AreaJudge, SkipTargetOption } from "../../domain/types";
+import type { AreaCountEvaluation, AreaJudge, SkipTargetOption } from "../../domain/types";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
@@ -26,7 +26,11 @@ type AreaJudgeScreenProps = {
   areaCountAssistEnabled?: boolean;
   areaCountSameItemLimit?: number | null;
   getAreaCountRecommendation?: (count: number) => AreaCountRecommendation;
-  onJudge: (judge: Exclude<AreaJudge, null>, areaCount?: number | null) => void;
+  onJudge: (
+    judge: Exclude<AreaJudge, null>,
+    areaCount?: number | null,
+    manualAreaCountEvaluation?: AreaCountEvaluation
+  ) => void;
   onSkip: () => void;
   onGoBack: () => void;
   onReturnHome: () => void;
@@ -48,9 +52,9 @@ const subActionButtonStyle: CSSProperties = {
 };
 
 function getJudgeLabelColor(label: string) {
-  if (label === "多い") return "#ff0000";
-  if (label === "どちらでもない") return "#008000";
-  if (label === "少ない") return "#0000ff";
+  if (label === "多い" || label === "やや多い") return "#ff0000";
+  if (label === "どちらでもない" || label === "普通") return "#008000";
+  if (label === "少ない" || label === "やや少ない") return "#0000ff";
   return "#000";
 }
 
@@ -175,6 +179,10 @@ export function AreaJudgeScreen({
 
   const handleJudge = (judge: Exclude<AreaJudge, null>) => {
     onJudge(judge, parsedAreaCount);
+  };
+
+  const handleManualAreaCountEvaluation = (evaluation: AreaCountEvaluation) => {
+    onJudge("normal", parsedAreaCount, evaluation);
   };
 
   const handleUseAreaCountRecommendation = () => {
@@ -331,7 +339,7 @@ export function AreaJudgeScreen({
               </div>
             ) : (
               <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
-                入力すると、過去の同じエリア・同じ時刻・同じ実際の曜日グループと比較します。
+                入力すると、過去の同じエリア・同じ時刻・同じ実際の曜日を優先して比較します。足りない時だけ暫定グループを使います。
               </div>
             )}
           </section>
@@ -369,6 +377,17 @@ export function AreaJudgeScreen({
             >
               この判定で進む
             </button>
+          </div>
+        ) : areaCountAssistEnabled ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ fontSize: 13, color: "#555", lineHeight: 1.7 }}>
+              過去データが足りない場合は、手動で5段階判定してください。ここでの「少ない」は後回しではなく、表示値引率-10%です。
+            </div>
+            <JudgeOptionButton label="多い" subLabel="+10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("many")} />
+            <JudgeOptionButton label="やや多い" subLabel="+5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_many")} />
+            <JudgeOptionButton label="普通" subLabel="±0%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("normal")} />
+            <JudgeOptionButton label="やや少ない" subLabel="-5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_few")} />
+            <JudgeOptionButton label="少ない" subLabel="-10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("few")} />
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>

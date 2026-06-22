@@ -100,9 +100,11 @@ import { getTrainingStepConfig } from "../domain/trainingMode.ts";
 import {
   cloneAreaCountRecords,
   evaluationText as getAreaCountEvaluationText,
-  getActualWeekdayGroup,
+  evaluationToRateAdjustment as getAreaCountRateAdjustment,
+  getActualWeekdayLabel,
+  getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation as buildAreaCountRecommendation,
-  getAreaCountSameItemLimitForWeekdayGroup,
+  getAreaCountSameItemLimit,
   isAreaCountAssistTarget,
   upsertAreaCountRecord,
 } from "../domain/areaCountHistory.ts";
@@ -2144,7 +2146,10 @@ const lateSkipNotice = useMemo(() => {
   );
 
   const areaCountSameItemLimit = areaCountAssistEnabled && state.session
-    ? getAreaCountSameItemLimitForWeekdayGroup(getActualWeekdayGroup(state.session.weekday))
+    ? getAreaCountSameItemLimit({
+        weekday: state.session.weekday,
+        discountTime: state.session.discountTime,
+      })
     : null;
 
   function getCurrentAreaCountRecommendation(count: number) {
@@ -2186,7 +2191,11 @@ const lateSkipNotice = useMemo(() => {
   }
 
 
-  function judgeCurrentArea(judge: Exclude<AreaJudge, null>, areaCount?: number | null) {
+  function judgeCurrentArea(
+    judge: Exclude<AreaJudge, null>,
+    areaCount?: number | null,
+    manualAreaCountEvaluation?: AreaCountEvaluation
+  ) {
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
@@ -2207,10 +2216,18 @@ const lateSkipNotice = useMemo(() => {
             rateAdjustment: areaCountRecommendation.areaRateAdjustment,
           }
         : undefined;
+    const manualAreaCountResult =
+      roundedAreaCount !== null && manualAreaCountEvaluation
+        ? {
+            evaluation: manualAreaCountEvaluation,
+            rateAdjustment: getAreaCountRateAdjustment(manualAreaCountEvaluation),
+          }
+        : undefined;
+    const effectiveAreaCountResult = readyAreaCountResult ?? manualAreaCountResult;
 
-    // エリア残数判定が使える場合、エリア判定はアプリの5段階結果で固定する。
+    // エリア残数判定が使える場合、エリア判定は5段階結果で固定する。
     // ここでの「少ない」はエリア全体の-10%補正であり、後回しにはしない。
-    const effectiveJudge: Exclude<AreaJudge, null> = readyAreaCountResult ? "normal" : judge;
+    const effectiveJudge: Exclude<AreaJudge, null> = effectiveAreaCountResult ? "normal" : judge;
     setAreaJudgeSelection(effectiveJudge);
 
     if (
@@ -2230,11 +2247,15 @@ const lateSkipNotice = useMemo(() => {
         areaId: state.currentAreaId,
         discountTime: state.session.discountTime,
         weekdayBase: weekdayBaseInfo.adjusted,
-        actualWeekdayGroup: getActualWeekdayGroup(state.session.weekday),
+        actualWeekday: getActualWeekdayLabel(state.session.weekday),
+        actualWeekdayGroup: getAreaCountFallbackWeekdayGroup({
+          weekday: state.session.weekday,
+          discountTime: state.session.discountTime,
+        }),
         count: roundedAreaCount,
         userJudge: effectiveJudge,
-        suggestedEvaluation: readyAreaCountResult?.evaluation,
-        areaRateAdjustment: readyAreaCountResult?.rateAdjustment,
+        suggestedEvaluation: effectiveAreaCountResult?.evaluation,
+        areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
         comfortPoint: areaCountRecommendation?.comfortPoint,
       };
 
@@ -2242,7 +2263,7 @@ const lateSkipNotice = useMemo(() => {
     }
 
     setState((prev) =>
-      applyAreaJudgeSelection(prev, effectiveJudge, roundedAreaCount, readyAreaCountResult)
+      applyAreaJudgeSelection(prev, effectiveJudge, roundedAreaCount, effectiveAreaCountResult)
     );
   }
 
