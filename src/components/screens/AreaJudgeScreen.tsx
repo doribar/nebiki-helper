@@ -99,9 +99,10 @@ function parseAreaCount(value: string): number | null {
   return Math.round(parsed);
 }
 
-function getRecommendationColor(judge: Exclude<AreaJudge, null> | undefined): string {
-  if (judge === "many") return "#b71c1c";
-  if (judge === "few") return "#0d47a1";
+function getRecommendationColor(recommendation: AreaCountRecommendation | null): string {
+  const evaluation = recommendation?.suggestedEvaluation;
+  if (evaluation === "many" || evaluation === "slightly_many") return "#b71c1c";
+  if (evaluation === "few" || evaluation === "slightly_few") return "#0d47a1";
   return "#1b5e20";
 }
 
@@ -169,11 +170,15 @@ export function AreaJudgeScreen({
     areaCountAssistEnabled && parsedAreaCount !== null && getAreaCountRecommendation
       ? getAreaCountRecommendation(parsedAreaCount)
       : null;
-  const recommendedJudge =
-    areaCountRecommendation?.status === "ready" ? areaCountRecommendation.suggestedJudge : undefined;
+  const isAreaCountReady = areaCountRecommendation?.status === "ready";
+  const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
 
   const handleJudge = (judge: Exclude<AreaJudge, null>) => {
     onJudge(judge, parsedAreaCount);
+  };
+
+  const handleUseAreaCountRecommendation = () => {
+    onJudge("normal", parsedAreaCount);
   };
 
   return (
@@ -265,7 +270,7 @@ export function AreaJudgeScreen({
               background: "#f7fbff",
             }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>エリア残数判定（検証用）</div>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>エリア残数判定</div>
             <label style={{ display: "grid", gap: 6, fontSize: 14, fontWeight: 700 }}>
               エリア全体の商品数
               <input
@@ -313,7 +318,7 @@ export function AreaJudgeScreen({
                 <div
                   style={{
                     fontWeight: 900,
-                    color: getRecommendationColor(areaCountRecommendation.suggestedJudge),
+                    color: getRecommendationColor(areaCountRecommendation),
                   }}
                 >
                   {areaCountRecommendation.summaryText}
@@ -326,22 +331,57 @@ export function AreaJudgeScreen({
               </div>
             ) : (
               <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
-                入力すると、過去の同じエリア・同じ時刻・同じ曜日基準と比較します。
+                入力すると、過去の同じエリア・同じ時刻・同じ実際の曜日グループと比較します。
               </div>
             )}
           </section>
         ) : null}
 
-        <div style={{ display: "grid", gap: 10 }}>
-          <JudgeOptionButton label="多い" selected={recommendedJudge === "many"} onClick={() => handleJudge("many")} />
-          <JudgeOptionButton label="どちらでもない" selected={recommendedJudge === "normal"} onClick={() => handleJudge("normal")} />
-          <JudgeOptionButton
-            label="少ない"
-            subLabel="後回しします"
-            selected={recommendedJudge === "few"}
-            onClick={() => handleJudge("few")}
-          />
-        </div>
+        {areaCountAssistEnabled && parsedAreaCount === null ? (
+          <div
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 12,
+              padding: 12,
+              background: "#fafafa",
+              lineHeight: 1.7,
+              fontWeight: 700,
+            }}
+          >
+            エリア全体の商品数を入力すると判定に進めます。
+          </div>
+        ) : isAreaCountReady ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <button
+              type="button"
+              onClick={handleUseAreaCountRecommendation}
+              style={{
+                width: "100%",
+                padding: "14px 16px",
+                borderRadius: 12,
+                border: "2px solid #2f5ef5",
+                background: "#e8f0ff",
+                textAlign: "center",
+                cursor: "pointer",
+                fontSize: 16,
+                fontWeight: 900,
+              }}
+            >
+              この判定で進む
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            <JudgeOptionButton label="多い" selected={false} onClick={() => canUseManualJudge && handleJudge("many")} />
+            <JudgeOptionButton label="どちらでもない" selected={false} onClick={() => canUseManualJudge && handleJudge("normal")} />
+            <JudgeOptionButton
+              label="少ない"
+              subLabel="後回しします"
+              selected={false}
+              onClick={() => canUseManualJudge && handleJudge("few")}
+            />
+          </div>
+        )}
       </section>
 
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
@@ -410,13 +450,13 @@ export function AreaJudgeScreen({
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
-          <div>今使っている曜日基準が</div>
+          <div>実際の曜日が</div>
           <div>
-            月・水または火・木
+            月・水・火・木
             <span style={{ color: "#e65100", fontWeight: 700 }}>➡多い側に寄せる</span>
           </div>
           <div>
-            金・土または日
+            金・土・日
             <span style={{ color: "#e65100", fontWeight: 700 }}>➡少ない側に寄せる</span>
           </div>
         </div>

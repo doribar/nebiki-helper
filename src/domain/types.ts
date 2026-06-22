@@ -107,6 +107,8 @@ export type AreaProgress = {
   status: AreaStatus;
   areaJudge: AreaJudge;
   areaCount?: number;
+  areaCountEvaluation?: AreaCountEvaluation;
+  areaRateAdjustment?: AreaRateAdjustment;
   visitedAt?: string;
   completedAt?: string;
   skipReason?: "manual" | "few" | "late_time";
@@ -135,6 +137,9 @@ export type ScreenName =
 export type FlowMode = "normal" | "pending";
 
 export type WeekdayBaseLabel = "日" | "金土" | "火木" | "月水";
+export type ActualWeekdayGroup = "月水" | "火木" | "金土日";
+export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
+export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
 
 export type WeekdayBaseInfo = {
   original: WeekdayBaseLabel;

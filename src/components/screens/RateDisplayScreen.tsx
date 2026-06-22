@@ -221,7 +221,6 @@ export function RateDisplayScreen({
 
   const manyColor = "#ff0000";
   const normalColor = "#008000";
-  const fewColor = "#0000ff";
   const referencePrefix = basisGuide.referenceText.replace("を基準に考えて", "");
   const showManyProductRate = trainingStepConfig.showManyProductRate;
   const showFewProductRule = trainingStepConfig.showFewProductRule;
@@ -360,9 +359,6 @@ export function RateDisplayScreen({
                       line={rateDisplay.normal}
                       color={normalColor}
                     />
-                    {showFewProductRule ? (
-                      <RateRow label="少ない" line={rateDisplay.few} color={fewColor} />
-                    ) : null}
                   </>
                 )}
               </>
@@ -466,15 +462,15 @@ export function RateDisplayScreen({
         </div>
 
         <div style={{ marginTop: 14, marginBottom: 8 }}>
-          ・分かれていなければ今使っている曜日基準が
+          ・分かれていなければ実際の曜日が
         </div>
         <div style={{ lineHeight: 1.8 }}>
           <div>
-            月・水または火・木
+            月・水・火・木
             <span style={{ color: "#e65100", fontWeight: 700 }}>➡多い側に寄せる</span>
           </div>
           <div>
-            金・土または日
+            金・土・日
             <span style={{ color: "#e65100", fontWeight: 700 }}>➡少ない側に寄せる</span>
           </div>
         </div>

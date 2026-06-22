@@ -4,6 +4,7 @@ import type {
   RateDisplayData,
   RateLine,
   AreaJudge,
+  AreaRateAdjustment,
   WeekdayBaseLabel,
 } from "./types";
 
@@ -39,8 +40,8 @@ function capNormalDiscountRate(
   discountTime: Exclude<DiscountTime, "20">,
   ignoreTimeRateCap: boolean
 ): number {
-  if (ignoreTimeRateCap) return rawRate;
-  return Math.min(rawRate, getNormalTimeRateCap(discountTime));
+  if (ignoreTimeRateCap) return Math.max(0, rawRate);
+  return Math.max(0, Math.min(rawRate, getNormalTimeRateCap(discountTime)));
 }
 
 function toRateLine(main: string, note?: string): RateLine {
@@ -106,15 +107,21 @@ export function getNormalTimeRateDisplay(params: {
   isSunday?: boolean;
   ignoreTimeRateCap?: boolean;
   weekdayBase?: WeekdayBaseLabel;
+  areaRateAdjustment?: AreaRateAdjustment;
 }): RateDisplayData {
   const ignoreTimeRateCap = params.ignoreTimeRateCap ?? false;
   const base = getBaseRate(params.discountTime) + params.weatherBonus;
 
-  let areaAdjustedBase = base;
-  if (params.areaJudge === "many") {
-    areaAdjustedBase = base + 10;
-  } else if (params.areaJudge === "few") {
-    areaAdjustedBase = base - 5;
+  let areaAdjustedBase = base + (params.areaRateAdjustment ?? 0);
+
+  // 旧データ・手動判定互換: エリア残数からの5段階補正がない場合だけ、
+  // 従来の3段階エリア判定で表示値引率を補正する。
+  if (params.areaRateAdjustment === undefined) {
+    if (params.areaJudge === "many") {
+      areaAdjustedBase = base + 10;
+    } else if (params.areaJudge === "few") {
+      areaAdjustedBase = base - 5;
+    }
   }
 
   const manyRate = capNormalDiscountRate(

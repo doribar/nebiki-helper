@@ -24,6 +24,8 @@ import type {
   Review19Snapshot,
   Review19Reference,
   WeekdayBaseLabel,
+  AreaCountEvaluation,
+  AreaRateAdjustment,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -34,7 +36,6 @@ import {
 } from "../domain/weekdayBase";
 import {
   getFinalTimeGuide,
-  getManyPlus5Threshold,
   getNormalTimeRateDisplay,
 } from "../domain/discount";
 import {
@@ -98,7 +99,10 @@ import type { TrainingStep } from "../domain/trainingMode.ts";
 import { getTrainingStepConfig } from "../domain/trainingMode.ts";
 import {
   cloneAreaCountRecords,
+  evaluationText as getAreaCountEvaluationText,
+  getActualWeekdayGroup,
   getAreaCountRecommendation as buildAreaCountRecommendation,
+  getAreaCountSameItemLimitForWeekdayGroup,
   isAreaCountAssistTarget,
   upsertAreaCountRecord,
 } from "../domain/areaCountHistory.ts";
@@ -304,6 +308,7 @@ function buildCompletedRateSnapshot(params: {
     isSunday: session.weekday === 0 && session.discountTime === "15",
     ignoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
     weekdayBase: params.weekdayBase,
+    areaRateAdjustment: progress.areaRateAdjustment,
   });
 
   return {
@@ -430,6 +435,21 @@ function isValidAreaJudge(value: unknown): value is AreaJudge {
   return value === "many" || value === "normal" || value === "few" || value === null;
 }
 
+function isValidAreaCountEvaluation(value: unknown): value is AreaCountEvaluation {
+  return (
+    value === "many" ||
+    value === "slightly_many" ||
+    value === "normal" ||
+    value === "slightly_few" ||
+    value === "few"
+  );
+}
+
+function isValidAreaRateAdjustment(value: unknown): value is AreaRateAdjustment {
+  return value === -10 || value === -5 || value === 0 || value === 5 || value === 10;
+}
+
+
 function normalizeReview19ExcludedAreaIds(raw: unknown): AreaId[] {
   if (!Array.isArray(raw)) return [];
 
@@ -480,6 +500,12 @@ function normalizeAreaProgressMap(
         typeof progress.areaCount === "number" && Number.isFinite(progress.areaCount) && progress.areaCount >= 0
           ? Math.round(progress.areaCount)
           : undefined,
+      areaCountEvaluation: isValidAreaCountEvaluation(progress.areaCountEvaluation)
+        ? progress.areaCountEvaluation
+        : undefined,
+      areaRateAdjustment: isValidAreaRateAdjustment(progress.areaRateAdjustment)
+        ? progress.areaRateAdjustment
+        : undefined,
       visitedAt:
         typeof progress.visitedAt === "string" ? progress.visitedAt : undefined,
       completedAt:
@@ -1457,6 +1483,7 @@ const lateSkipNotice = useMemo(() => {
       isSunday: state.session.weekday === 0 && state.session.discountTime === "15",
       ignoreTimeRateCap: ignoreNormalTimeRateCap,
       weekdayBase: weekdayBaseInfo.adjusted,
+      areaRateAdjustment: currentAreaProgress.areaRateAdjustment,
     });
   }, [
   state.session,
@@ -1465,6 +1492,7 @@ const lateSkipNotice = useMemo(() => {
   lateTimeBonus,
   ignoreNormalTimeRateCap,
   weekdayBaseInfo.adjusted,
+  currentAreaProgress?.areaRateAdjustment,
 ]);
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
@@ -1524,6 +1552,7 @@ const lateSkipNotice = useMemo(() => {
         isSunday: session.weekday === 0 && discountTime === "15",
         ignoreTimeRateCap: ignoreNormalTimeRateCap,
         weekdayBase: weekdayBaseInfo.adjusted,
+        areaRateAdjustment: progress.areaRateAdjustment,
       });
 
       const completedNormalRateText = getProgressNormalRateText(progress) ?? display.normal.main;
@@ -1532,7 +1561,9 @@ const lateSkipNotice = useMemo(() => {
       return {
         areaId,
         areaName: getAreaName(areaId),
-        judgeText: getAreaJudgeText(progress.areaJudge),
+        judgeText: progress.areaCountEvaluation
+          ? getAreaCountEvaluationText(progress.areaCountEvaluation)
+          : getAreaJudgeText(progress.areaJudge),
         rateText: completedNormalRateText,
         manyRateText: completedManyRateText,
         manyNote: progress.completedManyNote ?? display.many.note,
@@ -1827,7 +1858,11 @@ const lateSkipNotice = useMemo(() => {
   function applyAreaJudgeSelection(
     prev: AppState,
     selection: Exclude<AreaJudge, null>,
-    areaCount?: number | null
+    areaCount?: number | null,
+    areaCountResult?: {
+      evaluation?: AreaCountEvaluation;
+      rateAdjustment?: AreaRateAdjustment;
+    }
   ): AppState {
     if (!prev.currentAreaId) return prev;
     const currentAreaId = prev.currentAreaId;
@@ -1847,6 +1882,8 @@ const lateSkipNotice = useMemo(() => {
             ...prev.areaProgressMap[currentAreaId],
             areaJudge: selection,
             areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
+            areaCountEvaluation: areaCountResult?.evaluation,
+            areaRateAdjustment: areaCountResult?.rateAdjustment,
             visitedAt: new Date().toISOString(),
           },
         },
@@ -1865,6 +1902,8 @@ const lateSkipNotice = useMemo(() => {
         ...prev.areaProgressMap[currentAreaId],
         areaJudge: "few" as const,
         areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
+        areaCountEvaluation: areaCountResult?.evaluation,
+        areaRateAdjustment: areaCountResult?.rateAdjustment,
         visitedAt: currentVisitedAt,
       },
     };
@@ -1875,6 +1914,8 @@ const lateSkipNotice = useMemo(() => {
         ...prev.areaProgressMap[currentAreaId],
         areaJudge: "few" as const,
         areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
+        areaCountEvaluation: areaCountResult?.evaluation,
+        areaRateAdjustment: areaCountResult?.rateAdjustment,
         status: "postponed_few" as const,
         skipReason: "few" as const,
         visitedAt: currentVisitedAt,
@@ -2102,8 +2143,8 @@ const lateSkipNotice = useMemo(() => {
     })
   );
 
-  const areaCountSameItemLimit = areaCountAssistEnabled
-    ? getManyPlus5Threshold(weekdayBaseInfo.adjusted)
+  const areaCountSameItemLimit = areaCountAssistEnabled && state.session
+    ? getAreaCountSameItemLimitForWeekdayGroup(getActualWeekdayGroup(state.session.weekday))
     : null;
 
   function getCurrentAreaCountRecommendation(count: number) {
@@ -2111,7 +2152,9 @@ const lateSkipNotice = useMemo(() => {
       records: areaCountRecords,
       areaId: state.currentAreaId,
       discountTime: state.session?.discountTime,
-      weekdayBase: weekdayBaseInfo.adjusted,
+      weekday: state.session?.weekday,
+      weather: state.session?.weather,
+      date: state.session?.date,
       count,
     });
   }
@@ -2144,7 +2187,6 @@ const lateSkipNotice = useMemo(() => {
 
 
   function judgeCurrentArea(judge: Exclude<AreaJudge, null>, areaCount?: number | null) {
-    setAreaJudgeSelection(judge);
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
@@ -2152,6 +2194,24 @@ const lateSkipNotice = useMemo(() => {
       typeof areaCount === "number" && Number.isFinite(areaCount) && areaCount >= 0
         ? Math.round(areaCount)
         : null;
+
+    const areaCountRecommendation = roundedAreaCount !== null
+      ? getCurrentAreaCountRecommendation(roundedAreaCount)
+      : null;
+    const readyAreaCountResult =
+      areaCountRecommendation?.status === "ready" &&
+      areaCountRecommendation.suggestedEvaluation &&
+      areaCountRecommendation.areaRateAdjustment !== undefined
+        ? {
+            evaluation: areaCountRecommendation.suggestedEvaluation,
+            rateAdjustment: areaCountRecommendation.areaRateAdjustment,
+          }
+        : undefined;
+
+    // エリア残数判定が使える場合、エリア判定はアプリの5段階結果で固定する。
+    // ここでの「少ない」はエリア全体の-10%補正であり、後回しにはしない。
+    const effectiveJudge: Exclude<AreaJudge, null> = readyAreaCountResult ? "normal" : judge;
+    setAreaJudgeSelection(effectiveJudge);
 
     if (
       roundedAreaCount !== null &&
@@ -2170,14 +2230,20 @@ const lateSkipNotice = useMemo(() => {
         areaId: state.currentAreaId,
         discountTime: state.session.discountTime,
         weekdayBase: weekdayBaseInfo.adjusted,
+        actualWeekdayGroup: getActualWeekdayGroup(state.session.weekday),
         count: roundedAreaCount,
-        userJudge: judge,
+        userJudge: effectiveJudge,
+        suggestedEvaluation: readyAreaCountResult?.evaluation,
+        areaRateAdjustment: readyAreaCountResult?.rateAdjustment,
+        comfortPoint: areaCountRecommendation?.comfortPoint,
       };
 
       setAreaCountRecords((current) => upsertAreaCountRecord(current, nextRecord));
     }
 
-    setState((prev) => applyAreaJudgeSelection(prev, judge, roundedAreaCount));
+    setState((prev) =>
+      applyAreaJudgeSelection(prev, effectiveJudge, roundedAreaCount, readyAreaCountResult)
+    );
   }
 
   function goBackOneScreen() {
