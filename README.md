@@ -49,3 +49,27 @@ AI写真判定は廃止済みです。写真判定サーバー、写真撮影画
 - 少ない: 表示値引率 -10%
 
 過去データが3件未満の間は、従来通り手動でエリア判断します。
+
+## エリア残数履歴のサーバー保存
+
+この版では、Supabase設定がある場合だけエリア残数履歴をサーバー保存します。設定がない場合は従来通りlocalStorageだけで動きます。
+
+### 1. Supabase側の準備
+
+SupabaseのSQL editorで `supabase_area_count_records.sql` を実行してください。
+
+### 2. Vercel環境変数
+
+Vercelに以下を設定して再デプロイしてください。
+
+```text
+VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=Supabaseのanon public key
+```
+
+### 3. 保存・読み込みの挙動
+
+- 起動時にサーバーの `area_count_records` を読み込み、端末内のlocalStorage履歴とマージします。
+- エリア残数判定を確定して次へ進むと、localStorageとSupabaseの両方へ保存します。
+- Supabase未設定、または通信失敗時はlocalStorageだけで継続します。
+- ステップURLは残しますが、エリア残数履歴はstep1〜step5・通常版で共通です。

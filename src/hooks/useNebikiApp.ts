@@ -108,6 +108,11 @@ import {
   isAreaCountAssistTarget,
   upsertAreaCountRecord,
 } from "../domain/areaCountHistory.ts";
+import {
+  loadRemoteAreaCountRecords,
+  mergeAreaCountRecords,
+  upsertRemoteAreaCountRecord,
+} from "../domain/areaCountRemoteStorage.ts";
 
 function formatLocalDate(date = new Date()): string {
   const y = date.getFullYear();
@@ -1089,6 +1094,20 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
   const suppressHistoryPushRef = useRef(false);
 
 
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadRemoteAreaCountRecords().then((result) => {
+      if (cancelled || result.status !== "ready") return;
+
+      setAreaCountRecords((current) => mergeAreaCountRecords(current, result.records));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     savePersistedNebikiState(
@@ -2259,6 +2278,7 @@ const lateSkipNotice = useMemo(() => {
       };
 
       setAreaCountRecords((current) => upsertAreaCountRecord(current, nextRecord));
+      void upsertRemoteAreaCountRecord(nextRecord);
     }
 
     setState((prev) =>
