@@ -4,6 +4,7 @@ import type {
   ForecastHourKey,
   ForecastWeatherKind,
   SessionDraft,
+  AreaCountMigrationResult,
 } from "../../domain/types";
 import type { TrainingStepConfig } from "../../domain/trainingMode";
 import {
@@ -31,6 +32,8 @@ type StartScreenProps = {
   startButtonLabel?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
+  localAreaCountRecordCount?: number;
+  onMigrateLocalAreaCountRecords?: () => Promise<AreaCountMigrationResult>;
   onReturnHome?: () => void;
 };
 
@@ -344,6 +347,8 @@ export function StartScreen({
   startButtonLabel,
   canStartReview19 = false,
   onStartReview19,
+  localAreaCountRecordCount = 0,
+  onMigrateLocalAreaCountRecords,
   onReturnHome,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
@@ -356,6 +361,8 @@ export function StartScreen({
   const [confirmedInputs, setConfirmedInputs] = useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isMigratingLocalRecords, setIsMigratingLocalRecords] = useState(false);
+  const [migrationMessage, setMigrationMessage] = useState<AreaCountMigrationResult | null>(null);
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
@@ -478,6 +485,29 @@ export function StartScreen({
       discountTime: nextDiscountTime,
       manualDiscountTimeOverride: true,
     });
+  };
+
+  const handleMigrateLocalAreaCountRecords = async () => {
+    if (!onMigrateLocalAreaCountRecords || isMigratingLocalRecords) return;
+
+    const ok = window.confirm(
+      "ローカルに残っているエリア残数履歴をサーバーへ送信します。\n同じ記録がすでにある場合は上書きされます。"
+    );
+    if (!ok) return;
+
+    setIsMigratingLocalRecords(true);
+    setMigrationMessage(null);
+    try {
+      const result = await onMigrateLocalAreaCountRecords();
+      setMigrationMessage(result);
+    } catch (error) {
+      setMigrationMessage({
+        ok: false,
+        message: error instanceof Error ? error.message : "ローカル履歴の送信に失敗しました。",
+      });
+    } finally {
+      setIsMigratingLocalRecords(false);
+    }
   };
 
   return (
@@ -792,6 +822,52 @@ rightAction={null}
             </div>
           ) : null}
         </div>
+      ) : null}
+
+      {onMigrateLocalAreaCountRecords ? (
+        <section
+          style={{
+            marginTop: 16,
+            padding: 14,
+            borderRadius: 12,
+            border: "1px solid #ddd",
+            background: "#fafafa",
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>ローカル履歴のサーバー送信</div>
+          <div style={{ fontSize: 13, color: "#555", lineHeight: 1.6, marginBottom: 10 }}>
+            端末内にあるエリア残数履歴をSupabaseへ送信します。現在のローカル履歴は{localAreaCountRecordCount}件です。
+          </div>
+          <button
+            type="button"
+            onClick={handleMigrateLocalAreaCountRecords}
+            disabled={isMigratingLocalRecords || localAreaCountRecordCount === 0}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid #ccc",
+              background: isMigratingLocalRecords || localAreaCountRecordCount === 0 ? "#eee" : "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: isMigratingLocalRecords || localAreaCountRecordCount === 0 ? "not-allowed" : "pointer",
+            }}
+          >
+            {isMigratingLocalRecords ? "送信中…" : "ローカル履歴をサーバーへ送信"}
+          </button>
+          {migrationMessage ? (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 13,
+                color: migrationMessage.ok ? "#1b5e20" : "#b00020",
+                lineHeight: 1.6,
+              }}
+            >
+              {migrationMessage.message}
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {onReturnHome ? (

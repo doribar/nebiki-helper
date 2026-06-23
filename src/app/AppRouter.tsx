@@ -43,6 +43,8 @@ export function AppRouter({ app }: AppRouterProps) {
           startButtonLabel={derived.startButtonLabel}
           canStartReview19={derived.canStartReview19Manually}
           onStartReview19={actions.startReview19Manually}
+          localAreaCountRecordCount={derived.localAreaCountRecordCount}
+          onMigrateLocalAreaCountRecords={actions.migrateLocalAreaCountRecordsToRemote}
         />
       );
 

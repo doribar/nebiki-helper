@@ -26,6 +26,7 @@ import type {
   WeekdayBaseLabel,
   AreaCountEvaluation,
   AreaRateAdjustment,
+  AreaCountMigrationResult,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -54,6 +55,7 @@ import {
   loadReview19SourceState,
   saveReview19SourceState,
   clearReview19SourceState,
+  loadAreaCountRecords,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -112,6 +114,7 @@ import {
   loadRemoteAreaCountRecords,
   mergeAreaCountRecords,
   upsertRemoteAreaCountRecord,
+  upsertRemoteAreaCountRecords,
 } from "../domain/areaCountRemoteStorage.ts";
 
 function formatLocalDate(date = new Date()): string {
@@ -2286,6 +2289,40 @@ const lateSkipNotice = useMemo(() => {
     );
   }
 
+  async function migrateLocalAreaCountRecordsToRemote(): Promise<AreaCountMigrationResult> {
+    const localRecords = loadAreaCountRecords();
+
+    if (localRecords.length === 0) {
+      return {
+        ok: true,
+        message: "ローカル履歴はありません。",
+      };
+    }
+
+    const result = await upsertRemoteAreaCountRecords(localRecords);
+
+    if (result.status === "disabled") {
+      return {
+        ok: false,
+        message: "Supabase設定が見つかりません。Vercelの環境変数と再デプロイを確認してください。",
+      };
+    }
+
+    if (result.status === "error") {
+      return {
+        ok: false,
+        message: `サーバー送信に失敗しました。${result.message}`,
+      };
+    }
+
+    setAreaCountRecords((current) => mergeAreaCountRecords(current, localRecords));
+
+    return {
+      ok: true,
+      message: `${result.savedCount ?? localRecords.length}件のローカル履歴をサーバーへ送信しました。`,
+    };
+  }
+
   function goBackOneScreen() {
     const historyResult = popNavigationHistory(screenHistoryRef.current);
     if (!historyResult.previousSnapshot) return;
@@ -2931,6 +2968,7 @@ const lateSkipNotice = useMemo(() => {
   review19ReferenceLines,
   review19Export,
   canStartReview19Manually,
+  localAreaCountRecordCount: areaCountRecords.length,
 },
     actions: {
       updateSessionDraft,
@@ -2954,6 +2992,7 @@ const lateSkipNotice = useMemo(() => {
       startNextDoneSession,
       exportReview19Records,
       startReview19Manually,
+      migrateLocalAreaCountRecordsToRemote,
       resetApp,
     },
   };
