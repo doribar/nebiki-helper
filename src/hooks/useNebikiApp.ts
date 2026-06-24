@@ -130,8 +130,8 @@ function resolveDiscountTime(date = new Date()): DiscountTime {
   // 天候入力・値引開始準備の時刻で自動切替する。
   // 15時・17時は冷惣菜値引もあるため20分前、それ以降は5分前。
   if (minutes < 16 * 60 + 40) return "15";
-  if (minutes < 18 * 60 + 55) return "17";
-  if (minutes < 19 * 60 + 40) return "18";
+  if (minutes < 18 * 60 + 25) return "17";
+  if (minutes < 19 * 60 + 25) return "18";
   if (minutes < 20 * 60 + 25) return "19";
   return "20";
 }
@@ -143,9 +143,9 @@ function getBasisTimeText(discountTime: DiscountTime): string {
     case "17":
       return "17時";
     case "18":
-      return "19時";
+      return "18時30分";
     case "19":
-      return "19時45分";
+      return "19時30分";
     case "20":
       return "20時30分";
   }
@@ -177,15 +177,15 @@ function getNextDoneDiscountInfo(
       targetDiscountTime: "17",
     },
     "17": {
-      label: "19時の値引に進む",
-      unlockMinutes: 18 * 60 + 55,
-      unlockText: "18:55からタップできます",
+      label: "18時30分の値引に進む",
+      unlockMinutes: 18 * 60 + 25,
+      unlockText: "18:25からタップできます",
       targetDiscountTime: "18",
     },
     "18": {
-      label: "19時45分の値引に進む",
-      unlockMinutes: 19 * 60 + 40,
-      unlockText: "19:40からタップできます",
+      label: "19時30分の値引に進む",
+      unlockMinutes: 19 * 60 + 25,
+      unlockText: "19:25からタップできます",
       targetDiscountTime: "19",
     },
     "19": {
@@ -229,15 +229,15 @@ function canStartReview19FromCurrentState(params: {
 
 function buildTimeSwitchNotice(to: DiscountTime): string {
   if (to === "20") {
-    return "20時30分を過ぎたため、19時45分の値引を打ち切り、20時30分の最終値引を開始します。";
+    return "20時30分を過ぎたため、19時30分の値引を打ち切り、20時30分の最終値引を開始します。";
   }
 
   if (to === "19") {
-    return "19時45分を過ぎたため、19時の値引を打ち切り、19時45分の値引を開始します。";
+    return "19時30分を過ぎたため、18時30分の値引を打ち切り、19時30分の値引を開始します。";
   }
 
   if (to === "18") {
-    return "19時を過ぎたため、17時の値引を打ち切り、19時の値引を開始します。";
+    return "18時30分を過ぎたため、17時の値引を打ち切り、18時30分の値引を開始します。";
   }
 
   return `現在時刻が${getBasisTimeText(
@@ -777,14 +777,9 @@ function normalizeLoadedState(
   const session = normalizeSessionData(loaded.session);
   const sessionDraft = normalizeSessionDraft(loaded.sessionDraft);
   const normalizedReview19 = normalizeReview19Result((loaded as Partial<AppState>).review19);
-  const screen = loaded.screen === "review19_weather" ? "review19" : loaded.screen;
-  const review19 =
-    loaded.screen === "review19_weather" && session && normalizedReview19 && !normalizedReview19.reference
-      ? {
-          ...normalizedReview19,
-          reference: createReview19Reference(createReview19WeatherDraft(session)),
-        }
-      : normalizedReview19;
+  const reviewScreens: ScreenName[] = ["review19_weather", "review19", "review19_done"];
+  const screen = reviewScreens.includes(loaded.screen) ? "start" : loaded.screen;
+  const review19 = reviewScreens.includes(loaded.screen) ? null : normalizedReview19;
 
   return {
     ...loaded,
@@ -1403,12 +1398,12 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
     return minutes >= 18 * 60 ? 5 : 0;
   }
 
-  // 19時基準の値引中に19時30分を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
+  // 18時30分基準の値引中に19時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
   if (state.session.discountTime === "18") {
-    return minutes >= 19 * 60 + 30 ? 5 : 0;
+    return minutes >= 19 * 60 ? 5 : 0;
   }
 
-  // 19時45分基準の値引中に20時15分を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
+  // 19時30分基準の値引中に20時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
   if (state.session.discountTime === "19") {
     return minutes >= 20 * 60 + 15 ? 5 : 0;
   }
@@ -1428,11 +1423,11 @@ const lateTimeBonusNotice = useMemo(() => {
   }
 
   if (state.session.discountTime === "18") {
-    return "19時30分を過ぎたため値引率を5%上げています。";
+    return "19時を過ぎたため値引率を5%上げています。";
   }
 
   if (state.session.discountTime === "19") {
-    return "20時15分を過ぎたため値引率を5%上げています。";
+    return "20時を過ぎたため値引率を5%上げています。";
   }
 
   return null;

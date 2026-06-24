@@ -30,8 +30,6 @@ type StartScreenProps = {
   onStart: () => void;
   trainingStepConfig: TrainingStepConfig;
   startButtonLabel?: string;
-  canStartReview19?: boolean;
-  onStartReview19?: () => void;
   localAreaCountRecordCount?: number;
   onMigrateLocalAreaCountRecords?: () => Promise<AreaCountMigrationResult>;
   onReturnHome?: () => void;
@@ -50,8 +48,8 @@ const WEEKDAY_OPTIONS = [
 const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
   { value: "15", label: "15時" },
   { value: "17", label: "17時" },
-  { value: "18", label: "19時" },
-  { value: "19", label: "19時45分" },
+  { value: "18", label: "18時30分" },
+  { value: "19", label: "19時30分" },
   { value: "20", label: "20時30分" },
 ];
 
@@ -80,8 +78,8 @@ function resolveDiscountTime(date = new Date()): DiscountTime {
   // 天候入力・値引開始準備の時刻で自動切替する。
   // 15時・17時は冷惣菜値引もあるため20分前、それ以降は5分前。
   if (minutes < 16 * 60 + 40) return "15";
-  if (minutes < 18 * 60 + 55) return "17";
-  if (minutes < 19 * 60 + 40) return "18";
+  if (minutes < 18 * 60 + 25) return "17";
+  if (minutes < 19 * 60 + 25) return "18";
   if (minutes < 20 * 60 + 25) return "19";
   return "20";
 }
@@ -95,8 +93,8 @@ function getDiscountTimeLabel(discountTime: DiscountTime): string {
   const map: Record<DiscountTime, string> = {
     "15": "15時",
     "17": "17時",
-    "18": "19時",
-    "19": "19時45分",
+    "18": "18時30分",
+    "19": "19時30分",
     "20": "20時30分",
   };
   return map[discountTime];
@@ -109,9 +107,9 @@ function getSessionInputOpenMinutes(discountTime: DiscountTime): number {
     case "17":
       return 16 * 60 + 40;
     case "18":
-      return 18 * 60 + 55;
+      return 18 * 60 + 25;
     case "19":
-      return 19 * 60 + 40;
+      return 19 * 60 + 25;
     case "20":
       return 20 * 60 + 25;
   }
@@ -124,9 +122,9 @@ function getSessionInputOpenText(discountTime: DiscountTime): string {
     case "17":
       return "16:40から進めます";
     case "18":
-      return "18:55から進めます";
+      return "18:25から進めます";
     case "19":
-      return "19:40から進めます";
+      return "19:25から進めます";
     case "20":
       return "20:25から進めます";
   }
@@ -377,8 +375,6 @@ export function StartScreen({
   onChangeSessionDraft,
   onStart,
   startButtonLabel,
-  canStartReview19 = false,
-  onStartReview19,
   localAreaCountRecordCount = 0,
   onMigrateLocalAreaCountRecords,
   onReturnHome,
@@ -863,18 +859,6 @@ rightAction={null}
         </div>
       ) : null}
 
-      {onStartReview19 ? (
-        <div style={{ marginTop: 10 }}>
-          <PrimaryButton onClick={onStartReview19} disabled={!canStartReview19}>
-            19時売場チェックに入る
-          </PrimaryButton>
-          {!canStartReview19 ? (
-            <div style={{ fontSize: 13, color: "#666", marginTop: 6, textAlign: "center" }}>
-              19時以降に開始できます。
-            </div>
-          ) : null}
-        </div>
-      ) : null}
 
       {onMigrateLocalAreaCountRecords ? (
         <section
