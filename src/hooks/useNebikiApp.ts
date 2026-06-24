@@ -1662,15 +1662,15 @@ const lateSkipNotice = useMemo(() => {
     : null;
 
   useEffect(() => {
-    if (state.screen !== "done") return;
+    if (!state.session) return;
     if (!doneNextSessionInfo?.canStart) return;
 
-    // 次の天候入力開始時刻が来たら、待機完了画面から自動で次の入力画面へ進む。
+    // 次の天候入力開始時刻が来たら、完了画面以外にいても自動で次の入力画面へ進む。
     // 20時30分の最終値引は天候入力がないため、そのまま最終値引画面へ進む。
     startNextDoneSession();
   }, [
-    state.screen,
     state.session?.discountTime,
+    state.session?.startedAt,
     doneNextSessionInfo?.canStart,
     doneNextSessionInfo?.targetDiscountTime,
   ]);
@@ -2862,9 +2862,10 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startNextDoneSession() {
-    if (state.screen !== "done" || !state.session) return;
+    if (!state.session) return;
 
-    const nextInfo = getNextDoneDiscountInfo(state.session.discountTime, new Date(nowMs));
+    const previousDiscountTime = state.session.discountTime;
+    const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, new Date(nowMs));
     if (!nextInfo?.canStart) return;
 
     if (nextInfo.targetDiscountTime !== "20") {
@@ -2878,7 +2879,7 @@ const lateSkipNotice = useMemo(() => {
     const startedAt = now.toISOString();
 
     setState((prev) => {
-      if (prev.screen !== "done" || !prev.session) return prev;
+      if (!prev.session || prev.session.discountTime !== previousDiscountTime) return prev;
 
       const nextSession: SessionData = {
         ...prev.sessionDraft,
