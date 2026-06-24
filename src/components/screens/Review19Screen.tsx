@@ -68,7 +68,7 @@ export function Review19Screen({ items, referenceLines, onChangeRating, onSave, 
           19時売場チェック
         </div>
         <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7 }}>
-17時値引時点で入力した天気予報をもとに、19時30分値引の基準を確認しながら、15時・17時値引後の減り方をエリアごとに記録します。
+17時値引時点で入力した天気予報をもとに、19時値引の基準を確認しながら、15時・17時値引後の減り方をエリアごとに記録します。
           <br />
           初期値はすべて「ちょうどいい」です。違うエリアだけ変更してください。
         </div>
@@ -84,7 +84,7 @@ export function Review19Screen({ items, referenceLines, onChangeRating, onSave, 
             background: "#fafafa",
           }}
         >
-          <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>19時30分値引の基準</div>
+          <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>19時値引の基準</div>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.7, color: "#444" }}>
             {referenceLines.map((line) => (
               <li key={line}>{line}</li>

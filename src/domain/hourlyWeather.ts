@@ -103,9 +103,9 @@ function getCurrentForecastHour(discountTime: DiscountTime): ForecastHourKey {
     case '17':
       return '17';
     case '18':
-      return '18';
-    case '19':
       return '19';
+    case '19':
+      return '20';
     case '20':
       return '20';
   }
@@ -118,7 +118,7 @@ function getNearForecastHour(discountTime: DiscountTime): ForecastHourKey {
     case '17':
       return '18';
     case '18':
-      return '19';
+      return '20';
     case '19':
       return '20';
     case '20':
@@ -146,11 +146,18 @@ function getDirectPrecipForecastEntries(
         hourText: `${hour}時`,
         weather: weather.hourlyForecasts[hour].weather,
       }));
-    case '18':
-      return (['19', '20', '21'] as ForecastHourKey[]).map((hour) => ({
-        hourText: `${hour}時`,
-        weather: weather.hourlyForecasts[hour].weather,
-      }));
+    case '18': {
+      const hour20Weather = weather.hourlyForecasts['20'].weather;
+      const virtual22Weather = hour20Weather === 'rain' || hour20Weather === 'snow'
+        ? hour20Weather
+        : 'sunny';
+
+      return [
+        { hourText: '20時', weather: hour20Weather },
+        { hourText: '21時', weather: weather.hourlyForecasts['21'].weather },
+        { hourText: '22時扱い', weather: virtual22Weather },
+      ];
+    }
     case '19': {
       const hour20Weather = weather.hourlyForecasts['20'].weather;
       const virtual22Weather = hour20Weather === 'rain' || hour20Weather === 'snow'

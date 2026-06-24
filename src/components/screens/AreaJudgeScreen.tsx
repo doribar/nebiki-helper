@@ -110,6 +110,13 @@ function getRecommendationColor(recommendation: AreaCountRecommendation | null):
   return "#1b5e20";
 }
 
+function getComparisonNotice(recommendation: AreaCountRecommendation): string | null {
+  if (recommendation.comparisonMode !== "fallback_group") return null;
+
+  const group = recommendation.actualWeekdayGroup ?? "暫定グループ";
+  return `※同じ曜日の過去データが足りないため、暫定グループ（${group}）で判定しています。`;
+}
+
 export function AreaJudgeScreen({
   weekdayText,
   timeText,
@@ -284,6 +291,23 @@ export function AreaJudgeScreen({
                 >
                   {areaCountRecommendation.summaryText}
                 </div>
+                {getComparisonNotice(areaCountRecommendation) ? (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      background: "#fff8e1",
+                      border: "1px solid #ead28b",
+                      color: "#6d4c00",
+                      fontSize: 13,
+                      fontWeight: 800,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {getComparisonNotice(areaCountRecommendation)}
+                  </div>
+                ) : null}
                 {areaCountRecommendation.detailLines.map((line) => (
                   <div key={line} style={{ fontSize: 13, color: "#444" }}>
                     {line}

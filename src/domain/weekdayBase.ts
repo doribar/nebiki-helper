@@ -31,9 +31,9 @@ function getBasisTimeText(discountTime: DiscountTime): string {
     case "17":
       return "17時";
     case "18":
-      return "18時30分";
+      return "19時";
     case "19":
-      return "19時30分";
+      return "19時45分";
     case "20":
       return "20時30分";
   }
@@ -409,7 +409,7 @@ function getNearForecastHourText(discountTime: DiscountTime): string {
     case "17":
       return "18時";
     case "18":
-      return "19時";
+      return "20時";
     case "19":
       return "20時";
     case "20":

@@ -50,8 +50,8 @@ const WEEKDAY_OPTIONS = [
 const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
   { value: "15", label: "15時" },
   { value: "17", label: "17時" },
-  { value: "18", label: "18時30分" },
-  { value: "19", label: "19時30分" },
+  { value: "18", label: "19時" },
+  { value: "19", label: "19時45分" },
   { value: "20", label: "20時30分" },
 ];
 
@@ -77,10 +77,12 @@ function formatLocalDate(date = new Date()): string {
 function resolveDiscountTime(date = new Date()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
-  if (minutes < 16 * 60 + 30) return "15";
-  if (minutes < 18 * 60 + 15) return "17";
-  if (minutes < 19 * 60 + 30) return "18";
-  if (minutes < 20 * 60 + 30) return "19";
+  // 天候入力・値引開始準備の時刻で自動切替する。
+  // 15時・17時は冷惣菜値引もあるため20分前、それ以降は5分前。
+  if (minutes < 16 * 60 + 40) return "15";
+  if (minutes < 18 * 60 + 55) return "17";
+  if (minutes < 19 * 60 + 40) return "18";
+  if (minutes < 20 * 60 + 25) return "19";
   return "20";
 }
 
@@ -93,11 +95,41 @@ function getDiscountTimeLabel(discountTime: DiscountTime): string {
   const map: Record<DiscountTime, string> = {
     "15": "15時",
     "17": "17時",
-    "18": "18時30分",
-    "19": "19時30分",
+    "18": "19時",
+    "19": "19時45分",
     "20": "20時30分",
   };
   return map[discountTime];
+}
+
+function getSessionInputOpenMinutes(discountTime: DiscountTime): number {
+  switch (discountTime) {
+    case "15":
+      return 14 * 60 + 40;
+    case "17":
+      return 16 * 60 + 40;
+    case "18":
+      return 18 * 60 + 55;
+    case "19":
+      return 19 * 60 + 40;
+    case "20":
+      return 20 * 60 + 25;
+  }
+}
+
+function getSessionInputOpenText(discountTime: DiscountTime): string {
+  switch (discountTime) {
+    case "15":
+      return "14:40から進めます";
+    case "17":
+      return "16:40から進めます";
+    case "18":
+      return "18:55から進めます";
+    case "19":
+      return "19:40から進めます";
+    case "20":
+      return "20:25から進めます";
+  }
 }
 
 function cycleIndex(length: number, currentIndex: number, delta: number): number {
@@ -320,7 +352,7 @@ function getInputStartForecastHour(discountTime: DiscountTime): ForecastHourKey 
     case "17":
       return "18";
     case "18":
-      return "19";
+      return "20";
     case "19":
       return "20";
     case "20":
@@ -363,6 +395,18 @@ export function StartScreen({
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isMigratingLocalRecords, setIsMigratingLocalRecords] = useState(false);
   const [migrationMessage, setMigrationMessage] = useState<AreaCountMigrationResult | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const updateNow = () => setNowMs(Date.now());
+    const id = window.setInterval(updateNow, 30000);
+    window.addEventListener("focus", updateNow);
+
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", updateNow);
+    };
+  }, []);
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
@@ -373,6 +417,8 @@ export function StartScreen({
     : fieldOrder.findIndex(({ hour, field }: { hour: ForecastHourKey; field: InputField }) => !confirmedInputs[hour][field]);
   const currentUnlockTarget = currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
   const allRequiredInputsConfirmed = isFinalTime || currentUnlockIndex === -1;
+  const currentMinutes = new Date(nowMs).getHours() * 60 + new Date(nowMs).getMinutes();
+  const canStartByTime = sessionDraft.manualDiscountTimeOverride || currentMinutes >= getSessionInputOpenMinutes(sessionDraft.discountTime);
   const wasAllRequiredInputsConfirmedRef = useRef(allRequiredInputsConfirmed);
 
 
@@ -807,9 +853,15 @@ rightAction={null}
         </div>
       ) : null}
 
-      <PrimaryButton buttonRef={startButtonRef} onClick={onStart} disabled={!allRequiredInputsConfirmed}>
+      <PrimaryButton buttonRef={startButtonRef} onClick={onStart} disabled={!allRequiredInputsConfirmed || !canStartByTime}>
         {startButtonLabel ?? (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
       </PrimaryButton>
+
+      {!canStartByTime ? (
+        <div style={{ fontSize: 13, color: "#666", marginTop: 6, textAlign: "center" }}>
+          {getDiscountTimeLabel(sessionDraft.discountTime)}は{getSessionInputOpenText(sessionDraft.discountTime)}。
+        </div>
+      ) : null}
 
       {onStartReview19 ? (
         <div style={{ marginTop: 10 }}>

@@ -127,10 +127,12 @@ function formatLocalDate(date = new Date()): string {
 function resolveDiscountTime(date = new Date()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
-  if (minutes < 16 * 60 + 30) return "15";
-  if (minutes < 18 * 60 + 15) return "17";
-  if (minutes < 19 * 60 + 15) return "18";
-  if (minutes < 20 * 60 + 15) return "19";
+  // 天候入力・値引開始準備の時刻で自動切替する。
+  // 15時・17時は冷惣菜値引もあるため20分前、それ以降は5分前。
+  if (minutes < 16 * 60 + 40) return "15";
+  if (minutes < 18 * 60 + 55) return "17";
+  if (minutes < 19 * 60 + 40) return "18";
+  if (minutes < 20 * 60 + 25) return "19";
   return "20";
 }
 
@@ -141,9 +143,9 @@ function getBasisTimeText(discountTime: DiscountTime): string {
     case "17":
       return "17時";
     case "18":
-      return "18時30分";
+      return "19時";
     case "19":
-      return "19時30分";
+      return "19時45分";
     case "20":
       return "20時30分";
   }
@@ -175,15 +177,15 @@ function getNextDoneDiscountInfo(
       targetDiscountTime: "17",
     },
     "17": {
-      label: "18時30分の値引に進む",
-      unlockMinutes: 18 * 60 + 25,
-      unlockText: "18:25からタップできます",
+      label: "19時の値引に進む",
+      unlockMinutes: 18 * 60 + 55,
+      unlockText: "18:55からタップできます",
       targetDiscountTime: "18",
     },
     "18": {
-      label: "19時30分の値引に進む",
-      unlockMinutes: 19 * 60 + 25,
-      unlockText: "19:25からタップできます",
+      label: "19時45分の値引に進む",
+      unlockMinutes: 19 * 60 + 40,
+      unlockText: "19:40からタップできます",
       targetDiscountTime: "19",
     },
     "19": {
@@ -227,15 +229,15 @@ function canStartReview19FromCurrentState(params: {
 
 function buildTimeSwitchNotice(to: DiscountTime): string {
   if (to === "20") {
-    return "20時15分を過ぎたため、19時30分の値引を打ち切り、20時30分の最終値引を開始します。";
+    return "20時30分を過ぎたため、19時45分の値引を打ち切り、20時30分の最終値引を開始します。";
   }
 
   if (to === "19") {
-    return "19時15分を過ぎたため、18時30分の値引を打ち切り、19時30分の値引を開始します。";
+    return "19時45分を過ぎたため、19時の値引を打ち切り、19時45分の値引を開始します。";
   }
 
   if (to === "18") {
-    return "18時15分を過ぎたため、17時の値引を打ち切り、18時30分の値引を開始します。";
+    return "19時を過ぎたため、17時の値引を打ち切り、19時の値引を開始します。";
   }
 
   return `現在時刻が${getBasisTimeText(
@@ -1401,14 +1403,14 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
     return minutes >= 18 * 60 ? 5 : 0;
   }
 
-  // 18時30分基準の値引中に19時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
+  // 19時基準の値引中に19時30分を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
   if (state.session.discountTime === "18") {
-    return minutes >= 19 * 60 ? 5 : 0;
+    return minutes >= 19 * 60 + 30 ? 5 : 0;
   }
 
-  // 19時30分基準の値引中に20時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
+  // 19時45分基準の値引中に20時15分を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
   if (state.session.discountTime === "19") {
-    return minutes >= 20 * 60 ? 5 : 0;
+    return minutes >= 20 * 60 + 15 ? 5 : 0;
   }
 
   return 0;
@@ -1426,11 +1428,11 @@ const lateTimeBonusNotice = useMemo(() => {
   }
 
   if (state.session.discountTime === "18") {
-    return "19時を過ぎたため値引率を5%上げています。";
+    return "19時30分を過ぎたため値引率を5%上げています。";
   }
 
   if (state.session.discountTime === "19") {
-    return "20時を過ぎたため値引率を5%上げています。";
+    return "20時15分を過ぎたため値引率を5%上げています。";
   }
 
   return null;
@@ -1444,7 +1446,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   if (state.session.discountTime === "19") {
-    return "20時を過ぎたため、今回は5%強めて値引します。";
+    return "20時15分を過ぎたため、今回は5%強めて値引します。";
   }
 
   return `次の基準時刻に近づいているため、今回は5%強めて値引します。
@@ -1663,6 +1665,20 @@ const lateSkipNotice = useMemo(() => {
   const doneNextSessionInfo = state.session
     ? getNextDoneDiscountInfo(state.session.discountTime, new Date(nowMs))
     : null;
+
+  useEffect(() => {
+    if (state.screen !== "done") return;
+    if (!doneNextSessionInfo?.canStart) return;
+
+    // 次の天候入力開始時刻が来たら、待機完了画面から自動で次の入力画面へ進む。
+    // 20時30分の最終値引は天候入力がないため、そのまま最終値引画面へ進む。
+    startNextDoneSession();
+  }, [
+    state.screen,
+    state.session?.discountTime,
+    doneNextSessionInfo?.canStart,
+    doneNextSessionInfo?.targetDiscountTime,
+  ]);
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
@@ -2814,6 +2830,42 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
+  function openNextSessionInput(targetDiscountTime: Exclude<DiscountTime, "20">) {
+    const now = new Date();
+    const currentDate = formatLocalDate(now);
+    const currentWeekday = now.getDay();
+
+    if (state.session?.date === currentDate && state.session.discountTime === "17") {
+      saveReview19SourceState(cloneAppState(state));
+    }
+
+    const baseDraft = buildStartDefaultDraft(lastUsedSessionDraft);
+    const nextDraft: SessionDraft = {
+      ...baseDraft,
+      date: currentDate,
+      weekday: currentWeekday,
+      discountTime: targetDiscountTime,
+      manualWeekdayOverride: false,
+      manualDiscountTimeOverride: false,
+      weather: {
+        ...baseDraft.weather,
+        hourlyForecasts: cloneHourlyForecasts(baseDraft.weather.hourlyForecasts),
+      },
+    };
+
+    clearWorkSessionCheckpoint();
+    clearRuntimeState();
+    screenHistoryRef.current = [];
+    previousRenderRef.current = null;
+    suppressHistoryPushRef.current = false;
+    setState(createInitialState(nextDraft));
+    setAreaJudgeSelection(null);
+    setResumeTargetScreen(null);
+    setTimeSwitchTarget(null);
+    setUndoSnapshot(null);
+    setUndoNotice(null);
+  }
+
   function startNextDoneSession() {
     if (state.screen !== "done" || !state.session) return;
 
@@ -2821,7 +2873,7 @@ const lateSkipNotice = useMemo(() => {
     if (!nextInfo?.canStart) return;
 
     if (nextInfo.targetDiscountTime !== "20") {
-      resetApp();
+      openNextSessionInput(nextInfo.targetDiscountTime);
       return;
     }
 
@@ -2856,6 +2908,7 @@ const lateSkipNotice = useMemo(() => {
           date: currentDate,
           weekday: nextSession.weekday,
           discountTime: "20",
+          manualDiscountTimeOverride: false,
           weather: {
             ...nextSession.weather,
             hourlyForecasts: cloneHourlyForecasts(nextSession.weather.hourlyForecasts),
