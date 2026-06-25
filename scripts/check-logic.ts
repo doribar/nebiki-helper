@@ -431,11 +431,11 @@ const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
     expectedNoteExcludes: ['多いのうち10個以上は 40%'],
   },
   {
-    name: '雨雪補正中は時刻別上限を外して多い個数目安も上げる',
+    name: '雨雪補正中も絶対上限50%を超える多い個数目安は表示しない',
     discountTime: '19',
     weatherBonus: 20,
     ignoreTimeRateCap: true,
-    expectedNoteIncludes: ['多いのうち10個以上は 65%'],
+    expectedNoteExcludes: ['多いのうち10個以上は 55%', '多いのうち10個以上は 65%'],
   },
 ];
 
@@ -1065,13 +1065,13 @@ try {
     areaJudge: 'many',
     ignoreTimeRateCap: true,
   });
-  assert.equal(uncappedRainOrSnow.normal.main, '60%');
-  assert.equal(uncappedRainOrSnow.many.main, '70%');
+  assert.equal(uncappedRainOrSnow.normal.main, '50%');
+  assert.equal(uncappedRainOrSnow.many.main, '50%');
 
-  console.log('PASS: 通常時は時刻別上限、雨雪補正中は上限なし');
+  console.log('PASS: 通常時は時刻別上限、雨雪補正中も絶対上限50%');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: 通常時は時刻別上限、雨雪補正中は上限なし');
+  console.error('FAIL: 通常時は時刻別上限、雨雪補正中も絶対上限50%');
   console.error(error);
   process.exitCode = 1;
 }
@@ -1376,6 +1376,21 @@ assert.equal(Object.hasOwn(sundayEveningRateDisplay, 'slightlyMany'), false);
 assert.equal(sundayEveningRateDisplay.many.main, '20%');
 
 console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず12個以上補足だけを表示する');
+
+
+
+const absoluteCapRateDisplay = getNormalTimeRateDisplay({
+  discountTime: '19',
+  weatherBonus: 10,
+  areaJudge: 'normal',
+  ignoreTimeRateCap: true,
+  areaRateAdjustment: 5,
+});
+assert.equal(absoluteCapRateDisplay.many.main, '50%');
+assert.equal(absoluteCapRateDisplay.normal.main, '45%');
+assert.ok(!(absoluteCapRateDisplay.many.note ?? '').includes('55%'));
+console.log('PASS: 通常値引きは雨雪補正やエリア補正込みでも50%を超えない');
+
 
 
 

@@ -8,6 +8,12 @@ import type {
   WeekdayBaseLabel,
 } from "./types";
 
+const MAX_DISCOUNT_RATE = 50;
+
+function capAbsoluteDiscountRate(rawRate: number): number {
+  return Math.max(0, Math.min(rawRate, MAX_DISCOUNT_RATE));
+}
+
 export function getBaseRate(discountTime: DiscountTime): number {
   switch (discountTime) {
     case "15":
@@ -40,8 +46,8 @@ function capNormalDiscountRate(
   discountTime: Exclude<DiscountTime, "20">,
   ignoreTimeRateCap: boolean
 ): number {
-  if (ignoreTimeRateCap) return Math.max(0, rawRate);
-  return Math.max(0, Math.min(rawRate, getNormalTimeRateCap(discountTime)));
+  if (ignoreTimeRateCap) return capAbsoluteDiscountRate(rawRate);
+  return capAbsoluteDiscountRate(Math.min(rawRate, getNormalTimeRateCap(discountTime)));
 }
 
 function toRateLine(main: string, note?: string): RateLine {
