@@ -443,16 +443,16 @@ let passed = 0;
 
 {
   try {
-    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '月水' }), 8);
+    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '月水' }), 10);
     assert.equal(getAreaCountSameItemLimit({ weekdayBase: '火木' }), 10);
-    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '金土' }), 12);
-    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '日' }), 12);
-    assert.equal(getAreaCountSameItemLimit({ weekday: 1, discountTime: '15' }), 8);
+    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '金土' }), 10);
+    assert.equal(getAreaCountSameItemLimit({ weekdayBase: '日' }), 10);
+    assert.equal(getAreaCountSameItemLimit({ weekday: 1, discountTime: '15' }), 10);
     assert.equal(getAreaCountSameItemLimit({ weekday: 0, discountTime: '17' }), 10);
-    console.log('PASS: 同じ商品カウント上限は表示中の曜日基準で決める');
+    console.log('PASS: 同じ商品カウント上限は曜日・時刻に関係なく10個固定');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 同じ商品カウント上限は表示中の曜日基準で決める');
+    console.error('FAIL: 同じ商品カウント上限は曜日・時刻に関係なく10個固定');
     console.error(error);
     process.exitCode = 1;
   }

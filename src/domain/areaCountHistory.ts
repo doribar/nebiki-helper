@@ -133,50 +133,12 @@ export function getAreaCountFallbackWeekdayGroup(params: {
   return getActualWeekdayGroup(params.weekday);
 }
 
-function weekdayBaseToSameItemLimit(weekdayBase: WeekdayBaseLabel): number {
-  switch (weekdayBase) {
-    case "月水":
-      return 8;
-    case "金土":
-    case "日":
-      return 12;
-    case "火木":
-    default:
-      return 10;
-  }
-}
-
-function fallbackWeekdayGroupToSameItemLimit(group: ActualWeekdayGroup): number {
-  switch (group) {
-    case "月水":
-      return 8;
-    case "金土日":
-      return 12;
-    case "火木":
-    default:
-      return 10;
-  }
-}
-
-export function getAreaCountSameItemLimit(params: {
+export function getAreaCountSameItemLimit(_params: {
   weekdayBase?: WeekdayBaseLabel;
   weekday?: number;
   discountTime?: AreaCountDiscountTime;
 }): number {
-  // エリア残数入力の「同じ商品は〇個まで」は、画面上の曜日基準と揃える。
-  // 天候による快適度補正は、曜日基準補正側に反映済みなのでここでは二重にかけない。
-  if (params.weekdayBase) {
-    return weekdayBaseToSameItemLimit(params.weekdayBase);
-  }
-
-  // 旧呼び出し・テスト互換。通常の画面表示では weekdayBase を渡す。
-  if (typeof params.weekday === "number" && params.discountTime) {
-    return fallbackWeekdayGroupToSameItemLimit(getAreaCountFallbackWeekdayGroup({
-      weekday: params.weekday,
-      discountTime: params.discountTime,
-    }));
-  }
-
+  // エリア残数入力の「同じ商品は〇個まで」は、曜日・時刻に関係なく常に10個に固定する。
   return 10;
 }
 
