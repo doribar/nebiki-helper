@@ -55,13 +55,20 @@ const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
 
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
 const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
-const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS.filter((hour) => hour !== "15");
+const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS.filter(
+  (hour) => hour !== "15",
+);
 const FORECAST_WEATHER_ORDER: ForecastWeatherKind[] = ["sunny", "rain", "snow"];
 
-function stepForecastWeather(current: ForecastWeatherKind, delta: 1 | -1): ForecastWeatherKind {
+function stepForecastWeather(
+  current: ForecastWeatherKind,
+  delta: 1 | -1,
+): ForecastWeatherKind {
   const currentIndex = FORECAST_WEATHER_ORDER.indexOf(current);
   const safeIndex = currentIndex >= 0 ? currentIndex : 0;
-  const nextIndex = (safeIndex + delta + FORECAST_WEATHER_ORDER.length) % FORECAST_WEATHER_ORDER.length;
+  const nextIndex =
+    (safeIndex + delta + FORECAST_WEATHER_ORDER.length) %
+    FORECAST_WEATHER_ORDER.length;
   return FORECAST_WEATHER_ORDER[nextIndex];
 }
 
@@ -85,7 +92,15 @@ function resolveDiscountTime(date = new Date()): DiscountTime {
 }
 
 function getWeekdayLabel(weekday: number): string {
-  const map = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
+  const map = [
+    "日曜日",
+    "月曜日",
+    "火曜日",
+    "水曜日",
+    "木曜日",
+    "金曜日",
+    "土曜日",
+  ];
   return map[weekday] ?? "";
 }
 
@@ -100,37 +115,11 @@ function getDiscountTimeLabel(discountTime: DiscountTime): string {
   return map[discountTime];
 }
 
-function getSessionInputOpenMinutes(discountTime: DiscountTime): number {
-  switch (discountTime) {
-    case "15":
-      return 14 * 60 + 40;
-    case "17":
-      return 16 * 60 + 40;
-    case "18":
-      return 18 * 60 + 25;
-    case "19":
-      return 19 * 60 + 25;
-    case "20":
-      return 20 * 60 + 25;
-  }
-}
-
-function getSessionInputOpenText(discountTime: DiscountTime): string {
-  switch (discountTime) {
-    case "15":
-      return "14:40から進めます";
-    case "17":
-      return "16:40から進めます";
-    case "18":
-      return "18:25から進めます";
-    case "19":
-      return "19:25から進めます";
-    case "20":
-      return "20:25から進めます";
-  }
-}
-
-function cycleIndex(length: number, currentIndex: number, delta: number): number {
+function cycleIndex(
+  length: number,
+  currentIndex: number,
+  delta: number,
+): number {
   return (currentIndex + delta + length) % length;
 }
 
@@ -189,7 +178,8 @@ function ForecastNumberStepper(props: {
       <button
         type="button"
         onClick={() => {
-          if (props.disabled || !props.isUnconfirmed || !props.onConfirmCurrent) return;
+          if (props.disabled || !props.isUnconfirmed || !props.onConfirmCurrent)
+            return;
           props.onConfirmCurrent();
         }}
         disabled={props.disabled}
@@ -204,10 +194,15 @@ function ForecastNumberStepper(props: {
           alignItems: "center",
           justifyContent: "center",
           padding: "4px",
-          cursor: props.disabled ? "not-allowed" : props.isUnconfirmed ? "pointer" : "default",
+          cursor: props.disabled
+            ? "not-allowed"
+            : props.isUnconfirmed
+              ? "pointer"
+              : "default",
         }}
       >
-        {props.value}{props.unit}
+        {props.value}
+        {props.unit}
       </button>
 
       <button
@@ -275,7 +270,8 @@ function ForecastWeatherStepper(props: {
       <button
         type="button"
         onClick={() => {
-          if (props.disabled || !props.isUnconfirmed || !props.onConfirmCurrent) return;
+          if (props.disabled || !props.isUnconfirmed || !props.onConfirmCurrent)
+            return;
           props.onConfirmCurrent();
         }}
         disabled={props.disabled}
@@ -291,12 +287,20 @@ function ForecastWeatherStepper(props: {
           alignItems: "center",
           justifyContent: "center",
           padding: "4px",
-          cursor: props.disabled ? "not-allowed" : props.isUnconfirmed ? "pointer" : "default",
+          cursor: props.disabled
+            ? "not-allowed"
+            : props.isUnconfirmed
+              ? "pointer"
+              : "default",
           gap: 2,
         }}
       >
-        <span style={{ fontSize: 18, lineHeight: 1 }}>{getForecastWeatherSymbol(props.weather)}</span>
-        <span style={{ fontSize: 12 }}>{getForecastWeatherLabel(props.weather)}</span>
+        <span style={{ fontSize: 18, lineHeight: 1 }}>
+          {getForecastWeatherSymbol(props.weather)}
+        </span>
+        <span style={{ fontSize: 12 }}>
+          {getForecastWeatherLabel(props.weather)}
+        </span>
       </button>
 
       <button
@@ -322,11 +326,12 @@ function ForecastWeatherStepper(props: {
   );
 }
 
-
-
 const INPUT_FIELDS = ["weather", "temp", "wind"] as const;
 type InputField = (typeof INPUT_FIELDS)[number];
-type ForecastConfirmationMap = Record<ForecastHourKey, Record<InputField, boolean>>;
+type ForecastConfirmationMap = Record<
+  ForecastHourKey,
+  Record<InputField, boolean>
+>;
 
 function createEmptyConfirmationMap(): ForecastConfirmationMap {
   return FORECAST_HOUR_KEYS.reduce((acc, hour) => {
@@ -343,7 +348,9 @@ function isHourAtOrAfter(hour: ForecastHourKey, startHour: ForecastHourKey) {
   return Number(hour) >= Number(startHour);
 }
 
-function getInputStartForecastHour(discountTime: DiscountTime): ForecastHourKey {
+function getInputStartForecastHour(
+  discountTime: DiscountTime,
+): ForecastHourKey {
   switch (discountTime) {
     case "15":
       return "16";
@@ -358,14 +365,19 @@ function getInputStartForecastHour(discountTime: DiscountTime): ForecastHourKey 
   }
 }
 
-function getInputHoursForField(activeHours: ForecastHourKey[], field: InputField): ForecastHourKey[] {
+function getInputHoursForField(
+  activeHours: ForecastHourKey[],
+  field: InputField,
+): ForecastHourKey[] {
   return field === "temp" ? [...activeHours].reverse() : activeHours;
 }
 
 function createFieldOrder(startHour: ForecastHourKey) {
-  const activeHours = DISPLAY_FORECAST_HOURS.filter((hour) => isHourAtOrAfter(hour, startHour));
+  const activeHours = DISPLAY_FORECAST_HOURS.filter((hour) =>
+    isHourAtOrAfter(hour, startHour),
+  );
   return INPUT_FIELDS.flatMap((field) =>
-    getInputHoursForField(activeHours, field).map((hour) => ({ hour, field }))
+    getInputHoursForField(activeHours, field).map((hour) => ({ hour, field })),
   );
 }
 
@@ -380,29 +392,27 @@ export function StartScreen({
   onReturnHome,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
-  const startForecastHour = getInputStartForecastHour(sessionDraft.discountTime);
-  const activeHours = useMemo(
-    () => DISPLAY_FORECAST_HOURS.filter((hour) => isHourAtOrAfter(hour, startForecastHour)),
-    [startForecastHour]
+  const startForecastHour = getInputStartForecastHour(
+    sessionDraft.discountTime,
   );
-  const fieldOrder = useMemo(() => createFieldOrder(startForecastHour), [startForecastHour]);
-  const [confirmedInputs, setConfirmedInputs] = useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
+  const activeHours = useMemo(
+    () =>
+      DISPLAY_FORECAST_HOURS.filter((hour) =>
+        isHourAtOrAfter(hour, startForecastHour),
+      ),
+    [startForecastHour],
+  );
+  const fieldOrder = useMemo(
+    () => createFieldOrder(startForecastHour),
+    [startForecastHour],
+  );
+  const [confirmedInputs, setConfirmedInputs] =
+    useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isMigratingLocalRecords, setIsMigratingLocalRecords] = useState(false);
-  const [migrationMessage, setMigrationMessage] = useState<AreaCountMigrationResult | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  useEffect(() => {
-    const updateNow = () => setNowMs(Date.now());
-    const id = window.setInterval(updateNow, 30000);
-    window.addEventListener("focus", updateNow);
-
-    return () => {
-      window.clearInterval(id);
-      window.removeEventListener("focus", updateNow);
-    };
-  }, []);
+  const [migrationMessage, setMigrationMessage] =
+    useState<AreaCountMigrationResult | null>(null);
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
@@ -410,13 +420,14 @@ export function StartScreen({
 
   const currentUnlockIndex = isFinalTime
     ? -1
-    : fieldOrder.findIndex(({ hour, field }: { hour: ForecastHourKey; field: InputField }) => !confirmedInputs[hour][field]);
-  const currentUnlockTarget = currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
+    : fieldOrder.findIndex(
+        ({ hour, field }: { hour: ForecastHourKey; field: InputField }) =>
+          !confirmedInputs[hour][field],
+      );
+  const currentUnlockTarget =
+    currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
   const allRequiredInputsConfirmed = isFinalTime || currentUnlockIndex === -1;
-  const currentMinutes = new Date(nowMs).getHours() * 60 + new Date(nowMs).getMinutes();
-  const canStartByTime = sessionDraft.manualDiscountTimeOverride || currentMinutes >= getSessionInputOpenMinutes(sessionDraft.discountTime);
   const wasAllRequiredInputsConfirmedRef = useRef(allRequiredInputsConfirmed);
-
 
   useEffect(() => {
     if (!currentUnlockTarget) return;
@@ -436,13 +447,17 @@ export function StartScreen({
     return () => window.clearTimeout(timer);
   }, [currentUnlockTarget]);
 
-
-
   useEffect(() => {
-    const wasAllRequiredInputsConfirmed = wasAllRequiredInputsConfirmedRef.current;
+    const wasAllRequiredInputsConfirmed =
+      wasAllRequiredInputsConfirmedRef.current;
     wasAllRequiredInputsConfirmedRef.current = allRequiredInputsConfirmed;
 
-    if (isFinalTime || wasAllRequiredInputsConfirmed || !allRequiredInputsConfirmed) return;
+    if (
+      isFinalTime ||
+      wasAllRequiredInputsConfirmed ||
+      !allRequiredInputsConfirmed
+    )
+      return;
 
     const timer = window.setTimeout(() => {
       startButtonRef.current?.focus();
@@ -453,7 +468,10 @@ export function StartScreen({
 
   const isFieldEnabled = (hour: ForecastHourKey, field: InputField) => {
     if (!isHourAtOrAfter(hour, startForecastHour)) return false;
-    const index = fieldOrder.findIndex((item: { hour: ForecastHourKey; field: InputField }) => item.hour === hour && item.field === field);
+    const index = fieldOrder.findIndex(
+      (item: { hour: ForecastHourKey; field: InputField }) =>
+        item.hour === hour && item.field === field,
+    );
     if (index === -1) return false;
     return currentUnlockIndex === -1 || index <= currentUnlockIndex;
   };
@@ -464,7 +482,9 @@ export function StartScreen({
     patch: Partial<SessionDraft["weather"]["hourlyForecasts"][ForecastHourKey]>,
     shouldConfirm = true,
   ) => {
-    const nextHourlyForecasts = cloneHourlyForecasts(sessionDraft.weather.hourlyForecasts);
+    const nextHourlyForecasts = cloneHourlyForecasts(
+      sessionDraft.weather.hourlyForecasts,
+    );
     nextHourlyForecasts[hour] = {
       ...nextHourlyForecasts[hour],
       ...patch,
@@ -472,7 +492,8 @@ export function StartScreen({
 
     const fieldInputHours = getInputHoursForField(activeHours, field);
     const activeIndex = fieldInputHours.indexOf(hour);
-    const nextHour = activeIndex >= 0 ? fieldInputHours[activeIndex + 1] : undefined;
+    const nextHour =
+      activeIndex >= 0 ? fieldInputHours[activeIndex + 1] : undefined;
     if (nextHour && !confirmedInputs[nextHour][field]) {
       const currentEntry = nextHourlyForecasts[hour];
       nextHourlyForecasts[nextHour] = {
@@ -507,7 +528,9 @@ export function StartScreen({
 
   const handleWeekdayWheel = (deltaY: number) => {
     const step = getWheelStep(deltaY);
-    const currentIndex = WEEKDAY_OPTIONS.findIndex((option) => option.value === sessionDraft.weekday);
+    const currentIndex = WEEKDAY_OPTIONS.findIndex(
+      (option) => option.value === sessionDraft.weekday,
+    );
     const nextIndex = cycleIndex(WEEKDAY_OPTIONS.length, currentIndex, step);
     const nextWeekday = WEEKDAY_OPTIONS[nextIndex].value;
 
@@ -519,8 +542,14 @@ export function StartScreen({
 
   const handleDiscountTimeWheel = (deltaY: number) => {
     const step = getWheelStep(deltaY);
-    const currentIndex = DISCOUNT_TIME_OPTIONS.findIndex((option) => option.value === sessionDraft.discountTime);
-    const nextIndex = cycleIndex(DISCOUNT_TIME_OPTIONS.length, currentIndex, step);
+    const currentIndex = DISCOUNT_TIME_OPTIONS.findIndex(
+      (option) => option.value === sessionDraft.discountTime,
+    );
+    const nextIndex = cycleIndex(
+      DISCOUNT_TIME_OPTIONS.length,
+      currentIndex,
+      step,
+    );
     const nextDiscountTime = DISCOUNT_TIME_OPTIONS[nextIndex].value;
 
     onChangeSessionDraft({
@@ -533,7 +562,7 @@ export function StartScreen({
     if (!onMigrateLocalAreaCountRecords || isMigratingLocalRecords) return;
 
     const ok = window.confirm(
-      "ローカルに残っているエリア残数履歴をサーバーへ送信します。\n同じ記録がすでにある場合は上書きされます。"
+      "ローカルに残っているエリア残数履歴をサーバーへ送信します。\n同じ記録がすでにある場合は上書きされます。",
     );
     if (!ok) return;
 
@@ -545,7 +574,10 @@ export function StartScreen({
     } catch (error) {
       setMigrationMessage({
         ok: false,
-        message: error instanceof Error ? error.message : "ローカル履歴の送信に失敗しました。",
+        message:
+          error instanceof Error
+            ? error.message
+            : "ローカル履歴の送信に失敗しました。",
       });
     } finally {
       setIsMigratingLocalRecords(false);
@@ -567,13 +599,14 @@ export function StartScreen({
             </div>
           </>
         }
-rightAction={null}
+        rightAction={null}
       />
-
 
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>曜日</StartSectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}
+        >
           <div
             onWheel={(e) => {
               e.preventDefault();
@@ -590,7 +623,12 @@ rightAction={null}
                     manualWeekdayOverride: true,
                   })
                 }
-                style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid #ccc" }}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                }}
               >
                 {WEEKDAY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -637,14 +675,18 @@ rightAction={null}
               whiteSpace: "nowrap",
             }}
           >
-            {sessionDraft.manualWeekdayOverride ? "自動に戻す" : "手動で切り替える"}
+            {sessionDraft.manualWeekdayOverride
+              ? "自動に戻す"
+              : "手動で切り替える"}
           </button>
         </div>
       </div>
 
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>時刻</StartSectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}
+        >
           <div
             onWheel={(e) => {
               e.preventDefault();
@@ -661,7 +703,12 @@ rightAction={null}
                     manualDiscountTimeOverride: true,
                   })
                 }
-                style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid #ccc" }}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #ccc",
+                }}
               >
                 {DISCOUNT_TIME_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -707,124 +754,159 @@ rightAction={null}
               whiteSpace: "nowrap",
             }}
           >
-            {sessionDraft.manualDiscountTimeOverride ? "自動に戻す" : "手動で切り替える"}
+            {sessionDraft.manualDiscountTimeOverride
+              ? "自動に戻す"
+              : "手動で切り替える"}
           </button>
         </div>
       </div>
 
-{!isFinalTime ? (
+      {!isFinalTime ? (
         <>
-      <StartSectionLabel>天候</StartSectionLabel>
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 14,
-          marginBottom: 16,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ overflowX: "auto", paddingBottom: 4 }}>
-          <div
+          <StartSectionLabel>天候</StartSectionLabel>
+          <section
             style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${DISPLAY_FORECAST_HOURS.length}, minmax(72px, 1fr))`,
-              gap: 8,
-              minWidth: DISPLAY_FORECAST_HOURS.length * 78,
-              alignItems: "center",
+              border: "1px solid #ddd",
+              borderRadius: 12,
+              padding: 14,
+              marginBottom: 16,
+              background: "#fafafa",
             }}
           >
-            {DISPLAY_FORECAST_HOURS.map((hour) => (
-              <div key={`head-${hour}`} style={{ textAlign: "center", fontWeight: 800 }}>
-                {hour}時
-              </div>
-            ))}
-
-            {DISPLAY_FORECAST_HOURS.map((hour) => {
-              const forecast = sessionDraft.weather.hourlyForecasts[hour];
-              const enabled = isFieldEnabled(hour, "weather");
-              const isConfirmed = confirmedInputs[hour].weather;
-              return (
-                <div key={`weather-wrap-${hour}`} ref={(node) => { hourlyFieldRefs.current[`weather-${hour}`] = node; }}>
-                  <ForecastWeatherStepper
-                    key={`weather-${hour}`}
-                    weather={forecast.weather}
-                    disabled={!enabled}
-                    isUnconfirmed={!isConfirmed}
-                    onConfirmCurrent={() => confirmCurrentDefault(hour, "weather")}
-                    onChange={(next) => applyHourlyChange(hour, "weather", { weather: next }, false)}
-                  />
-                </div>
-              );
-            })}
-
-            {DISPLAY_FORECAST_HOURS.map((hour) => {
-              const forecast = sessionDraft.weather.hourlyForecasts[hour];
-              const enabled = isFieldEnabled(hour, "temp");
-              const isConfirmed = confirmedInputs[hour].temp;
-              return (
-                <div
-                  key={`temp-wrap-${hour}`}
-                  ref={(node) => {
-                    hourlyFieldRefs.current[`temp-${hour}`] = node;
-                  }}
-                >
-                  <ForecastNumberStepper
-                    key={`temp-${hour}`}
-                    value={forecast.tempC}
-                    options={TEMP_NUMBER_OPTIONS}
-                    unit="℃"
-                    disabled={!enabled}
-                    isUnconfirmed={!isConfirmed}
-                    onConfirmCurrent={() => confirmCurrentDefault(hour, "temp")}
-                    onChange={(next) => applyHourlyChange(hour, "temp", { tempC: next }, false)}
-                  />
-                </div>
-              );
-            })}
-
-            {DISPLAY_FORECAST_HOURS.map((hour) => {
-              const forecast = sessionDraft.weather.hourlyForecasts[hour];
-              const enabled = isFieldEnabled(hour, "wind");
-              const isConfirmed = confirmedInputs[hour].wind;
-              return (
-                <div
-                  key={`wind-wrap-${hour}`}
-                  ref={(node) => {
-                    hourlyFieldRefs.current[`wind-${hour}`] = node;
-                  }}
-                >
-                  <ForecastNumberStepper
-                    key={`wind-${hour}`}
-                    value={forecast.windMs}
-                    options={WIND_NUMBER_OPTIONS}
-                    unit="m"
-                    disabled={!enabled}
-                    isUnconfirmed={!isConfirmed}
-                    onConfirmCurrent={() => confirmCurrentDefault(hour, "wind")}
-                    onChange={(next) => applyHourlyChange(hour, "wind", { windMs: next }, false)}
-                  />
-                </div>
-              );
-            })}
-
-            {DISPLAY_FORECAST_HOURS.map((hour) => (
+            <div style={{ overflowX: "auto", paddingBottom: 4 }}>
               <div
-                key={`foot-${hour}`}
                 style={{
-                  textAlign: "center",
-                  fontWeight: 800,
-                  paddingTop: 2,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${DISPLAY_FORECAST_HOURS.length}, minmax(72px, 1fr))`,
+                  gap: 8,
+                  minWidth: DISPLAY_FORECAST_HOURS.length * 78,
+                  alignItems: "center",
                 }}
               >
-                {hour}時
+                {DISPLAY_FORECAST_HOURS.map((hour) => (
+                  <div
+                    key={`head-${hour}`}
+                    style={{ textAlign: "center", fontWeight: 800 }}
+                  >
+                    {hour}時
+                  </div>
+                ))}
+
+                {DISPLAY_FORECAST_HOURS.map((hour) => {
+                  const forecast = sessionDraft.weather.hourlyForecasts[hour];
+                  const enabled = isFieldEnabled(hour, "weather");
+                  const isConfirmed = confirmedInputs[hour].weather;
+                  return (
+                    <div
+                      key={`weather-wrap-${hour}`}
+                      ref={(node) => {
+                        hourlyFieldRefs.current[`weather-${hour}`] = node;
+                      }}
+                    >
+                      <ForecastWeatherStepper
+                        key={`weather-${hour}`}
+                        weather={forecast.weather}
+                        disabled={!enabled}
+                        isUnconfirmed={!isConfirmed}
+                        onConfirmCurrent={() =>
+                          confirmCurrentDefault(hour, "weather")
+                        }
+                        onChange={(next) =>
+                          applyHourlyChange(
+                            hour,
+                            "weather",
+                            { weather: next },
+                            false,
+                          )
+                        }
+                      />
+                    </div>
+                  );
+                })}
+
+                {DISPLAY_FORECAST_HOURS.map((hour) => {
+                  const forecast = sessionDraft.weather.hourlyForecasts[hour];
+                  const enabled = isFieldEnabled(hour, "temp");
+                  const isConfirmed = confirmedInputs[hour].temp;
+                  return (
+                    <div
+                      key={`temp-wrap-${hour}`}
+                      ref={(node) => {
+                        hourlyFieldRefs.current[`temp-${hour}`] = node;
+                      }}
+                    >
+                      <ForecastNumberStepper
+                        key={`temp-${hour}`}
+                        value={forecast.tempC}
+                        options={TEMP_NUMBER_OPTIONS}
+                        unit="℃"
+                        disabled={!enabled}
+                        isUnconfirmed={!isConfirmed}
+                        onConfirmCurrent={() =>
+                          confirmCurrentDefault(hour, "temp")
+                        }
+                        onChange={(next) =>
+                          applyHourlyChange(
+                            hour,
+                            "temp",
+                            { tempC: next },
+                            false,
+                          )
+                        }
+                      />
+                    </div>
+                  );
+                })}
+
+                {DISPLAY_FORECAST_HOURS.map((hour) => {
+                  const forecast = sessionDraft.weather.hourlyForecasts[hour];
+                  const enabled = isFieldEnabled(hour, "wind");
+                  const isConfirmed = confirmedInputs[hour].wind;
+                  return (
+                    <div
+                      key={`wind-wrap-${hour}`}
+                      ref={(node) => {
+                        hourlyFieldRefs.current[`wind-${hour}`] = node;
+                      }}
+                    >
+                      <ForecastNumberStepper
+                        key={`wind-${hour}`}
+                        value={forecast.windMs}
+                        options={WIND_NUMBER_OPTIONS}
+                        unit="m"
+                        disabled={!enabled}
+                        isUnconfirmed={!isConfirmed}
+                        onConfirmCurrent={() =>
+                          confirmCurrentDefault(hour, "wind")
+                        }
+                        onChange={(next) =>
+                          applyHourlyChange(
+                            hour,
+                            "wind",
+                            { windMs: next },
+                            false,
+                          )
+                        }
+                      />
+                    </div>
+                  );
+                })}
+
+                {DISPLAY_FORECAST_HOURS.map((hour) => (
+                  <div
+                    key={`foot-${hour}`}
+                    style={{
+                      textAlign: "center",
+                      fontWeight: 800,
+                      paddingTop: 2,
+                    }}
+                  >
+                    {hour}時
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-
+            </div>
+          </section>
         </>
       ) : null}
 
@@ -838,8 +920,12 @@ rightAction={null}
             background: "#fafafa",
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>20時30分以降は最終値引です</div>
-          <div style={{ lineHeight: 1.7 }}>なるべく商品が多いエリアから値引きを始めてください。</div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>
+            20時30分以降は最終値引です
+          </div>
+          <div style={{ lineHeight: 1.7 }}>
+            なるべく商品が多いエリアから値引きを始めてください。
+          </div>
         </section>
       ) : null}
 
@@ -849,16 +935,14 @@ rightAction={null}
         </div>
       ) : null}
 
-      <PrimaryButton buttonRef={startButtonRef} onClick={onStart} disabled={!allRequiredInputsConfirmed || !canStartByTime}>
-        {startButtonLabel ?? (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
+      <PrimaryButton
+        buttonRef={startButtonRef}
+        onClick={onStart}
+        disabled={!allRequiredInputsConfirmed}
+      >
+        {startButtonLabel ??
+          (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
       </PrimaryButton>
-
-      {!canStartByTime ? (
-        <div style={{ fontSize: 13, color: "#666", marginTop: 6, textAlign: "center" }}>
-          {getDiscountTimeLabel(sessionDraft.discountTime)}は{getSessionInputOpenText(sessionDraft.discountTime)}。
-        </div>
-      ) : null}
-
 
       {onMigrateLocalAreaCountRecords ? (
         <section
@@ -870,26 +954,46 @@ rightAction={null}
             background: "#fafafa",
           }}
         >
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>ローカル履歴のサーバー送信</div>
-          <div style={{ fontSize: 13, color: "#555", lineHeight: 1.6, marginBottom: 10 }}>
-            端末内にあるエリア残数履歴をSupabaseへ送信します。現在のローカル履歴は{localAreaCountRecordCount}件です。
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>
+            ローカル履歴のサーバー送信
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#555",
+              lineHeight: 1.6,
+              marginBottom: 10,
+            }}
+          >
+            端末内にあるエリア残数履歴をSupabaseへ送信します。現在のローカル履歴は
+            {localAreaCountRecordCount}件です。
           </div>
           <button
             type="button"
             onClick={handleMigrateLocalAreaCountRecords}
-            disabled={isMigratingLocalRecords || localAreaCountRecordCount === 0}
+            disabled={
+              isMigratingLocalRecords || localAreaCountRecordCount === 0
+            }
             style={{
               width: "100%",
               padding: "10px 14px",
               borderRadius: 12,
               border: "1px solid #ccc",
-              background: isMigratingLocalRecords || localAreaCountRecordCount === 0 ? "#eee" : "#fff",
+              background:
+                isMigratingLocalRecords || localAreaCountRecordCount === 0
+                  ? "#eee"
+                  : "#fff",
               fontSize: 14,
               fontWeight: 700,
-              cursor: isMigratingLocalRecords || localAreaCountRecordCount === 0 ? "not-allowed" : "pointer",
+              cursor:
+                isMigratingLocalRecords || localAreaCountRecordCount === 0
+                  ? "not-allowed"
+                  : "pointer",
             }}
           >
-            {isMigratingLocalRecords ? "送信中…" : "ローカル履歴をサーバーへ送信"}
+            {isMigratingLocalRecords
+              ? "送信中…"
+              : "ローカル履歴をサーバーへ送信"}
           </button>
           {migrationMessage ? (
             <div
