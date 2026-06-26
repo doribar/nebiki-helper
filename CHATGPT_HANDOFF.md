@@ -2133,3 +2133,30 @@ ZIP返却方針:
 
 ZIP返却方針:
 - 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。
+
+## 2026-06-26 追記：値引率表示の「迷ったら」を曜日基準から時刻基準へ変更
+
+ユーザー要望により、値引率表示ステップの「迷ったら」文言を、実際の曜日ではなく値引時刻の方針で分ける形に変更した。
+
+### 仕様
+- 15時は品揃え確保優先として扱う。
+  - 表示文言: `迷ったら：15時は品揃え確保優先なので、迷ったら少ない側に寄せる`
+- 17時以降（17時・18時30分・19時30分）は売り切り優先として扱う。
+  - 表示文言: `迷ったら：17時以降は売り切り優先なので、迷ったら多い側に寄せる`
+- 20時30分は最終値引画面のため、通常値引ステップ側の「迷ったら」表示は使わない。
+- 表示位置は従来通り、各値引指示ステップの「終わった」ボタン直前。
+- 値引率計算・ステップ順・エリア判定ロジックは変更していない。
+
+### 実装
+- `src/components/screens/RateDisplayScreen.tsx`
+  - `getWeekdayBiasNotice(weekdayText)` を廃止。
+  - `getTimeBiasNotice(discountTime)` を追加。
+  - `RateInstructionCard` の props を `weekdayBiasNotice` から `timeBiasNotice` に変更。
+  - `discountTime` を基準に「少ない側」「多い側」の文言を出すよう変更。
+
+### 確認結果
+- `npm run check:logic` PASS。
+- `npm run build` PASS。
+
+ZIP返却方針:
+- 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。

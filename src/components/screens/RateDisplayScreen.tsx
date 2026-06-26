@@ -95,24 +95,22 @@ type RateInstructionStep = {
   color?: string;
 };
 
-type WeekdayBiasNotice = {
+type TimeBiasNotice = {
   text: string;
   color: string;
 };
 
-function getWeekdayBiasNotice(weekdayText: string): WeekdayBiasNotice | null {
-  const weekday = weekdayText.replace("曜日", "");
-
-  if (["月", "火", "水", "木"].includes(weekday)) {
+function getTimeBiasNotice(discountTime: DiscountTime): TimeBiasNotice | null {
+  if (discountTime === "15") {
     return {
-      text: `${weekdayText}なので、迷ったら多い側に寄せる`,
+      text: "15時は品揃え確保優先なので、迷ったら少ない側に寄せる",
       color: "#e65100",
     };
   }
 
-  if (["金", "土", "日"].includes(weekday)) {
+  if (["17", "18", "19"].includes(discountTime)) {
     return {
-      text: `${weekdayText}なので、迷ったら少ない側に寄せる`,
+      text: "17時以降は売り切り優先なので、迷ったら多い側に寄せる",
       color: "#e65100",
     };
   }
@@ -230,13 +228,13 @@ function RateInstructionCard({
   step,
   currentIndex,
   totalCount,
-  weekdayBiasNotice,
+  timeBiasNotice,
   onDone,
 }: {
   step: RateInstructionStep;
   currentIndex: number;
   totalCount: number;
-  weekdayBiasNotice: WeekdayBiasNotice | null;
+  timeBiasNotice: TimeBiasNotice | null;
   onDone: () => void;
 }) {
   return (
@@ -279,7 +277,7 @@ function RateInstructionCard({
         </div>
       ) : null}
 
-      {weekdayBiasNotice ? (
+      {timeBiasNotice ? (
         <div
           style={{
             marginTop: 16,
@@ -291,14 +289,14 @@ function RateInstructionCard({
             fontSize: 14,
             fontWeight: 700,
             lineHeight: 1.6,
-            color: weekdayBiasNotice.color,
+            color: timeBiasNotice.color,
           }}
         >
-          迷ったら：{weekdayBiasNotice.text}
+          迷ったら：{timeBiasNotice.text}
         </div>
       ) : null}
 
-      <div style={{ marginTop: weekdayBiasNotice ? 0 : 20 }}>
+      <div style={{ marginTop: timeBiasNotice ? 0 : 20 }}>
         <PrimaryButton onClick={onDone}>終わった</PrimaryButton>
       </div>
     </>
@@ -480,7 +478,7 @@ export function RateDisplayScreen({
         Math.max(rateInstructionSteps.length - 1, 0),
       )
     ];
-  const weekdayBiasNotice = getWeekdayBiasNotice(weekdayText);
+  const timeBiasNotice = getTimeBiasNotice(discountTime);
 
   function handleRateInstructionDone() {
     if (rateInstructionStepIndex < rateInstructionSteps.length - 1) {
@@ -633,7 +631,7 @@ export function RateDisplayScreen({
                 step={currentRateInstructionStep}
                 currentIndex={rateInstructionStepIndex}
                 totalCount={rateInstructionSteps.length}
-                weekdayBiasNotice={weekdayBiasNotice}
+                timeBiasNotice={timeBiasNotice}
                 onDone={handleRateInstructionDone}
               />
             ) : null}
