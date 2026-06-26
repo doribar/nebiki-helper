@@ -95,29 +95,6 @@ type RateInstructionStep = {
   color?: string;
 };
 
-type TimeBiasNotice = {
-  text: string;
-  color: string;
-};
-
-function getTimeBiasNotice(discountTime: DiscountTime): TimeBiasNotice | null {
-  if (discountTime === "15") {
-    return {
-      text: "15時は品揃え確保優先なので、迷ったら少ない側に寄せる",
-      color: "#e65100",
-    };
-  }
-
-  if (["17", "18", "19"].includes(discountTime)) {
-    return {
-      text: "17時以降は売り切り優先なので、迷ったら多い側に寄せる",
-      color: "#e65100",
-    };
-  }
-
-  return null;
-}
-
 function buildManyThresholdInstruction(
   note: string | undefined,
   color: string,
@@ -228,13 +205,11 @@ function RateInstructionCard({
   step,
   currentIndex,
   totalCount,
-  timeBiasNotice,
   onDone,
 }: {
   step: RateInstructionStep;
   currentIndex: number;
   totalCount: number;
-  timeBiasNotice: TimeBiasNotice | null;
   onDone: () => void;
 }) {
   return (
@@ -277,26 +252,7 @@ function RateInstructionCard({
         </div>
       ) : null}
 
-      {timeBiasNotice ? (
-        <div
-          style={{
-            marginTop: 16,
-            marginBottom: 10,
-            padding: "10px 12px",
-            borderRadius: 10,
-            background: "#fafafa",
-            border: "1px solid #e5e5e5",
-            fontSize: 14,
-            fontWeight: 700,
-            lineHeight: 1.6,
-            color: timeBiasNotice.color,
-          }}
-        >
-          迷ったら：{timeBiasNotice.text}
-        </div>
-      ) : null}
-
-      <div style={{ marginTop: timeBiasNotice ? 0 : 20 }}>
+      <div style={{ marginTop: 20 }}>
         <PrimaryButton onClick={onDone}>終わった</PrimaryButton>
       </div>
     </>
@@ -478,7 +434,6 @@ export function RateDisplayScreen({
         Math.max(rateInstructionSteps.length - 1, 0),
       )
     ];
-  const timeBiasNotice = getTimeBiasNotice(discountTime);
 
   function handleRateInstructionDone() {
     if (rateInstructionStepIndex < rateInstructionSteps.length - 1) {
@@ -631,7 +586,6 @@ export function RateDisplayScreen({
                 step={currentRateInstructionStep}
                 currentIndex={rateInstructionStepIndex}
                 totalCount={rateInstructionSteps.length}
-                timeBiasNotice={timeBiasNotice}
                 onDone={handleRateInstructionDone}
               />
             ) : null}
@@ -734,7 +688,7 @@ export function RateDisplayScreen({
           background: "#fafafa",
         }}
       >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>補足</div>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
         <div style={{ lineHeight: 1.8 }}>
           <div>
             ・アウトパック
@@ -751,6 +705,30 @@ export function RateDisplayScreen({
           <span style={{ color: "#ab47bc", fontWeight: 700 }}>
             ➡近いものだけ値引
           </span>
+        </div>
+
+        <div style={{ marginTop: 14, marginBottom: 8 }}>
+          ・分かれていなければ値引時刻が
+        </div>
+        <div style={{ lineHeight: 1.8 }}>
+          <div>
+            15時
+            <span style={{ color: "#e65100", fontWeight: 700 }}>
+              ➡少ない側に寄せる
+            </span>
+            <span style={{ color: "#666", fontSize: 13 }}>
+              （品揃え確保優先）
+            </span>
+          </div>
+          <div>
+            17時以降
+            <span style={{ color: "#e65100", fontWeight: 700 }}>
+              ➡多い側に寄せる
+            </span>
+            <span style={{ color: "#666", fontSize: 13 }}>
+              （売り切り優先）
+            </span>
+          </div>
         </div>
       </section>
 
