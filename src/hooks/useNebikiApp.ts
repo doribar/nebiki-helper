@@ -1841,7 +1841,14 @@ const lateSkipNotice = useMemo(() => {
       };
 
       if (hasWeatherPatch && !prev.sessionDraft.manualDiscountTimeOverride) {
-        mergedDraft.weatherInputLockedDiscountTime = prev.sessionDraft.discountTime;
+        // 天候入力中に時刻境界を跨いでも、入力を始めた時刻を維持する。
+        // StartScreen側から明示された表示中の値引時刻を優先することで、
+        // 19時30分入力中に自動判定だけ20時30分へ進む競合を防ぐ。
+        mergedDraft.weatherInputLockedDiscountTime = isValidDiscountTime(
+          patch.weatherInputLockedDiscountTime,
+        )
+          ? patch.weatherInputLockedDiscountTime
+          : prev.sessionDraft.weatherInputLockedDiscountTime ?? prev.sessionDraft.discountTime;
       }
 
       if (patch.manualDiscountTimeOverride === true) {
@@ -2075,7 +2082,11 @@ const lateSkipNotice = useMemo(() => {
       // 開始時は、クリック時点の現在時刻で再解決せず、画面に表示されている値引時刻をそのまま使う。
       // そうしないと、天候入力中や開始ボタン押下直前に時刻境界を跨いだとき、
       // 19時30分で入力したのに20時30分の値引へ進むことがある。
-      const resolvedDiscountTime = prev.sessionDraft.discountTime;
+      const resolvedDiscountTime =
+        !prev.sessionDraft.manualDiscountTimeOverride &&
+        isValidDiscountTime(prev.sessionDraft.weatherInputLockedDiscountTime)
+          ? prev.sessionDraft.weatherInputLockedDiscountTime
+          : prev.sessionDraft.discountTime;
 
       const nextSession: SessionData = {
         ...prev.sessionDraft,

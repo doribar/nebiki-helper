@@ -2028,3 +2028,34 @@ ZIP返却方針:
 
 ZIP返却方針:
 - 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。
+
+## 2026-06-26 追記：19時30分入力中に20時30分へ飛ぶ問題の追加修正
+
+ユーザーから前回修正後も「飛んじゃう」と指摘があったため、天候入力ロックの競合をさらに潰した。
+
+### 原因として残っていた可能性
+- `updateSessionDraft()` 側で天候入力時のロック時刻を `prev.sessionDraft.discountTime` から取っていた。
+- そのため、時刻境界付近で開始画面の自動時刻同期が先に走ると、画面上では19時30分を見て入力していても、親state側の `prev.sessionDraft.discountTime` が20時30分に更新済みになり、ロック自体が20時30分になる競合があり得た。
+- また開始時も、ロック時刻より `sessionDraft.discountTime` を優先する経路が残っていた。
+
+### 今回の仕様
+- 天候入力画面で天候・気温・風のどれかを入力/確定した時、StartScreenがその時点で表示している `sessionDraft.discountTime` を `weatherInputLockedDiscountTime` として明示的に渡す。
+- `updateSessionDraft()` は、天候入力パッチに明示ロック時刻が含まれる場合、それを最優先で使う。
+- 明示ロックがない場合だけ、既存ロックまたは現在のdraft時刻を使う。
+- `startSession()` は、手動時刻指定がない場合、`weatherInputLockedDiscountTime` が有効ならそれを `session.discountTime` として使う。
+- これにより、19時30分表示中に天候入力を始めた後、実時間が20時25分以降になっても、開始後は19時30分の値引率表示へ進む。
+- 手動時刻指定時は従来どおり手動指定を優先する。
+
+### 変更ファイル
+- `src/components/screens/StartScreen.tsx`
+  - `applyHourlyChange()` で、手動時刻指定でない通常値引の天候入力時に `weatherInputLockedDiscountTime: sessionDraft.discountTime` を明示的に渡す。
+- `src/hooks/useNebikiApp.ts`
+  - `updateSessionDraft()` で明示ロック時刻を優先。
+  - `startSession()` で `manualDiscountTimeOverride` がなく、有効な `weatherInputLockedDiscountTime` がある場合はその時刻で開始。
+
+### 確認結果
+- `npm run check:logic` PASS。
+- `npm run build` PASS。
+
+ZIP返却方針:
+- 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。

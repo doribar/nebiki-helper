@@ -515,6 +515,9 @@ export function StartScreen({
     }
 
     onChangeSessionDraft({
+      ...(!sessionDraft.manualDiscountTimeOverride && !isFinalTime
+        ? { weatherInputLockedDiscountTime: sessionDraft.discountTime }
+        : {}),
       weather: {
         ...sessionDraft.weather,
         hourlyForecasts: nextHourlyForecasts,
