@@ -86,6 +86,12 @@ export type SessionDraft = {
   discountTime: DiscountTime;
   manualWeekdayOverride: boolean;
   manualDiscountTimeOverride: boolean;
+  /**
+   * 天候入力中に自動時刻が次の値引帯へ進んでも、
+   * 入力した時刻のまま開始するための一時ロック。
+   * 手動切替とは別扱いなので、実時間による遅れ補正は従来どおり使える。
+   */
+  weatherInputLockedDiscountTime?: DiscountTime | null;
   weather: WeatherInput;
 };
 

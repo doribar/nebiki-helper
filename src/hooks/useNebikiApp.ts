@@ -457,6 +457,16 @@ function isValidAreaCountEvaluation(value: unknown): value is AreaCountEvaluatio
   );
 }
 
+function isValidDiscountTime(value: unknown): value is DiscountTime {
+  return (
+    value === "15" ||
+    value === "17" ||
+    value === "18" ||
+    value === "19" ||
+    value === "20"
+  );
+}
+
 function isValidAreaRateAdjustment(value: unknown): value is AreaRateAdjustment {
   return value === -10 || value === -5 || value === 0 || value === 5 || value === 10;
 }
@@ -705,6 +715,9 @@ function normalizeSessionDraft(raw?: Partial<SessionDraft> | null): SessionDraft
       typeof raw?.manualDiscountTimeOverride === "boolean"
         ? raw.manualDiscountTimeOverride
         : false,
+    weatherInputLockedDiscountTime: isValidDiscountTime(raw?.weatherInputLockedDiscountTime)
+      ? raw.weatherInputLockedDiscountTime
+      : null,
     weather: normalizeWeatherInput(raw?.weather, discountTime),
   };
 }
@@ -718,15 +731,22 @@ function buildStartDefaultDraft(raw?: Partial<SessionDraft> | null): SessionDraf
 
   const normalized = normalizeSessionDraft(raw);
 
+  const lockedDiscountTime =
+    normalized.date === currentDefault.date
+      ? normalized.weatherInputLockedDiscountTime ?? null
+      : null;
   const resolvedDiscountTime = normalized.manualDiscountTimeOverride
     ? normalized.discountTime
-    : currentDefault.discountTime;
+    : lockedDiscountTime ?? currentDefault.discountTime;
 
   return {
     ...normalized,
     date: currentDefault.date,
     weekday: normalized.manualWeekdayOverride ? normalized.weekday : currentDefault.weekday,
     discountTime: resolvedDiscountTime,
+    weatherInputLockedDiscountTime: normalized.manualDiscountTimeOverride
+      ? null
+      : lockedDiscountTime,
     weather: {
       ...normalized.weather,
       hourlyForecasts: cloneHourlyForecasts(normalized.weather.hourlyForecasts),
@@ -1249,6 +1269,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
 
       if (nextDraft.date !== nowDate) {
         nextDraft.date = nowDate;
+        nextDraft.weatherInputLockedDiscountTime = null;
         changed = true;
       }
 
@@ -1262,6 +1283,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
 
       if (
         !nextDraft.manualDiscountTimeOverride &&
+        !nextDraft.weatherInputLockedDiscountTime &&
         nextDraft.discountTime !== nowDiscountTime
       ) {
         nextDraft.discountTime = nowDiscountTime;
@@ -1805,6 +1827,7 @@ const lateSkipNotice = useMemo(() => {
 
   function updateSessionDraft(patch: Partial<SessionDraft>) {
     setState((prev) => {
+      const hasWeatherPatch = Object.prototype.hasOwnProperty.call(patch, "weather");
       const mergedDraft: SessionDraft = {
         ...prev.sessionDraft,
         ...patch,
@@ -1813,6 +1836,18 @@ const lateSkipNotice = useMemo(() => {
           ...(patch.weather ?? {}),
         },
       };
+
+      if (hasWeatherPatch && !prev.sessionDraft.manualDiscountTimeOverride) {
+        mergedDraft.weatherInputLockedDiscountTime = prev.sessionDraft.discountTime;
+      }
+
+      if (patch.manualDiscountTimeOverride === true) {
+        mergedDraft.weatherInputLockedDiscountTime = null;
+      }
+
+      if (patch.manualDiscountTimeOverride === false) {
+        mergedDraft.weatherInputLockedDiscountTime = null;
+      }
 
       return {
         ...prev,
@@ -2036,9 +2071,10 @@ const lateSkipNotice = useMemo(() => {
     let nextSkipRecords = nextSessionSkipRecords;
 
     setState((prev) => {
+      const lockedDiscountTime = prev.sessionDraft.weatherInputLockedDiscountTime ?? null;
       const resolvedDiscountTime = prev.sessionDraft.manualDiscountTimeOverride
         ? prev.sessionDraft.discountTime
-        : currentDiscountTime;
+        : lockedDiscountTime ?? currentDiscountTime;
 
       const nextSession: SessionData = {
         ...prev.sessionDraft,
