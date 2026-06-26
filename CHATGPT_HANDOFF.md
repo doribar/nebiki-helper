@@ -2106,3 +2106,30 @@ ZIP返却方針:
 
 ZIP返却方針:
 - 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。
+
+## 2026-06-26 追記：動作確認モードでは残数入力を保存しない
+
+ユーザーから「動作確認モードでは残数入力してもSupabaseにもローカルにも保存されないようにできる？」と依頼があったため、テスト用URLパラメータ利用中は入力結果を永続保存しないようにした。
+
+### 仕様
+- `?testTime=1930` などの動作確認モード中は、残数入力をしてもエリア残数履歴を保存しない。
+- Supabaseへ `area_count_records` の upsert をしない。
+- 端末内 `localStorage` へアプリ状態・画面遷移状態を保存しない。
+- これにより、テスト中に入力した残数が本番判定用データや通常利用時の再開状態を汚さない。
+- Supabaseからの既存履歴読込は維持する。判定表示の動作確認では、本番と同じ過去履歴を参照できるようにするため。
+- 通常URLでは従来どおり保存する。
+
+### 実装
+- `src/hooks/useNebikiApp.ts`
+  - `const isTestMode = params?.testNow instanceof Date;` を追加。
+  - 永続化用 `useEffect` で、動作確認モード中は `savePersistedNebikiState()` / `saveWorkSessionCheckpoint()` を実行しない。
+  - runtime state保存用 `useEffect` で、動作確認モード中は `saveRuntimeState()` を実行しない。
+  - `judgeCurrentArea()` のエリア残数履歴保存条件に `!isTestMode` を追加し、`setAreaCountRecords()` と `upsertRemoteAreaCountRecord()` をスキップ。
+  - `migrateLocalAreaCountRecordsToRemote()` も動作確認モード中は実行しない。
+
+### 確認結果
+- `npm run check:logic` PASS。
+- `npm run build` PASS。
+
+ZIP返却方針:
+- 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。

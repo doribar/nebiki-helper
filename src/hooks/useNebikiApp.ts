@@ -1051,6 +1051,7 @@ function createReview19WeatherDraft(session: SessionData): SessionDraft {
 }
 export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: Date | null }): UseNebikiAppResult {
   setRuntimeNowOverride(params?.testNow ?? null);
+  const isTestMode = params?.testNow instanceof Date;
   const trainingStep = params?.trainingStep ?? "step5";
   const trainingStepConfig = getTrainingStepConfig(trainingStep);
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
@@ -1145,6 +1146,10 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   }, []);
 
   useEffect(() => {
+    // 動作確認モードでは入力結果を端末内のlocalStorageへ残さない。
+    // 残数入力の確認で、本番用のセッション状態やエリア残数履歴を汚さないため。
+    if (isTestMode) return;
+
     savePersistedNebikiState(
       clonePersistedNebikiStateSnapshot({
         currentSession: state,
@@ -1160,6 +1165,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
       saveWorkSessionCheckpoint(cloneAppState(state));
     }
   }, [
+    isTestMode,
     state,
     nextSessionSkipRecords,
     lastSessionWeather,
@@ -1193,6 +1199,9 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   }, [nextSessionSkipRecords, lastSessionWeather]);
 
   useEffect(() => {
+    // 動作確認モードでは画面遷移状態もlocalStorageへ保存しない。
+    if (isTestMode) return;
+
     saveRuntimeState({
       areaJudgeSelection,
       resumeTargetScreen,
@@ -1201,6 +1210,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
       screenHistory: screenHistoryRef.current,
     });
   }, [
+    isTestMode,
     state,
     areaJudgeSelection,
     resumeTargetScreen,
@@ -2326,6 +2336,7 @@ const lateSkipNotice = useMemo(() => {
     setAreaJudgeSelection(effectiveJudge);
 
     if (
+      !isTestMode &&
       roundedAreaCount !== null &&
       state.session &&
       state.currentAreaId &&
@@ -2364,6 +2375,13 @@ const lateSkipNotice = useMemo(() => {
   }
 
   async function migrateLocalAreaCountRecordsToRemote(): Promise<AreaCountMigrationResult> {
+    if (isTestMode) {
+      return {
+        ok: false,
+        message: "動作確認モードではローカル履歴をサーバーへ送信しません。",
+      };
+    }
+
     const localRecords = loadAreaCountRecords();
 
     if (localRecords.length === 0) {
