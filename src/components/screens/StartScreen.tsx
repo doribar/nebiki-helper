@@ -104,17 +104,6 @@ function getWeekdayLabel(weekday: number): string {
   return map[weekday] ?? "";
 }
 
-function getDiscountTimeLabel(discountTime: DiscountTime): string {
-  const map: Record<DiscountTime, string> = {
-    "15": "15時",
-    "17": "17時",
-    "18": "18時30分",
-    "19": "19時30分",
-    "20": "20時30分",
-  };
-  return map[discountTime];
-}
-
 function cycleIndex(
   length: number,
   currentIndex: number,
@@ -694,55 +683,38 @@ export function StartScreen({
             }}
             style={{ minWidth: 0 }}
           >
-            {sessionDraft.manualDiscountTimeOverride ? (
-              <select
-                value={sessionDraft.discountTime}
-                onChange={(e) =>
-                  onChangeSessionDraft({
-                    discountTime: e.target.value as DiscountTime,
-                    manualDiscountTimeOverride: true,
-                  })
-                }
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                }}
-              >
-                {DISCOUNT_TIME_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                  background: "#f7f7f7",
-                  fontWeight: 700,
-                }}
-              >
-                {getDiscountTimeLabel(sessionDraft.discountTime)}
-              </div>
-            )}
+            <select
+              value={sessionDraft.discountTime}
+              onChange={(e) =>
+                onChangeSessionDraft({
+                  discountTime: e.target.value as DiscountTime,
+                  manualDiscountTimeOverride: true,
+                })
+              }
+              style={{
+                width: "100%",
+                padding: 12,
+                borderRadius: 10,
+                border: "1px solid #ccc",
+                fontWeight: 700,
+                background: "#fff",
+              }}
+            >
+              {DISCOUNT_TIME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <button
             type="button"
             onClick={() => {
-              if (sessionDraft.manualDiscountTimeOverride) {
-                onChangeSessionDraft({
-                  discountTime: resolveDiscountTime(new Date()),
-                  manualDiscountTimeOverride: false,
-                });
-              } else {
-                onChangeSessionDraft({ manualDiscountTimeOverride: true });
-              }
+              onChangeSessionDraft({
+                discountTime: resolveDiscountTime(new Date()),
+                manualDiscountTimeOverride: false,
+              });
             }}
             style={{
               padding: "0 14px",
@@ -754,9 +726,7 @@ export function StartScreen({
               whiteSpace: "nowrap",
             }}
           >
-            {sessionDraft.manualDiscountTimeOverride
-              ? "自動に戻す"
-              : "手動で切り替える"}
+            {sessionDraft.manualDiscountTimeOverride ? "自動に戻す" : "自動中"}
           </button>
         </div>
       </div>
