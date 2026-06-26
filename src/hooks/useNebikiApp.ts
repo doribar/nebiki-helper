@@ -1685,12 +1685,15 @@ const lateSkipNotice = useMemo(() => {
 
   useEffect(() => {
     if (!state.session) return;
+    if (state.screen === "start") return;
     if (!doneNextSessionInfo?.canStart) return;
 
-    // 次の天候入力開始時刻が来たら、完了画面以外にいても自動で次の入力画面へ進む。
-    // 20時30分の最終値引は天候入力がないため、そのまま最終値引画面へ進む。
+    // 次の天候入力開始時刻が来たら、作業中・完了画面では自動で次の入力画面へ進む。
+    // ただし開始画面で天候入力中は、表示中の値引時刻を優先し、自動遷移しない。
+    // ここで自動遷移すると、19時30分の天候入力中に20時30分へ飛ぶことがある。
     startNextDoneSession();
   }, [
+    state.screen,
     state.session?.discountTime,
     state.session?.startedAt,
     doneNextSessionInfo?.canStart,
@@ -2066,15 +2069,13 @@ const lateSkipNotice = useMemo(() => {
     const startedAt = now.toISOString();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
-    const currentDiscountTime = resolveDiscountTime(now);
-
     let nextSkipRecords = nextSessionSkipRecords;
 
     setState((prev) => {
-      const lockedDiscountTime = prev.sessionDraft.weatherInputLockedDiscountTime ?? null;
-      const resolvedDiscountTime = prev.sessionDraft.manualDiscountTimeOverride
-        ? prev.sessionDraft.discountTime
-        : lockedDiscountTime ?? currentDiscountTime;
+      // 開始時は、クリック時点の現在時刻で再解決せず、画面に表示されている値引時刻をそのまま使う。
+      // そうしないと、天候入力中や開始ボタン押下直前に時刻境界を跨いだとき、
+      // 19時30分で入力したのに20時30分の値引へ進むことがある。
+      const resolvedDiscountTime = prev.sessionDraft.discountTime;
 
       const nextSession: SessionData = {
         ...prev.sessionDraft,
