@@ -2059,3 +2059,50 @@ ZIP返却方針:
 
 ZIP返却方針:
 - 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。
+
+## 2026-06-26 追記：URLパラメータ式の動作確認モードを追加
+
+ユーザーの目的は本番運用ではなく、各値引時刻の動作確認。実時間による自動判定と競合して19時30分確認中に20時30分へ飛ぶ問題が続いたため、本番UIの手動時刻選択をいじるのではなく、URLパラメータで実時間を固定できる動作確認モードを追加した。
+
+### 仕様
+- 通常URLでは従来どおり実時間で動く。
+- `?testTime=1930` のように付けた時だけ、アプリ内の現在時刻を固定する。
+- 対応例:
+  - `?testTime=1500` または `?testTime=15` → 15時固定
+  - `?testTime=1700` または `?testTime=17` → 17時固定
+  - `?testTime=1830` または `?testTime=18` → 18時30分固定
+  - `?testTime=1930` または `?testTime=19` → 19時30分固定
+  - `?testTime=2030` または `?testTime=20` → 20時30分固定
+- `?testDate=YYYY-MM-DD` を併用すると、曜日判定用の日付も固定できる。
+  - 例: `?testTime=1930&testDate=2026-06-24`
+- 動作確認モード中は左上に小さく「動作確認モード：YYYY-MM-DD ○時固定」と表示する。
+- 動作確認モード中は日付跨ぎ更新ブロッカーを出さない。固定したテスト日付・時刻で動作確認できるようにするため。
+
+### 実装方針
+- `src/app/App.tsx` で URLSearchParams から `testTime` / `testDate` を読む。
+- 解析した固定日時を `useNebikiApp({ testNow })` に渡す。
+- `src/hooks/useNebikiApp.ts` に runtime now override を追加し、アプリ内の `new Date()` / `Date.now()` 参照をテスト時刻に差し替えられるようにした。
+- `src/app/AppRouter.tsx` 経由で `StartScreen` にも `testNow` を渡し、開始画面の「自動に戻す」操作でもテスト時刻を使うようにした。
+- 本番URLでは override は `null` になり、通常どおり実時間を使う。
+
+### 変更ファイル
+- `src/app/App.tsx`
+  - `getCurrentTestMode()` / `parseTestTime()` / `parseTestDate()` を追加。
+  - 動作確認モード表示バナーを追加。
+  - `useNebikiApp` に `testNow` を渡す。
+- `src/app/AppRouter.tsx`
+  - `testNow` props を追加し、`StartScreen` へ渡す。
+- `src/components/screens/StartScreen.tsx`
+  - `now?: Date` props を追加。
+  - 曜日・時刻を「自動に戻す」時に、実時間ではなく渡された `now` を使う。
+- `src/hooks/useNebikiApp.ts`
+  - `runtimeNowOverrideMs` / `getRuntimeNow()` / `getRuntimeNowMs()` を追加。
+  - `useNebikiApp` の引数に `testNow?: Date | null` を追加。
+  - 初期セッション、日付、現在時刻更新、開始処理、リセット処理などの現在時刻取得で override を使うように変更。
+
+### 確認結果
+- `npm run check:logic` PASS。
+- `npm run build` PASS。
+
+ZIP返却方針:
+- 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。

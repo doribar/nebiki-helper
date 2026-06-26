@@ -9,9 +9,10 @@ import { DoneScreen } from "../components/screens/DoneScreen";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
+  testNow?: Date | null;
 };
 
-export function AppRouter({ app }: AppRouterProps) {
+export function AppRouter({ app, testNow }: AppRouterProps) {
   const { state, derived, actions } = app;
 
   const handleReturnHome = () => {
@@ -41,6 +42,7 @@ export function AppRouter({ app }: AppRouterProps) {
           startButtonLabel={derived.startButtonLabel}
           localAreaCountRecordCount={derived.localAreaCountRecordCount}
           onMigrateLocalAreaCountRecords={actions.migrateLocalAreaCountRecordsToRemote}
+          now={testNow ?? undefined}
         />
       );
 

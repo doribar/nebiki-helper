@@ -33,6 +33,7 @@ type StartScreenProps = {
   localAreaCountRecordCount?: number;
   onMigrateLocalAreaCountRecords?: () => Promise<AreaCountMigrationResult>;
   onReturnHome?: () => void;
+  now?: Date;
 };
 
 const WEEKDAY_OPTIONS = [
@@ -390,6 +391,7 @@ export function StartScreen({
   localAreaCountRecordCount = 0,
   onMigrateLocalAreaCountRecords,
   onReturnHome,
+  now = new Date(),
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
   const startForecastHour = getInputStartForecastHour(
@@ -660,8 +662,8 @@ export function StartScreen({
             onClick={() => {
               if (sessionDraft.manualWeekdayOverride) {
                 onChangeSessionDraft({
-                  date: formatLocalDate(new Date()),
-                  weekday: new Date().getDay(),
+                  date: formatLocalDate(now),
+                  weekday: now.getDay(),
                   manualWeekdayOverride: false,
                 });
               } else {
@@ -740,7 +742,7 @@ export function StartScreen({
             onClick={() => {
               if (sessionDraft.manualDiscountTimeOverride) {
                 onChangeSessionDraft({
-                  discountTime: resolveDiscountTime(new Date()),
+                  discountTime: resolveDiscountTime(now),
                   manualDiscountTimeOverride: false,
                 });
               } else {

@@ -117,14 +117,28 @@ import {
   upsertRemoteAreaCountRecords,
 } from "../domain/areaCountRemoteStorage.ts";
 
-function formatLocalDate(date = new Date()): string {
+let runtimeNowOverrideMs: number | null = null;
+
+function setRuntimeNowOverride(date?: Date | null): void {
+  runtimeNowOverrideMs = date ? date.getTime() : null;
+}
+
+function getRuntimeNow(): Date {
+  return runtimeNowOverrideMs === null ? new Date() : new Date(runtimeNowOverrideMs);
+}
+
+function getRuntimeNowMs(): number {
+  return runtimeNowOverrideMs === null ? Date.now() : runtimeNowOverrideMs;
+}
+
+function formatLocalDate(date = getRuntimeNow()): string {
   const y = date.getFullYear();
   const m = `${date.getMonth() + 1}`.padStart(2, "0");
   const d = `${date.getDate()}`.padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
-function resolveDiscountTime(date = new Date()): DiscountTime {
+function resolveDiscountTime(date = getRuntimeNow()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
   // 天候入力・値引開始準備の時刻で自動切替する。
@@ -403,7 +417,7 @@ function hasRemainingNormalFlowArea(
 }
 
 function createInitialSessionDraft(): SessionDraft {
-  const now = new Date();
+  const now = getRuntimeNow();
 
   return {
     date: formatLocalDate(now),
@@ -763,7 +777,7 @@ function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | 
   return {
     ...normalizedDraft,
     startedAt:
-      typeof raw.startedAt === "string" ? raw.startedAt : new Date().toISOString(),
+      typeof raw.startedAt === "string" ? raw.startedAt : getRuntimeNow().toISOString(),
   };
 }
 
@@ -848,7 +862,7 @@ function createAreaProgressMapWithAutoSkippedAreas(
       ...base[record.areaId],
       status: "auto_skipped_late_time",
       skipReason: "late_time",
-      completedAt: new Date().toISOString(),
+      completedAt: getRuntimeNow().toISOString(),
       previousRateText: record.previousRateText,
       previousManyRateText: record.previousManyRateText,
       previousManyNote: record.previousManyNote,
@@ -1035,7 +1049,8 @@ function createReview19WeatherDraft(session: SessionData): SessionDraft {
     },
   };
 }
-export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebikiAppResult {
+export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: Date | null }): UseNebikiAppResult {
+  setRuntimeNowOverride(params?.testNow ?? null);
   const trainingStep = params?.trainingStep ?? "step5";
   const trainingStepConfig = getTrainingStepConfig(trainingStep);
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
@@ -1047,7 +1062,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
   const initialLastUsedSessionDraft = buildStartDefaultDraft(
     initialPersistenceRef.current?.lastUsedSessionDraft ?? null
   );
-  const initialToday = formatLocalDate(new Date());
+  const initialToday = formatLocalDate(getRuntimeNow());
   const initialLoadedState = shouldUseCheckpointInsteadOfCurrent({
     currentSession: initialPersistenceRef.current?.currentSession ?? null,
     checkpoint: initialPersistenceRef.current?.workSessionCheckpoint ?? null,
@@ -1059,7 +1074,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
   const [state, setState] = useState<AppState>(() =>
     normalizeLoadedState(initialLoadedState, initialLastUsedSessionDraft)
   );
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(() => getRuntimeNowMs());
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
   );
@@ -1235,7 +1250,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
   }, [state.session?.startedAt]);
 
   useEffect(() => {
-    const updateNow = () => setNowMs(Date.now());
+    const updateNow = () => setNowMs(getRuntimeNowMs());
     const onVisibilityChange = () => {
       if (!document.hidden) updateNow();
     };
@@ -1259,7 +1274,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
     setState((prev) => {
       if (prev.screen !== "start") return prev;
 
-      const now = new Date();
+      const now = getRuntimeNow();
       const nowDiscountTime = resolveDiscountTime(now);
       const nowDate = formatLocalDate(now);
       const nowWeekday = now.getDay();
@@ -1964,7 +1979,7 @@ const lateSkipNotice = useMemo(() => {
             areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
             areaCountEvaluation: areaCountResult?.evaluation,
             areaRateAdjustment: areaCountResult?.rateAdjustment,
-            visitedAt: new Date().toISOString(),
+            visitedAt: getRuntimeNow().toISOString(),
           },
         },
       };
@@ -1972,7 +1987,7 @@ const lateSkipNotice = useMemo(() => {
 
     const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
-    const currentVisitedAt = new Date().toISOString();
+    const currentVisitedAt = getRuntimeNow().toISOString();
     const nextReview19ExcludedAreaIds = prev.session?.discountTime === "15"
       ? addReview19ExcludedAreaId(prev.review19ExcludedAreaIds, currentAreaId)
       : prev.review19ExcludedAreaIds;
@@ -2072,7 +2087,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startSession() {
-    const now = new Date();
+    const now = getRuntimeNow();
     const startedAt = now.toISOString();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
@@ -2319,7 +2334,7 @@ const lateSkipNotice = useMemo(() => {
         discountTime: state.session.discountTime,
       })
     ) {
-      const recordedAt = new Date().toISOString();
+      const recordedAt = getRuntimeNow().toISOString();
       const nextRecord: AreaCountRecord = {
         date: state.session.date,
         sessionStartedAt: state.session.startedAt,
@@ -2537,7 +2552,7 @@ const lateSkipNotice = useMemo(() => {
         [currentAreaId]: {
           ...prev.areaProgressMap[currentAreaId],
           status: "completed" as const,
-          completedAt: new Date().toISOString(),
+          completedAt: getRuntimeNow().toISOString(),
           ...rateSnapshot,
         },
       };
@@ -2631,7 +2646,7 @@ const lateSkipNotice = useMemo(() => {
 
       if (currentProgress?.status !== "auto_skipped_late_time") return prev;
 
-      const acknowledgedAt = new Date().toISOString();
+      const acknowledgedAt = getRuntimeNow().toISOString();
       const updatedMap = {
         ...prev.areaProgressMap,
         [currentAreaId]: {
@@ -2774,7 +2789,7 @@ const lateSkipNotice = useMemo(() => {
   function buildRecordedReview19Result(): Review19Result | null {
     if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
 
-    const recordedAt = state.review19.recordedAt ?? new Date().toISOString();
+    const recordedAt = state.review19.recordedAt ?? getRuntimeNow().toISOString();
     const snapshot = state.session
       ? createReview19Snapshot({
           capturedAt: recordedAt,
@@ -2821,7 +2836,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function start19DiscountAfterReview() {
-    const now = new Date();
+    const now = getRuntimeNow();
     const startedAt = now.toISOString();
     let nextSkipRecords = nextSessionSkipRecords;
 
@@ -2874,7 +2889,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function openNextSessionInput(targetDiscountTime: Exclude<DiscountTime, "20">) {
-    const now = new Date();
+    const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
 
@@ -2921,7 +2936,7 @@ const lateSkipNotice = useMemo(() => {
       return;
     }
 
-    const now = new Date();
+    const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
     const startedAt = now.toISOString();
@@ -2980,7 +2995,7 @@ const lateSkipNotice = useMemo(() => {
 
     if (batch.length < 10) return;
 
-    const exportedAt = new Date().toISOString();
+    const exportedAt = getRuntimeNow().toISOString();
     const payload = buildReview19ExportPayload({ records: batch, exportedAt });
     const firstDate = batch[0]?.date ?? 'unknown';
     const lastDate = batch[batch.length - 1]?.date ?? firstDate;
@@ -3009,7 +3024,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function resetApp() {
-    const now = new Date();
+    const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
     if (state.session?.date === currentDate && state.session.discountTime === "17") {
       saveReview19SourceState(cloneAppState(state));
