@@ -95,6 +95,31 @@ type RateInstructionStep = {
   color?: string;
 };
 
+type WeekdayBiasNotice = {
+  text: string;
+  color: string;
+};
+
+function getWeekdayBiasNotice(weekdayText: string): WeekdayBiasNotice | null {
+  const weekday = weekdayText.replace("曜日", "");
+
+  if (["月", "火", "水", "木"].includes(weekday)) {
+    return {
+      text: `${weekdayText}なので、迷ったら多い側に寄せる`,
+      color: "#e65100",
+    };
+  }
+
+  if (["金", "土", "日"].includes(weekday)) {
+    return {
+      text: `${weekdayText}なので、迷ったら少ない側に寄せる`,
+      color: "#e65100",
+    };
+  }
+
+  return null;
+}
+
 function buildManyThresholdInstruction(
   note: string | undefined,
   color: string,
@@ -205,11 +230,13 @@ function RateInstructionCard({
   step,
   currentIndex,
   totalCount,
+  weekdayBiasNotice,
   onDone,
 }: {
   step: RateInstructionStep;
   currentIndex: number;
   totalCount: number;
+  weekdayBiasNotice: WeekdayBiasNotice | null;
   onDone: () => void;
 }) {
   return (
@@ -229,8 +256,8 @@ function RateInstructionCard({
 
       <div
         style={{
-          fontSize: 22,
-          fontWeight: 800,
+          fontSize: 18,
+          fontWeight: 700,
           lineHeight: 1.7,
           color: step.color,
         }}
@@ -252,7 +279,26 @@ function RateInstructionCard({
         </div>
       ) : null}
 
-      <div style={{ marginTop: 20 }}>
+      {weekdayBiasNotice ? (
+        <div
+          style={{
+            marginTop: 16,
+            marginBottom: 10,
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: "#fafafa",
+            border: "1px solid #e5e5e5",
+            fontSize: 14,
+            fontWeight: 700,
+            lineHeight: 1.6,
+            color: weekdayBiasNotice.color,
+          }}
+        >
+          迷ったら：{weekdayBiasNotice.text}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: weekdayBiasNotice ? 0 : 20 }}>
         <PrimaryButton onClick={onDone}>終わった</PrimaryButton>
       </div>
     </>
@@ -434,6 +480,7 @@ export function RateDisplayScreen({
         Math.max(rateInstructionSteps.length - 1, 0),
       )
     ];
+  const weekdayBiasNotice = getWeekdayBiasNotice(weekdayText);
 
   function handleRateInstructionDone() {
     if (rateInstructionStepIndex < rateInstructionSteps.length - 1) {
@@ -570,9 +617,7 @@ export function RateDisplayScreen({
                   <span style={{ color: "#008000", fontWeight: 700 }}>
                     どちらでもない
                   </span>
-                  <span>」のどれかを確認し、</span>
-                  <br />
-                  <span>完了したら以下の値引率で値引きをしてください。</span>
+                  <span>」のどれかを確認してください。</span>
                 </>
               ) : (
                 <>
@@ -588,6 +633,7 @@ export function RateDisplayScreen({
                 step={currentRateInstructionStep}
                 currentIndex={rateInstructionStepIndex}
                 totalCount={rateInstructionSteps.length}
+                weekdayBiasNotice={weekdayBiasNotice}
                 onDone={handleRateInstructionDone}
               />
             ) : null}
@@ -690,7 +736,7 @@ export function RateDisplayScreen({
           background: "#fafafa",
         }}
       >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>補足</div>
         <div style={{ lineHeight: 1.8 }}>
           <div>
             ・アウトパック
@@ -707,24 +753,6 @@ export function RateDisplayScreen({
           <span style={{ color: "#ab47bc", fontWeight: 700 }}>
             ➡近いものだけ値引
           </span>
-        </div>
-
-        <div style={{ marginTop: 14, marginBottom: 8 }}>
-          ・分かれていなければ実際の曜日が
-        </div>
-        <div style={{ lineHeight: 1.8 }}>
-          <div>
-            月・水・火・木
-            <span style={{ color: "#e65100", fontWeight: 700 }}>
-              ➡多い側に寄せる
-            </span>
-          </div>
-          <div>
-            金・土・日
-            <span style={{ color: "#e65100", fontWeight: 700 }}>
-              ➡少ない側に寄せる
-            </span>
-          </div>
         </div>
       </section>
 
