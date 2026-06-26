@@ -34,6 +34,44 @@ export function cloneHourlyForecasts(hourlyForecasts: HourlyForecastMap): Hourly
   }, {} as HourlyForecastMap);
 }
 
+function shouldTreatAsRainSandwich(
+  hourlyForecasts: HourlyForecastMap,
+  index: number,
+): boolean {
+  const hour = FORECAST_HOUR_KEYS[index];
+  if (hourlyForecasts[hour].weather !== 'sunny') {
+    return false;
+  }
+
+  const previousHour = FORECAST_HOUR_KEYS[index - 1];
+  const nextHour = FORECAST_HOUR_KEYS[index + 1];
+  if (!previousHour || !nextHour) {
+    return false;
+  }
+
+  return (
+    hourlyForecasts[previousHour].weather === 'rain'
+    && hourlyForecasts[nextHour].weather === 'rain'
+  );
+}
+
+export function resolveRainSandwichedHourlyForecasts(
+  hourlyForecasts: HourlyForecastMap,
+): HourlyForecastMap {
+  const resolved = cloneHourlyForecasts(hourlyForecasts);
+
+  FORECAST_HOUR_KEYS.forEach((hour, index) => {
+    if (shouldTreatAsRainSandwich(hourlyForecasts, index)) {
+      resolved[hour] = {
+        ...resolved[hour],
+        weather: 'rain',
+      };
+    }
+  });
+
+  return resolved;
+}
+
 export function cycleForecastWeather(current: ForecastWeatherKind): ForecastWeatherKind {
   switch (current) {
     case 'sunny':
@@ -280,10 +318,15 @@ export function resolveWeatherInputForDiscount(
   weather: WeatherInput,
   discountTime: DiscountTime,
 ): ResolvedWeatherInput {
-  const nearEntry = weather.hourlyForecasts[getNearForecastHour(discountTime)];
-  const laterEntries = getLaterForecastHours(discountTime).map((hour) => weather.hourlyForecasts[hour]);
+  const hourlyForecasts = resolveRainSandwichedHourlyForecasts(weather.hourlyForecasts);
+  const effectiveWeather: WeatherInput = {
+    ...weather,
+    hourlyForecasts,
+  };
+  const nearEntry = hourlyForecasts[getNearForecastHour(discountTime)];
+  const laterEntries = getLaterForecastHours(discountTime).map((hour) => hourlyForecasts[hour]);
   const directPrecipRateBonus = getDirectPrecipRateBonus({
-    entries: getDirectPrecipForecastEntries(weather, discountTime),
+    entries: getDirectPrecipForecastEntries(effectiveWeather, discountTime),
     discountTime,
   });
 
@@ -302,7 +345,7 @@ export function resolveWeatherInputForDiscount(
 
   const weatherPointHours = getWeatherPointHours(discountTime);
   const weatherPointScore = weatherPointHours.reduce(
-    (sum, hour) => sum + getFutureWeatherPoint(weather.hourlyForecasts[hour]),
+    (sum, hour) => sum + getFutureWeatherPoint(hourlyForecasts[hour]),
     0,
   );
   const weatherPointShift = getWeatherPointShift(weatherPointScore);

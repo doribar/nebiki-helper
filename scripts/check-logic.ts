@@ -17,7 +17,12 @@ import {
   markReview19RecordsExportedInMemory,
   normalizeReview19Result,
 } from '../src/domain/review19.ts';
-import { createDefaultHourlyForecasts, buildHourlyForecastsFromLegacy, resolveWeatherInputForDiscount } from '../src/domain/hourlyWeather.ts';
+import {
+  createDefaultHourlyForecasts,
+  buildHourlyForecastsFromLegacy,
+  resolveRainSandwichedHourlyForecasts,
+  resolveWeatherInputForDiscount,
+} from '../src/domain/hourlyWeather.ts';
 import {
   appendNavigationHistory,
   cloneNavigationSnapshot,
@@ -453,6 +458,57 @@ let passed = 0;
     passed += 1;
   } catch (error) {
     console.error('FAIL: 同じ商品カウント上限は曜日・時刻に関係なく10個固定');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+
+{
+  try {
+    const hourlyForecasts = createDefaultHourlyForecasts();
+    hourlyForecasts['16'].weather = 'rain';
+    hourlyForecasts['17'].weather = 'sunny';
+    hourlyForecasts['18'].weather = 'rain';
+    hourlyForecasts['19'].weather = 'snow';
+    hourlyForecasts['20'].weather = 'rain';
+
+    const resolved = resolveRainSandwichedHourlyForecasts(hourlyForecasts);
+    assert.equal(resolved['17'].weather, 'rain');
+    assert.equal(resolved['19'].weather, 'snow');
+    assert.equal(hourlyForecasts['17'].weather, 'sunny');
+
+    const longGapForecasts = createDefaultHourlyForecasts();
+    longGapForecasts['15'].weather = 'rain';
+    longGapForecasts['16'].weather = 'sunny';
+    longGapForecasts['17'].weather = 'sunny';
+    longGapForecasts['18'].weather = 'rain';
+    const longGapResolved = resolveRainSandwichedHourlyForecasts(longGapForecasts);
+    assert.equal(longGapResolved['16'].weather, 'sunny');
+    assert.equal(longGapResolved['17'].weather, 'sunny');
+
+    console.log('PASS: 雨に直接1枠だけ挟まれた晴れ時刻だけ計算上雨扱い、雪は雪のまま');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 雨に挟まれた時刻の天気補正');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+{
+  try {
+    const hourlyForecasts = createDefaultHourlyForecasts();
+    hourlyForecasts['16'].weather = 'rain';
+    hourlyForecasts['18'].weather = 'rain';
+    const resolvedWeather = resolveWeatherInputForDiscount({ hourlyForecasts, afterRainSky: null }, '15');
+
+    assert.equal(resolvedWeather.precipitationRateBonus, 10);
+    assert.equal(resolvedWeather.weatherPointScore, -2);
+    console.log('PASS: 雨に挟まれた晴れ時刻は値引率補正と未来天候ポイントに反映する');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 雨に挟まれた時刻を値引率計算に反映する');
     console.error(error);
     process.exitCode = 1;
   }
