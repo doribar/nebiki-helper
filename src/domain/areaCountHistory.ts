@@ -308,6 +308,51 @@ export function upsertAreaCountRecord(
   });
 }
 
+function compareRecordFreshness(a: AreaCountRecord, b: AreaCountRecord): number {
+  const recordedAtCompare = a.recordedAt.localeCompare(b.recordedAt);
+  if (recordedAtCompare !== 0) return recordedAtCompare;
+  return a.sessionStartedAt.localeCompare(b.sessionStartedAt);
+}
+
+export function dedupeLatestAreaCountRecordsByDateAreaTime(
+  records: AreaCountRecord[],
+): AreaCountRecord[] {
+  const latestByKey = new Map<string, AreaCountRecord>();
+
+  for (const record of records) {
+    const key = `${record.date}__${record.areaId}__${record.discountTime}`;
+    const current = latestByKey.get(key);
+
+    if (!current || compareRecordFreshness(current, record) <= 0) {
+      latestByKey.set(key, cloneAreaCountRecord(record));
+    }
+  }
+
+  return [...latestByKey.values()].sort((a, b) => {
+    const dateCompare = a.date.localeCompare(b.date);
+    if (dateCompare !== 0) return dateCompare;
+    return compareRecordFreshness(a, b);
+  });
+}
+
+function getHistoricalAreaCountRecords(
+  records: AreaCountRecord[],
+  currentDate: string,
+): AreaCountRecord[] {
+  return dedupeLatestAreaCountRecordsByDateAreaTime(records).filter((record) => {
+    return record.date < currentDate;
+  });
+}
+
+function getCurrentDateAreaCountRecords(
+  records: AreaCountRecord[],
+  currentDate: string,
+): AreaCountRecord[] {
+  return dedupeLatestAreaCountRecordsByDateAreaTime(records).filter((record) => {
+    return record.date === currentDate;
+  });
+}
+
 function getMedian(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const center = Math.floor(sorted.length / 2);
@@ -759,8 +804,15 @@ export function getAreaCountRecommendation(params: {
     weekday: params.weekday,
     discountTime,
   });
+  // エリア判定の比較サンプルは「今日より前」の履歴だけを使う。
+  // 同じ日・同じエリア・同じ時刻で複数記録がある場合は、最新の1件だけを採用する。
+  const historicalRecords = getHistoricalAreaCountRecords(params.records, date);
+  const recordsForDecrease = [
+    ...historicalRecords,
+    ...getCurrentDateAreaCountRecords(params.records, date),
+  ];
   const reference = getReferenceRecords({
-    records: params.records,
+    records: historicalRecords,
     areaId,
     discountTime,
     actualWeekday,
@@ -797,7 +849,7 @@ export function getAreaCountRecommendation(params: {
     referenceCount: comfortAdjustedMedianCount,
   });
   const decreaseRecommendation = getDecreaseRecommendation({
-    records: params.records,
+    records: recordsForDecrease,
     referenceCurrentRecords: matchedRecords,
     date,
     areaId,

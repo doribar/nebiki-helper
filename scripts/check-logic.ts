@@ -30,7 +30,7 @@ import {
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
 import { appendSkipRecordsInMemory } from '../src/domain/storage.ts';
-import { getAreaCountSameItemLimit } from '../src/domain/areaCountHistory.ts';
+import { getAreaCountRecommendation, getAreaCountSameItemLimit } from '../src/domain/areaCountHistory.ts';
 import type {
   AreaId,
   AppState,
@@ -463,6 +463,77 @@ let passed = 0;
   }
 }
 
+
+
+{
+  try {
+    const records = [
+      {
+        date: '2026-06-26',
+        sessionStartedAt: '2026-06-26T09:00:00.000Z',
+        recordedAt: '2026-06-26T09:05:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '15',
+        actualWeekday: '金',
+        actualWeekdayGroup: '金土日',
+        count: 0,
+      },
+      {
+        date: '2026-06-19',
+        sessionStartedAt: '2026-06-19T09:00:00.000Z',
+        recordedAt: '2026-06-19T09:05:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '15',
+        actualWeekday: '金',
+        actualWeekdayGroup: '金土日',
+        count: 4,
+      },
+      {
+        date: '2026-06-19',
+        sessionStartedAt: '2026-06-19T10:00:00.000Z',
+        recordedAt: '2026-06-19T10:05:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '15',
+        actualWeekday: '金',
+        actualWeekdayGroup: '金土日',
+        count: 9,
+      },
+      {
+        date: '2026-06-12',
+        sessionStartedAt: '2026-06-12T09:00:00.000Z',
+        recordedAt: '2026-06-12T09:05:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '15',
+        actualWeekday: '金',
+        actualWeekdayGroup: '金土日',
+        count: 8,
+      },
+    ];
+
+    const recommendation = getAreaCountRecommendation({
+      records,
+      areaId: 'bento_men',
+      discountTime: '15',
+      weekday: 5,
+      weather: toWeatherInput('15', weather({})),
+      date: '2026-06-26',
+      count: 5,
+    });
+
+    assert.equal(recommendation.status, 'insufficient');
+    assert.equal(recommendation.sampleSize, 2);
+    assert.equal(recommendation.detailLines.some((line) => line.includes('同じ曜日の記録：2/3件')), true);
+    assert.deepEqual(recommendation.matchedRecords.map((record) => record.date), ['2026-06-12', '2026-06-19']);
+    assert.equal(recommendation.matchedRecords.find((record) => record.date === '2026-06-19')?.count, 9);
+
+    console.log('PASS: エリア残数判定は今日の記録を除外し、同日同エリア同時刻は最新1件だけ使う');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: エリア残数判定の過去データ絞り込み');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
 
 {
   try {

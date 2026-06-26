@@ -1052,9 +1052,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
   const [dailyMessageState, setDailyMessageState] = useState<DailyMessageState>(() =>
     normalizeDailyMessageState(initialPersistenceRef.current?.dailyMessageState ?? null)
   );
-  const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
-    cloneAreaCountRecords(initialPersistenceRef.current?.areaCountRecords ?? [])
-  );
+  const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>([]);
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
 
   const [areaJudgeSelection, setAreaJudgeSelection] = useState<AreaJudge>(
@@ -1101,7 +1099,9 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep }): UseNebik
     void loadRemoteAreaCountRecords().then((result) => {
       if (cancelled || result.status !== "ready") return;
 
-      setAreaCountRecords((current) => mergeAreaCountRecords(current, result.records));
+      // エリア判定の履歴はSupabaseを正とする。
+      // 端末内のローカル履歴を混ぜると、削除済みテストデータで判定がズレるため使わない。
+      setAreaCountRecords(cloneAreaCountRecords(result.records));
     });
 
     return () => {
