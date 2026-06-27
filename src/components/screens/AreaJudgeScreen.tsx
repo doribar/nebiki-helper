@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AreaCountEvaluation, AreaJudge, SkipTargetOption } from "../../domain/types";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
@@ -63,14 +63,17 @@ function JudgeOptionButton({
   subLabel,
   selected,
   onClick,
+  buttonRef,
 }: {
   label: string;
   subLabel?: string;
   selected: boolean;
   onClick: () => void;
+  buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
       style={{
@@ -137,6 +140,8 @@ export function AreaJudgeScreen({
   const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: onSkip });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [areaCountText, setAreaCountText] = useState("");
+  const [highlightNormalManualJudge, setHighlightNormalManualJudge] = useState(false);
+  const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -155,6 +160,7 @@ export function AreaJudgeScreen({
   useEffect(() => {
     setShowSkipTargetPicker(false);
     setAreaCountText("");
+    setHighlightNormalManualJudge(false);
   }, [areaName]);
 
   const parsedAreaCount = parseAreaCount(areaCountText);
@@ -166,6 +172,7 @@ export function AreaJudgeScreen({
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
 
   const handleAreaCountDigit = (digit: string) => {
+    setHighlightNormalManualJudge(false);
     setAreaCountText((current) => {
       const next = current === "0" ? digit : `${current}${digit}`;
       return next.replace(/^0+(?=\d)/, "");
@@ -173,6 +180,7 @@ export function AreaJudgeScreen({
   };
 
   const handleAreaCountBackspace = () => {
+    setHighlightNormalManualJudge(false);
     setAreaCountText((current) => current.slice(0, -1));
   };
 
@@ -181,11 +189,28 @@ export function AreaJudgeScreen({
   };
 
   const handleManualAreaCountEvaluation = (evaluation: AreaCountEvaluation) => {
+    setHighlightNormalManualJudge(false);
     onJudge("normal", parsedAreaCount, evaluation);
   };
 
   const handleUseAreaCountRecommendation = () => {
     onJudge("normal", parsedAreaCount);
+  };
+
+  const handleAreaCountComplete = () => {
+    if (parsedAreaCount === null) return;
+
+    if (isAreaCountReady) {
+      setHighlightNormalManualJudge(false);
+      handleUseAreaCountRecommendation();
+      return;
+    }
+
+    setHighlightNormalManualJudge(true);
+    window.setTimeout(() => {
+      normalManualJudgeButtonRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      normalManualJudgeButtonRef.current?.focus();
+    }, 0);
   };
 
   return (
@@ -301,7 +326,6 @@ export function AreaJudgeScreen({
                     {digit}
                   </button>
                 ))}
-                <div aria-hidden="true" />
                 <button
                   type="button"
                   onClick={() => handleAreaCountDigit("0")}
@@ -334,6 +358,23 @@ export function AreaJudgeScreen({
                   aria-label="1文字削除"
                 >
                   ⌫
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAreaCountComplete}
+                  disabled={parsedAreaCount === null}
+                  style={{
+                    padding: "12px 0",
+                    borderRadius: 12,
+                    border: parsedAreaCount !== null ? "2px solid #2f5ef5" : "1px solid #ccc",
+                    background: parsedAreaCount !== null ? "#e8f0ff" : "#eee",
+                    color: parsedAreaCount !== null ? "#111" : "#999",
+                    fontSize: 18,
+                    fontWeight: 900,
+                    cursor: parsedAreaCount !== null ? "pointer" : "not-allowed",
+                  }}
+                >
+                  完了
                 </button>
               </div>
             </div>
@@ -413,34 +454,14 @@ export function AreaJudgeScreen({
           >
             エリア全体の商品数を入力すると判定に進めます。
           </div>
-        ) : isAreaCountReady ? (
-          <div style={{ display: "grid", gap: 10 }}>
-            <button
-              type="button"
-              onClick={handleUseAreaCountRecommendation}
-              style={{
-                width: "100%",
-                padding: "14px 16px",
-                borderRadius: 12,
-                border: "2px solid #2f5ef5",
-                background: "#e8f0ff",
-                textAlign: "center",
-                cursor: "pointer",
-                fontSize: 16,
-                fontWeight: 900,
-              }}
-            >
-              この判定で進む
-            </button>
-          </div>
-        ) : areaCountAssistEnabled ? (
+        ) : isAreaCountReady ? null : areaCountAssistEnabled ? (
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ fontSize: 13, color: "#555", lineHeight: 1.7 }}>
               過去データが足りない場合は、手動で5段階判定してください。ここでの「少ない」は後回しではなく、表示値引率-10%です。
             </div>
             <JudgeOptionButton label="多い" subLabel="+10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("many")} />
             <JudgeOptionButton label="やや多い" subLabel="+5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_many")} />
-            <JudgeOptionButton label="普通" subLabel="±0%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("normal")} />
+            <JudgeOptionButton label="普通" subLabel="±0%" selected={highlightNormalManualJudge} buttonRef={normalManualJudgeButtonRef} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("normal")} />
             <JudgeOptionButton label="やや少ない" subLabel="-5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_few")} />
             <JudgeOptionButton label="少ない" subLabel="-10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("few")} />
           </div>

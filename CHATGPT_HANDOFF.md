@@ -2275,3 +2275,35 @@ ZIP返却方針:
 
 ZIP返却方針:
 - 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。
+
+## 2026-06-27 追記：残数入力キーパッドの完了ボタン配置と手動判定フォーカス
+
+ユーザー要望により、エリア残数入力の画面内キーパッド下段を、左から `0` / `⌫` / `完了` に変更した。あわせて、`完了` を押したときに過去データ不足で自動判定できない場合は、手動5段階判定の `普通` ボタンへフォーカスし、選びやすい状態にした。
+
+### 仕様
+- 数値キーパッドは3列のままにする。
+- 下段は左から `0`、`⌫`、`完了`。
+- 残数が未入力の場合、`完了` は押せない。
+- 残数入力後に `完了` を押した場合:
+  - 過去データが足りて自動エリア残数判定が使えるなら、その判定で進む。
+  - 過去データが足りない場合は、手動5段階判定の `普通（±0%）` ボタンへスクロール・フォーカスする。
+  - このとき `普通` ボタンを青枠で強調する。
+- 数字やバックスペースを押して入力値を変えた場合、`普通` ボタンの強調は解除する。
+- 値引率計算、Supabase保存方針、動作確認モード中の非保存仕様は変更していない。
+
+### 実装
+- `src/components/screens/AreaJudgeScreen.tsx`
+  - `JudgeOptionButton` に `buttonRef` を渡せるようにした。
+  - `normalManualJudgeButtonRef` を追加。
+  - `highlightNormalManualJudge` state を追加。
+  - `handleAreaCountComplete()` を追加。
+  - `完了` ボタンの disabled 条件を `parsedAreaCount === null` に変更。
+  - `isAreaCountReady` なら従来どおり推薦判定で進む。
+  - `!isAreaCountReady` なら `普通` ボタンへ `scrollIntoView()` + `focus()` し、青枠で強調する。
+
+### 確認結果
+- `npm run check:logic` PASS。
+- `npm run build` PASS。
+
+ZIP返却方針:
+- 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。
