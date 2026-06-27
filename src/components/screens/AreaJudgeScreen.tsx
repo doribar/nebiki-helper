@@ -165,6 +165,17 @@ export function AreaJudgeScreen({
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
 
+  const handleAreaCountDigit = (digit: string) => {
+    setAreaCountText((current) => {
+      const next = current === "0" ? digit : `${current}${digit}`;
+      return next.replace(/^0+(?=\d)/, "");
+    });
+  };
+
+  const handleAreaCountBackspace = () => {
+    setAreaCountText((current) => current.slice(0, -1));
+  };
+
   const handleJudge = (judge: Exclude<AreaJudge, null>) => {
     onJudge(judge, parsedAreaCount);
   };
@@ -233,32 +244,99 @@ export function AreaJudgeScreen({
             fontWeight: 800,
           }}
         >
-          このエリア全体の商品数は？
+          このエリア全体で、消費期限が今日までの商品数は？
         </div>
 
         {areaCountAssistEnabled ? (
           <section style={{ marginBottom: 14 }}>
             <div style={{ fontWeight: 800, marginBottom: 8 }}>エリア残数判定</div>
-            <label style={{ display: "grid", gap: 6, fontSize: 14, fontWeight: 700 }}>
-              エリア全体の商品数
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={areaCountText}
-                onChange={(event) => setAreaCountText(event.target.value)}
-                placeholder="例：23"
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>
+                消費期限が今日までの商品数
+              </div>
+              <div
+                aria-live="polite"
                 style={{
                   width: "100%",
                   boxSizing: "border-box",
-                  padding: "12px 14px",
+                  minHeight: 48,
+                  padding: "10px 14px",
                   borderRadius: 12,
                   border: "1px solid #bbb",
-                  fontSize: 16,
+                  background: "#fff",
+                  fontSize: 22,
+                  fontWeight: 900,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  color: areaCountText ? "#111" : "#999",
+                  userSelect: "none",
                 }}
-              />
-            </label>
+              >
+                {areaCountText || "未入力"}
+              </div>
+              <div
+                aria-label="残数入力キーパッド"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 8,
+                }}
+              >
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                  <button
+                    key={digit}
+                    type="button"
+                    onClick={() => handleAreaCountDigit(digit)}
+                    style={{
+                      padding: "12px 0",
+                      borderRadius: 12,
+                      border: "1px solid #ccc",
+                      background: "#fff",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {digit}
+                  </button>
+                ))}
+                <div aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={() => handleAreaCountDigit("0")}
+                  style={{
+                    padding: "12px 0",
+                    borderRadius: 12,
+                    border: "1px solid #ccc",
+                    background: "#fff",
+                    fontSize: 18,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAreaCountBackspace}
+                  disabled={!areaCountText}
+                  style={{
+                    padding: "12px 0",
+                    borderRadius: 12,
+                    border: "1px solid #ccc",
+                    background: areaCountText ? "#fff" : "#eee",
+                    color: areaCountText ? "#111" : "#999",
+                    fontSize: 18,
+                    fontWeight: 900,
+                    cursor: areaCountText ? "pointer" : "not-allowed",
+                  }}
+                  aria-label="1文字削除"
+                >
+                  ⌫
+                </button>
+              </div>
+            </div>
 
             {areaCountSameItemLimit !== null ? (
               <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
