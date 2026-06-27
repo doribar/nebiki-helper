@@ -309,18 +309,46 @@ function RateInstructionCard({
 
   return (
     <>
-      {totalCount > 1 ? (
-        <div
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: totalCount > 1 ? "space-between" : "flex-end",
+          gap: 12,
+          marginBottom: 10,
+        }}
+      >
+        {totalCount > 1 ? (
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#666",
+            }}
+          >
+            {currentIndex + 1} / {totalCount}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => setShowJudgeHint(true)}
           style={{
+            border: 0,
+            background: "transparent",
+            color: "#555",
             fontSize: 14,
             fontWeight: 700,
-            marginBottom: 10,
-            color: "#666",
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+            cursor: "pointer",
+            padding: "4px 0",
+            whiteSpace: "nowrap",
           }}
         >
-          {currentIndex + 1} / {totalCount}
-        </div>
-      ) : null}
+          迷ったら…
+        </button>
+      </div>
 
       <div
         style={{
@@ -347,27 +375,7 @@ function RateInstructionCard({
         </div>
       ) : null}
 
-      <div style={{ marginTop: 20, textAlign: "center" }}>
-        <button
-          type="button"
-          onClick={() => setShowJudgeHint(true)}
-          style={{
-            border: 0,
-            background: "transparent",
-            color: "#555",
-            fontSize: 14,
-            fontWeight: 700,
-            textDecoration: "underline",
-            textUnderlineOffset: 3,
-            cursor: "pointer",
-            padding: "8px 12px",
-          }}
-        >
-          迷ったら…
-        </button>
-      </div>
-
-      <div style={{ marginTop: 4 }}>
+      <div style={{ marginTop: 24 }}>
         <PrimaryButton onClick={onDone}>終わった</PrimaryButton>
       </div>
 
