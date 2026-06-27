@@ -201,6 +201,99 @@ function buildRateInstructionSteps(params: {
   ];
 }
 
+function JudgeHintContent() {
+  return (
+    <div style={{ lineHeight: 1.8 }}>
+      <div>
+        ・アウトパック
+        <span style={{ color: "#00897b", fontWeight: 700 }}>
+          ➡多い側に寄せる
+        </span>
+      </div>
+      <div>
+        ・商品が大パックと小パックで分かれている
+        <span style={{ color: "#ab47bc", fontWeight: 700 }}>
+          ➡大パックだけ値引
+        </span>
+      </div>
+      <div>
+        ・期限が近いものと遠いもので分かれている
+        <span style={{ color: "#ab47bc", fontWeight: 700 }}>
+          ➡近いものだけ値引
+        </span>
+      </div>
+
+      <div style={{ marginTop: 14, marginBottom: 8 }}>
+        ・分かれていなければ値引時刻が
+      </div>
+      <div>
+        15時
+        <span style={{ color: "#e65100", fontWeight: 700 }}>
+          ➡少ない側に寄せる
+        </span>
+        <span style={{ color: "#666", fontSize: 13 }}>
+          （品揃え確保優先）
+        </span>
+      </div>
+      <div>
+        17時以降
+        <span style={{ color: "#e65100", fontWeight: 700 }}>
+          ➡多い側に寄せる
+        </span>
+        <span style={{ color: "#666", fontSize: 13 }}>
+          （売り切り優先）
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function JudgeHintDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="judge-hint-title"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        background: "rgba(0, 0, 0, 0.35)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          borderRadius: 16,
+          background: "#fff",
+          padding: 18,
+          boxShadow: "0 12px 32px rgba(0, 0, 0, 0.25)",
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          id="judge-hint-title"
+          style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}
+        >
+          迷った時の判断基準
+        </div>
+
+        <JudgeHintContent />
+
+        <div style={{ marginTop: 18 }}>
+          <PrimaryButton onClick={onClose}>OK</PrimaryButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RateInstructionCard({
   step,
   currentIndex,
@@ -212,6 +305,8 @@ function RateInstructionCard({
   totalCount: number;
   onDone: () => void;
 }) {
+  const [showJudgeHint, setShowJudgeHint] = useState(false);
+
   return (
     <>
       {totalCount > 1 ? (
@@ -252,9 +347,33 @@ function RateInstructionCard({
         </div>
       ) : null}
 
-      <div style={{ marginTop: 20 }}>
+      <div style={{ marginTop: 20, textAlign: "center" }}>
+        <button
+          type="button"
+          onClick={() => setShowJudgeHint(true)}
+          style={{
+            border: 0,
+            background: "transparent",
+            color: "#555",
+            fontSize: 14,
+            fontWeight: 700,
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+            cursor: "pointer",
+            padding: "8px 12px",
+          }}
+        >
+          迷ったら…
+        </button>
+      </div>
+
+      <div style={{ marginTop: 4 }}>
         <PrimaryButton onClick={onDone}>終わった</PrimaryButton>
       </div>
+
+      {showJudgeHint ? (
+        <JudgeHintDialog onClose={() => setShowJudgeHint(false)} />
+      ) : null}
     </>
   );
 }
@@ -678,59 +797,6 @@ export function RateDisplayScreen({
           </section>
         ) : null}
       </div>
-
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-          background: "#fafafa",
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>迷ったら…</div>
-        <div style={{ lineHeight: 1.8 }}>
-          <div>
-            ・アウトパック
-            <span style={{ color: "#00897b", fontWeight: 700 }}>
-              ➡多い側に寄せる
-            </span>
-          </div>
-          ・商品が大パックと小パックで分かれている
-          <span style={{ color: "#ab47bc", fontWeight: 700 }}>
-            ➡大パックだけ値引
-          </span>
-          <br />
-          ・期限が近いものと遠いもので分かれている
-          <span style={{ color: "#ab47bc", fontWeight: 700 }}>
-            ➡近いものだけ値引
-          </span>
-        </div>
-
-        <div style={{ marginTop: 14, marginBottom: 8 }}>
-          ・分かれていなければ値引時刻が
-        </div>
-        <div style={{ lineHeight: 1.8 }}>
-          <div>
-            15時
-            <span style={{ color: "#e65100", fontWeight: 700 }}>
-              ➡少ない側に寄せる
-            </span>
-            <span style={{ color: "#666", fontSize: 13 }}>
-              （品揃え確保優先）
-            </span>
-          </div>
-          <div>
-            17時以降
-            <span style={{ color: "#e65100", fontWeight: 700 }}>
-              ➡多い側に寄せる
-            </span>
-            <span style={{ color: "#666", fontSize: 13 }}>
-              （売り切り優先）
-            </span>
-          </div>
-        </div>
-      </section>
 
       {!isFinalTime ? (
         <NoticeSection itemIds={trainingStepConfig.noticeItemIds} />
