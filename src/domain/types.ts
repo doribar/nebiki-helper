@@ -353,6 +353,7 @@ export type Review19Result = {
   sessionStartedAt: string;
   ratings: Record<AreaId, Review19Rating>;
   ratingScores: Record<AreaId, Review19RatingScore>;
+  areaCounts: Partial<Record<AreaId, number>>;
   excludedAreaIds: AreaId[];
   excludeReasons: Partial<Record<AreaId, Review19ExcludeReason>>;
   recordedAt?: string;
@@ -365,6 +366,7 @@ export type Review19AreaItem = {
   areaId: AreaId;
   areaName: string;
   rating: Review19Rating;
+  count?: number;
   excluded: boolean;
   excludeReasonText?: string;
 };
@@ -415,7 +417,8 @@ export type UseNebikiAppDerived = {
   review19ReferenceLines: string[];
   review19Export: {
     unexportedCount: number;
-    canExportTen: boolean;
+    totalCount: number;
+    shouldRecommendExport: boolean;
   };
   canStartReview19Manually: boolean;
   localAreaCountRecordCount: number;
@@ -442,11 +445,13 @@ export type UseNebikiAppActions = {
   acknowledgeAutoSkippedArea: () => void;
   advanceFinalTimeStep: () => void;
   updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
+  updateReview19AreaCount: (areaId: AreaId, count: number) => void;
   startReview19AfterWeather: () => void;
   saveReview19: () => void;
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
   exportReview19Records: () => void;
+  exportAllReview19Records: () => void;
   startReview19Manually: () => void;
   migrateLocalAreaCountRecordsToRemote: () => Promise<AreaCountMigrationResult>;
   resetApp: () => void;

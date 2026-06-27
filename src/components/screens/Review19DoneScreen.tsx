@@ -3,8 +3,10 @@ import { PrimaryButton } from "../layout/PrimaryButton";
 
 type Review19DoneScreenProps = {
   unexportedCount: number;
-  canExportTen: boolean;
-  onExport: () => void;
+  totalCount: number;
+  shouldRecommendExport: boolean;
+  onExportUnexported: () => void;
+  onExportAll: () => void;
   onReturnHome: () => void;
 };
 
@@ -18,8 +20,10 @@ const cardStyle: CSSProperties = {
 
 export function Review19DoneScreen({
   unexportedCount,
-  canExportTen,
-  onExport,
+  totalCount,
+  shouldRecommendExport,
+  onExportUnexported,
+  onExportAll,
   onReturnHome,
 }: Review19DoneScreenProps) {
   return (
@@ -42,25 +46,58 @@ export function Review19DoneScreen({
 
       <section style={cardStyle}>
         <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 8 }}>
-          振り返りデータ
+          19:00チェックデータ
         </div>
 
-        {canExportTen ? (
-          <>
-            <div style={{ fontSize: 14, color: "#444", lineHeight: 1.7, marginBottom: 16 }}>
-              未出力の振り返りデータが{unexportedCount}日分あります。
-              <br />
-              古い順に10日分をJSONファイルとして保存できます。
-            </div>
-            <PrimaryButton onClick={onExport}>10日分のデータを出力</PrimaryButton>
-          </>
-        ) : (
-          <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7 }}>
-            未出力の振り返りデータ：{unexportedCount}日分
+        {shouldRecommendExport ? (
+          <div
+            style={{
+              border: "1px solid #f0d58c",
+              borderRadius: 12,
+              padding: 12,
+              background: "#fff8df",
+              fontSize: 14,
+              color: "#5c4400",
+              lineHeight: 1.7,
+              fontWeight: 800,
+              marginBottom: 14,
+            }}
+          >
+            19:00チェックデータが{unexportedCount}回分たまりました。
             <br />
-            10日分たまると、分析用データを出力できます。
+            分析用に出力するのがおすすめです。
           </div>
-        )}
+        ) : null}
+
+        <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7, marginBottom: 14 }}>
+          未出力データ：{unexportedCount}回分
+          <br />
+          保存済みデータ：{totalCount}回分
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <PrimaryButton onClick={onExportUnexported} disabled={unexportedCount === 0}>
+            未出力データを出力
+          </PrimaryButton>
+          <button
+            type="button"
+            onClick={onExportAll}
+            disabled={totalCount === 0}
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid #ccc",
+              background: totalCount === 0 ? "#eee" : "#fff",
+              color: totalCount === 0 ? "#999" : "#111",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: totalCount === 0 ? "not-allowed" : "pointer",
+            }}
+          >
+            全データを出力
+          </button>
+        </div>
       </section>
 
       <div style={{ marginTop: 16 }}>

@@ -14,10 +14,26 @@ body {
   font-family: "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
   background: #f5f6f8;
   color: #111;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 button,
 input,
 select {
   font: inherit;
+}
+#root,
+#root * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#root input,
+#root textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }

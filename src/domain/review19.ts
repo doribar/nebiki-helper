@@ -104,6 +104,7 @@ export function createInitialReview19Result(params: {
     sessionStartedAt: params.sessionStartedAt,
     ratings,
     ratingScores: createReview19RatingScores(ratings),
+    areaCounts: {},
     excludedAreaIds,
     excludeReasons: createExcludeReasons(excludedAreaIds),
   };
@@ -179,6 +180,21 @@ function cloneReview19Reference(
   return JSON.parse(JSON.stringify(raw)) as Review19Reference;
 }
 
+
+function normalizeReview19AreaCounts(raw: unknown): Partial<Record<AreaId, number>> {
+  const result: Partial<Record<AreaId, number>> = {};
+  if (!raw || typeof raw !== "object") return result;
+
+  for (const areaId of NORMAL_ROUTE) {
+    const value = (raw as Partial<Record<AreaId, unknown>>)[areaId];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const rounded = Math.max(0, Math.round(value));
+    result[areaId] = rounded;
+  }
+
+  return result;
+}
+
 export function normalizeReview19Result(
   raw?: Partial<Review19Result> | null,
 ): Review19Result | null {
@@ -208,6 +224,7 @@ export function normalizeReview19Result(
   return {
     ...base,
     ratingScores: createReview19RatingScores(base.ratings),
+    areaCounts: normalizeReview19AreaCounts((raw as Partial<Review19Result>).areaCounts),
     excludedAreaIds: base.excludedAreaIds,
     excludeReasons: base.excludeReasons,
     recordedAt: typeof raw.recordedAt === "string" ? raw.recordedAt : undefined,

@@ -91,10 +91,8 @@ import {
   parseReview19RatePercent,
   normalizeReview19Result,
   buildReview19ExportPayload,
-  getReview19ExportBatch,
   getUnexportedReview19Records,
   markReview19RecordsExportedInMemory,
-  REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
 import type { AreaCountRecord } from "../domain/areaCountHistory.ts";
 import type { TrainingStep } from "../domain/trainingMode.ts";
@@ -505,14 +503,6 @@ function addReview19ExcludedAreaId(current: AreaId[], areaId: AreaId): AreaId[] 
 
 function removeReview19ExcludedAreaId(current: AreaId[], areaId: AreaId): AreaId[] {
   return current.filter((currentAreaId) => currentAreaId !== areaId);
-}
-
-function getReview19ExcludedAreaIdsForReview(state: AppState): AreaId[] {
-  return normalizeReview19ExcludedAreaIds(
-    state.review19ExcludedAreaIds.filter(
-      (areaId) => state.areaProgressMap[areaId]?.areaJudge === "few"
-    )
-  );
 }
 
 function normalizeAreaProgressMap(
@@ -1650,21 +1640,14 @@ const lateSkipNotice = useMemo(() => {
 
   const review19Items = useMemo(() => {
     const ratings = state.review19?.ratings;
-    const excludedAreaIdSet = new Set(state.review19?.excludedAreaIds ?? []);
 
-    return getReview19AreaItems().map((item) => {
-      const excluded = excludedAreaIdSet.has(item.areaId);
-      const excludeReason = state.review19?.excludeReasons?.[item.areaId];
-
-      return {
-        ...item,
-        rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
-        excluded,
-        excludeReasonText: excluded
-          ? REVIEW19_EXCLUDE_REASON_TEXT[excludeReason ?? "few_at_15_and_17"]
-          : undefined,
-      };
-    });
+    return getReview19AreaItems().map((item) => ({
+      ...item,
+      rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
+      count: state.review19?.areaCounts?.[item.areaId],
+      excluded: false,
+      excludeReasonText: undefined,
+    }));
   }, [state.review19]);
 
   const review19ReferenceLines = useMemo(() => {
@@ -1691,10 +1674,12 @@ const lateSkipNotice = useMemo(() => {
 
   const review19Export = (() => {
     void review19RecordsVersion;
-    const unexportedCount = getUnexportedReview19Records(loadReview19Records()).length;
+    const records = loadReview19Records();
+    const unexportedCount = getUnexportedReview19Records(records).length;
     return {
       unexportedCount,
-      canExportTen: unexportedCount >= 10,
+      totalCount: records.length,
+      shouldRecommendExport: unexportedCount >= 10,
     };
   })();
 
@@ -2746,7 +2731,7 @@ const lateSkipNotice = useMemo(() => {
       const initialReview19 = createInitialReview19Result({
         date: session.date,
         sessionStartedAt: session.startedAt,
-        excludedAreaIds: sourceSession ? getReview19ExcludedAreaIdsForReview(sourceStateForReview) : [],
+        excludedAreaIds: [],
       });
 
       return {
@@ -2804,6 +2789,25 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
+  function updateReview19AreaCount(areaId: AreaId, count: number) {
+    setState((prev) => {
+      if (prev.screen !== "review19" || !prev.review19) return prev;
+
+      const safeCount = Math.max(0, Math.round(count));
+
+      return {
+        ...prev,
+        review19: {
+          ...prev.review19,
+          areaCounts: {
+            ...prev.review19.areaCounts,
+            [areaId]: safeCount,
+          },
+        },
+      };
+    });
+  }
+
   function buildRecordedReview19Result(): Review19Result | null {
     if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
 
@@ -2817,7 +2821,7 @@ const lateSkipNotice = useMemo(() => {
           basisGuide,
           lateTimeBonus,
           reviewReference: state.review19.reference,
-          excludedAreaIds: state.review19.excludedAreaIds,
+          excludedAreaIds: [],
           areaProgressMap: state.areaProgressMap,
           doneSummaryItems,
         })
@@ -2826,8 +2830,8 @@ const lateSkipNotice = useMemo(() => {
     return {
       ...state.review19,
       ratingScores: createReview19RatingScores(state.review19.ratings),
-      excludedAreaIds: state.review19.excludedAreaIds,
-      excludeReasons: state.review19.excludeReasons,
+      excludedAreaIds: [],
+      excludeReasons: {},
       recordedAt,
       snapshot,
     };
@@ -2837,9 +2841,11 @@ const lateSkipNotice = useMemo(() => {
     const recordedReview = buildRecordedReview19Result();
     if (!recordedReview) return;
 
-    appendReview19Record(recordedReview);
-    clearReview19SourceState();
-    setReview19RecordsVersion((version) => version + 1);
+    if (!isTestMode) {
+      appendReview19Record(recordedReview);
+      clearReview19SourceState();
+      setReview19RecordsVersion((version) => version + 1);
+    }
 
     setState((prev) => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
@@ -3007,22 +3013,35 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
-  function exportReview19Records() {
-    const currentRecords = loadReview19Records();
-    const batch = getReview19ExportBatch(currentRecords, 10);
+  function getReview19ExportFilename(params: {
+    records: Review19Result[];
+    kind: "unexported" | "all";
+  }): string {
+    const firstDate = params.records[0]?.date ?? "unknown";
+    const lastDate = params.records[params.records.length - 1]?.date ?? firstDate;
+    return `nebiki-review19-${params.kind}-${firstDate}_${lastDate}.json`;
+  }
 
-    if (batch.length < 10) return;
+  function downloadReview19Records(params: {
+    records: Review19Result[];
+    exportedAt: string;
+    kind: "unexported" | "all";
+  }) {
+    if (params.records.length === 0) return;
 
-    const exportedAt = getRuntimeNow().toISOString();
-    const payload = buildReview19ExportPayload({ records: batch, exportedAt });
-    const firstDate = batch[0]?.date ?? 'unknown';
-    const lastDate = batch[batch.length - 1]?.date ?? firstDate;
-    const filename = `nebiki-review19-${firstDate}_${lastDate}.json`;
+    const payload = buildReview19ExportPayload({
+      records: params.records,
+      exportedAt: params.exportedAt,
+    });
+    const filename = getReview19ExportFilename({
+      records: params.records,
+      kind: params.kind,
+    });
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json;charset=utf-8',
+      type: "application/json;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
 
     link.href = url;
     link.download = filename;
@@ -3030,15 +3049,45 @@ const lateSkipNotice = useMemo(() => {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function exportReview19Records() {
+    const currentRecords = loadReview19Records();
+    const unexportedRecords = getUnexportedReview19Records(currentRecords);
+
+    if (unexportedRecords.length === 0) return;
+
+    const exportedAt = getRuntimeNow().toISOString();
+    downloadReview19Records({
+      records: unexportedRecords,
+      exportedAt,
+      kind: "unexported",
+    });
 
     saveReview19Records(
       markReview19RecordsExportedInMemory({
         currentRecords,
-        recordsToMark: batch,
+        recordsToMark: unexportedRecords,
         exportedAt,
       })
     );
     setReview19RecordsVersion((version) => version + 1);
+  }
+
+  function exportAllReview19Records() {
+    const records = loadReview19Records().sort((a, b) => {
+      const recordedCompare = (a.recordedAt ?? "").localeCompare(b.recordedAt ?? "");
+      if (recordedCompare !== 0) return recordedCompare;
+      return `${a.date}::${a.sessionStartedAt}`.localeCompare(`${b.date}::${b.sessionStartedAt}`);
+    });
+
+    if (records.length === 0) return;
+
+    downloadReview19Records({
+      records,
+      exportedAt: getRuntimeNow().toISOString(),
+      kind: "all",
+    });
   }
 
   function resetApp() {
@@ -3116,11 +3165,13 @@ const lateSkipNotice = useMemo(() => {
       acknowledgeAutoSkippedArea,
       advanceFinalTimeStep,
       updateReview19Rating,
+      updateReview19AreaCount,
       startReview19AfterWeather,
       saveReview19,
       start19DiscountAfterReview,
       startNextDoneSession,
       exportReview19Records,
+      exportAllReview19Records,
       startReview19Manually,
       migrateLocalAreaCountRecordsToRemote,
       resetApp,

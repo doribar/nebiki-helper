@@ -6,6 +6,8 @@ type DoneScreenProps = {
   onGoBack: () => void;
   onStartNextSession: () => void;
   onReturnHome: () => void;
+  canStartReview19?: boolean;
+  onStartReview19?: () => void;
   summaryItems: DoneSummaryItem[];
   nextSessionInfo: DoneNextSessionInfo | null;
   trainingStepConfig: TrainingStepConfig;
@@ -36,6 +38,8 @@ export function DoneScreen({
   onGoBack,
   onStartNextSession,
   onReturnHome,
+  canStartReview19 = false,
+  onStartReview19,
   summaryItems,
   nextSessionInfo,
   trainingStepConfig,
@@ -96,6 +100,28 @@ export function DoneScreen({
               </div>
             ) : null}
           </>
+        ) : null}
+
+        {canStartReview19 && onStartReview19 ? (
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={onStartReview19}
+              style={{
+                width: "100%",
+                border: "1px solid #111",
+                borderRadius: 14,
+                padding: "14px 16px",
+                background: "#fff",
+                color: "#111",
+                fontSize: 16,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              19:00残数チェック
+            </button>
+          </div>
         ) : null}
       </section>
 

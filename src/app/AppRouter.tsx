@@ -6,6 +6,8 @@ import { AutoSkipNoticeScreen } from "../components/screens/AutoSkipNoticeScreen
 import { RateDisplayScreen } from "../components/screens/RateDisplayScreen";
 import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
+import { Review19Screen } from "../components/screens/Review19Screen";
+import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -140,6 +142,31 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           trainingStepConfig={derived.trainingStepConfig}
           onGoBack={actions.goBackOneScreen}
           onStartNextSession={actions.startNextDoneSession}
+          canStartReview19={derived.canStartReview19Manually}
+          onStartReview19={actions.startReview19Manually}
+          onReturnHome={handleReturnHome}
+        />
+      );
+
+    case "review19":
+      return (
+        <Review19Screen
+          items={derived.review19Items}
+          referenceLines={derived.review19ReferenceLines}
+          onChangeAreaCount={actions.updateReview19AreaCount}
+          onSave={actions.saveReview19}
+          onReturnHome={handleReturnHome}
+        />
+      );
+
+    case "review19_done":
+      return (
+        <Review19DoneScreen
+          unexportedCount={derived.review19Export.unexportedCount}
+          totalCount={derived.review19Export.totalCount}
+          shouldRecommendExport={derived.review19Export.shouldRecommendExport}
+          onExportUnexported={actions.exportReview19Records}
+          onExportAll={actions.exportAllReview19Records}
           onReturnHome={handleReturnHome}
         />
       );

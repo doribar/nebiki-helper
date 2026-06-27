@@ -266,11 +266,7 @@ export function AreaJudgeScreen({
 
         {areaCountAssistEnabled ? (
           <section style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>エリア残数判定</div>
             <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>
-                消費期限が今日までの商品数
-              </div>
               <div
                 aria-live="polite"
                 style={{
@@ -433,20 +429,7 @@ export function AreaJudgeScreen({
           </section>
         ) : null}
 
-        {areaCountAssistEnabled && parsedAreaCount === null ? (
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fafafa",
-              lineHeight: 1.7,
-              fontWeight: 700,
-            }}
-          >
-            エリア全体の商品数を入力すると判定に進めます。
-          </div>
-        ) : isAreaCountReady ? null : areaCountAssistEnabled ? (
+        {areaCountAssistEnabled && parsedAreaCount === null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ fontSize: 13, color: "#555", lineHeight: 1.7 }}>
               過去データが足りない場合は、手動で5段階判定してください。ここでの「少ない」は後回しではなく、表示値引率-10%です。
