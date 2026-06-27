@@ -2307,3 +2307,28 @@ ZIP返却方針:
 
 ZIP返却方針:
 - 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。
+
+## 2026-06-27 追記：手動判定の普通ボタンは強調せず中央表示だけに変更
+
+ユーザー要望により、残数入力の `完了` 押下後、過去データ不足で手動5段階判定が必要な場合の挙動を微修正した。
+
+### 仕様
+- 残数入力後に `完了` を押し、過去データが足りない場合は、手動5段階判定の `普通（±0%）` ボタンが画面中央付近に来るようにスクロールする。
+- `普通` ボタンを青枠や背景色で強調しない。
+- `普通` ボタンへブラウザフォーカスもしない。
+- 目的は「視界の中央に捉えるだけ」で、選択状態に見せないこと。
+- キーパッド配置、値引率計算、Supabase保存方針、動作確認モード中の非保存仕様は変更していない。
+
+### 実装
+- `src/components/screens/AreaJudgeScreen.tsx`
+  - `highlightNormalManualJudge` state を削除。
+  - `handleAreaCountComplete()` の過去データ不足時は `scrollIntoView({ block: "center", behavior: "smooth" })` のみ実行する。
+  - `focus()` 呼び出しを削除。
+  - `普通` ボタンの `selected` は常に `false` にした。
+
+### 確認結果
+- `npm run check:logic` PASS。
+- `npm run build` PASS。
+
+ZIP返却方針:
+- 引き続き軽量版ZIPで返す。`.git` / `node_modules` / `.env` / 作業ログ / 余計なZIPは含めない。通常の軽量版では `dist/` は同梱可。

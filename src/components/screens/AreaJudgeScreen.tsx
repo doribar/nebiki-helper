@@ -140,7 +140,6 @@ export function AreaJudgeScreen({
   const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: onSkip });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [areaCountText, setAreaCountText] = useState("");
-  const [highlightNormalManualJudge, setHighlightNormalManualJudge] = useState(false);
   const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
   const skipTargetGroups = [
     {
@@ -160,7 +159,6 @@ export function AreaJudgeScreen({
   useEffect(() => {
     setShowSkipTargetPicker(false);
     setAreaCountText("");
-    setHighlightNormalManualJudge(false);
   }, [areaName]);
 
   const parsedAreaCount = parseAreaCount(areaCountText);
@@ -172,7 +170,6 @@ export function AreaJudgeScreen({
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
 
   const handleAreaCountDigit = (digit: string) => {
-    setHighlightNormalManualJudge(false);
     setAreaCountText((current) => {
       const next = current === "0" ? digit : `${current}${digit}`;
       return next.replace(/^0+(?=\d)/, "");
@@ -180,7 +177,6 @@ export function AreaJudgeScreen({
   };
 
   const handleAreaCountBackspace = () => {
-    setHighlightNormalManualJudge(false);
     setAreaCountText((current) => current.slice(0, -1));
   };
 
@@ -189,7 +185,6 @@ export function AreaJudgeScreen({
   };
 
   const handleManualAreaCountEvaluation = (evaluation: AreaCountEvaluation) => {
-    setHighlightNormalManualJudge(false);
     onJudge("normal", parsedAreaCount, evaluation);
   };
 
@@ -201,15 +196,12 @@ export function AreaJudgeScreen({
     if (parsedAreaCount === null) return;
 
     if (isAreaCountReady) {
-      setHighlightNormalManualJudge(false);
       handleUseAreaCountRecommendation();
       return;
     }
 
-    setHighlightNormalManualJudge(true);
     window.setTimeout(() => {
       normalManualJudgeButtonRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-      normalManualJudgeButtonRef.current?.focus();
     }, 0);
   };
 
@@ -461,7 +453,7 @@ export function AreaJudgeScreen({
             </div>
             <JudgeOptionButton label="多い" subLabel="+10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("many")} />
             <JudgeOptionButton label="やや多い" subLabel="+5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_many")} />
-            <JudgeOptionButton label="普通" subLabel="±0%" selected={highlightNormalManualJudge} buttonRef={normalManualJudgeButtonRef} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("normal")} />
+            <JudgeOptionButton label="普通" subLabel="±0%" selected={false} buttonRef={normalManualJudgeButtonRef} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("normal")} />
             <JudgeOptionButton label="やや少ない" subLabel="-5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_few")} />
             <JudgeOptionButton label="少ない" subLabel="-10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("few")} />
           </div>
