@@ -44,6 +44,8 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           startButtonLabel={derived.startButtonLabel}
           localAreaCountRecordCount={derived.localAreaCountRecordCount}
           onMigrateLocalAreaCountRecords={actions.migrateLocalAreaCountRecordsToRemote}
+          canStartReview19={derived.canStartReview19Manually && state.sessionDraft.discountTime === "18"}
+          onStartReview19={actions.startReview19Manually}
           now={testNow ?? undefined}
         />
       );
@@ -142,8 +144,6 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           trainingStepConfig={derived.trainingStepConfig}
           onGoBack={actions.goBackOneScreen}
           onStartNextSession={actions.startNextDoneSession}
-          canStartReview19={derived.canStartReview19Manually}
-          onStartReview19={actions.startReview19Manually}
           onReturnHome={handleReturnHome}
         />
       );

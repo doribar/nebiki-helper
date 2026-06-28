@@ -11,7 +11,7 @@ import type {
 const MAX_DISCOUNT_RATE = 50;
 
 function capAbsoluteDiscountRate(rawRate: number): number {
-  return Math.max(0, Math.min(rawRate, MAX_DISCOUNT_RATE));
+  return Math.min(rawRate, MAX_DISCOUNT_RATE);
 }
 
 export function getBaseRate(discountTime: DiscountTime): number {

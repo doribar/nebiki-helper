@@ -32,6 +32,8 @@ type StartScreenProps = {
   startButtonLabel?: string;
   localAreaCountRecordCount?: number;
   onMigrateLocalAreaCountRecords?: () => Promise<AreaCountMigrationResult>;
+  canStartReview19?: boolean;
+  onStartReview19?: () => void;
   onReturnHome?: () => void;
   now?: Date;
 };
@@ -390,6 +392,8 @@ export function StartScreen({
   startButtonLabel,
   localAreaCountRecordCount = 0,
   onMigrateLocalAreaCountRecords,
+  canStartReview19 = false,
+  onStartReview19,
   onReturnHome,
   now = new Date(),
 }: StartScreenProps) {
@@ -949,6 +953,7 @@ export function StartScreen({
           (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
       </PrimaryButton>
 
+
       {onMigrateLocalAreaCountRecords ? (
         <section
           style={{
@@ -1032,6 +1037,28 @@ export function StartScreen({
             }}
           >
             トップに戻る
+          </button>
+        </div>
+      ) : null}
+
+      {canStartReview19 && onStartReview19 ? (
+        <div style={{ marginTop: 16 }}>
+          <button
+            type="button"
+            onClick={onStartReview19}
+            style={{
+              width: "100%",
+              border: "1px solid #111",
+              borderRadius: 14,
+              padding: "14px 16px",
+              background: "#fff",
+              color: "#111",
+              fontSize: 16,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            19:00チェックを始める
           </button>
         </div>
       ) : null}
