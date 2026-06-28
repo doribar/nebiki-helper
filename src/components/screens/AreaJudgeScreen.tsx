@@ -368,8 +368,8 @@ export function AreaJudgeScreen({
             </div>
 
             {areaCountSameItemLimit !== null ? (
-              <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
-                同じ商品が極端に多い場合は、{areaCountSameItemLimit}個までとして数えてください。超えた分は個別に多い商品として判断します。
+              <div style={{ marginTop: 8, fontSize: 16, color: "#333", lineHeight: 1.7 }}>
+                商品名が同じ商品が11個以上ある場合、その商品は10個としてカウントします。
               </div>
             ) : null}
 
@@ -421,11 +421,7 @@ export function AreaJudgeScreen({
                   </div>
                 ))}
               </div>
-            ) : (
-              <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.7 }}>
-                入力すると、過去の同じエリア・同じ時刻・同じ実際の曜日を優先して比較します。足りない時だけ暫定グループを使います。
-              </div>
-            )}
+            ) : null}
           </section>
         ) : null}
 
