@@ -219,18 +219,11 @@ function getNextDoneDiscountInfo(
   };
 }
 
-function isAtOrAfterReview19StartTime(now: Date): boolean {
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  return minutes >= 19 * 60;
-}
-
 function canStartReview19FromCurrentState(params: {
   state: AppState;
   now: Date;
 }): boolean {
   const { state, now } = params;
-
-  if (!isAtOrAfterReview19StartTime(now)) return false;
 
   const currentDate = formatLocalDate(now);
   if (state.review19?.date === currentDate && state.review19.recordedAt) return false;
