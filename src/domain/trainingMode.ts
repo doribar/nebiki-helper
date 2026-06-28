@@ -50,7 +50,6 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
       "twoLeftNotMany",
       "judgeIncludesTrend",
       "oneLeftFew",
-      "fewNoDiscountExceptFinal",
     ],
   },
   step4: {
@@ -64,7 +63,6 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
       "twoLeftNotMany",
       "judgeIncludesTrend",
       "oneLeftFew",
-      "fewNoDiscountExceptFinal",
       "badAppearancePlus",
       "unpopularPlus",
     ],
@@ -80,7 +78,6 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
       "twoLeftNotMany",
       "judgeIncludesTrend",
       "oneLeftFew",
-      "fewNoDiscountExceptFinal",
       "badAppearancePlus",
       "unpopularPlus",
       "steadyStandardMinus",
