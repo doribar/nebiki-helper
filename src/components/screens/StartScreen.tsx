@@ -360,7 +360,7 @@ function getInputStartForecastHour(
     case "17":
       return "18";
     case "18":
-      return "20";
+      return "19";
     case "19":
       return "20";
     case "20":
