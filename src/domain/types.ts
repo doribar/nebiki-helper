@@ -25,6 +25,7 @@ export type AreaId =
   previousManyRateText?: string;
   previousManyNote?: string;
   previousNormalRateText?: string;
+  skipKind?: "late_plus5" | "early_next_minus5";
 };
 
 export type AreaMaster = {
@@ -126,6 +127,7 @@ export type AreaProgress = {
   previousManyRateText?: string;
   previousManyNote?: string;
   previousNormalRateText?: string;
+  autoSkipKind?: "late_plus5" | "early_next_minus5";
 };
 
 

@@ -27,6 +27,7 @@ import type {
   AreaCountEvaluation,
   AreaRateAdjustment,
   AreaCountMigrationResult,
+  RateDisplayData,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -250,6 +251,45 @@ function buildTimeSwitchNotice(to: DiscountTime): string {
   )}を過ぎたため、ここから${getBasisTimeText(to)}の基準で表示します。`;
 }
 
+function clampDisplayRate(value: number): number {
+  return Math.max(0, Math.min(50, value));
+}
+
+function applyRateOffsetToText(text: string, offset: number): string {
+  return text.replace(/(\d+)%/g, (_match, valueText: string) => {
+    const value = Number(valueText);
+    if (!Number.isFinite(value)) return _match;
+    return `${clampDisplayRate(value + offset)}%`;
+  });
+}
+
+function applyRateOffsetToDisplay(display: RateDisplayData, offset: number): RateDisplayData {
+  return {
+    many: {
+      main: applyRateOffsetToText(display.many.main, offset),
+      note: display.many.note ? applyRateOffsetToText(display.many.note, offset) : undefined,
+    },
+    normal: {
+      main: applyRateOffsetToText(display.normal.main, offset),
+      note: display.normal.note ? applyRateOffsetToText(display.normal.note, offset) : undefined,
+    },
+    few: {
+      main: applyRateOffsetToText(display.few.main, offset),
+      note: display.few.note ? applyRateOffsetToText(display.few.note, offset) : undefined,
+    },
+  };
+}
+
+function isEarlyNextMinus5Window(session: SessionData | null, nowMs: number): boolean {
+  if (!session || session.discountTime !== "17") return false;
+  if (session.manualDiscountTimeOverride) return false;
+
+  const now = new Date(nowMs);
+  const minutes = now.getHours() * 60 + now.getMinutes();
+
+  return minutes >= 18 * 60 && minutes < 18 * 60 + 25;
+}
+
 function getAreaJudgeText(judge: AreaJudge): string {
   switch (judge) {
     case "many":
@@ -275,7 +315,9 @@ function getAreaStatusText(progress: AreaProgress): string | undefined {
     case "postponed_few":
       return "未完了（少ないため後回し）";
     case "auto_skipped_late_time":
-      return "スキップ済み（前回+5%で値引済み）";
+      return progress.autoSkipKind === "early_next_minus5"
+        ? "スキップ済み（先取り値引済み）"
+        : "スキップ済み（前回+5%で値引済み）";
     case "unstarted":
       return "未完了";
   }
@@ -309,6 +351,7 @@ function buildCompletedRateSnapshot(params: {
   progress: AreaProgress;
   weatherBonus: number;
   weekdayBase: WeekdayBaseLabel;
+  rateDisplayOverride?: RateDisplayData | null;
 }): CompletedRateSnapshot {
   const { session, progress, weatherBonus } = params;
 
@@ -316,17 +359,19 @@ function buildCompletedRateSnapshot(params: {
     return {};
   }
 
-  const resolvedWeather = resolveWeatherInputForDiscount(session.weather, session.discountTime);
+  const display = params.rateDisplayOverride ?? (() => {
+    const resolvedWeather = resolveWeatherInputForDiscount(session.weather, session.discountTime);
 
-  const display = getNormalTimeRateDisplay({
-    discountTime: session.discountTime,
-    weatherBonus,
-    areaJudge: progress.areaJudge,
-    isSunday: session.weekday === 0 && session.discountTime === "15",
-    ignoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
-    weekdayBase: params.weekdayBase,
-    areaRateAdjustment: progress.areaRateAdjustment,
-  });
+    return getNormalTimeRateDisplay({
+      discountTime: session.discountTime,
+      weatherBonus,
+      areaJudge: progress.areaJudge,
+      isSunday: session.weekday === 0 && session.discountTime === "15",
+      ignoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
+      weekdayBase: params.weekdayBase,
+      areaRateAdjustment: progress.areaRateAdjustment,
+    });
+  })();
 
   return {
     completedRateText: display.normal.main,
@@ -341,6 +386,7 @@ function buildNextSessionSkipRecord(params: {
   targetDiscountTime: "18" | "19";
   areaId: AreaId;
   rateSnapshot: CompletedRateSnapshot;
+  skipKind?: "late_plus5" | "early_next_minus5";
 }): NextSessionSkipRecord {
   return {
     date: params.date,
@@ -350,6 +396,7 @@ function buildNextSessionSkipRecord(params: {
     previousManyRateText: params.rateSnapshot.completedManyRateText,
     previousManyNote: params.rateSnapshot.completedManyNote,
     previousNormalRateText: params.rateSnapshot.completedNormalRateText,
+    skipKind: params.skipKind,
   };
 }
 
@@ -850,10 +897,89 @@ function createAreaProgressMapWithAutoSkippedAreas(
       previousManyRateText: record.previousManyRateText,
       previousManyNote: record.previousManyNote,
       previousNormalRateText: record.previousNormalRateText,
+      autoSkipKind: record.skipKind ?? "late_plus5",
     };
   }
 
   return base;
+}
+
+function createAreaProgressMapForTimeSwitch(params: {
+  previousMap: Record<AreaId, AreaProgress>;
+  skippedRecords: NextSessionSkipRecord[];
+}): Record<AreaId, AreaProgress> {
+  const base = createInitialAreaProgressMap();
+  const completedAt = getRuntimeNow().toISOString();
+
+  const markCompleted = (areaId: AreaId, patch?: Partial<AreaProgress>) => {
+    if (!isValidAreaId(areaId) || !base[areaId]) return;
+
+    base[areaId] = {
+      ...base[areaId],
+      status: "completed",
+      skipReason: "late_time",
+      completedAt,
+      ...patch,
+    };
+  };
+
+  const markAutoSkipped = (record: NextSessionSkipRecord) => {
+    if (!isValidAreaId(record.areaId) || !base[record.areaId]) return;
+
+    base[record.areaId] = {
+      ...base[record.areaId],
+      status: "auto_skipped_late_time",
+      skipReason: "late_time",
+      completedAt,
+      previousRateText: record.previousRateText,
+      previousManyRateText: record.previousManyRateText,
+      previousManyNote: record.previousManyNote,
+      previousNormalRateText: record.previousNormalRateText,
+      autoSkipKind: record.skipKind ?? "late_plus5",
+    };
+  };
+
+  for (const areaId of NORMAL_ROUTE) {
+    const previous = params.previousMap[areaId];
+    if (!previous) continue;
+
+    if (previous.status === "completed" || previous.status === "auto_skipped_late_time") {
+      markCompleted(areaId, {
+        previousRateText: previous.completedRateText ?? previous.previousRateText,
+        previousManyRateText: previous.completedManyRateText ?? previous.previousManyRateText,
+        previousManyNote: previous.completedManyNote ?? previous.previousManyNote,
+        previousNormalRateText: previous.completedNormalRateText ?? previous.previousNormalRateText,
+        autoSkipKind: previous.autoSkipKind,
+      });
+    }
+  }
+
+  for (const record of params.skippedRecords) {
+    markAutoSkipped(record);
+  }
+
+  return base;
+}
+
+function buildAutoTimeSwitchDialogText(params: {
+  from: DiscountTime;
+  to: DiscountTime;
+  prioritizeUnfinishedAreas: boolean;
+}): string {
+  const transitionText =
+    params.to === "20"
+      ? `次の値引時刻に近づいたため、${getBasisTimeText(params.to)}の最終値引に移行します。`
+      : `次の値引時刻に近づいたため、${getBasisTimeText(params.to)}の値引に移行します。`;
+
+  if (!params.prioritizeUnfinishedAreas || params.to === "20") {
+    return transitionText;
+  }
+
+  return `${transitionText}\n${getBasisTimeText(params.from)}の値引で未完了のエリアから先に表示されます。`;
+}
+
+function shouldPrioritizeUnfinishedAreasOnAutoTransition(screen: ScreenName): boolean {
+  return screen === "area_judge" || screen === "rate_display" || screen === "auto_skip_notice";
 }
 
 function getFirstAvailableAreaId(
@@ -1408,6 +1534,40 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   sessionSource.date,
 ]);
 
+  const earlyNextMinus5Info = useMemo(() => {
+    if (!isEarlyNextMinus5Window(state.session, nowMs)) return null;
+    if (!state.session) return null;
+
+    const targetDiscountTime = "18" as const;
+    const resolvedWeather = resolveWeatherInputForDiscount(
+      state.session.weather,
+      targetDiscountTime
+    );
+    const targetWeekdayBaseInfo = getWeekdayBaseInfo(
+      state.session.weekday,
+      targetDiscountTime,
+      resolvedWeather,
+      state.session.date
+    );
+    const targetBasisGuide = getBasisGuideDisplay({
+      date: state.session.date,
+      weekday: state.session.weekday,
+      discountTime: targetDiscountTime,
+      weather: resolvedWeather,
+    });
+
+    return {
+      targetDiscountTime,
+      resolvedWeather,
+      weekdayBaseInfo: targetWeekdayBaseInfo,
+      basisGuide: targetBasisGuide,
+      ignoreNormalTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
+    };
+  }, [
+    state.session,
+    nowMs,
+  ]);
+
   const lateTimeBonus = useMemo(() => {
   if (!state.session) return 0;
   if (state.session.discountTime === "20") return 0;
@@ -1423,9 +1583,9 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
     return minutes >= 16 * 60 ? 5 : 0;
   }
 
-  // 17時基準の値引中に18時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
+  // 17時基準の18:00〜18:24は、+5%ではなく18時30分値引率-5%で表示する。
   if (state.session.discountTime === "17") {
-    return minutes >= 18 * 60 ? 5 : 0;
+    return 0;
   }
 
   // 18時30分基準の値引中に19時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
@@ -1464,6 +1624,11 @@ const lateTimeBonusNotice = useMemo(() => {
 }, [state.session, lateTimeBonus]);
 
 const lateSkipNotice = useMemo(() => {
+  if (earlyNextMinus5Info) {
+    return `18時を過ぎたため、18時30分の値引率より5%弱めて表示しています。
+このエリアは18時30分値引ではスキップします。`;
+  }
+
   if (!state.session || lateTimeBonus === 0) return null;
 
   if (state.session.discountTime === "15") {
@@ -1476,9 +1641,13 @@ const lateSkipNotice = useMemo(() => {
 
   return `次の基準時刻に近づいているため、今回は5%強めて値引します。
 このエリアは次回の値引でスキップします。`;
-}, [state.session, lateTimeBonus]);
+}, [state.session, lateTimeBonus, earlyNextMinus5Info]);
 
     const basisGuide = useMemo(() => {
+  if (earlyNextMinus5Info) {
+    return earlyNextMinus5Info.basisGuide;
+  }
+
   const baseGuide = getBasisGuideDisplay({
     date: sessionSource.date,
     weekday: sessionSource.weekday,
@@ -1506,9 +1675,13 @@ const lateSkipNotice = useMemo(() => {
   lateTimeBonus,
   weekdayBaseInfo.baseRateBonus,
   sessionSource.date,
+  earlyNextMinus5Info,
 ]);
 
   const ignoreNormalTimeRateCap = shouldIgnoreNormalTimeRateCap(sessionSourceResolvedWeather);
+  const effectiveRateDiscountTime = earlyNextMinus5Info?.targetDiscountTime ?? state.session?.discountTime;
+  const effectiveRateWeekdayBase = earlyNextMinus5Info?.weekdayBaseInfo.adjusted ?? weekdayBaseInfo.adjusted;
+  const effectiveRateIgnoreTimeRateCap = earlyNextMinus5Info?.ignoreNormalTimeRateCap ?? ignoreNormalTimeRateCap;
 
   const weatherGuideText = useMemo(() => {
     return getWeatherGuideText();
@@ -1527,15 +1700,20 @@ const lateSkipNotice = useMemo(() => {
     if (state.session.discountTime === "20") return null;
     if (!currentAreaProgress.areaJudge) return null;
 
-    return getNormalTimeRateDisplay({
-      discountTime: state.session.discountTime,
-      weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+    const rateDiscountTime = (effectiveRateDiscountTime ?? state.session.discountTime) as Exclude<DiscountTime, "20">;
+    const display = getNormalTimeRateDisplay({
+      discountTime: rateDiscountTime,
+      weatherBonus: earlyNextMinus5Info
+        ? earlyNextMinus5Info.weekdayBaseInfo.baseRateBonus
+        : weekdayBaseInfo.baseRateBonus + lateTimeBonus,
       areaJudge: currentAreaProgress.areaJudge,
-      isSunday: state.session.weekday === 0 && state.session.discountTime === "15",
-      ignoreTimeRateCap: ignoreNormalTimeRateCap,
-      weekdayBase: weekdayBaseInfo.adjusted,
+      isSunday: state.session.weekday === 0 && rateDiscountTime === "15",
+      ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
+      weekdayBase: effectiveRateWeekdayBase,
       areaRateAdjustment: currentAreaProgress.areaRateAdjustment,
     });
+
+    return earlyNextMinus5Info ? applyRateOffsetToDisplay(display, -5) : display;
   }, [
   state.session,
   currentAreaProgress,
@@ -1543,6 +1721,10 @@ const lateSkipNotice = useMemo(() => {
   lateTimeBonus,
   ignoreNormalTimeRateCap,
   weekdayBaseInfo.adjusted,
+  effectiveRateDiscountTime,
+  effectiveRateWeekdayBase,
+  effectiveRateIgnoreTimeRateCap,
+  earlyNextMinus5Info,
   currentAreaProgress?.areaRateAdjustment,
 ]);
   const finalGuide = useMemo(() => {
@@ -1575,7 +1757,7 @@ const lateSkipNotice = useMemo(() => {
         return {
           areaId,
           areaName: getAreaName(areaId),
-          judgeText: "前回+5%済み",
+          judgeText: progress.autoSkipKind === "early_next_minus5" ? "先取り値引済み" : "前回+5%済み",
           rateText: previousNormalRateText,
           manyRateText: previousManyRateText,
           manyNote: progress.previousManyNote,
@@ -1694,7 +1876,7 @@ const lateSkipNotice = useMemo(() => {
     // 次の天候入力開始時刻が来たら、作業中・完了画面では自動で次の入力画面へ進む。
     // ただし開始画面で天候入力中は、表示中の値引時刻を優先し、自動遷移しない。
     // ここで自動遷移すると、19時30分の天候入力中に20時30分へ飛ぶことがある。
-    startNextDoneSession();
+    startNextDoneSession({ autoTransition: true });
   }, [
     state.screen,
     state.session?.discountTime,
@@ -2116,9 +2298,10 @@ const lateSkipNotice = useMemo(() => {
           });
 
           nextSkipRecords = consumed.remainingRecords;
-          areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-            consumed.skippedRecords
-          );
+          areaProgressMap = createAreaProgressMapForTimeSwitch({
+            previousMap: prev.areaProgressMap,
+            skippedRecords: consumed.skippedRecords,
+          });
         }
 
         const firstAreaId =
@@ -2541,6 +2724,7 @@ const lateSkipNotice = useMemo(() => {
         progress: prev.areaProgressMap[currentAreaId],
         weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
         weekdayBase: weekdayBaseInfo.adjusted,
+        rateDisplayOverride: rateDisplay,
       });
 
       const updatedMap = {
@@ -2556,12 +2740,16 @@ const lateSkipNotice = useMemo(() => {
       // 次回スキップ予約は「次のエリアへ」で完遂した時点で作る。
       // ただし直後に「戻る」または取り消しを押した場合は、
       // NavigationSnapshot から nextSessionSkipRecords も復元されるため予約も取り消される。
-      if (
-        prev.session &&
-        lateTimeBonus > 0 &&
-        !prev.session.manualDiscountTimeOverride
-      ) {
-        const targetDiscountTime = getNextSkipTargetDiscountTime(prev.session.discountTime);
+      if (prev.session && !prev.session.manualDiscountTimeOverride) {
+        const earlyNextTargetDiscountTime =
+          earlyNextMinus5Info && prev.session.discountTime === "17"
+            ? earlyNextMinus5Info.targetDiscountTime
+            : null;
+        const targetDiscountTime =
+          earlyNextTargetDiscountTime ??
+          (lateTimeBonus > 0
+            ? getNextSkipTargetDiscountTime(prev.session.discountTime)
+            : null);
 
         if (targetDiscountTime) {
           nextSkipRecords = appendSkipRecordsInMemory({
@@ -2572,6 +2760,9 @@ const lateSkipNotice = useMemo(() => {
                 targetDiscountTime,
                 areaId: currentAreaId,
                 rateSnapshot,
+                skipKind: earlyNextTargetDiscountTime
+                  ? "early_next_minus5"
+                  : "late_plus5",
               }),
             ],
           });
@@ -2905,7 +3096,10 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
-  function openNextSessionInput(targetDiscountTime: Exclude<DiscountTime, "20">) {
+  function openNextSessionInput(
+    targetDiscountTime: Exclude<DiscountTime, "20">,
+    options?: { preserveCurrentSession?: boolean }
+  ) {
     const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
@@ -2928,6 +3122,21 @@ const lateSkipNotice = useMemo(() => {
       },
     };
 
+    if (options?.preserveCurrentSession && state.session) {
+      setState((prev) => ({
+        ...prev,
+        screen: "start",
+        sessionDraft: nextDraft,
+        timeSwitchNotice: null,
+      }));
+      setAreaJudgeSelection(null);
+      setResumeTargetScreen(null);
+      setTimeSwitchTarget(targetDiscountTime);
+      setUndoSnapshot(null);
+      setUndoNotice(null);
+      return;
+    }
+
     clearWorkSessionCheckpoint();
     clearRuntimeState();
     screenHistoryRef.current = [];
@@ -2941,15 +3150,29 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
-  function startNextDoneSession() {
+  function startNextDoneSession(options?: { autoTransition?: boolean }) {
     if (!state.session) return;
 
     const previousDiscountTime = state.session.discountTime;
     const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, new Date(nowMs));
     if (!nextInfo?.canStart) return;
 
+    const prioritizeUnfinishedAreas =
+      (options?.autoTransition ?? false) &&
+      shouldPrioritizeUnfinishedAreasOnAutoTransition(state.screen);
+
+    if (options?.autoTransition) {
+      window.alert(buildAutoTimeSwitchDialogText({
+        from: previousDiscountTime,
+        to: nextInfo.targetDiscountTime,
+        prioritizeUnfinishedAreas,
+      }));
+    }
+
     if (nextInfo.targetDiscountTime !== "20") {
-      openNextSessionInput(nextInfo.targetDiscountTime);
+      openNextSessionInput(nextInfo.targetDiscountTime, {
+        preserveCurrentSession: prioritizeUnfinishedAreas,
+      });
       return;
     }
 

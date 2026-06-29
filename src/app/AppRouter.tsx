@@ -86,6 +86,11 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
           areaName={derived.currentAreaName}
+          autoSkipKind={
+            state.currentAreaId
+              ? state.areaProgressMap[state.currentAreaId]?.autoSkipKind
+              : undefined
+          }
           onConfirm={actions.acknowledgeAutoSkippedArea}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}

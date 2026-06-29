@@ -57,6 +57,7 @@ function cloneSkipRecord(record: NextSessionSkipRecord): NextSessionSkipRecord {
   if (typeof record.previousManyRateText === "string") cloned.previousManyRateText = record.previousManyRateText;
   if (typeof record.previousManyNote === "string") cloned.previousManyNote = record.previousManyNote;
   if (typeof record.previousNormalRateText === "string") cloned.previousNormalRateText = record.previousNormalRateText;
+  if (record.skipKind === "late_plus5" || record.skipKind === "early_next_minus5") cloned.skipKind = record.skipKind;
 
   return cloned;
 }

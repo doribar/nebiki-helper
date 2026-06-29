@@ -6,6 +6,7 @@ type AutoSkipNoticeScreenProps = {
   timeText: string;
   areaName: string;
   onConfirm: () => void;
+  autoSkipKind?: "late_plus5" | "early_next_minus5";
   onGoBack: () => void;
   onReturnHome: () => void;
 };
@@ -26,6 +27,7 @@ export function AutoSkipNoticeScreen({
   timeText,
   areaName,
   onConfirm,
+  autoSkipKind = "late_plus5",
   onGoBack,
   onReturnHome,
 }: AutoSkipNoticeScreenProps) {
@@ -51,13 +53,26 @@ export function AutoSkipNoticeScreen({
           textAlign: "center",
         }}
       >
-        <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.7, marginBottom: 18 }}>
-          {areaName}エリアは
-          <br />
-          前回の値引で+5%で値引きしているため
-          <br />
-          今回はスキップします。
-        </div>
+        {autoSkipKind === "early_next_minus5" ? (
+          <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.7, marginBottom: 18 }}>
+            {areaName}エリアは
+            <br />
+            先取り値引済みのため
+            <br />
+            今回はスキップします。
+            <div style={{ marginTop: 10, fontSize: 14, fontWeight: 700, color: "#555" }}>
+              18:00以降に、18時30分値引率より5%弱めて値引済みです。
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.7, marginBottom: 18 }}>
+            {areaName}エリアは
+            <br />
+            前回の値引で+5%で値引きしているため
+            <br />
+            今回はスキップします。
+          </div>
+        )}
 
         <button
           type="button"
