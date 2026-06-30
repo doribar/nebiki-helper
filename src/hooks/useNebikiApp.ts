@@ -769,22 +769,15 @@ function buildStartDefaultDraft(raw?: Partial<SessionDraft> | null): SessionDraf
 
   const normalized = normalizeSessionDraft(raw);
 
-  const lockedDiscountTime =
-    normalized.date === currentDefault.date
-      ? normalized.weatherInputLockedDiscountTime ?? null
-      : null;
-  const resolvedDiscountTime = normalized.manualDiscountTimeOverride
-    ? normalized.discountTime
-    : lockedDiscountTime ?? currentDefault.discountTime;
-
   return {
     ...normalized,
     date: currentDefault.date,
     weekday: normalized.manualWeekdayOverride ? normalized.weekday : currentDefault.weekday,
-    discountTime: resolvedDiscountTime,
-    weatherInputLockedDiscountTime: normalized.manualDiscountTimeOverride
-      ? null
-      : lockedDiscountTime,
+    // 手動時刻・天候入力ロックはページ再読み込み後まで引き継がない。
+    // ここを保存値から復元すると、メイン画面や固定動作確認モードが以前の時刻に貼り付く。
+    discountTime: currentDefault.discountTime,
+    manualDiscountTimeOverride: false,
+    weatherInputLockedDiscountTime: null,
     weather: {
       ...normalized.weather,
       hourlyForecasts: cloneHourlyForecasts(normalized.weather.hourlyForecasts),
@@ -833,11 +826,14 @@ function normalizeLoadedState(
     (loaded as Partial<AppState>).pendingDeferredAreaIds ?? [];
   const pendingDeferredAreaIds = rawPendingDeferredAreaIds.filter(isValidAreaId);
   const session = normalizeSessionData(loaded.session);
-  const sessionDraft = normalizeSessionDraft(loaded.sessionDraft);
   const normalizedReview19 = normalizeReview19Result((loaded as Partial<AppState>).review19);
   const reviewScreens: ScreenName[] = ["review19_weather", "review19", "review19_done"];
   const screen = reviewScreens.includes(loaded.screen) ? "start" : loaded.screen;
   const review19 = reviewScreens.includes(loaded.screen) ? null : normalizedReview19;
+  const sessionDraft =
+    screen === "start" && !session
+      ? buildStartDefaultDraft(loaded.sessionDraft)
+      : normalizeSessionDraft(loaded.sessionDraft);
 
   return {
     ...loaded,
@@ -1160,18 +1156,30 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
 
   if (!initialPersistenceRef.current) {
-    initialPersistenceRef.current = loadPersistedNebikiState();
+    initialPersistenceRef.current = isTestMode
+      ? {
+          currentSession: null,
+          workSessionCheckpoint: null,
+          runtimeState: null,
+          nextSessionSkipRecords: [],
+          lastSessionWeather: null,
+          lastUsedSessionDraft: null,
+          dailyMessageState: normalizeDailyMessageState(null),
+        }
+      : loadPersistedNebikiState();
   }
 
   const initialLastUsedSessionDraft = buildStartDefaultDraft(
-    initialPersistenceRef.current?.lastUsedSessionDraft ?? null
+    isTestMode ? null : initialPersistenceRef.current?.lastUsedSessionDraft ?? null
   );
   const initialToday = formatLocalDate(getRuntimeNow());
-  const initialLoadedState = shouldUseCheckpointInsteadOfCurrent({
-    currentSession: initialPersistenceRef.current?.currentSession ?? null,
-    checkpoint: initialPersistenceRef.current?.workSessionCheckpoint ?? null,
-    today: initialToday,
-  })
+  const initialLoadedState = isTestMode
+    ? null
+    : shouldUseCheckpointInsteadOfCurrent({
+        currentSession: initialPersistenceRef.current?.currentSession ?? null,
+        checkpoint: initialPersistenceRef.current?.workSessionCheckpoint ?? null,
+        today: initialToday,
+      })
     ? initialPersistenceRef.current?.workSessionCheckpoint ?? null
     : initialPersistenceRef.current?.currentSession ?? null;
 
