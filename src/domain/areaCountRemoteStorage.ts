@@ -1,5 +1,5 @@
 import type { AreaCountRecord } from "./areaCountHistory.ts";
-import { cloneAreaCountRecords, normalizeAreaCountRecords, upsertAreaCountRecord } from "./areaCountHistory.ts";
+import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
 
 type SupabaseConfig = {
   url: string;
@@ -91,16 +91,6 @@ function recordToRow(record: AreaCountRecord): AreaCountRecordRow {
   };
 }
 
-export function mergeAreaCountRecords(
-  baseRecords: AreaCountRecord[],
-  recordsToMerge: AreaCountRecord[],
-): AreaCountRecord[] {
-  return recordsToMerge.reduce(
-    (merged, record) => upsertAreaCountRecord(merged, record),
-    cloneAreaCountRecords(baseRecords),
-  );
-}
-
 export async function loadRemoteAreaCountRecords(): Promise<RemoteAreaCountLoadResult> {
   const config = getSupabaseConfig();
   if (!config) return { status: "disabled" };
@@ -130,41 +120,6 @@ export async function loadRemoteAreaCountRecords(): Promise<RemoteAreaCountLoadR
   }
 }
 
-
-export async function upsertRemoteAreaCountRecords(
-  records: AreaCountRecord[],
-): Promise<RemoteAreaCountSaveResult> {
-  const config = getSupabaseConfig();
-  if (!config) return { status: "disabled" };
-
-  const normalizedRecords = normalizeAreaCountRecords(records);
-  if (normalizedRecords.length === 0) return { status: "saved", savedCount: 0 };
-
-  try {
-    const response = await fetch(
-      `${config.url}/rest/v1/${TABLE_NAME}?on_conflict=date,session_started_at,area_id,discount_time`,
-      {
-        method: "POST",
-        headers: {
-          ...buildHeaders(config),
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(normalizedRecords.map(recordToRow)),
-      },
-    );
-
-    if (!response.ok) {
-      return { status: "error", message: `HTTP ${response.status}` };
-    }
-
-    return { status: "saved", savedCount: normalizedRecords.length };
-  } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : "unknown error",
-    };
-  }
-}
 
 export async function upsertRemoteAreaCountRecord(
   record: AreaCountRecord,

@@ -9,8 +9,6 @@ import type {
   AreaJudge,
   ScreenName,
 } from "./types";
-import type { AreaCountRecord } from "./areaCountHistory.ts";
-import { cloneAreaCountRecords, normalizeAreaCountRecords } from "./areaCountHistory.ts";
 import type { NavigationSnapshot } from "./navigationHistory";
 import { appendReview19RecordInMemory, cloneReview19Records } from "./review19.ts";
 
@@ -24,7 +22,6 @@ export const STORAGE_KEYS = {
   dailyMessageState: "nebiki-helper/daily-message-state",
   review19Records: "nebiki-helper/review19-records",
   review19SourceState: "nebiki-helper/review19-source-state",
-  areaCountRecords: "nebiki-helper/area-count-records",
 } as const;
 
 export type PersistedRuntimeState = {
@@ -43,7 +40,6 @@ export type PersistedNebikiState = {
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft | null;
   dailyMessageState: DailyMessageState;
-  areaCountRecords: AreaCountRecord[];
 };
 
 function cloneSkipRecord(record: NextSessionSkipRecord): NextSessionSkipRecord {
@@ -234,16 +230,8 @@ export function clearLastUsedSessionDraft(): void {
 }
 
 
-export function loadAreaCountRecords(): AreaCountRecord[] {
-  const raw = localStorage.getItem(STORAGE_KEYS.areaCountRecords);
-  return normalizeAreaCountRecords(safeParseJSON<unknown>(raw, []));
-}
-
-export function saveAreaCountRecords(records: AreaCountRecord[]): void {
-  localStorage.setItem(
-    STORAGE_KEYS.areaCountRecords,
-    JSON.stringify(cloneAreaCountRecords(records))
-  );
+function clearLegacyAreaCountRecords(): void {
+  localStorage.removeItem("nebiki-helper/area-count-records");
 }
 
 const defaultDailyMessageState: DailyMessageState = {
@@ -318,6 +306,8 @@ export function clearReview19SourceState(): void {
 }
 
 export function loadPersistedNebikiState(): PersistedNebikiState {
+  clearLegacyAreaCountRecords();
+
   return {
     currentSession: loadCurrentSession(),
     workSessionCheckpoint: loadWorkSessionCheckpoint(),
@@ -326,7 +316,6 @@ export function loadPersistedNebikiState(): PersistedNebikiState {
     lastSessionWeather: loadLastSessionWeather(),
     lastUsedSessionDraft: loadLastUsedSessionDraft(),
     dailyMessageState: loadDailyMessageState(),
-    areaCountRecords: loadAreaCountRecords(),
   };
 }
 
@@ -352,7 +341,7 @@ export function savePersistedNebikiState(state: PersistedNebikiState): void {
   }
 
   saveDailyMessageState(state.dailyMessageState);
-  saveAreaCountRecords(state.areaCountRecords);
+  clearLegacyAreaCountRecords();
 }
 
 export function appendSkipRecordsInMemory(params: {

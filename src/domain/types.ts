@@ -150,11 +150,6 @@ export type ActualWeekdayGroup = "月水" | "火木" | "金土日";
 export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
 export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
 
-export type AreaCountMigrationResult = {
-  ok: boolean;
-  message: string;
-};
-
 export type WeekdayBaseInfo = {
   original: WeekdayBaseLabel;
   adjusted: WeekdayBaseLabel;
@@ -423,7 +418,6 @@ export type UseNebikiAppDerived = {
     shouldRecommendExport: boolean;
   };
   canStartReview19Manually: boolean;
-  localAreaCountRecordCount: number;
 };
 
 export type UseNebikiAppActions = {
@@ -455,7 +449,6 @@ export type UseNebikiAppActions = {
   exportReview19Records: () => void;
   exportAllReview19Records: () => void;
   startReview19Manually: () => void;
-  migrateLocalAreaCountRecordsToRemote: () => Promise<AreaCountMigrationResult>;
   resetApp: () => void;
 };
 

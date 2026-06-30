@@ -42,8 +42,6 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           onStart={actions.startSession}
           trainingStepConfig={derived.trainingStepConfig}
           startButtonLabel={derived.startButtonLabel}
-          localAreaCountRecordCount={derived.localAreaCountRecordCount}
-          onMigrateLocalAreaCountRecords={actions.migrateLocalAreaCountRecordsToRemote}
           canStartReview19={derived.canStartReview19Manually && state.sessionDraft.discountTime === "18"}
           onStartReview19={actions.startReview19Manually}
           now={testNow ?? undefined}

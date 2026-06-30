@@ -26,7 +26,6 @@ import type {
   WeekdayBaseLabel,
   AreaCountEvaluation,
   AreaRateAdjustment,
-  AreaCountMigrationResult,
   RateDisplayData,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
@@ -56,7 +55,6 @@ import {
   loadReview19SourceState,
   saveReview19SourceState,
   clearReview19SourceState,
-  loadAreaCountRecords,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -111,9 +109,7 @@ import {
 } from "../domain/areaCountHistory.ts";
 import {
   loadRemoteAreaCountRecords,
-  mergeAreaCountRecords,
   upsertRemoteAreaCountRecord,
-  upsertRemoteAreaCountRecords,
 } from "../domain/areaCountRemoteStorage.ts";
 
 let runtimeNowOverrideMs: number | null = null;
@@ -644,7 +640,6 @@ function clonePersistedNebikiStateSnapshot(params: {
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft;
   dailyMessageState: DailyMessageState;
-  areaCountRecords: AreaCountRecord[];
 }) {
   return {
     currentSession: cloneAppState(params.currentSession),
@@ -654,7 +649,6 @@ function clonePersistedNebikiStateSnapshot(params: {
     lastSessionWeather: cloneLastSessionWeatherRecord(params.lastSessionWeather),
     lastUsedSessionDraft: normalizeSessionDraft(params.lastUsedSessionDraft),
     dailyMessageState: normalizeDailyMessageState(params.dailyMessageState),
-    areaCountRecords: cloneAreaCountRecords(params.areaCountRecords),
   };
 }
 
@@ -1256,7 +1250,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
 
   useEffect(() => {
     // 動作確認モードでは入力結果を端末内のlocalStorageへ残さない。
-    // 残数入力の確認で、本番用のセッション状態やエリア残数履歴を汚さないため。
+    // 残数入力の確認で、本番用のセッション状態を汚さないため。
     if (isTestMode) return;
 
     savePersistedNebikiState(
@@ -1266,7 +1260,6 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
         lastSessionWeather,
         lastUsedSessionDraft,
         dailyMessageState,
-        areaCountRecords,
       })
     );
 
@@ -1280,7 +1273,6 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
     lastSessionWeather,
     lastUsedSessionDraft,
     dailyMessageState,
-    areaCountRecords,
   ]);
 
 
@@ -2535,47 +2527,6 @@ const lateSkipNotice = useMemo(() => {
     );
   }
 
-  async function migrateLocalAreaCountRecordsToRemote(): Promise<AreaCountMigrationResult> {
-    if (isTestMode) {
-      return {
-        ok: false,
-        message: "動作確認モードではローカル履歴をサーバーへ送信しません。",
-      };
-    }
-
-    const localRecords = loadAreaCountRecords();
-
-    if (localRecords.length === 0) {
-      return {
-        ok: true,
-        message: "ローカル履歴はありません。",
-      };
-    }
-
-    const result = await upsertRemoteAreaCountRecords(localRecords);
-
-    if (result.status === "disabled") {
-      return {
-        ok: false,
-        message: "Supabase設定が見つかりません。Vercelの環境変数と再デプロイを確認してください。",
-      };
-    }
-
-    if (result.status === "error") {
-      return {
-        ok: false,
-        message: `サーバー送信に失敗しました。${result.message}`,
-      };
-    }
-
-    setAreaCountRecords((current) => mergeAreaCountRecords(current, localRecords));
-
-    return {
-      ok: true,
-      message: `${result.savedCount ?? localRecords.length}件のローカル履歴をサーバーへ送信しました。`,
-    };
-  }
-
   function goBackOneScreen() {
     const historyResult = popNavigationHistory(screenHistoryRef.current);
     if (!historyResult.previousSnapshot) return;
@@ -3363,7 +3314,6 @@ const lateSkipNotice = useMemo(() => {
   review19ReferenceLines,
   review19Export,
   canStartReview19Manually,
-  localAreaCountRecordCount: areaCountRecords.length,
 },
     actions: {
       updateSessionDraft,
@@ -3389,7 +3339,6 @@ const lateSkipNotice = useMemo(() => {
       exportReview19Records,
       exportAllReview19Records,
       startReview19Manually,
-      migrateLocalAreaCountRecordsToRemote,
       resetApp,
     },
   };
