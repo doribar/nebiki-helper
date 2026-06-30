@@ -157,7 +157,6 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
       return (
         <Review19Screen
           items={derived.review19Items}
-          referenceLines={derived.review19ReferenceLines}
           onChangeAreaCount={actions.updateReview19AreaCount}
           onSave={actions.saveReview19}
           onReturnHome={handleReturnHome}

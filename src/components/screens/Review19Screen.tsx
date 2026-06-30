@@ -33,7 +33,6 @@ function getCountText(count?: number): string {
 
 type Review19ScreenProps = {
   items: Review19AreaItem[];
-  referenceLines: string[];
   onChangeAreaCount: (areaId: AreaId, count: number) => void;
   onSave: () => void;
   onReturnHome: () => void;
@@ -41,7 +40,6 @@ type Review19ScreenProps = {
 
 export function Review19Screen({
   items,
-  referenceLines,
   onChangeAreaCount,
   onSave,
   onReturnHome,
@@ -122,25 +120,6 @@ export function Review19Screen({
           値引判断前のエリア残数とは別データとして扱います。
         </div>
       </section>
-
-      {referenceLines.length > 0 ? (
-        <section
-          style={{
-            ...cardStyle,
-            marginTop: 16,
-            background: "#fafafa",
-          }}
-        >
-          <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 8 }}>
-            19時30分値引の参考基準
-          </div>
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.7, color: "#444" }}>
-            {referenceLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
 
       <section style={{ ...cardStyle, marginTop: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
