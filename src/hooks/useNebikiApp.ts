@@ -1863,11 +1863,18 @@ const lateSkipNotice = useMemo(() => {
   useEffect(() => {
     if (!state.session) return;
     if (state.screen === "start") return;
+    if (
+      state.screen === "review19_weather" ||
+      state.screen === "review19" ||
+      state.screen === "review19_done"
+    ) {
+      return;
+    }
     if (!doneNextSessionInfo?.canStart) return;
 
     // 次の天候入力開始時刻が来たら、作業中・完了画面では自動で次の入力画面へ進む。
-    // ただし開始画面で天候入力中は、表示中の値引時刻を優先し、自動遷移しない。
-    // ここで自動遷移すると、19時30分の天候入力中に20時30分へ飛ぶことがある。
+    // ただし開始画面で天候入力中、または19時チェック中は、表示中の作業を優先し、自動遷移しない。
+    // ここで自動遷移すると、19時チェック開始直後に18時30分入力へ戻されることがある。
     startNextDoneSession({ autoTransition: true });
   }, [
     state.screen,
