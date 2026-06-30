@@ -147,6 +147,8 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           summaryItems={derived.doneSummaryItems}
           nextSessionInfo={derived.doneNextSessionInfo}
           trainingStepConfig={derived.trainingStepConfig}
+          referenceText={derived.basisGuide.referenceText}
+          timeText={derived.timeText}
           onGoBack={actions.goBackOneScreen}
           onStartNextSession={actions.startNextDoneSession}
           onReturnHome={handleReturnHome}

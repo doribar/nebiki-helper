@@ -6,6 +6,8 @@ type DoneScreenProps = {
   onGoBack: () => void;
   onStartNextSession: () => void;
   onReturnHome: () => void;
+  referenceText?: string;
+  timeText?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
   summaryItems: DoneSummaryItem[];
@@ -34,10 +36,58 @@ const summaryRowStyle: CSSProperties = {
   fontSize: 13,
 };
 
+function getReferenceBaseText(referenceText: string): string {
+  return referenceText.replace(/を基準に考えて$/, "");
+}
+
+function getReferenceWeekdayBaseText(referenceText: string, timeText: string): string {
+  const baseText = getReferenceBaseText(referenceText);
+  const suffix = `の${timeText}`;
+  return baseText.endsWith(suffix)
+    ? baseText.slice(0, -suffix.length)
+    : baseText;
+}
+
+function BasisTimeMiniPanel({
+  referenceText,
+  timeText,
+}: {
+  referenceText: string;
+  timeText: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 4,
+        padding: "10px 12px",
+        borderRadius: 10,
+        background: "#f7f7f7",
+        border: "1px solid #e0e0e0",
+        fontSize: 13,
+        color: "#333",
+        lineHeight: 1.5,
+        marginBottom: 12,
+      }}
+    >
+      <div>
+        <strong>曜日基準：</strong>
+        {getReferenceWeekdayBaseText(referenceText, timeText)}
+      </div>
+      <div>
+        <strong>値引時刻：</strong>
+        {timeText}
+      </div>
+    </div>
+  );
+}
+
 export function DoneScreen({
   onGoBack,
   onStartNextSession,
   onReturnHome,
+  referenceText,
+  timeText,
   canStartReview19 = false,
   onStartReview19,
   summaryItems,
@@ -138,6 +188,10 @@ export function DoneScreen({
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
             全エリアの値引率
           </div>
+
+          {referenceText && timeText ? (
+            <BasisTimeMiniPanel referenceText={referenceText} timeText={timeText} />
+          ) : null}
 
           <div
             style={{
