@@ -57,6 +57,11 @@ export type AreaCountRecommendation = {
   actualWeekdayGroup?: ActualWeekdayGroup;
   comparisonMode?: "weekday" | "fallback_group";
   medianCount?: number;
+  shortMedianCount?: number;
+  longMedianCount?: number;
+  shortSampleSize?: number;
+  longSampleSize?: number;
+  medianDownGuardApplied?: boolean;
   comfortPoint?: number;
   comfortAdjustedMedianCount?: number;
   smallDifferenceThreshold?: number;
@@ -75,7 +80,9 @@ export type AreaCountRecommendation = {
 };
 
 const REQUIRED_SAMPLE_SIZE = 3;
-const MAX_REFERENCE_RECORDS = 10;
+const SHORT_REFERENCE_RECORDS = 16;
+const LONG_REFERENCE_RECORDS = 52;
+const MEDIAN_DOWN_GUARD_MAX_DROP = 2;
 const DECREASE_RATE_THRESHOLD = 0.2;
 
 const NO_AFTERNOON_ADD_AREA_IDS = new Set<AreaId>([
@@ -617,11 +624,12 @@ function getReferenceRecords(params: {
   fallbackWeekdayGroup: ActualWeekdayGroup;
 }): {
   matchedRecords: AreaCountRecord[];
+  longMatchedRecords: AreaCountRecord[];
   comparisonMode: "weekday" | "fallback_group";
   weekdaySampleSize: number;
   fallbackSampleSize: number;
 } {
-  const sameWeekdayRecords = params.records
+  const sameWeekdayAllRecords = params.records
     .filter((record) => {
       return (
         record.areaId === params.areaId &&
@@ -629,19 +637,19 @@ function getReferenceRecords(params: {
         record.actualWeekday === params.actualWeekday
       );
     })
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
-    .slice(-MAX_REFERENCE_RECORDS);
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
 
-  if (sameWeekdayRecords.length >= REQUIRED_SAMPLE_SIZE) {
+  if (sameWeekdayAllRecords.length >= REQUIRED_SAMPLE_SIZE) {
     return {
-      matchedRecords: sameWeekdayRecords,
+      matchedRecords: sameWeekdayAllRecords.slice(-SHORT_REFERENCE_RECORDS),
+      longMatchedRecords: sameWeekdayAllRecords.slice(-LONG_REFERENCE_RECORDS),
       comparisonMode: "weekday",
-      weekdaySampleSize: sameWeekdayRecords.length,
+      weekdaySampleSize: sameWeekdayAllRecords.length,
       fallbackSampleSize: 0,
     };
   }
 
-  const fallbackRecords = params.records
+  const fallbackAllRecords = params.records
     .filter((record) => {
       return (
         record.areaId === params.areaId &&
@@ -649,14 +657,59 @@ function getReferenceRecords(params: {
         record.actualWeekdayGroup === params.fallbackWeekdayGroup
       );
     })
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
-    .slice(-MAX_REFERENCE_RECORDS);
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
 
   return {
-    matchedRecords: fallbackRecords,
+    matchedRecords: fallbackAllRecords.slice(-SHORT_REFERENCE_RECORDS),
+    longMatchedRecords: fallbackAllRecords.slice(-LONG_REFERENCE_RECORDS),
     comparisonMode: "fallback_group",
-    weekdaySampleSize: sameWeekdayRecords.length,
-    fallbackSampleSize: fallbackRecords.length,
+    weekdaySampleSize: sameWeekdayAllRecords.length,
+    fallbackSampleSize: fallbackAllRecords.length,
+  };
+}
+
+function getGuardedReferenceMedian(params: {
+  shortRecords: AreaCountRecord[];
+  longRecords: AreaCountRecord[];
+  comparisonMode: "weekday" | "fallback_group";
+}): {
+  shortMedianCount: number;
+  longMedianCount: number;
+  adoptedMedianCount: number;
+  medianDownGuardApplied: boolean;
+} {
+  const shortMedianCount = getMedian(params.shortRecords.map((record) => record.count));
+  const longMedianCount = getMedian(params.longRecords.map((record) => record.count));
+
+  // 暫定グループはデータが少ない時の代替なので、まずは従来どおり直近中央値で判定する。
+  if (params.comparisonMode === "fallback_group") {
+    return {
+      shortMedianCount,
+      longMedianCount,
+      adoptedMedianCount: shortMedianCount,
+      medianDownGuardApplied: false,
+    };
+  }
+
+  if (shortMedianCount >= longMedianCount) {
+    return {
+      shortMedianCount,
+      longMedianCount,
+      adoptedMedianCount: shortMedianCount,
+      medianDownGuardApplied: false,
+    };
+  }
+
+  const guardedMedianCount = Math.max(
+    shortMedianCount,
+    longMedianCount - MEDIAN_DOWN_GUARD_MAX_DROP
+  );
+
+  return {
+    shortMedianCount,
+    longMedianCount,
+    adoptedMedianCount: guardedMedianCount,
+    medianDownGuardApplied: guardedMedianCount !== shortMedianCount,
   };
 }
 
@@ -714,7 +767,7 @@ function getDecreaseRecommendation(params: {
 
     if (!pairedPreviousRecord || pairedPreviousRecord.count <= 0) return [];
     return [(pairedPreviousRecord.count - record.count) / pairedPreviousRecord.count];
-  }).slice(-MAX_REFERENCE_RECORDS);
+  }).slice(-SHORT_REFERENCE_RECORDS);
 
   if (historicalRates.length < requiredSampleSize) {
     return {
@@ -841,7 +894,12 @@ export function getAreaCountRecommendation(params: {
     };
   }
 
-  const medianCount = getMedian(matchedRecords.map((record) => record.count));
+  const referenceMedian = getGuardedReferenceMedian({
+    shortRecords: matchedRecords,
+    longRecords: reference.longMatchedRecords,
+    comparisonMode,
+  });
+  const medianCount = referenceMedian.adoptedMedianCount;
   const comfort = getComfortPoint({ weather, discountTime });
   const comfortAdjustedMedianCount = adjustMedianByComfort(medianCount, comfort.point);
   const baseEvaluationInfo = getEvaluationFromCount({
@@ -876,6 +934,11 @@ export function getAreaCountRecommendation(params: {
     actualWeekdayGroup,
     comparisonMode,
     medianCount,
+    shortMedianCount: referenceMedian.shortMedianCount,
+    longMedianCount: referenceMedian.longMedianCount,
+    shortSampleSize: matchedRecords.length,
+    longSampleSize: reference.longMatchedRecords.length,
+    medianDownGuardApplied: referenceMedian.medianDownGuardApplied,
     comfortPoint: comfort.point,
     comfortAdjustedMedianCount,
     smallDifferenceThreshold: baseEvaluationInfo.smallDifferenceThreshold,
@@ -896,7 +959,15 @@ export function getAreaCountRecommendation(params: {
         ? `比較条件：同じ曜日（${actualWeekday}）`
         : `比較条件：暫定グループ（${actualWeekdayGroup}）`,
       `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
-      `過去中央値：${medianCount}個（同条件${matchedRecords.length}件）`,
+      comparisonMode === "weekday"
+        ? `短期中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
+        : `暫定中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
+      comparisonMode === "weekday"
+        ? `長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
+        : `暫定グループは短期中央値で判定`,
+      referenceMedian.medianDownGuardApplied
+        ? `短期が長期より少ないため、基準を下げすぎないように${medianCount}個で判定。`
+        : `採用基準：${medianCount}個`,
       `快適度ポイント：${comfort.point}（${comfort.detailText}）`,
       `快適度補正後の基準：${comfortAdjustedMedianCount}個`,
       `少ない：${baseEvaluationInfo.lowerLargeThreshold}個以下 / やや少ない：${baseEvaluationInfo.lowerSmallThreshold}個以下`,
