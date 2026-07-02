@@ -1516,9 +1516,6 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
     return getWeekdayText(sessionSource.weekday);
   }, [sessionSource.weekday]);
 
-  const timeText = useMemo(() => {
-    return getBasisTimeText(sessionSource.discountTime);
-  }, [sessionSource.discountTime]);
 
   const weekdayBaseInfo = useMemo(() => {
   return getWeekdayBaseInfo(
@@ -1682,6 +1679,9 @@ const lateSkipNotice = useMemo(() => {
   const effectiveRateDiscountTime = earlyNextMinus5Info?.targetDiscountTime ?? state.session?.discountTime;
   const effectiveRateWeekdayBase = earlyNextMinus5Info?.weekdayBaseInfo.adjusted ?? weekdayBaseInfo.adjusted;
   const effectiveRateIgnoreTimeRateCap = earlyNextMinus5Info?.ignoreNormalTimeRateCap ?? ignoreNormalTimeRateCap;
+  const effectiveTimeText = useMemo(() => {
+    return getBasisTimeText(effectiveRateDiscountTime ?? sessionSource.discountTime);
+  }, [effectiveRateDiscountTime, sessionSource.discountTime]);
 
   const weatherGuideText = useMemo(() => {
     return getWeatherGuideText();
@@ -1740,8 +1740,22 @@ const lateSkipNotice = useMemo(() => {
     const session = state.session;
     if (!session || session.discountTime === "20") return [];
 
-    const discountTime = session.discountTime;
-    const baseWeatherBonus = weekdayBaseInfo.baseRateBonus + lateTimeBonus;
+    const isEarlyNextMinus5Summary =
+      Boolean(earlyNextMinus5Info) &&
+      session.discountTime === "17" &&
+      !session.manualDiscountTimeOverride;
+    const discountTime = (isEarlyNextMinus5Summary
+      ? earlyNextMinus5Info!.targetDiscountTime
+      : session.discountTime) as Exclude<DiscountTime, "20">;
+    const baseWeatherBonus = isEarlyNextMinus5Summary
+      ? earlyNextMinus5Info!.weekdayBaseInfo.baseRateBonus
+      : weekdayBaseInfo.baseRateBonus + lateTimeBonus;
+    const summaryWeekdayBase = isEarlyNextMinus5Summary
+      ? earlyNextMinus5Info!.weekdayBaseInfo.adjusted
+      : weekdayBaseInfo.adjusted;
+    const summaryIgnoreTimeRateCap = isEarlyNextMinus5Summary
+      ? earlyNextMinus5Info!.ignoreNormalTimeRateCap
+      : ignoreNormalTimeRateCap;
 
     return DONE_SUMMARY_ROUTE.map((areaId) => {
       const weatherBonus = baseWeatherBonus;
@@ -1778,18 +1792,25 @@ const lateSkipNotice = useMemo(() => {
         };
       }
 
-      const display = getNormalTimeRateDisplay({
+      const baseDisplay = getNormalTimeRateDisplay({
         discountTime,
         weatherBonus,
         areaJudge: progress.areaJudge,
         isSunday: session.weekday === 0 && discountTime === "15",
-        ignoreTimeRateCap: ignoreNormalTimeRateCap,
-        weekdayBase: weekdayBaseInfo.adjusted,
+        ignoreTimeRateCap: summaryIgnoreTimeRateCap,
+        weekdayBase: summaryWeekdayBase,
         areaRateAdjustment: progress.areaRateAdjustment,
       });
+      const display = isEarlyNextMinus5Summary
+        ? applyRateOffsetToDisplay(baseDisplay, -5)
+        : baseDisplay;
 
-      const completedNormalRateText = getProgressNormalRateText(progress) ?? display.normal.main;
-      const completedManyRateText = getProgressManyRateText(progress) ?? display.many.main;
+      const completedNormalRateText = isEarlyNextMinus5Summary
+        ? display.normal.main
+        : getProgressNormalRateText(progress) ?? display.normal.main;
+      const completedManyRateText = isEarlyNextMinus5Summary
+        ? display.many.main
+        : getProgressManyRateText(progress) ?? display.many.main;
 
       return {
         areaId,
@@ -1799,7 +1820,9 @@ const lateSkipNotice = useMemo(() => {
           : getAreaJudgeText(progress.areaJudge),
         rateText: completedNormalRateText,
         manyRateText: completedManyRateText,
-        manyNote: progress.completedManyNote ?? display.many.note,
+        manyNote: isEarlyNextMinus5Summary
+          ? display.many.note
+          : progress.completedManyNote ?? display.many.note,
         normalRateText: completedNormalRateText,
         statusText,
       };
@@ -1811,6 +1834,7 @@ const lateSkipNotice = useMemo(() => {
     lateTimeBonus,
     ignoreNormalTimeRateCap,
     weekdayBaseInfo.adjusted,
+    earlyNextMinus5Info,
   ]);
 
   const review19Items = useMemo(() => {
@@ -3299,7 +3323,7 @@ const lateSkipNotice = useMemo(() => {
   trainingStepConfig,
   currentAreaName,
   weekdayText,
-  timeText,
+  timeText: effectiveTimeText,
   basisGuide,
   weatherGuideText,
   rateDisplay,

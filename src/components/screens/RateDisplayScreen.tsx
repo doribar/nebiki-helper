@@ -536,6 +536,15 @@ export function RateDisplayScreen({
     },
   ].filter((group) => group.options.length > 0);
 
+  const rateDisplaySignature = [
+    rateDisplay?.many.main ?? "",
+    rateDisplay?.many.note ?? "",
+    rateDisplay?.normal.main ?? "",
+    rateDisplay?.normal.note ?? "",
+    rateDisplay?.few.main ?? "",
+    rateDisplay?.few.note ?? "",
+  ].join("|");
+
   useEffect(() => {
     setShowSkipTargetPicker(false);
     setRateInstructionStepIndex(0);
@@ -543,7 +552,7 @@ export function RateDisplayScreen({
     areaName,
     canChooseSkipTarget,
     discountTime,
-    rateDisplay,
+    rateDisplaySignature,
     showManyProductRate,
     showFewProductRule,
   ]);
