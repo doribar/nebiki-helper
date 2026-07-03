@@ -34,7 +34,7 @@ function getCountText(count?: number): string {
 type Review19ScreenProps = {
   items: Review19AreaItem[];
   onChangeAreaCount: (areaId: AreaId, count: number) => void;
-  onSave: () => void;
+  onSave: (latestAreaCount?: { areaId: AreaId; count: number }) => void;
   onReturnHome: () => void;
 };
 
@@ -83,7 +83,11 @@ export function Review19Screen({
     }
 
     if (isLast) {
-      window.setTimeout(onSave, 0);
+      const latestAreaCount =
+        !activeItem.excluded && parsedCount !== null
+          ? { areaId: activeItem.areaId, count: parsedCount }
+          : undefined;
+      window.setTimeout(() => onSave(latestAreaCount), 0);
       return;
     }
 

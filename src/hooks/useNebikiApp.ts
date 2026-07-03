@@ -2982,9 +2982,14 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function buildRecordedReview19Result(): Review19Result | null {
+  function buildRecordedReview19Result(
+    latestAreaCount?: { areaId: AreaId; count: number }
+  ): Review19Result | null {
     if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
 
+    const latestAreaCounts: Partial<Record<AreaId, number>> = latestAreaCount
+      ? { [latestAreaCount.areaId]: Math.max(0, Math.round(latestAreaCount.count)) }
+      : {};
     const recordedAt = state.review19.recordedAt ?? getRuntimeNow().toISOString();
     const snapshot = state.session
       ? createReview19Snapshot({
@@ -3004,6 +3009,10 @@ const lateSkipNotice = useMemo(() => {
     return {
       ...state.review19,
       ratingScores: createReview19RatingScores(state.review19.ratings),
+      areaCounts: {
+        ...state.review19.areaCounts,
+        ...latestAreaCounts,
+      },
       excludedAreaIds: [],
       excludeReasons: {},
       recordedAt,
@@ -3011,8 +3020,8 @@ const lateSkipNotice = useMemo(() => {
     };
   }
 
-  function saveReview19() {
-    const recordedReview = buildRecordedReview19Result();
+  function saveReview19(latestAreaCount?: { areaId: AreaId; count: number }) {
+    const recordedReview = buildRecordedReview19Result(latestAreaCount);
     if (!recordedReview) return;
 
     if (!isTestMode) {
