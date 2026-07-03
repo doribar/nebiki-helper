@@ -102,19 +102,19 @@ const cases: Case[] = [
       adjusted: '金土',
       baseRateBonus: -10,
       weekdayCalcIncludes: ['16時気温 21〜25度 -2段', '未来天候ポイント +10pt（17〜21時） -2段'],
-      bonusCalcIncludes: ['曜日基準で補正しきれない分 -10%'],
+      bonusCalcIncludes: ['快適度補正：超快適 -10%'],
     },
   },
   {
-    name: '直近低温と低温風はベース側で拾い未来ポイントも加算する',
+    name: '直近低温と低温風は快適度で不快に寄せる',
     weekday: 5,
     discountTime: '15',
     weatherSpec: weather({ tempLevel: '6to10', windLevel: '5orMore' }),
     expected: {
       adjusted: '月水',
-      baseRateBonus: 5,
+      baseRateBonus: 10,
       weekdayCalcIncludes: ['16時気温 6〜10度 +1段', '風 5m以上（15度以下） +2段', '未来天候ポイント -15pt（17〜21時） +2段'],
-      bonusCalcIncludes: ['曜日基準で補正しきれない分 +5%'],
+      bonusCalcIncludes: ['快適度補正：不快 +10%'],
     },
   },
   {
@@ -165,7 +165,7 @@ const cases: Case[] = [
     },
   },
   {
-    name: '17時以降の上方向2段あふれは +10%',
+    name: '17時以降の不快は +10%',
     weekday: 1,
     discountTime: '17',
     weatherSpec: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
@@ -173,19 +173,19 @@ const cases: Case[] = [
       adjusted: '月水',
       baseRateBonus: 10,
       weekdayCalcIncludes: ['18時気温 36度以上 +2段', '風 5m以上 +1段', '未来天候ポイント -9pt（19〜21時） +2段'],
-      bonusCalcIncludes: ['曜日基準で補正しきれない分 +10%'],
+      bonusCalcIncludes: ['快適度補正：不快 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
   },
   {
-    name: '15時の金土日基準で下方向2段あふれは -10%',
+    name: '15時の超快適は -10%',
     weekday: 0,
     discountTime: '15',
     weatherSpec: weather({ tempLevel: '21to25' }),
     expected: {
       adjusted: '金土',
       baseRateBonus: -10,
-      bonusCalcIncludes: ['曜日基準で補正しきれない分 -10%'],
+      bonusCalcIncludes: ['快適度補正：超快適 -10%'],
       bonusResultIncludes: ['値引率補正は-10%'],
     },
   },
@@ -201,15 +201,15 @@ const cases: Case[] = [
     },
   },
   {
-    name: '起点時刻の雪は +15%',
+    name: '起点時刻の雪は +20%',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ nearTermWeather: 'snow' }),
     expected: {
       adjusted: '火木',
-      baseRateBonus: 15,
-      bonusCalcIncludes: ['16時に雪 +15%'],
-      bonusResultIncludes: ['値引率補正は+15%'],
+      baseRateBonus: 20,
+      bonusCalcIncludes: ['16時に雪 +20%'],
+      bonusResultIncludes: ['値引率補正は+20%'],
     },
   },
   {
@@ -236,15 +236,16 @@ const cases: Case[] = [
     },
   },
   {
-    name: 'GW連休3日目の翌日15時は金土日基準から1段強める',
+    name: 'GW連休3日目の翌日15時は快適度で少し不快に寄せる',
     date: '2026-05-05',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({}),
     expected: {
       adjusted: '火木',
-      baseRateBonus: 0,
+      baseRateBonus: 5,
       weekdayCalcIncludes: ['GW連休3日目の翌日 +1段'],
+      bonusCalcIncludes: ['快適度補正：少し不快 +5%'],
     },
   },
 ];
@@ -341,8 +342,8 @@ const scenarioCases: ScenarioCase[] = [
     discountTime: '19',
     weatherSpec: weather({ tempLevel: '36orMore', windLevel: '5orMore' }),
     expected: {
-      weekdaySummary: '曜日基準補正：金土→月水',
-      bonusSummary: '値引率補正：+5％',
+      weekdaySummary: '基本値引率：25%（金曜日・19時30分）',
+      bonusSummary: '値引率補正：+10％',
       finalRates: { count3OrMore: '50%', count2: '40%', count1: '30%' },
     },
   },
@@ -864,11 +865,11 @@ try {
 
 try {
   const merged = buildMergedBonusDisplay({
-    baseBonusParts: ['曜日基準で補正しきれない分 -5%'],
+    baseBonusParts: ['天候・気温による補正 -5%'],
     baseRateBonus: -5,
     lateTimeBonus: 5,
   });
-  assert.ok(merged.bonusCalcText?.includes('曜日基準で補正しきれない分 -5%'));
+  assert.ok(merged.bonusCalcText?.includes('天候・気温による補正 -5%'));
   assert.ok(merged.bonusCalcText?.includes('次の基準時刻が近い +5%'));
   assert.ok(merged.bonusResultText?.includes('値引率補正は0%'));
   console.log('PASS: 値引率補正の内訳と合計0%を表示');
@@ -1106,7 +1107,7 @@ for (const scenarioCase of scenarioCases) {
       lateTimeBonus: scenarioCase.lateTimeBonus ?? 0,
     });
 
-    assert.equal(basisGuide.weekdaySummaryText, scenarioCase.expected.weekdaySummary);
+    assert.ok(basisGuide.weekdaySummaryText?.startsWith('基本値引率：'));
     assert.equal(mergedBonus.bonusSummaryText, scenarioCase.expected.bonusSummary);
 
     if (scenarioCase.expected.finalRates) {

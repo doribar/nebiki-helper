@@ -71,7 +71,7 @@ function BasisTimeMiniPanel({
       }}
     >
       <div>
-        <strong>曜日基準：</strong>
+        <strong>今日の曜日：</strong>
         {getReferenceWeekdayBaseText(referenceText, timeText)}
       </div>
       <div>

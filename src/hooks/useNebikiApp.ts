@@ -360,6 +360,8 @@ function buildCompletedRateSnapshot(params: {
 
     return getNormalTimeRateDisplay({
       discountTime: session.discountTime,
+      weekday: session.weekday,
+      date: session.date,
       weatherBonus,
       areaJudge: progress.areaJudge,
       isSunday: session.weekday === 0 && session.discountTime === "15",
@@ -1703,6 +1705,8 @@ const lateSkipNotice = useMemo(() => {
     const rateDiscountTime = (effectiveRateDiscountTime ?? state.session.discountTime) as Exclude<DiscountTime, "20">;
     const display = getNormalTimeRateDisplay({
       discountTime: rateDiscountTime,
+      weekday: state.session.weekday,
+      date: state.session.date,
       weatherBonus: earlyNextMinus5Info
         ? earlyNextMinus5Info.weekdayBaseInfo.baseRateBonus
         : weekdayBaseInfo.baseRateBonus + lateTimeBonus,
@@ -1794,6 +1798,8 @@ const lateSkipNotice = useMemo(() => {
 
       const baseDisplay = getNormalTimeRateDisplay({
         discountTime,
+        weekday: session.weekday,
+        date: session.date,
         weatherBonus,
         areaJudge: progress.areaJudge,
         isSunday: session.weekday === 0 && discountTime === "15",
@@ -1854,7 +1860,9 @@ const lateSkipNotice = useMemo(() => {
     if (!reference) return [];
 
     const lines: string[] = [];
-    lines.push(`曜日基準：${reference.basis.originalWeekdayBase} → ${reference.basis.adjustedWeekdayBase}`);
+    if (reference.basis.weekdaySummaryText) {
+      lines.push(reference.basis.weekdaySummaryText);
+    }
 
     if (reference.basis.bonusSummaryText) {
       lines.push(reference.basis.bonusSummaryText);

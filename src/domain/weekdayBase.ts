@@ -13,6 +13,7 @@ import {
   isJapaneseHolidayOrObserved,
   isJapaneseHolidayOrWeekend,
 } from "./japaneseHoliday.ts";
+import { getBaseRate } from "./discount.ts";
 
 type ShiftTerm = {
   label: string;
@@ -39,29 +40,24 @@ function getBasisTimeText(discountTime: DiscountTime): string {
   }
 }
 
-function getWeekdayBaseRank(label: WeekdayBaseLabel): number {
-  switch (label) {
-    // 旧データ互換: 以前の「日」基準は、現在は15時の金土日基準に統合する。
-    case "日":
-    case "金土":
-      return 1;
-    case "火木":
-      return 2;
-    case "月水":
-      return 3;
-  }
-}
-
-function rankToWeekdayBase(rank: number): WeekdayBaseLabel {
-  switch (Math.max(1, Math.min(rank, 3))) {
+function getActualWeekdayText(weekday: number): string {
+  switch (weekday) {
+    case 0:
+      return "日曜日";
     case 1:
-      return "金土";
+      return "月曜日";
     case 2:
-      return "火木";
+      return "火曜日";
     case 3:
-      return "月水";
+      return "水曜日";
+    case 4:
+      return "木曜日";
+    case 5:
+      return "金曜日";
+    case 6:
+      return "土曜日";
     default:
-      return "火木";
+      return "不明曜日";
   }
 }
 
@@ -137,42 +133,6 @@ function getHolidayAdjustedWeekdayBase(params: {
   return { original: getOriginalWeekdayBase(params.weekday) };
 }
 
-function getRelaxFloor(_discountTime: DiscountTime): WeekdayBaseLabel {
-  return "金土";
-}
-
-function getWeekdayBaseDisplayLabel(
-  label: WeekdayBaseLabel,
-  discountTime: DiscountTime,
-): string {
-  switch (label) {
-    // 旧データ互換: 以前の「日」基準は、現在は15時の金土日基準に統合する。
-    case "日":
-    case "金土":
-      return discountTime === "15" ? "金土日" : "金土";
-    case "火木":
-      return "火木";
-    case "月水":
-      return "月水";
-  }
-}
-
-function toWeekdayGroupText(
-  label: WeekdayBaseLabel,
-  discountTime: DiscountTime,
-): string {
-  switch (label) {
-    // 旧データ互換: 以前の「日」基準は、現在は15時の金土日基準に統合する。
-    case "日":
-    case "金土":
-      return discountTime === "15" ? "金曜・土曜・日曜" : "金曜・土曜";
-    case "火木":
-      return "火曜・木曜";
-    case "月水":
-      return "月曜・水曜";
-  }
-}
-
 function formatSignedValue(value: number, unit: string): string {
   if (value > 0) {
     return `+${value}${unit}`;
@@ -213,21 +173,6 @@ function formatSignedPercentCompact(value: number): string {
   }
 
   return "0％";
-}
-
-function buildWeekdaySummaryText(
-  original: WeekdayBaseLabel,
-  adjusted: WeekdayBaseLabel,
-  discountTime: DiscountTime,
-): string {
-  if (original === adjusted) {
-    return "曜日基準補正：なし";
-  }
-
-  return `曜日基準補正：${getWeekdayBaseDisplayLabel(
-    original,
-    discountTime,
-  )}→${getWeekdayBaseDisplayLabel(adjusted, discountTime)}`;
 }
 
 function buildBonusSummaryText(totalBonus: number): string {
@@ -531,6 +476,36 @@ function getGoldenWeekAfterPeakShiftTerm(params: {
   };
 }
 
+
+function getWeekdayBaseRank(label: WeekdayBaseLabel): number {
+  switch (label) {
+    case "日":
+    case "金土":
+      return 1;
+    case "火木":
+      return 2;
+    case "月水":
+      return 3;
+  }
+}
+
+function rankToWeekdayBase(rank: number): WeekdayBaseLabel {
+  switch (Math.max(1, Math.min(rank, 3))) {
+    case 1:
+      return "金土";
+    case 2:
+      return "火木";
+    case 3:
+      return "月水";
+    default:
+      return "火木";
+  }
+}
+
+function getRelaxFloor(_discountTime: DiscountTime): WeekdayBaseLabel {
+  return "金土";
+}
+
 function applyWeekdayShift(params: {
   base: WeekdayBaseLabel;
   discountTime: DiscountTime;
@@ -573,47 +548,84 @@ function applyWeekdayShift(params: {
   };
 }
 
-function getOverflowBonusValue(params: {
-  discountTime: DiscountTime;
-  overflowDirection: "up" | "down" | null;
-  overflowSteps: number;
-}): number {
-  if (params.overflowDirection === null || params.overflowSteps <= 0) {
-    return 0;
+function clampComfortScore(score: number): -2 | -1 | 0 | 1 | 2 {
+  return Math.max(-2, Math.min(2, score)) as -2 | -1 | 0 | 1 | 2;
+}
+
+function getComfortText(score: number): string {
+  switch (clampComfortScore(score)) {
+    case -2:
+      return "超快適";
+    case -1:
+      return "快適";
+    case 1:
+      return "少し不快";
+    case 2:
+      return "不快";
+    case 0:
+    default:
+      return "普通";
   }
+}
 
-  if (params.overflowDirection === "up") {
-    if (params.discountTime === "15") {
-      return 5;
-    }
+function isRainPrecipitationBonus(value: number): boolean {
+  return value > 0 && value < 20;
+}
 
-    return params.overflowSteps >= 2 ? 10 : 5;
+function isSnowPrecipitationBonus(value: number): boolean {
+  return value >= 20;
+}
+
+function applyComfortNegativeLimit(params: {
+  rawScore: number;
+  discountTime: DiscountTime;
+  hasRain: boolean;
+}): { score: -2 | -1 | 0 | 1 | 2; note?: string } {
+  const rawScore = clampComfortScore(params.rawScore);
+
+  if (rawScore >= 0) {
+    return { score: rawScore };
   }
 
   if (params.discountTime === "15") {
-    return params.overflowSteps >= 2 ? -10 : -5;
+    if (params.hasRain && rawScore < -1) {
+      return { score: -1, note: "雨あり15時のため快適方向は-5%まで" };
+    }
+
+    return { score: rawScore };
   }
 
-  return -5;
+  if (params.hasRain) {
+    return { score: 0, note: "17時以降の雨ありのため快適方向は0%" };
+  }
+
+  if (rawScore < -1) {
+    return { score: -1, note: "17時以降のため快適方向は-5%まで" };
+  }
+
+  return { score: rawScore };
 }
 
-function getOverflowBonusTerm(params: {
+function getComfortRateBonusTerm(params: {
   discountTime: DiscountTime;
-  overflowDirection: "up" | "down" | null;
-  overflowSteps: number;
-  hasNearTermPercentBonus: boolean;
+  rawScore: number;
+  precipitationBonus: number;
 }): PercentTerm | undefined {
-  if (params.hasNearTermPercentBonus) {
-    return undefined;
-  }
+  if (isSnowPrecipitationBonus(params.precipitationBonus)) return undefined;
 
-  const value = getOverflowBonusValue(params);
-  if (value === 0) {
-    return undefined;
-  }
+  const rawScore = clampComfortScore(params.rawScore);
+  if (rawScore === 0) return undefined;
+
+  const limited = applyComfortNegativeLimit({
+    rawScore,
+    discountTime: params.discountTime,
+    hasRain: isRainPrecipitationBonus(params.precipitationBonus),
+  });
+  const value = limited.score * 5;
+  const note = limited.note ? `（${limited.note}）` : "";
 
   return {
-    label: "曜日基準で補正しきれない分",
+    label: `快適度補正：${getComfortText(rawScore)}${note}`,
     value,
   };
 }
@@ -626,60 +638,6 @@ function toPercentCalcPart(term: PercentTerm): string {
   return `${term.label} ${formatSignedValue(term.value, "%")}`;
 }
 
-function buildWeekdayResultText(params: {
-  original: WeekdayBaseLabel;
-  adjusted: WeekdayBaseLabel;
-  totalShift: number;
-  overflowDirection: "up" | "down" | null;
-  discountTime: DiscountTime;
-}): string | undefined {
-  if (params.totalShift === 0) {
-    return buildResultText({
-      label: "曜日基準補正",
-      total: 0,
-      unit: "段",
-      suffix: `${toWeekdayGroupText(params.original, params.discountTime)}の基準のままです`,
-    });
-  }
-
-  if (params.overflowDirection === "up") {
-    return buildResultText({
-      label: "曜日基準補正",
-      total: params.totalShift,
-      unit: "段",
-      suffix: `上限に当たるため${toWeekdayGroupText(
-        params.adjusted,
-        params.discountTime,
-      )}の基準を使用します`,
-    });
-  }
-
-  if (params.overflowDirection === "down") {
-    return buildResultText({
-      label: "曜日基準補正",
-      total: params.totalShift,
-      unit: "段",
-      suffix: `下限に当たるため${toWeekdayGroupText(
-        params.adjusted,
-        params.discountTime,
-      )}の基準を使用します`,
-    });
-  }
-
-  return buildResultText({
-    label: "曜日基準補正",
-    total: params.totalShift,
-    unit: "段",
-    suffix: `${toWeekdayGroupText(
-      params.original,
-      params.discountTime,
-    )}ではなく${toWeekdayGroupText(
-      params.adjusted,
-      params.discountTime,
-    )}の基準を使用します`,
-  });
-}
-
 function buildPercentResultText(totalBonus: number): string | undefined {
   return buildResultText({
     label: "値引率補正",
@@ -687,17 +645,6 @@ function buildPercentResultText(totalBonus: number): string | undefined {
     unit: "%",
     suffix: totalBonus === 0 ? "補正はありません" : undefined,
   });
-}
-
-function buildDetailLines<T extends ShiftTerm | PercentTerm>(
-  terms: T[],
-  formatter: (term: T) => string,
-): string[] | undefined {
-  if (terms.length === 0) {
-    return undefined;
-  }
-
-  return terms.map(formatter);
 }
 
 function joinBonusCalculationParts(parts: string[]): string | undefined {
@@ -762,7 +709,7 @@ function resolveWeatherEffect(params: {
   const original = holidayAdjusted.original;
   const noticeText = holidayAdjusted.noticeText;
 
-  const shiftTerms = [
+  const comfortShiftTerms = [
     getBaseTempShiftTerm(params.weather, params.discountTime),
     getWindShiftTerm(params.weather.tempLevel, params.weather.windLevel),
     getWeatherPointShiftTerm(params.weather),
@@ -773,7 +720,7 @@ function resolveWeatherEffect(params: {
     }),
   ].filter((value): value is ShiftTerm => Boolean(value));
 
-  const totalShift =
+  const rawComfortShift =
     getBaseTempShift(params.weather.tempLevel) +
     getWindShift(params.weather.tempLevel, params.weather.windLevel) +
     getWeatherPointShift(params.weather) +
@@ -782,46 +729,60 @@ function resolveWeatherEffect(params: {
       ? getGoldenWeekAfterPeakShift(params.discountTime)
       : 0);
 
+  // 旧形式の保存データ互換用。値引率の計算には使わない。
   const shifted = applyWeekdayShift({
     base: original,
     discountTime: params.discountTime,
-    shift: totalShift,
+    shift: rawComfortShift,
+  });
+
+  const precipitationBonus = getPrecipitationRateBonus(params.weather);
+  const precipitationTerm = getPrecipitationRateBonusTerm(
+    params.weather,
+    params.discountTime,
+  );
+  const comfortTerm = getComfortRateBonusTerm({
+    discountTime: params.discountTime,
+    rawScore: rawComfortShift,
+    precipitationBonus,
   });
 
   const percentTerms = [
-    getPrecipitationRateBonusTerm(params.weather, params.discountTime),
-    getOverflowBonusTerm({
-      discountTime: params.discountTime,
-      overflowDirection: shifted.overflowDirection,
-      overflowSteps: shifted.overflowSteps,
-      hasNearTermPercentBonus: getPrecipitationRateBonus(params.weather) > 0,
-    }),
+    comfortTerm,
+    precipitationTerm,
   ].filter((value): value is PercentTerm => Boolean(value));
 
   const baseRateBonus = percentTerms.reduce((sum, term) => sum + term.value, 0);
-  const weekdaySummaryText = buildWeekdaySummaryText(
-    original,
-    shifted.adjusted,
-    params.discountTime,
-  );
-  const weekdayDetailLines = buildDetailLines(shiftTerms, toShiftCalcPart);
+  const basicRate = getBaseRate(params.discountTime, {
+    weekday: params.weekday,
+    date: params.date,
+  });
+  const rawComfortScore = clampComfortScore(rawComfortShift);
+  const finalComfortScore = isSnowPrecipitationBonus(precipitationBonus)
+    ? 0
+    : applyComfortNegativeLimit({
+        rawScore: rawComfortScore,
+        discountTime: params.discountTime,
+        hasRain: isRainPrecipitationBonus(precipitationBonus),
+      }).score;
+
+  const weekdaySummaryText = `基本値引率：${basicRate}%（${getActualWeekdayText(params.weekday)}・${getBasisTimeText(params.discountTime)}）`;
+  const weekdayDetailLines = [
+    ...comfortShiftTerms.map(toShiftCalcPart),
+    isSnowPrecipitationBonus(precipitationBonus)
+      ? "雪のため快適度補正は使いません。"
+      : `快適度：${getComfortText(rawComfortScore)}（${formatSignedValue(finalComfortScore * 5, "%")}）`,
+  ];
   const weekdayCalcText = buildCalcText(
-    "曜日基準補正の内訳",
-    shiftTerms.map(toShiftCalcPart),
+    "快適度計算の内訳",
+    comfortShiftTerms.map(toShiftCalcPart),
   );
-  const weekdayResultText =
-    shiftTerms.length > 0
-      ? buildWeekdayResultText({
-          original,
-          adjusted: shifted.adjusted,
-          totalShift,
-          overflowDirection: shifted.overflowDirection,
-          discountTime: params.discountTime,
-        })
-      : undefined;
+  const weekdayResultText = isSnowPrecipitationBonus(precipitationBonus)
+    ? "雪のため、快適度補正は使いません。"
+    : `快適度は${getComfortText(rawComfortScore)}、快適度補正は${formatSignedValue(finalComfortScore * 5, "%")}です。`;
   const bonusCalcParts = percentTerms.map(toPercentCalcPart);
   const bonusSummaryText = buildBonusSummaryText(baseRateBonus);
-  const bonusDetailLines = buildDetailLines(percentTerms, toPercentCalcPart);
+  const bonusDetailLines = bonusCalcParts.length > 0 ? bonusCalcParts : undefined;
   const bonusCalcText = joinBonusCalculationParts(bonusCalcParts);
   const bonusResultText =
     bonusCalcParts.length > 0
@@ -841,7 +802,7 @@ function resolveWeatherEffect(params: {
     bonusCalcText,
     bonusResultText,
     bonusCalcParts,
-    totalShift,
+    totalShift: rawComfortShift,
     baseRateBonus,
   };
 }
@@ -892,10 +853,7 @@ export function getBasisGuideDisplay(params: {
     bonusResultText: resolved.bonusResultText,
     bonusCalcParts: resolved.bonusCalcParts,
     bonusTotal: resolved.baseRateBonus,
-    referenceText: `${toWeekdayGroupText(
-      resolved.adjusted,
-      params.discountTime,
-    )}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
+    referenceText: `${getActualWeekdayText(params.weekday)}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
   };
 }
 

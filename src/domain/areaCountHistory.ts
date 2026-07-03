@@ -885,10 +885,10 @@ export function getAreaCountRecommendation(params: {
       comparisonMode,
       summaryText: `過去データ ${matchedRecords.length}/${requiredSampleSize}件`,
       detailLines: [
-        `実際の曜日：${actualWeekday}`,
+        `今日の曜日：${actualWeekday}`,
         `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
         `暫定グループ（${actualWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
-        "同じエリア・同じ時刻・同じ実際の曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
+        "同じエリア・同じ時刻・同じ曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
         `今回の${count}個も、判定後に履歴へ保存されます。`,
       ],
     };
@@ -954,7 +954,7 @@ export function getAreaCountRecommendation(params: {
     decreaseRecommendation,
     summaryText: `おすすめ：${evaluationText(suggestedEvaluation)}（表示値引率 ${formatRateAdjustment(areaRateAdjustment)}）`,
     detailLines: [
-      `実際の曜日：${actualWeekday}`,
+      `今日の曜日：${actualWeekday}`,
       comparisonMode === "weekday"
         ? `比較条件：同じ曜日（${actualWeekday}）`
         : `比較条件：暫定グループ（${actualWeekdayGroup}）`,

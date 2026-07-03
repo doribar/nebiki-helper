@@ -135,7 +135,7 @@ function BasisTimeMiniPanel({
       }}
     >
       <div>
-        <strong>実際の曜日：</strong>
+        <strong>今日の曜日：</strong>
         {weekdayText}
       </div>
       <div>

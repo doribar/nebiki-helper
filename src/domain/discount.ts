@@ -7,6 +7,11 @@ import type {
   AreaRateAdjustment,
   WeekdayBaseLabel,
 } from "./types";
+import {
+  addDaysToDateString,
+  isJapaneseHolidayOrObserved,
+  isJapaneseHolidayOrWeekend,
+} from "./japaneseHoliday.ts";
 
 const MAX_DISCOUNT_RATE = 50;
 
@@ -14,7 +19,81 @@ function capAbsoluteDiscountRate(rawRate: number): number {
   return Math.max(0, Math.min(rawRate, MAX_DISCOUNT_RATE));
 }
 
-export function getBaseRate(discountTime: DiscountTime): number {
+type BasicRateGroup = "friSatSun" | "tueThu" | "monWed";
+
+function isNightDiscountTime(discountTime: DiscountTime): boolean {
+  return discountTime === "17" || discountTime === "18" || discountTime === "19" || discountTime === "20";
+}
+
+function getBasicRateGroup(params: {
+  weekday?: number;
+  discountTime: DiscountTime;
+  date?: string;
+}): BasicRateGroup {
+  if (params.date && isJapaneseHolidayOrObserved(params.date)) {
+    if (params.discountTime === "15") return "friSatSun";
+
+    if (isNightDiscountTime(params.discountTime)) {
+      const nextDate = addDaysToDateString(params.date, 1);
+      return isJapaneseHolidayOrWeekend(nextDate) ? "friSatSun" : "tueThu";
+    }
+  }
+
+  switch (params.weekday) {
+    case 1:
+    case 3:
+      return "monWed";
+    case 2:
+    case 4:
+      return "tueThu";
+    case 0:
+      return params.discountTime === "15" ? "friSatSun" : "tueThu";
+    case 5:
+    case 6:
+      return "friSatSun";
+    default:
+      return "tueThu";
+  }
+}
+
+export function getBaseRate(
+  discountTime: DiscountTime,
+  params?: { weekday?: number; date?: string }
+): number {
+  if (discountTime === "20") return 0;
+
+  const group = getBasicRateGroup({
+    weekday: params?.weekday,
+    date: params?.date,
+    discountTime,
+  });
+
+  if (group === "friSatSun") {
+    switch (discountTime) {
+      case "15":
+        return 0;
+      case "17":
+        return 5;
+      case "18":
+        return 15;
+      case "19":
+        return 25;
+    }
+  }
+
+  if (group === "monWed") {
+    switch (discountTime) {
+      case "15":
+        return 5;
+      case "17":
+        return 15;
+      case "18":
+        return 25;
+      case "19":
+        return 35;
+    }
+  }
+
   switch (discountTime) {
     case "15":
       return 0;
@@ -24,8 +103,6 @@ export function getBaseRate(discountTime: DiscountTime): number {
       return 20;
     case "19":
       return 30;
-    case "20":
-      return 0;
   }
 }
 
@@ -100,6 +177,8 @@ function buildManyNote(params: {
 
 export function getNormalTimeRateDisplay(params: {
   discountTime: Exclude<DiscountTime, "20">;
+  weekday?: number;
+  date?: string;
   weatherBonus: number;
   areaJudge: Exclude<AreaJudge, null>;
   isSunday?: boolean;
@@ -108,7 +187,10 @@ export function getNormalTimeRateDisplay(params: {
   areaRateAdjustment?: AreaRateAdjustment;
 }): RateDisplayData {
   const ignoreTimeRateCap = params.ignoreTimeRateCap ?? false;
-  const base = getBaseRate(params.discountTime) + params.weatherBonus;
+  const base = getBaseRate(params.discountTime, {
+    weekday: params.weekday,
+    date: params.date,
+  }) + params.weatherBonus;
 
   let areaAdjustedBase = base + (params.areaRateAdjustment ?? 0);
 

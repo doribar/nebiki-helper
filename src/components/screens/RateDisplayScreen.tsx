@@ -509,7 +509,7 @@ export function RateDisplayScreen({
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
   const normalColor = "#008000";
-  const productAmountReferenceText = `実際の曜日（${weekdayText}）の${timeText}`;
+  const productAmountReferenceText = `${weekdayText}の${timeText}`;
   const showManyProductRate = trainingStepConfig.showManyProductRate;
   const showFewProductRule = trainingStepConfig.showFewProductRule;
   const skipTargetGroups = [
