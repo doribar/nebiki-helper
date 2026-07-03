@@ -509,10 +509,7 @@ export function RateDisplayScreen({
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
   const normalColor = "#008000";
-  const referencePrefix = basisGuide.referenceText.replace(
-    "を基準に考えて",
-    "",
-  );
+  const productAmountReferenceText = `実際の曜日（${weekdayText}）の${timeText}`;
   const showManyProductRate = trainingStepConfig.showManyProductRate;
   const showFewProductRule = trainingStepConfig.showFewProductRule;
   const skipTargetGroups = [
@@ -685,7 +682,7 @@ export function RateDisplayScreen({
         {!isFinalTime ? (
           <>
             <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
-              <span style={{ fontWeight: 800 }}>{referencePrefix}</span>
+              <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
               <span>を基準に考えて</span>
               <br />
               {!showManyProductRate ? (

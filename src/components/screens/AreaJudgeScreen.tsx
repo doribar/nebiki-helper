@@ -113,23 +113,11 @@ function getRecommendationColor(recommendation: AreaCountRecommendation | null):
   return "#1b5e20";
 }
 
-function getReferenceBaseText(referenceText: string): string {
-  return referenceText.replace(/を基準に考えて$/, "");
-}
-
-function getReferenceWeekdayBaseText(referenceText: string, timeText: string): string {
-  const baseText = getReferenceBaseText(referenceText);
-  const suffix = `の${timeText}`;
-  return baseText.endsWith(suffix)
-    ? baseText.slice(0, -suffix.length)
-    : baseText;
-}
-
 function BasisTimeMiniPanel({
-  referenceText,
+  weekdayText,
   timeText,
 }: {
-  referenceText: string;
+  weekdayText: string;
   timeText: string;
 }) {
   return (
@@ -147,8 +135,8 @@ function BasisTimeMiniPanel({
       }}
     >
       <div>
-        <strong>曜日基準：</strong>
-        {getReferenceWeekdayBaseText(referenceText, timeText)}
+        <strong>実際の曜日：</strong>
+        {weekdayText}
       </div>
       <div>
         <strong>値引時刻：</strong>
@@ -475,7 +463,7 @@ export function AreaJudgeScreen({
             <div style={{ fontSize: 13, color: "#555", lineHeight: 1.7 }}>
               過去データが足りない場合は、手動で5段階判定してください。ここでの「少ない」は後回しではなく、表示値引率-10%です。
             </div>
-            <BasisTimeMiniPanel referenceText={basisGuide.referenceText} timeText={timeText} />
+            <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
             <JudgeOptionButton label="多い" subLabel="+10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("many")} />
             <JudgeOptionButton label="やや多い" subLabel="+5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_many")} />
             <JudgeOptionButton label="普通" subLabel="±0%" selected={false} buttonRef={normalManualJudgeButtonRef} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("normal")} />
@@ -484,7 +472,7 @@ export function AreaJudgeScreen({
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            <BasisTimeMiniPanel referenceText={basisGuide.referenceText} timeText={timeText} />
+            <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
             <JudgeOptionButton label="多い" selected={false} onClick={() => canUseManualJudge && handleJudge("many")} />
             <JudgeOptionButton label="どちらでもない" selected={false} onClick={() => canUseManualJudge && handleJudge("normal")} />
             <JudgeOptionButton
