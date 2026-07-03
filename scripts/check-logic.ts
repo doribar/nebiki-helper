@@ -54,6 +54,7 @@ type Case = {
     baseRateBonus: number;
     weekdayCalcIncludes?: string[];
     weekdayResultIncludes?: string[];
+    bonusDetailIncludes?: string[];
     bonusCalcIncludes?: string[];
     bonusResultIncludes?: string[];
     bonusCalcAbsent?: boolean;
@@ -101,7 +102,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '金土',
       baseRateBonus: -10,
-      weekdayCalcIncludes: ['16時気温 21〜25度 -2段', '未来天候ポイント +10pt（17〜21時） -2段'],
+      bonusDetailIncludes: ['16時気温 21〜25度 -2点', '未来天候ポイント +10pt（17〜21時） -2点'],
       bonusCalcIncludes: ['快適度補正：超快適 -10%'],
     },
   },
@@ -113,7 +114,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 10,
-      weekdayCalcIncludes: ['16時気温 6〜10度 +1段', '風 5m以上（15度以下） +2段', '未来天候ポイント -15pt（17〜21時） +2段'],
+      bonusDetailIncludes: ['16時気温 6〜10度 +1点', '風 5m以上（15度以下） +2点', '未来天候ポイント -15pt（17〜21時） +2点'],
       bonusCalcIncludes: ['快適度補正：不快 +10%'],
     },
   },
@@ -172,7 +173,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '月水',
       baseRateBonus: 10,
-      weekdayCalcIncludes: ['18時気温 36度以上 +2段', '風 5m以上 +1段', '未来天候ポイント -9pt（19〜21時） +2段'],
+      bonusDetailIncludes: ['18時気温 36度以上 +2点', '風 5m以上 +1点', '未来天候ポイント -9pt（19〜21時） +2点'],
       bonusCalcIncludes: ['快適度補正：不快 +10%'],
       bonusResultIncludes: ['値引率補正は+10%'],
     },
@@ -244,7 +245,7 @@ const cases: Case[] = [
     expected: {
       adjusted: '火木',
       baseRateBonus: 5,
-      weekdayCalcIncludes: ['GW連休3日目の翌日 +1段'],
+      bonusDetailIncludes: ['GW連休3日目の翌日 +1点'],
       bonusCalcIncludes: ['快適度補正：少し不快 +5%'],
     },
   },
@@ -596,7 +597,7 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, 0);
     assert.equal(resolvedWeather.weatherPointShift, 0);
     assert.equal(info.adjusted, '火木');
-    assert.equal(guide.weekdayCalcText, undefined);
+    assert.ok(guide.weekdayCalcText?.includes('基本値引率の内訳：火曜日・15時 → 0%'));
     console.log('PASS: 28〜30度が続く日は天候ポイント補正なし');
     passed += 1;
   } catch (error) {
@@ -619,12 +620,12 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, 10);
     assert.equal(resolvedWeather.weatherPointShift, -2);
     assert.equal(info.adjusted, '金土');
-    assert.ok(guide.weekdayCalcText?.includes('16時気温 21〜25度 -2段'));
-    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント +10pt（17〜21時） -2段'));
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('16時気温 21〜25度 -2点')));
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('未来天候ポイント +10pt（17〜21時） -2点')));
     console.log('PASS: 直近21〜25度と未来21〜25度ならベースと未来ポイントで緩める');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 16〜21時が21〜25度なら天候ポイントで2段緩める');
+    console.error('FAIL: 16〜21時が21〜25度なら天候ポイントで2点緩める');
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
@@ -643,12 +644,12 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, 5);
     assert.equal(resolvedWeather.weatherPointShift, -1);
     assert.equal(info.adjusted, '金土');
-    assert.ok(guide.weekdayCalcText?.includes('16時気温 26〜27度 -1段'));
-    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント +5pt（17〜21時） -1段'));
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('16時気温 26〜27度 -1点')));
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('未来天候ポイント +5pt（17〜21時） -1点')));
     console.log('PASS: 直近26〜27度と未来26〜27度ならベースと未来ポイントで緩める');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 16〜21時が26〜27度なら天候ポイントで1段緩める');
+    console.error('FAIL: 16〜21時が26〜27度なら天候ポイントで1点緩める');
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
@@ -667,8 +668,8 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, 0);
     assert.equal(resolvedWeather.weatherPointShift, 0);
     assert.equal(info.adjusted, '火木');
-    assert.ok(guide.weekdayCalcText?.includes('16時気温 11〜15度 0段') || !guide.weekdayCalcText?.includes('16時気温 11〜15度'));
-    assert.ok(!guide.weekdayCalcText?.includes('未来天候ポイント'));
+    assert.ok(guide.bonusDetailLines?.every((line) => !line.includes('16時気温 11〜15度')) ?? true);
+    assert.ok(guide.bonusDetailLines?.every((line) => !line.includes('未来天候ポイント')) ?? true);
     console.log('PASS: 未来11〜15度は未来天候ポイントでマイナスにしない');
     passed += 1;
   } catch (error) {
@@ -691,12 +692,12 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, -5);
     assert.equal(resolvedWeather.weatherPointShift, 1);
     assert.equal(info.adjusted, '月水');
-    assert.ok(guide.weekdayCalcText?.includes('16時気温 6〜10度 +1段'));
-    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント -5pt（17〜21時） +1段'));
-    console.log('PASS: 直近6〜10度と未来6〜10度ならベースと未来ポイントで1段強める');
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('16時気温 6〜10度 +1点')));
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('未来天候ポイント -5pt（17〜21時） +1点')));
+    console.log('PASS: 直近6〜10度と未来6〜10度ならベースと未来ポイントで1点強める');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 16〜21時が6〜10度なら天候ポイントで1段強める');
+    console.error('FAIL: 16〜21時が6〜10度なら天候ポイントで1点強める');
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
@@ -721,11 +722,11 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, 9);
     assert.equal(resolvedWeather.weatherPointShift, -2);
     assert.equal(info.adjusted, '金土');
-    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント +9pt（17〜21時） -2段'));
-    console.log('PASS: 暑さが抜けて夜が快適な日は未来天候ポイントで2段緩める');
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('未来天候ポイント +9pt（17〜21時） -2点')));
+    console.log('PASS: 暑さが抜けて夜が快適な日は未来天候ポイントで2点緩める');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 暑さが抜けて夜が快適な日は天候ポイントで2段緩める');
+    console.error('FAIL: 暑さが抜けて夜が快適な日は天候ポイントで2点緩める');
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
@@ -750,11 +751,11 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, -7);
     assert.equal(resolvedWeather.weatherPointShift, 2);
     assert.equal(info.adjusted, '月水');
-    assert.ok(guide.weekdayCalcText?.includes('未来天候ポイント -7pt（17〜21時） +2段'));
-    console.log('PASS: 夕方以降に冷え込む日は未来天候ポイントで2段強める');
+    assert.ok(guide.bonusDetailLines?.some((line) => line.includes('未来天候ポイント -7pt（17〜21時） +2点')));
+    console.log('PASS: 夕方以降に冷え込む日は未来天候ポイントで2点強める');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 夕方以降に冷え込む日は天候ポイントで2段強める');
+    console.error('FAIL: 夕方以降に冷え込む日は天候ポイントで2点強める');
     console.error(error);
     console.error('actual info =', info);
     console.error('actual guide =', guide);
@@ -791,6 +792,13 @@ for (const testCase of cases) {
 
     for (const text of testCase.expected.weekdayCalcIncludes ?? []) {
       assert.ok(guide.weekdayCalcText?.includes(text), `weekdayCalcText に「${text}」がありません`);
+    }
+
+    for (const text of testCase.expected.bonusDetailIncludes ?? []) {
+      assert.ok(
+        guide.bonusDetailLines?.some((line) => line.includes(text)),
+        `bonusDetailLines に「${text}」がありません`
+      );
     }
 
     for (const text of testCase.expected.weekdayResultIncludes ?? []) {
@@ -1211,7 +1219,7 @@ const holidayWeekdayBaseCases = [
     weekday: 4,
     discountTime: '15' as DiscountTime,
     expectedAdjusted: '金土',
-    expectedNotice: '祝日の15時は金曜・土曜・日曜の基準',
+    expectedNotice: '祝日の15時は金曜・土曜・日曜相当の基本値引率',
   },
   {
     name: '祝日17時以降で翌日も休日なら金土基準を使う',

@@ -100,7 +100,7 @@ function getHolidayAdjustedWeekdayBase(params: {
     if (params.discountTime === "15") {
       return {
         original: "金土",
-        noticeText: "祝日の15時は金曜・土曜・日曜の基準を使います。",
+        noticeText: "祝日の15時は金曜・土曜・日曜相当の基本値引率を使います。",
       };
     }
 
@@ -110,14 +110,14 @@ function getHolidayAdjustedWeekdayBase(params: {
         return {
           original: "金土",
           noticeText:
-            "祝日の17時以降で翌日も休日・祝日のため、金曜・土曜の基準を使います。",
+            "祝日の17時以降で翌日も休日・祝日のため、金曜・土曜相当の基本値引率を使います。",
         };
       }
 
       return {
         original: "火木",
         noticeText:
-          "祝日の17時以降で翌日が平日のため、火曜・木曜の基準を使います。",
+          "祝日の17時以降で翌日が平日のため、火曜・木曜相当の基本値引率を使います。",
       };
     }
   }
@@ -126,7 +126,7 @@ function getHolidayAdjustedWeekdayBase(params: {
     return {
       original: "火木",
       noticeText:
-        "日曜日の17時以降は客足が減るため、火曜・木曜の基準を使います。",
+        "日曜日の17時以降は客足が減るため、火曜・木曜相当の基本値引率を使います。",
     };
   }
 
@@ -630,8 +630,8 @@ function getComfortRateBonusTerm(params: {
   };
 }
 
-function toShiftCalcPart(term: ShiftTerm): string {
-  return `${term.label} ${formatSignedValue(term.value, "段")}`;
+function toComfortScoreCalcPart(term: ShiftTerm): string {
+  return `${term.label} ${formatSignedValue(term.value, "点")}`;
 }
 
 function toPercentCalcPart(term: PercentTerm): string {
@@ -766,23 +766,29 @@ function resolveWeatherEffect(params: {
         hasRain: isRainPrecipitationBonus(precipitationBonus),
       }).score;
 
-  const weekdaySummaryText = `基本値引率：${basicRate}%（${getActualWeekdayText(params.weekday)}・${getBasisTimeText(params.discountTime)}）`;
+  const weekdayText = getActualWeekdayText(params.weekday);
+  const basisTimeText = getBasisTimeText(params.discountTime);
+  const weekdaySummaryText = `基本値引率：${basicRate}%（${weekdayText}・${basisTimeText}）`;
   const weekdayDetailLines = [
-    ...comfortShiftTerms.map(toShiftCalcPart),
-    isSnowPrecipitationBonus(precipitationBonus)
-      ? "雪のため快適度補正は使いません。"
-      : `快適度：${getComfortText(rawComfortScore)}（${formatSignedValue(finalComfortScore * 5, "%")}）`,
+    `今日の曜日：${weekdayText}`,
+    `値引時刻：${basisTimeText}`,
+    `曜日・時刻ごとの基本値引率表から${basicRate}%を使用`,
   ];
-  const weekdayCalcText = buildCalcText(
-    "快適度計算の内訳",
-    comfortShiftTerms.map(toShiftCalcPart),
-  );
-  const weekdayResultText = isSnowPrecipitationBonus(precipitationBonus)
-    ? "雪のため、快適度補正は使いません。"
-    : `快適度は${getComfortText(rawComfortScore)}、快適度補正は${formatSignedValue(finalComfortScore * 5, "%")}です。`;
+  const weekdayCalcText = `基本値引率の内訳：${weekdayText}・${basisTimeText} → ${basicRate}%`;
+  const weekdayResultText = `基本値引率は${basicRate}%です。`;
+  const comfortCalcParts = comfortShiftTerms.map(toComfortScoreCalcPart);
+  const comfortDetailLine = isSnowPrecipitationBonus(precipitationBonus)
+    ? "雪のため快適度補正は使いません。"
+    : `快適度：${getComfortText(rawComfortScore)}（快適度補正 ${formatSignedValue(finalComfortScore * 5, "%")}）`;
   const bonusCalcParts = percentTerms.map(toPercentCalcPart);
   const bonusSummaryText = buildBonusSummaryText(baseRateBonus);
-  const bonusDetailLines = bonusCalcParts.length > 0 ? bonusCalcParts : undefined;
+  const bonusDetailLines = [
+    ...(comfortCalcParts.length > 0
+      ? [`快適度計算：${comfortCalcParts.join(" ＋ ")}`]
+      : []),
+    comfortDetailLine,
+    ...bonusCalcParts,
+  ];
   const bonusCalcText = joinBonusCalculationParts(bonusCalcParts);
   const bonusResultText =
     bonusCalcParts.length > 0
