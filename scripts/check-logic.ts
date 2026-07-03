@@ -413,20 +413,20 @@ const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
     expectedNoteIncludes: ['多いのうち10個以上は 10%'],
   },
   {
-    name: '月水基準は8個以上を+5%目安として表示する',
+    name: '月水基準でも10個以上を+5%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
     weekdayBase: '月水',
-    expectedNoteIncludes: ['多いのうち8個以上は 15%'],
+    expectedNoteIncludes: ['多いのうち10個以上は 15%'],
   },
   {
-    name: '金土日基準は12個以上を+5%目安として表示する',
+    name: '金土日基準でも10個以上を+5%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
     isSunday: true,
     weekdayBase: '金土',
     expectedNoteIncludes: [
-      '多いのうち12個以上は 15%',
+      '多いのうち10個以上は 15%',
     ],
   },
   {
@@ -1481,7 +1481,7 @@ const sundayRateDisplay = getNormalTimeRateDisplay({
 assert.equal(sundayRateDisplay.many.main, '10%');
 assert.equal(Object.hasOwn(sundayRateDisplay, 'slightlyMany'), false);
 assert.ok(!(sundayRateDisplay.many.note ?? '').includes('多いのうち5個以上'));
-assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち12個以上は 15%'));
+assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち10個以上は 15%'));
 
 const nonSundayRateDisplay = getNormalTimeRateDisplay({
   discountTime: '15',
@@ -1502,7 +1502,7 @@ assert.equal(sundayEveningRateDisplay.normal.main, '10%');
 assert.equal(Object.hasOwn(sundayEveningRateDisplay, 'slightlyMany'), false);
 assert.equal(sundayEveningRateDisplay.many.main, '20%');
 
-console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず12個以上補足だけを表示する');
+console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず10個以上補足だけを表示する');
 
 
 

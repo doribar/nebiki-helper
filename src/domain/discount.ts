@@ -55,17 +55,9 @@ function toRateLine(main: string, note?: string): RateLine {
 }
 
 
-export function getManyPlus5Threshold(weekdayBase: WeekdayBaseLabel | undefined): number {
-  switch (weekdayBase) {
-    case "月水":
-      return 8;
-    case "金土":
-    case "日": // legacy: 旧「日」基準は現在の金土日相当として扱う
-      return 12;
-    case "火木":
-    default:
-      return 10;
-  }
+export function getManyPlus5Threshold(_weekdayBase: WeekdayBaseLabel | undefined): number {
+  // 曜日基準に関係なく、「多い」の+5%目安は10個以上で固定する。
+  return 10;
 }
 
 function getManyThresholdPlus5Note(params: {
