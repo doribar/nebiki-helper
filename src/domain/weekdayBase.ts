@@ -298,7 +298,7 @@ function getNearForecastHourText(discountTime: DiscountTime): string {
     case "17":
       return "18時";
     case "18":
-      return "20時";
+      return "19時";
     case "19":
       return "20時";
     case "20":

@@ -176,6 +176,7 @@ function normalizeReview19DaySnapshot(
 
   return JSON.parse(JSON.stringify({
     ...raw,
+    sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
     areaCountRecords: Array.isArray(raw.areaCountRecords) ? raw.areaCountRecords : [],
   })) as Review19DaySnapshot;
 }

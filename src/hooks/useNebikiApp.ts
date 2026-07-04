@@ -27,6 +27,7 @@ import type {
   AreaCountEvaluation,
   AreaRateAdjustment,
   RateDisplayData,
+  DailySessionSnapshot,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -55,6 +56,8 @@ import {
   loadReview19SourceState,
   saveReview19SourceState,
   clearReview19SourceState,
+  getDailySessionSnapshotsForDate,
+  upsertDailySessionSnapshot,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -1007,16 +1010,113 @@ function refreshSessionDiscountTime(session: SessionData | null): {
 
 
 
+function buildAreaSnapshotsFromState(params: {
+  areaProgressMap: Record<AreaId, AreaProgress>;
+  doneSummaryItems: DoneSummaryItem[];
+  excludedAreaIds?: AreaId[];
+}): Record<AreaId, Review19Snapshot["areas"][AreaId]> {
+  const doneSummaryByArea = params.doneSummaryItems.reduce((acc, item) => {
+    acc[item.areaId] = item;
+    return acc;
+  }, {} as Record<AreaId, DoneSummaryItem>);
+  const excludedAreaIdSet = new Set(params.excludedAreaIds ?? []);
+
+  return DONE_SUMMARY_ROUTE.reduce((acc, areaId) => {
+    const progress = params.areaProgressMap[areaId];
+    const summary = doneSummaryByArea[areaId];
+
+    acc[areaId] = {
+      areaId,
+      areaName: getAreaName(areaId),
+      reviewExcluded: excludedAreaIdSet.has(areaId),
+      reviewExcludeReason: excludedAreaIdSet.has(areaId) ? "few_at_15_and_17" : undefined,
+      status: progress?.status ?? "unstarted",
+      statusText: summary?.statusText,
+      areaJudge: progress?.areaJudge ?? null,
+      areaCount: progress?.areaCount,
+      judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
+      rateText: summary?.rateText ?? "未完了",
+      ratePercent: parseReview19RatePercent(summary?.rateText),
+      manyRateText: summary?.manyRateText,
+      manyRatePercent: parseReview19RatePercent(summary?.manyRateText),
+      manyNote: summary?.manyNote,
+      normalRateText: summary?.normalRateText,
+      normalRatePercent: parseReview19RatePercent(summary?.normalRateText),
+      visitedAt: progress?.visitedAt,
+      completedAt: progress?.completedAt,
+      skipReason: progress?.skipReason,
+    };
+
+    return acc;
+  }, {} as Review19Snapshot["areas"]);
+}
+
+function createDailySessionSnapshot(params: {
+  capturedAt: string;
+  state: AppState;
+  resolvedWeather: ReturnType<typeof resolveWeatherInputForDiscount>;
+  weekdayBaseInfo: ReturnType<typeof getWeekdayBaseInfo>;
+  basisGuide: ReturnType<typeof getBasisGuideDisplay>;
+  lateTimeBonus: number;
+  doneSummaryItems: DoneSummaryItem[];
+}): DailySessionSnapshot | null {
+  const session = params.state.session;
+  if (!session) return null;
+
+  return {
+    version: 1,
+    capturedAt: params.capturedAt,
+    rateLogicVersion: "time_basic_rate_v1",
+    screen: params.state.screen,
+    session: {
+      date: session.date,
+      weekday: session.weekday,
+      discountTime: session.discountTime,
+      startedAt: session.startedAt,
+      manualWeekdayOverride: session.manualWeekdayOverride,
+      manualDiscountTimeOverride: session.manualDiscountTimeOverride,
+      weather: JSON.parse(JSON.stringify(session.weather)),
+      resolvedWeather: JSON.parse(JSON.stringify(params.resolvedWeather)),
+    },
+    basis: {
+      rateLogicVersion: "time_basic_rate_v1",
+      baseRateBonus: params.weekdayBaseInfo.baseRateBonus,
+      lateTimeBonus: params.lateTimeBonus,
+      totalRateBonus: params.weekdayBaseInfo.baseRateBonus + params.lateTimeBonus,
+      baseRateBonusReason: [...params.weekdayBaseInfo.baseRateBonusReason],
+      noticeText: params.basisGuide.noticeText,
+      weekdaySummaryText: params.basisGuide.weekdaySummaryText,
+      weekdayCalcText: params.basisGuide.weekdayCalcText,
+      weekdayResultText: params.basisGuide.weekdayResultText,
+      bonusSummaryText: params.basisGuide.bonusSummaryText,
+      bonusCalcText: params.basisGuide.bonusCalcText,
+      bonusResultText: params.basisGuide.bonusResultText,
+    },
+    areas: buildAreaSnapshotsFromState({
+      areaProgressMap: params.state.areaProgressMap,
+      doneSummaryItems: params.doneSummaryItems,
+      excludedAreaIds: params.state.review19ExcludedAreaIds,
+    }),
+    doneSummaryItems: JSON.parse(JSON.stringify(params.doneSummaryItems)) as DoneSummaryItem[],
+    currentAreaId: params.state.currentAreaId,
+    review19ExcludedAreaIds: [...params.state.review19ExcludedAreaIds],
+  };
+}
+
 function createReview19DaySnapshot(params: {
   capturedAt: string;
   date: string;
   areaCountRecords: AreaCountRecord[];
+  sessions: DailySessionSnapshot[];
 }): NonNullable<Review19Result["daySnapshot"]> {
   return {
     version: 1,
     capturedAt: params.capturedAt,
     date: params.date,
     rateLogicVersion: "time_basic_rate_v1",
+    sessions: params.sessions
+      .filter((session) => session.session.date === params.date)
+      .map((session) => JSON.parse(JSON.stringify(session)) as DailySessionSnapshot),
     areaCountRecords: cloneAreaCountRecords(
       params.areaCountRecords.filter((record) => record.date === params.date),
     ),
@@ -1854,6 +1954,41 @@ const lateSkipNotice = useMemo(() => {
     ignoreNormalTimeRateCap,
     weekdayBaseInfo.adjusted,
     earlyNextMinus5Info,
+  ]);
+
+  useEffect(() => {
+    if (isTestMode) return;
+    if (!state.session) return;
+    if (state.screen === "start") return;
+    if (
+      state.screen === "review19_weather" ||
+      state.screen === "review19" ||
+      state.screen === "review19_done"
+    ) {
+      return;
+    }
+
+    const snapshot = createDailySessionSnapshot({
+      capturedAt: getRuntimeNow().toISOString(),
+      state,
+      resolvedWeather: sessionSourceResolvedWeather,
+      weekdayBaseInfo,
+      basisGuide,
+      lateTimeBonus,
+      doneSummaryItems,
+    });
+
+    if (snapshot) {
+      upsertDailySessionSnapshot(snapshot);
+    }
+  }, [
+    isTestMode,
+    state,
+    sessionSourceResolvedWeather,
+    weekdayBaseInfo,
+    basisGuide,
+    lateTimeBonus,
+    doneSummaryItems,
   ]);
 
   const review19Items = useMemo(() => {
@@ -3024,10 +3159,25 @@ const lateSkipNotice = useMemo(() => {
         })
       : state.review19.snapshot;
 
+    const currentDailySnapshot = state.session
+      ? createDailySessionSnapshot({
+          capturedAt: recordedAt,
+          state,
+          resolvedWeather: sessionSourceResolvedWeather,
+          weekdayBaseInfo,
+          basisGuide,
+          lateTimeBonus,
+          doneSummaryItems,
+        })
+      : null;
     const daySnapshot = createReview19DaySnapshot({
       capturedAt: recordedAt,
       date: state.review19.date,
       areaCountRecords,
+      sessions: [
+        ...getDailySessionSnapshotsForDate(state.review19.date),
+        ...(currentDailySnapshot ? [currentDailySnapshot] : []),
+      ],
     });
 
     return {

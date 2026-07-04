@@ -6,6 +6,7 @@ import type {
   NextSessionSkipRecord,
   SessionDraft,
   Review19Result,
+  DailySessionSnapshot,
   AreaJudge,
   ScreenName,
 } from "./types";
@@ -22,6 +23,7 @@ export const STORAGE_KEYS = {
   dailyMessageState: "nebiki-helper/daily-message-state",
   review19Records: "nebiki-helper/review19-records",
   review19SourceState: "nebiki-helper/review19-source-state",
+  dailySessionSnapshots: "nebiki-helper/daily-session-snapshots",
 } as const;
 
 export type PersistedRuntimeState = {
@@ -303,6 +305,69 @@ export function saveReview19SourceState(state: AppState): void {
 
 export function clearReview19SourceState(): void {
   localStorage.removeItem(STORAGE_KEYS.review19SourceState);
+}
+
+function cloneDailySessionSnapshot(snapshot: DailySessionSnapshot): DailySessionSnapshot {
+  return JSON.parse(JSON.stringify(snapshot)) as DailySessionSnapshot;
+}
+
+export function loadDailySessionSnapshots(): DailySessionSnapshot[] {
+  const raw = localStorage.getItem(STORAGE_KEYS.dailySessionSnapshots);
+  const parsed = safeParseJSON<DailySessionSnapshot[]>(raw, []);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .filter((snapshot): snapshot is DailySessionSnapshot => {
+      return (
+        snapshot &&
+        typeof snapshot === "object" &&
+        snapshot.version === 1 &&
+        typeof snapshot.capturedAt === "string" &&
+        snapshot.session &&
+        typeof snapshot.session.date === "string" &&
+        typeof snapshot.session.startedAt === "string"
+      );
+    })
+    .map(cloneDailySessionSnapshot);
+}
+
+export function saveDailySessionSnapshots(snapshots: DailySessionSnapshot[]): void {
+  localStorage.setItem(
+    STORAGE_KEYS.dailySessionSnapshots,
+    JSON.stringify(snapshots.map(cloneDailySessionSnapshot))
+  );
+}
+
+export function upsertDailySessionSnapshot(snapshot: DailySessionSnapshot): void {
+  const current = loadDailySessionSnapshots();
+  const next = [
+    ...current.filter((item) => {
+      return !(
+        item.session.date === snapshot.session.date &&
+        item.session.discountTime === snapshot.session.discountTime &&
+        item.session.startedAt === snapshot.session.startedAt
+      );
+    }),
+    cloneDailySessionSnapshot(snapshot),
+  ]
+    .sort((a, b) => {
+      const dateCompare = a.session.date.localeCompare(b.session.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.capturedAt.localeCompare(b.capturedAt);
+    })
+    .slice(-120);
+
+  saveDailySessionSnapshots(next);
+}
+
+export function getDailySessionSnapshotsForDate(date: string): DailySessionSnapshot[] {
+  return loadDailySessionSnapshots()
+    .filter((snapshot) => snapshot.session.date === date)
+    .sort((a, b) => {
+      const timeCompare = a.session.discountTime.localeCompare(b.session.discountTime);
+      if (timeCompare !== 0) return timeCompare;
+      return a.capturedAt.localeCompare(b.capturedAt);
+    });
 }
 
 export function loadPersistedNebikiState(): PersistedNebikiState {

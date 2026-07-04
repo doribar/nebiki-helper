@@ -355,11 +355,49 @@ export type Review19Snapshot = {
 };
 
 
+export type DailySessionSnapshot = {
+  version: 1;
+  capturedAt: string;
+  rateLogicVersion?: RateLogicVersion;
+  screen: ScreenName;
+  session: {
+    date: string;
+    weekday: number;
+    discountTime: DiscountTime;
+    startedAt: string;
+    manualWeekdayOverride: boolean;
+    manualDiscountTimeOverride: boolean;
+    weather: WeatherInput;
+    resolvedWeather: ResolvedWeatherInput;
+  };
+  basis: {
+    rateLogicVersion?: RateLogicVersion;
+    baseRateBonus: number;
+    lateTimeBonus: number;
+    totalRateBonus: number;
+    baseRateBonusReason: string[];
+    noticeText?: string;
+    weekdaySummaryText?: string;
+    weekdayCalcText?: string;
+    weekdayResultText?: string;
+    bonusSummaryText?: string;
+    bonusCalcText?: string;
+    bonusResultText?: string;
+  };
+  areas: Record<AreaId, Review19AreaSnapshot>;
+  doneSummaryItems: DoneSummaryItem[];
+  currentAreaId: AreaId | null;
+  review19ExcludedAreaIds: AreaId[];
+};
+
+
 export type Review19DaySnapshot = {
   version: 1;
   capturedAt: string;
   date: string;
   rateLogicVersion?: RateLogicVersion;
+  /** その日の通常値引セッションログ。19:00チェックだけでなく、1日全体の判断ログとして出力する。 */
+  sessions: DailySessionSnapshot[];
   /** その日に通常の値引作業で保存されたエリア残数データ。19:00チェックの残数はReview19Result.areaCountsに保存する。 */
   areaCountRecords: AreaCountRecord[];
 };
