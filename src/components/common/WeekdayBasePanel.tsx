@@ -27,29 +27,33 @@ function DetailToggleRow({
     <div style={{ display: "grid", gap: 8 }}>
       <div
         style={{
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: hasDetails ? "minmax(0, 1fr) auto" : "1fr",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
+          gap: 8,
         }}
       >
-        <div style={{ fontWeight: 700 }}>{summaryText}</div>
+        <div style={{ fontWeight: 700, minWidth: 0 }}>{summaryText}</div>
         {hasDetails ? (
           <button
             type="button"
+            aria-label={isOpen ? "内訳を閉じる" : "内訳を表示"}
+            title={isOpen ? "内訳を閉じる" : "内訳を表示"}
             onClick={() => setIsOpen((current) => !current)}
             style={{
-              padding: "6px 10px",
+              width: 28,
+              height: 28,
+              padding: 0,
               borderRadius: 999,
               border: "1px solid #bbb",
               background: "#fff",
               fontSize: 13,
+              lineHeight: "26px",
               cursor: "pointer",
-              whiteSpace: "nowrap",
+              flexShrink: 0,
             }}
           >
-            {isOpen ? "内訳を閉じる" : "内訳を表示"}
+            {isOpen ? "▲" : "▼"}
           </button>
         ) : null}
       </div>
