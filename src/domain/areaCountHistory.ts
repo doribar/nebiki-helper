@@ -6,10 +6,8 @@ import type {
   AreaJudge,
   AreaRateAdjustment,
   DiscountTime,
-  WeatherInput,
   WeekdayBaseLabel,
 } from "./types";
-import { resolveWeatherInputForDiscount } from "./hourlyWeather.ts";
 import { isJapaneseHolidayOrObserved } from "./japaneseHoliday.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
@@ -63,8 +61,6 @@ export type AreaCountRecommendation = {
   shortSampleSize?: number;
   longSampleSize?: number;
   medianDownGuardApplied?: boolean;
-  comfortPoint?: number;
-  comfortAdjustedMedianCount?: number;
   smallDifferenceThreshold?: number;
   largeDifferenceThreshold?: number;
   lowerLargeThreshold?: number;
@@ -435,94 +431,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function getTempComfortPoint(tempLevel: ReturnType<typeof resolveWeatherInputForDiscount>["tempLevel"]): number {
-  switch (tempLevel) {
-    case "5orLess":
-    case "36orMore":
-      return 2;
-    case "6to10":
-    case "31to35":
-      return 1;
-    case "11to15":
-    case "16to20":
-    case "21to25":
-    case "26to27":
-    case "28to30":
-    case "26to30":
-    default:
-      return 0;
-  }
-}
-
-function isComfortableTemp(tempLevel: ReturnType<typeof resolveWeatherInputForDiscount>["tempLevel"]): boolean {
-  return tempLevel === "16to20" || tempLevel === "21to25" || tempLevel === "26to27";
-}
-
-function isColdTemp(tempLevel: ReturnType<typeof resolveWeatherInputForDiscount>["tempLevel"]): boolean {
-  return tempLevel === "5orLess" || tempLevel === "6to10" || tempLevel === "11to15";
-}
-
-function getComfortPoint(params: {
-  weather: WeatherInput;
-  discountTime: DiscountTime;
-}): { point: number; detailText: string } {
-  const resolved = resolveWeatherInputForDiscount(params.weather, params.discountTime);
-  let point = 0;
-  const details: string[] = [];
-
-  if (resolved.precipitationRateBonus >= 20) {
-    point += 3;
-    details.push("雪が続くため+3");
-  } else if (resolved.precipitationRateBonus >= 15) {
-    point += 2;
-    details.push("雪のため+2");
-  } else if (resolved.precipitationRateBonus >= 10) {
-    point += 2;
-    details.push("雨が続くため+2");
-  } else if (resolved.precipitationRateBonus >= 5) {
-    point += 1;
-    details.push("雨のため+1");
-  }
-
-  const tempPoint = getTempComfortPoint(resolved.tempLevel);
-  if (tempPoint > 0) {
-    point += tempPoint;
-    details.push(`気温で+${tempPoint}`);
-  }
-
-  if (resolved.windLevel === "5orMore") {
-    point += 1;
-    details.push("強い風で+1");
-    if (isColdTemp(resolved.tempLevel)) {
-      point += 1;
-      details.push("寒さと風でさらに+1");
-    }
-  }
-
-  if (
-    point === 0 &&
-    resolved.precipitationRateBonus === 0 &&
-    isComfortableTemp(resolved.tempLevel) &&
-    resolved.windLevel === "2orLess"
-  ) {
-    point -= 1;
-    details.push("快適な天候のため-1");
-  }
-
-  const clamped = clamp(point, -1, 3);
-  if (details.length === 0) details.push("通常の天候のため0");
-
-  return {
-    point: clamped,
-    detailText: details.join(" / "),
-  };
-}
-
-function adjustMedianByComfort(medianCount: number, comfortPoint: number): number {
-  const factor = 1 - comfortPoint * 0.05;
-  return Math.max(0, Math.round(medianCount * factor));
-}
-
 function getEvaluationFromCount(params: {
   count: number;
   referenceCount: number;
@@ -828,7 +736,6 @@ export function getAreaCountRecommendation(params: {
   areaId: AreaId | null;
   discountTime: DiscountTime | null | undefined;
   weekday: number | null | undefined;
-  weather: WeatherInput | null | undefined;
   date: string | null | undefined;
   count: number;
 }): AreaCountRecommendation {
@@ -838,7 +745,6 @@ export function getAreaCountRecommendation(params: {
   if (
     params.weekday === null ||
     params.weekday === undefined ||
-    !params.weather ||
     !params.date ||
     !isAreaCountAssistTarget({
       areaId: params.areaId,
@@ -858,7 +764,6 @@ export function getAreaCountRecommendation(params: {
 
   const areaId = params.areaId as AreaId;
   const discountTime = params.discountTime as AreaCountDiscountTime;
-  const weather = params.weather as WeatherInput;
   const date = params.date as string;
   const actualWeekday = getActualWeekdayLabel(params.weekday);
   const actualWeekdayGroup = getAreaCountFallbackWeekdayGroup({
@@ -909,11 +814,9 @@ export function getAreaCountRecommendation(params: {
     comparisonMode,
   });
   const medianCount = referenceMedian.adoptedMedianCount;
-  const comfort = getComfortPoint({ weather, discountTime });
-  const comfortAdjustedMedianCount = adjustMedianByComfort(medianCount, comfort.point);
   const baseEvaluationInfo = getEvaluationFromCount({
     count,
-    referenceCount: comfortAdjustedMedianCount,
+    referenceCount: medianCount,
   });
   const decreaseRecommendation = getDecreaseRecommendation({
     records: recordsForDecrease,
@@ -948,8 +851,6 @@ export function getAreaCountRecommendation(params: {
     shortSampleSize: matchedRecords.length,
     longSampleSize: reference.longMatchedRecords.length,
     medianDownGuardApplied: referenceMedian.medianDownGuardApplied,
-    comfortPoint: comfort.point,
-    comfortAdjustedMedianCount,
     smallDifferenceThreshold: baseEvaluationInfo.smallDifferenceThreshold,
     largeDifferenceThreshold: baseEvaluationInfo.largeDifferenceThreshold,
     lowerLargeThreshold: baseEvaluationInfo.lowerLargeThreshold,
@@ -977,12 +878,10 @@ export function getAreaCountRecommendation(params: {
       referenceMedian.medianDownGuardApplied
         ? `短期が長期より少ないため、基準を下げすぎないように${medianCount}個で判定。`
         : `採用基準：${medianCount}個`,
-      `快適度ポイント：${comfort.point}（${comfort.detailText}）`,
-      `快適度補正後の基準：${comfortAdjustedMedianCount}個`,
       `少ない：${baseEvaluationInfo.lowerLargeThreshold}個以下 / やや少ない：${baseEvaluationInfo.lowerSmallThreshold}個以下`,
       `やや多い：${baseEvaluationInfo.upperSmallThreshold}個以上 / 多い：${baseEvaluationInfo.upperLargeThreshold}個以上`,
       `今回：${count}個`,
-      `残数のみの判定：${evaluationText(baseEvaluationInfo.evaluation)}`,
+      `残数判定：${evaluationText(baseEvaluationInfo.evaluation)}`,
       ...decreaseRecommendation.detailLines,
     ],
   };

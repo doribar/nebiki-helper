@@ -1,4 +1,4 @@
-import type { AreaCountRecommendation } from "./areaCountHistory.ts";
+import type { AreaCountRecommendation, AreaCountRecord } from "./areaCountHistory.ts";
 import type { TrainingStep, TrainingStepConfig } from "./trainingMode.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 
@@ -354,6 +354,16 @@ export type Review19Snapshot = {
   reviewReference?: Review19Reference;
 };
 
+
+export type Review19DaySnapshot = {
+  version: 1;
+  capturedAt: string;
+  date: string;
+  rateLogicVersion?: RateLogicVersion;
+  /** その日に通常の値引作業で保存されたエリア残数データ。19:00チェックの残数はReview19Result.areaCountsに保存する。 */
+  areaCountRecords: AreaCountRecord[];
+};
+
 export type Review19Result = {
   date: string;
   sessionStartedAt: string;
@@ -366,6 +376,7 @@ export type Review19Result = {
   exportedAt?: string;
   reference?: Review19Reference;
   snapshot?: Review19Snapshot;
+  daySnapshot?: Review19DaySnapshot;
 };
 
 export type Review19AreaItem = {

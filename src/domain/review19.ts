@@ -7,6 +7,7 @@ import type {
   Review19Reference,
   Review19Result,
   Review19Snapshot,
+  Review19DaySnapshot,
 } from "./types.ts";
 
 export const REVIEW19_RATINGS: Array<{
@@ -165,6 +166,20 @@ function normalizeReview19Snapshot(
   return cloned;
 }
 
+
+function normalizeReview19DaySnapshot(
+  raw?: Partial<Review19DaySnapshot> | null,
+): Review19DaySnapshot | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  if (raw.version !== 1) return undefined;
+  if (typeof raw.capturedAt !== "string" || typeof raw.date !== "string") return undefined;
+
+  return JSON.parse(JSON.stringify({
+    ...raw,
+    areaCountRecords: Array.isArray(raw.areaCountRecords) ? raw.areaCountRecords : [],
+  })) as Review19DaySnapshot;
+}
+
 function cloneReview19Reference(
   raw?: Partial<Review19Reference> | null,
 ): Review19Reference | undefined {
@@ -231,6 +246,7 @@ export function normalizeReview19Result(
     exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : undefined,
     reference: cloneReview19Reference(raw.reference),
     snapshot: normalizeReview19Snapshot(raw.snapshot),
+    daySnapshot: normalizeReview19DaySnapshot(raw.daySnapshot),
   };
 }
 

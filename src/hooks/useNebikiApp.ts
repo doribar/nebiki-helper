@@ -1006,6 +1006,23 @@ function refreshSessionDiscountTime(session: SessionData | null): {
 
 
 
+
+function createReview19DaySnapshot(params: {
+  capturedAt: string;
+  date: string;
+  areaCountRecords: AreaCountRecord[];
+}): NonNullable<Review19Result["daySnapshot"]> {
+  return {
+    version: 1,
+    capturedAt: params.capturedAt,
+    date: params.date,
+    rateLogicVersion: "time_basic_rate_v1",
+    areaCountRecords: cloneAreaCountRecords(
+      params.areaCountRecords.filter((record) => record.date === params.date),
+    ),
+  };
+}
+
 function createReview19Snapshot(params: {
   capturedAt: string;
   session: SessionData;
@@ -2458,7 +2475,6 @@ const lateSkipNotice = useMemo(() => {
       areaId: state.currentAreaId,
       discountTime: state.session?.discountTime,
       weekday: state.session?.weekday,
-      weather: state.session?.weather,
       date: state.session?.date,
       count,
     });
@@ -2557,7 +2573,6 @@ const lateSkipNotice = useMemo(() => {
         userJudge: effectiveJudge,
         suggestedEvaluation: effectiveAreaCountResult?.evaluation,
         areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
-        comfortPoint: areaCountRecommendation?.comfortPoint,
       };
 
       setAreaCountRecords((current) => upsertAreaCountRecord(current, nextRecord));
@@ -3009,6 +3024,12 @@ const lateSkipNotice = useMemo(() => {
         })
       : state.review19.snapshot;
 
+    const daySnapshot = createReview19DaySnapshot({
+      capturedAt: recordedAt,
+      date: state.review19.date,
+      areaCountRecords,
+    });
+
     return {
       ...state.review19,
       ratingScores: createReview19RatingScores(state.review19.ratings),
@@ -3020,6 +3041,7 @@ const lateSkipNotice = useMemo(() => {
       excludeReasons: {},
       recordedAt,
       snapshot,
+      daySnapshot,
     };
   }
 
