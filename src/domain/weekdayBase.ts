@@ -513,11 +513,11 @@ function getComfortText(score: number): string {
 }
 
 function isRainPrecipitationBonus(value: number): boolean {
-  return value > 0 && value < 20;
+  return value > 0 && value < 15;
 }
 
 function isSnowPrecipitationBonus(value: number): boolean {
-  return value >= 20;
+  return value >= 15;
 }
 
 function applyComfortNegativeLimit(params: {

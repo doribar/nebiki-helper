@@ -202,15 +202,15 @@ const cases: Case[] = [
     },
   },
   {
-    name: '起点時刻の雪は +20%',
+    name: '起点時刻の雪は +15%',
     weekday: 2,
     discountTime: '15',
     weatherSpec: weather({ nearTermWeather: 'snow' }),
     expected: {
       adjusted: '火木',
-      baseRateBonus: 20,
-      bonusCalcIncludes: ['16時に雪 +20%'],
-      bonusResultIncludes: ['値引率補正は+20%'],
+      baseRateBonus: 15,
+      bonusCalcIncludes: ['16時に雪 +15%'],
+      bonusResultIncludes: ['値引率補正は+15%'],
     },
   },
   {

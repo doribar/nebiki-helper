@@ -221,8 +221,8 @@ function getDirectPrecipRateBonus(params: {
       return { value: 20, label: `${origin.hourText}に雪、その後も雪` };
     }
 
-    // 雪は快適度を見ずに+20%固定。
-    return { value: 20, label: `${origin.hourText}に雪` };
+    // 雪は快適度を見ない。単発雪は+15%、継続雪は+20%。
+    return { value: 15, label: `${origin.hourText}に雪` };
   }
 
   if (origin.weather !== 'rain') {
