@@ -706,11 +706,10 @@ function resolveWeatherEffect(params: {
         hasRain: isRainPrecipitationBonus(precipitationBonus),
       }).score;
 
-  const weekdayText = getActualWeekdayText(params.weekday);
   const basisTimeText = getBasisTimeText(params.discountTime);
   const weekdaySummaryText = `基本値引率：${basicRate}%（${basisTimeText}）`;
   const weekdayDetailLines: string[] = [];
-  const weekdayCalcText = `基本値引率：${basisTimeText} → ${basicRate}%`;
+  const weekdayCalcText = `基本値引率の内訳：${basisTimeText} → ${basicRate}%`;
   const weekdayResultText = `基本値引率は${basicRate}%です。曜日差はエリア残数判定で反映します。`;
   const comfortCalcParts = comfortShiftTerms.map(toComfortScoreCalcPart);
   const comfortDetailLine = isSnowPrecipitationBonus(precipitationBonus)
