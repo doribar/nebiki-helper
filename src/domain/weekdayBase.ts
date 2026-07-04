@@ -10,7 +10,6 @@ import type {
 } from "./types";
 import {
   addDaysToDateString,
-  isJapaneseHolidayOrObserved,
   isJapaneseHolidayOrWeekend,
 } from "./japaneseHoliday.ts";
 import { getBaseRate } from "./discount.ts";
@@ -76,61 +75,6 @@ export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
     default:
       return "火木";
   }
-}
-
-function isNightFloorTime(discountTime: DiscountTime): boolean {
-  return (
-    discountTime === "17" ||
-    discountTime === "18" ||
-    discountTime === "19" ||
-    discountTime === "20"
-  );
-}
-
-function getHolidayAdjustedWeekdayBase(params: {
-  date?: string;
-  weekday: number;
-  discountTime: DiscountTime;
-}): { original: WeekdayBaseLabel; noticeText?: string } {
-  const isHoliday = Boolean(
-    params.date && isJapaneseHolidayOrObserved(params.date),
-  );
-
-  if (isHoliday) {
-    if (params.discountTime === "15") {
-      return {
-        original: "金土",
-        noticeText: "祝日の15時は金曜・土曜・日曜相当の基本値引率を使います。",
-      };
-    }
-
-    if (isNightFloorTime(params.discountTime) && params.date) {
-      const nextDate = addDaysToDateString(params.date, 1);
-      if (isJapaneseHolidayOrWeekend(nextDate)) {
-        return {
-          original: "金土",
-          noticeText:
-            "祝日の17時以降で翌日も休日・祝日のため、金曜・土曜相当の基本値引率を使います。",
-        };
-      }
-
-      return {
-        original: "火木",
-        noticeText:
-          "祝日の17時以降で翌日が平日のため、火曜・木曜相当の基本値引率を使います。",
-      };
-    }
-  }
-
-  if (params.weekday === 0 && isNightFloorTime(params.discountTime)) {
-    return {
-      original: "火木",
-      noticeText:
-        "日曜日の17時以降は客足が減るため、火曜・木曜相当の基本値引率を使います。",
-    };
-  }
-
-  return { original: getOriginalWeekdayBase(params.weekday) };
 }
 
 function formatSignedValue(value: number, unit: string): string {
@@ -701,13 +645,9 @@ function resolveWeatherEffect(params: {
   discountTime: DiscountTime;
   weather: ResolvedWeatherInput;
 }) {
-  const holidayAdjusted = getHolidayAdjustedWeekdayBase({
-    date: params.date,
-    weekday: params.weekday,
-    discountTime: params.discountTime,
-  });
-  const original = holidayAdjusted.original;
-  const noticeText = holidayAdjusted.noticeText;
+  // 旧形式の保存データ互換用。値引率の計算には使わない。
+  const original = getOriginalWeekdayBase(params.weekday);
+  const noticeText = undefined;
 
   const comfortShiftTerms = [
     getBaseTempShiftTerm(params.weather, params.discountTime),
@@ -768,14 +708,14 @@ function resolveWeatherEffect(params: {
 
   const weekdayText = getActualWeekdayText(params.weekday);
   const basisTimeText = getBasisTimeText(params.discountTime);
-  const weekdaySummaryText = `基本値引率：${basicRate}%（${weekdayText}・${basisTimeText}）`;
+  const weekdaySummaryText = `基本値引率：${basicRate}%（${basisTimeText}）`;
   const weekdayDetailLines = [
     `今日の曜日：${weekdayText}`,
     `値引時刻：${basisTimeText}`,
-    `曜日・時刻ごとの基本値引率表から${basicRate}%を使用`,
+    `時刻ごとの基本値引率表から${basicRate}%を使用`,
   ];
-  const weekdayCalcText = `基本値引率の内訳：${weekdayText}・${basisTimeText} → ${basicRate}%`;
-  const weekdayResultText = `基本値引率は${basicRate}%です。`;
+  const weekdayCalcText = `基本値引率の内訳：${basisTimeText} → ${basicRate}%`;
+  const weekdayResultText = `基本値引率は${basicRate}%です。曜日差はエリア残数判定で反映します。`;
   const comfortCalcParts = comfortShiftTerms.map(toComfortScoreCalcPart);
   const comfortDetailLine = isSnowPrecipitationBonus(precipitationBonus)
     ? "雪のため快適度補正は使いません。"

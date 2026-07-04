@@ -149,6 +149,7 @@ export type ActualWeekdayLabel = "日" | "月" | "火" | "水" | "木" | "金" |
 export type ActualWeekdayGroup = "月水" | "火木" | "金土日";
 export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
 export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
+export type RateLogicVersion = "weekday_basis_v1" | "time_basic_rate_v1";
 
 export type WeekdayBaseInfo = {
   original: WeekdayBaseLabel;
@@ -297,9 +298,13 @@ export type Review19Reference = {
   weather: WeatherInput;
   resolvedWeather: ResolvedWeatherInput;
   basis: {
-    originalWeekdayBase: WeekdayBaseLabel;
-    adjustedWeekdayBase: WeekdayBaseLabel;
-    weekdayShift: number;
+    rateLogicVersion?: RateLogicVersion;
+    /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
+    originalWeekdayBase?: WeekdayBaseLabel;
+    /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
+    adjustedWeekdayBase?: WeekdayBaseLabel;
+    /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
+    weekdayShift?: number;
     baseRateBonus: number;
     baseRateBonusReason: string[];
     noticeText?: string;
@@ -326,9 +331,13 @@ export type Review19Snapshot = {
     resolvedWeather: ResolvedWeatherInput;
   };
   basis: {
-    originalWeekdayBase: WeekdayBaseLabel;
-    adjustedWeekdayBase: WeekdayBaseLabel;
-    weekdayShift: number;
+    rateLogicVersion?: RateLogicVersion;
+    /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
+    originalWeekdayBase?: WeekdayBaseLabel;
+    /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
+    adjustedWeekdayBase?: WeekdayBaseLabel;
+    /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
+    weekdayShift?: number;
     baseRateBonus: number;
     lateTimeBonus: number;
     totalRateBonus: number;

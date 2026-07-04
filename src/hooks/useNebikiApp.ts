@@ -1067,9 +1067,7 @@ function createReview19Snapshot(params: {
       resolvedWeather: JSON.parse(JSON.stringify(params.resolvedWeather)),
     },
     basis: {
-      originalWeekdayBase: params.weekdayBaseInfo.original,
-      adjustedWeekdayBase: params.weekdayBaseInfo.adjusted,
-      weekdayShift: params.weekdayBaseInfo.weekdayShift,
+      rateLogicVersion: "time_basic_rate_v1",
       baseRateBonus: params.weekdayBaseInfo.baseRateBonus,
       lateTimeBonus: params.lateTimeBonus,
       totalRateBonus: params.weekdayBaseInfo.baseRateBonus + params.lateTimeBonus,
@@ -1121,9 +1119,7 @@ function createReview19Reference(draft: SessionDraft): Review19Reference {
     weather: JSON.parse(JSON.stringify(reviewDraft.weather)) as WeatherInput,
     resolvedWeather: JSON.parse(JSON.stringify(resolvedWeather)),
     basis: {
-      originalWeekdayBase: weekdayBaseInfo.original,
-      adjustedWeekdayBase: weekdayBaseInfo.adjusted,
-      weekdayShift: weekdayBaseInfo.weekdayShift,
+      rateLogicVersion: "time_basic_rate_v1",
       baseRateBonus: weekdayBaseInfo.baseRateBonus,
       baseRateBonusReason: [...weekdayBaseInfo.baseRateBonusReason],
       noticeText: basisGuide.noticeText,
@@ -2453,7 +2449,6 @@ const lateSkipNotice = useMemo(() => {
 
   const areaCountSameItemLimit = areaCountAssistEnabled && state.session
     ? getAreaCountSameItemLimit({
-        weekdayBase: weekdayBaseInfo.adjusted,
       })
     : null;
 
@@ -2552,11 +2547,11 @@ const lateSkipNotice = useMemo(() => {
         recordedAt,
         areaId: state.currentAreaId,
         discountTime: state.session.discountTime,
-        weekdayBase: weekdayBaseInfo.adjusted,
         actualWeekday: getActualWeekdayLabel(state.session.weekday),
         actualWeekdayGroup: getAreaCountFallbackWeekdayGroup({
           weekday: state.session.weekday,
           discountTime: state.session.discountTime,
+          date: state.session.date,
         }),
         count: roundedAreaCount,
         userJudge: effectiveJudge,

@@ -10,6 +10,7 @@ import type {
   WeekdayBaseLabel,
 } from "./types";
 import { resolveWeatherInputForDiscount } from "./hourlyWeather.ts";
+import { isJapaneseHolidayOrObserved } from "./japaneseHoliday.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
 
@@ -134,9 +135,16 @@ export function getActualWeekdayGroup(weekday: number): ActualWeekdayGroup {
 export function getAreaCountFallbackWeekdayGroup(params: {
   weekday: number;
   discountTime: AreaCountDiscountTime;
+  date?: string | null;
 }): ActualWeekdayGroup {
-  // 日曜は、15時は製造量・売場作りに合わせて金土日寄り、17時以降は売れ方に合わせて火木寄りにする。
-  if (params.weekday === 0 && params.discountTime !== "15") return "火木";
+  // 暫定比較グループは値引率の曜日基準ではなく、
+  // 同じ曜日データが足りない時に近い残り方の曜日データを借りるための補助グループ。
+  // 祝日・日曜は、15時は休日の売場作りに合わせて金土日寄り、17時以降は売れ方に合わせて火木寄りにする。
+  const isHoliday = typeof params.date === "string" && isJapaneseHolidayOrObserved(params.date);
+  const isSundayOrHoliday = params.weekday === 0 || isHoliday;
+
+  if (isSundayOrHoliday && params.discountTime !== "15") return "火木";
+  if (isSundayOrHoliday && params.discountTime === "15") return "金土日";
   return getActualWeekdayGroup(params.weekday);
 }
 
@@ -856,6 +864,7 @@ export function getAreaCountRecommendation(params: {
   const actualWeekdayGroup = getAreaCountFallbackWeekdayGroup({
     weekday: params.weekday,
     discountTime,
+    date,
   });
   // エリア判定の比較サンプルは「今日より前」の履歴だけを使う。
   // 同じ日・同じエリア・同じ時刻で複数記録がある場合は、最新の1件だけを採用する。

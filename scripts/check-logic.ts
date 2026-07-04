@@ -30,7 +30,7 @@ import {
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
 import { appendSkipRecordsInMemory } from '../src/domain/storage.ts';
-import { getAreaCountRecommendation, getAreaCountSameItemLimit } from '../src/domain/areaCountHistory.ts';
+import { getAreaCountFallbackWeekdayGroup, getAreaCountRecommendation, getAreaCountSameItemLimit } from '../src/domain/areaCountHistory.ts';
 import type {
   AreaId,
   AppState,
@@ -243,7 +243,7 @@ const cases: Case[] = [
     discountTime: '15',
     weatherSpec: weather({}),
     expected: {
-      adjusted: '火木',
+      adjusted: '月水',
       baseRateBonus: 5,
       bonusDetailIncludes: ['GW連休3日目の翌日 +1点'],
       bonusCalcIncludes: ['快適度補正：少し不快 +5%'],
@@ -467,6 +467,23 @@ let passed = 0;
 
 
 
+
+{
+  try {
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '15', date: '2026-07-05' }), '金土日');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-05' }), '火木');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '15', date: '2026-07-20' }), '金土日');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-07-20' }), '火木');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 5, discountTime: '17', date: '2026-07-03' }), '金土日');
+    console.log('PASS: 暫定比較グループは祝日・日曜15時を金土日、17時以降を火木として扱う');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 暫定比較グループの祝日・日曜扱い');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
 {
   try {
     const records = [
@@ -597,7 +614,7 @@ let passed = 0;
     assert.equal(resolvedWeather.weatherPointScore, 0);
     assert.equal(resolvedWeather.weatherPointShift, 0);
     assert.equal(info.adjusted, '火木');
-    assert.ok(guide.weekdayCalcText?.includes('基本値引率の内訳：火曜日・15時 → 0%'));
+    assert.ok(guide.weekdayCalcText?.includes('基本値引率の内訳：15時 → 0%'));
     console.log('PASS: 28〜30度が続く日は天候ポイント補正なし');
     passed += 1;
   } catch (error) {
@@ -1212,51 +1229,41 @@ try {
   process.exitCode = 1;
 }
 
-const holidayWeekdayBaseCases = [
+const holidayBasicRateCases = [
   {
-    name: '祝日の15時は金土日基準を使う',
+    name: '祝日の15時でも基本値引率は時刻固定',
     date: '2026-01-01',
     weekday: 4,
     discountTime: '15' as DiscountTime,
-    expectedAdjusted: '金土',
-    expectedNotice: '祝日の15時は金曜・土曜・日曜相当の基本値引率',
+    expectedCalcText: '基本値引率の内訳：15時 → 0%',
   },
   {
-    name: '祝日17時以降で翌日も休日なら金土基準を使う',
+    name: '祝日17時以降で翌日も休日でも基本値引率は時刻固定',
     date: '2026-09-22',
     weekday: 2,
     discountTime: '17' as DiscountTime,
-    expectedAdjusted: '金土',
-    expectedNotice: '翌日も休日・祝日',
+    expectedCalcText: '基本値引率の内訳：17時 → 10%',
   },
   {
-    name: '祝日17時以降で翌日が平日なら火木基準を使う',
+    name: '祝日17時以降で翌日が平日でも基本値引率は時刻固定',
     date: '2026-01-12',
     weekday: 1,
     discountTime: '17' as DiscountTime,
-    expectedAdjusted: '火木',
-    expectedNotice: '翌日が平日',
+    expectedCalcText: '基本値引率の内訳：17時 → 10%',
   },
   {
-    name: '祝日に挟まれた休日も翌日休日判定に使う',
+    name: '祝日に挟まれた休日でも基本値引率は時刻固定',
     date: '2026-09-22',
     weekday: 2,
     discountTime: '17' as DiscountTime,
-    expectedAdjusted: '金土',
-    expectedNotice: '翌日も休日・祝日',
+    expectedCalcText: '基本値引率の内訳：17時 → 10%',
   },
 ];
 
-for (const holidayCase of holidayWeekdayBaseCases) {
+for (const holidayCase of holidayBasicRateCases) {
   try {
     const weatherInput = toWeatherInput(holidayCase.discountTime, weather({}));
     const resolvedWeather = resolveWeatherInputForDiscount(weatherInput, holidayCase.discountTime);
-    const info = getWeekdayBaseInfo(
-      holidayCase.weekday,
-      holidayCase.discountTime,
-      resolvedWeather,
-      holidayCase.date
-    );
     const guide = getBasisGuideDisplay({
       date: holidayCase.date,
       weekday: holidayCase.weekday,
@@ -1264,8 +1271,8 @@ for (const holidayCase of holidayWeekdayBaseCases) {
       weather: resolvedWeather,
     });
 
-    assert.equal(info.adjusted, holidayCase.expectedAdjusted);
-    assert.ok(guide.noticeText?.includes(holidayCase.expectedNotice));
+    assert.ok(guide.weekdayCalcText?.includes(holidayCase.expectedCalcText));
+    assert.equal(guide.noticeText, undefined);
     console.log(`PASS: ${holidayCase.name}`);
     passed += 1;
   } catch (error) {
