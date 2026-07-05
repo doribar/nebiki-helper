@@ -2689,7 +2689,6 @@ const lateSkipNotice = useMemo(() => {
     const effectiveAreaCountResult = readyAreaCountResult ?? manualAreaCountResult;
 
     // エリア残数判定が使える場合、エリア判定は5段階結果で固定する。
-    // ここでの「少ない」はエリア全体の-10%補正であり、後回しにはしない。
     const effectiveJudge: Exclude<AreaJudge, null> = effectiveAreaCountResult ? "normal" : judge;
     setAreaJudgeSelection(effectiveJudge);
 

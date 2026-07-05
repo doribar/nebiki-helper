@@ -317,11 +317,13 @@ function RateInstructionCard({
   step,
   currentIndex,
   totalCount,
+  showJudgeHintButton,
   onDone,
 }: {
   step: RateInstructionStep;
   currentIndex: number;
   totalCount: number;
+  showJudgeHintButton: boolean;
   onDone: () => void;
 }) {
   const [showJudgeHint, setShowJudgeHint] = useState(false);
@@ -349,24 +351,26 @@ function RateInstructionCard({
           </div>
         ) : null}
 
-        <button
-          type="button"
-          onClick={() => setShowJudgeHint(true)}
-          style={{
-            border: 0,
-            background: "transparent",
-            color: "#555",
-            fontSize: 14,
-            fontWeight: 700,
-            textDecoration: "underline",
-            textUnderlineOffset: 3,
-            cursor: "pointer",
-            padding: "4px 0",
-            whiteSpace: "nowrap",
-          }}
-        >
-          迷ったら…
-        </button>
+        {showJudgeHintButton ? (
+          <button
+            type="button"
+            onClick={() => setShowJudgeHint(true)}
+            style={{
+              border: 0,
+              background: "transparent",
+              color: "#555",
+              fontSize: 14,
+              fontWeight: 700,
+              textDecoration: "underline",
+              textUnderlineOffset: 3,
+              cursor: "pointer",
+              padding: "4px 0",
+              whiteSpace: "nowrap",
+            }}
+          >
+            迷ったら…
+          </button>
+        ) : null}
       </div>
 
       <div
@@ -757,6 +761,7 @@ export function RateDisplayScreen({
                 step={currentRateInstructionStep}
                 currentIndex={rateInstructionStepIndex}
                 totalCount={rateInstructionSteps.length}
+                showJudgeHintButton={trainingStepConfig.step !== "step1"}
                 onDone={handleRateInstructionDone}
               />
             ) : null}

@@ -64,6 +64,7 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           timeSwitchNotice={derived.timeSwitchNotice}
           areaCountAssistEnabled={derived.areaCountAssistEnabled}
           areaCountSameItemLimit={derived.areaCountSameItemLimit}
+          trainingStepConfig={derived.trainingStepConfig}
           getAreaCountRecommendation={actions.getCurrentAreaCountRecommendation}
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}

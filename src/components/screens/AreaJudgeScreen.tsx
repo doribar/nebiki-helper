@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { AreaCountEvaluation, AreaJudge, SkipTargetOption } from "../../domain/types";
+import type { TrainingStepConfig } from "../../domain/trainingMode";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
@@ -25,6 +26,7 @@ type AreaJudgeScreenProps = {
   timeSwitchNotice?: string | null;
   areaCountAssistEnabled?: boolean;
   areaCountSameItemLimit?: number | null;
+  trainingStepConfig: TrainingStepConfig;
   getAreaCountRecommendation?: (count: number) => AreaCountRecommendation;
   onJudge: (
     judge: Exclude<AreaJudge, null>,
@@ -161,6 +163,7 @@ export function AreaJudgeScreen({
   timeSwitchNotice,
   areaCountAssistEnabled = false,
   areaCountSameItemLimit = null,
+  trainingStepConfig,
   getAreaCountRecommendation,
   onJudge,
   onSkip,
@@ -200,6 +203,7 @@ export function AreaJudgeScreen({
       ? getAreaCountRecommendation(parsedAreaCount)
       : null;
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
+  const isStep1 = trainingStepConfig.step === "step1";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
 
   const handleAreaCountDigit = (digit: string) => {
@@ -230,6 +234,11 @@ export function AreaJudgeScreen({
 
     if (isAreaCountReady) {
       handleUseAreaCountRecommendation();
+      return;
+    }
+
+    if (isStep1 && areaCountAssistEnabled) {
+      onJudge("normal", parsedAreaCount);
       return;
     }
 
@@ -459,10 +468,8 @@ export function AreaJudgeScreen({
         ) : null}
 
         {areaCountAssistEnabled && parsedAreaCount === null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
+          isStep1 ? null : (
           <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ fontSize: 13, color: "#555", lineHeight: 1.7 }}>
-              過去データが足りない場合は、手動で5段階判定してください。ここでの「少ない」は後回しではなく、表示値引率-10%です。
-            </div>
             <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
             <JudgeOptionButton label="多い" subLabel="+10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("many")} />
             <JudgeOptionButton label="やや多い" subLabel="+5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_many")} />
@@ -470,6 +477,7 @@ export function AreaJudgeScreen({
             <JudgeOptionButton label="やや少ない" subLabel="-5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_few")} />
             <JudgeOptionButton label="少ない" subLabel="-10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("few")} />
           </div>
+          )
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
