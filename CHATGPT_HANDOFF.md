@@ -2534,3 +2534,7 @@ ZIP返却方針:
 - 基本値引率は時刻固定のため、画面上の基本値引率には内訳開閉ボタンを出さないように変更。値引率補正だけ内訳開閉を残す。
 
 - Vercel build error 修正。`src/domain/weekdayBase.ts` の未使用変数 `weekdayText` を削除し、`noUnusedLocals` で `TS6133` が出ないようにした。基本値引率の画面上の内訳ボタン削除は維持。
+
+- 19:00チェック出力の `daySnapshot.sessions` には通常値引セッションだけを入れるように修正。`review19` / `review19_weather` / `review19_done` の画面状態は sessions から除外する。
+- 19:00チェック自体の記録は `daySnapshot.review19Check` に分離して保存。これにより `daySnapshot` は「通常値引セッションログ」と「19:00チェック記録」を同列の1日ログとして持つ。
+- 古い出力/保存データに `screen: "review19"` のセッションが混ざっていても、読み込み時に `daySnapshot.sessions` から除外する互換処理を追加。

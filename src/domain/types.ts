@@ -391,14 +391,29 @@ export type DailySessionSnapshot = {
 };
 
 
+export type Review19DayCheckSnapshot = {
+  version: 1;
+  recordedAt: string;
+  sessionStartedAt: string;
+  ratings: Record<AreaId, Review19Rating>;
+  ratingScores: Record<AreaId, Review19RatingScore>;
+  areaCounts: Partial<Record<AreaId, number>>;
+  excludedAreaIds: AreaId[];
+  excludeReasons: Partial<Record<AreaId, Review19ExcludeReason>>;
+  reference?: Review19Reference;
+  snapshot?: Review19Snapshot;
+};
+
 export type Review19DaySnapshot = {
   version: 1;
   capturedAt: string;
   date: string;
   rateLogicVersion?: RateLogicVersion;
-  /** その日の通常値引セッションログ。19:00チェックだけでなく、1日全体の判断ログとして出力する。 */
+  /** その日の通常値引セッションログ。19:00チェックはreview19Checkへ分けて保存する。 */
   sessions: DailySessionSnapshot[];
-  /** その日に通常の値引作業で保存されたエリア残数データ。19:00チェックの残数はReview19Result.areaCountsに保存する。 */
+  /** 19:00チェックの記録。daySnapshot内でも1日のログとして参照できるように保存する。 */
+  review19Check?: Review19DayCheckSnapshot;
+  /** その日に通常の値引作業で保存されたエリア残数データ。19:00チェックの残数はReview19Result.areaCountsとreview19Check.areaCountsに保存する。 */
   areaCountRecords: AreaCountRecord[];
 };
 

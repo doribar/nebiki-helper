@@ -174,9 +174,19 @@ function normalizeReview19DaySnapshot(
   if (raw.version !== 1) return undefined;
   if (typeof raw.capturedAt !== "string" || typeof raw.date !== "string") return undefined;
 
+  const sessions = Array.isArray(raw.sessions)
+    ? raw.sessions.filter((session) => {
+        const screen = (session as { screen?: unknown })?.screen;
+        return screen !== "review19_weather" && screen !== "review19" && screen !== "review19_done";
+      })
+    : [];
+
   return JSON.parse(JSON.stringify({
     ...raw,
-    sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
+    sessions,
+    review19Check: raw.review19Check && typeof raw.review19Check === "object"
+      ? raw.review19Check
+      : undefined,
     areaCountRecords: Array.isArray(raw.areaCountRecords) ? raw.areaCountRecords : [],
   })) as Review19DaySnapshot;
 }

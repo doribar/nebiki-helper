@@ -1103,11 +1103,20 @@ function createDailySessionSnapshot(params: {
   };
 }
 
+function isReview19Screen(screen: ScreenName): boolean {
+  return (
+    screen === "review19_weather" ||
+    screen === "review19" ||
+    screen === "review19_done"
+  );
+}
+
 function createReview19DaySnapshot(params: {
   capturedAt: string;
   date: string;
   areaCountRecords: AreaCountRecord[];
   sessions: DailySessionSnapshot[];
+  review19Check?: NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>;
 }): NonNullable<Review19Result["daySnapshot"]> {
   return {
     version: 1,
@@ -1115,8 +1124,11 @@ function createReview19DaySnapshot(params: {
     date: params.date,
     rateLogicVersion: "time_basic_rate_v1",
     sessions: params.sessions
-      .filter((session) => session.session.date === params.date)
+      .filter((session) => session.session.date === params.date && !isReview19Screen(session.screen))
       .map((session) => JSON.parse(JSON.stringify(session)) as DailySessionSnapshot),
+    review19Check: params.review19Check
+      ? JSON.parse(JSON.stringify(params.review19Check)) as NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>
+      : undefined,
     areaCountRecords: cloneAreaCountRecords(
       params.areaCountRecords.filter((record) => record.date === params.date),
     ),
@@ -3159,34 +3171,34 @@ const lateSkipNotice = useMemo(() => {
         })
       : state.review19.snapshot;
 
-    const currentDailySnapshot = state.session
-      ? createDailySessionSnapshot({
-          capturedAt: recordedAt,
-          state,
-          resolvedWeather: sessionSourceResolvedWeather,
-          weekdayBaseInfo,
-          basisGuide,
-          lateTimeBonus,
-          doneSummaryItems,
-        })
-      : null;
+    const recordedAreaCounts = {
+      ...state.review19.areaCounts,
+      ...latestAreaCounts,
+    };
+    const ratingScores = createReview19RatingScores(state.review19.ratings);
     const daySnapshot = createReview19DaySnapshot({
       capturedAt: recordedAt,
       date: state.review19.date,
       areaCountRecords,
-      sessions: [
-        ...getDailySessionSnapshotsForDate(state.review19.date),
-        ...(currentDailySnapshot ? [currentDailySnapshot] : []),
-      ],
+      sessions: getDailySessionSnapshotsForDate(state.review19.date),
+      review19Check: {
+        version: 1,
+        recordedAt,
+        sessionStartedAt: state.review19.sessionStartedAt,
+        ratings: JSON.parse(JSON.stringify(state.review19.ratings)) as Review19Result["ratings"],
+        ratingScores,
+        areaCounts: recordedAreaCounts,
+        excludedAreaIds: [],
+        excludeReasons: {},
+        reference: state.review19.reference,
+        snapshot,
+      },
     });
 
     return {
       ...state.review19,
-      ratingScores: createReview19RatingScores(state.review19.ratings),
-      areaCounts: {
-        ...state.review19.areaCounts,
-        ...latestAreaCounts,
-      },
+      ratingScores,
+      areaCounts: recordedAreaCounts,
       excludedAreaIds: [],
       excludeReasons: {},
       recordedAt,
