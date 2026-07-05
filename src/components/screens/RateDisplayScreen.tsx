@@ -729,7 +729,7 @@ export function RateDisplayScreen({
               ) : null}
               {!showManyProductRate ? (
                 <span>
-                  このエリアの商品は、表示値引率で一律に値引きしてください。
+                  step1では、このエリアの商品は表示値引率で一律に値引きしてください。
                 </span>
               ) : showFewProductRule ? (
                 <>
