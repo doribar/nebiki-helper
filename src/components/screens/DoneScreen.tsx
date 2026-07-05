@@ -189,7 +189,7 @@ export function DoneScreen({
             全エリアの値引率
           </div>
 
-          {referenceText && timeText ? (
+          {trainingStepConfig.showAdvancedReference && referenceText && timeText ? (
             <BasisTimeMiniPanel referenceText={referenceText} timeText={timeText} />
           ) : null}
 
@@ -229,9 +229,14 @@ export function DoneScreen({
                         <div style={{ fontWeight: 800 }}>
                           多い → {item.manyRateText ?? item.rateText}
                         </div>
-                        {item.manyNote ? (
+                        {trainingStepConfig.showManyThresholdRule && item.manyNote ? (
                           <div style={{ color: "#666", whiteSpace: "pre-line" }}>
                             {item.manyNote}
+                          </div>
+                        ) : null}
+                        {trainingStepConfig.showFewProductRule ? (
+                          <div style={{ fontWeight: 800 }}>
+                            少ない → 引かない
                           </div>
                         ) : null}
                         <div style={{ fontWeight: 800 }}>

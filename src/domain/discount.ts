@@ -32,25 +32,13 @@ export function getBaseRate(
   }
 }
 
-function getNormalTimeRateCap(discountTime: Exclude<DiscountTime, "20">): number {
-  switch (discountTime) {
-    case "15":
-      return 20;
-    case "17":
-    case "18":
-      return 30;
-    case "19":
-      return 40;
-  }
-}
-
 function capNormalDiscountRate(
   rawRate: number,
-  discountTime: Exclude<DiscountTime, "20">,
-  ignoreTimeRateCap: boolean
+  _discountTime: Exclude<DiscountTime, "20">,
+  _ignoreTimeRateCap: boolean
 ): number {
-  if (ignoreTimeRateCap) return capAbsoluteDiscountRate(rawRate);
-  return capAbsoluteDiscountRate(Math.min(rawRate, getNormalTimeRateCap(discountTime)));
+  // 通常値引も時刻別上限は設けず、絶対上限50%だけで止める。
+  return capAbsoluteDiscountRate(rawRate);
 }
 
 function toRateLine(main: string, note?: string): RateLine {
@@ -58,12 +46,12 @@ function toRateLine(main: string, note?: string): RateLine {
 }
 
 
-export function getManyPlus5Threshold(_weekdayBase: WeekdayBaseLabel | undefined): number {
-  // 曜日基準に関係なく、「多い」の+5%目安は10個以上で固定する。
+export function getManyPlus15Threshold(_weekdayBase: WeekdayBaseLabel | undefined): number {
+  // 曜日基準に関係なく、「多い」のうち10個以上の+15%目安は10個以上で固定する。
   return 10;
 }
 
-function getManyThresholdPlus5Note(params: {
+function getManyThresholdPlus15Note(params: {
   manyRate: number;
   discountTime: Exclude<DiscountTime, "20">;
   ignoreTimeRateCap: boolean;
@@ -79,7 +67,7 @@ function getManyThresholdPlus5Note(params: {
     return undefined;
   }
 
-  const threshold = getManyPlus5Threshold(params.weekdayBase);
+  const threshold = getManyPlus15Threshold(params.weekdayBase);
 
   return `多いのうち${threshold}個以上は ${tenOrMoreRate}%`;
 }
@@ -92,7 +80,7 @@ function buildManyNote(params: {
 }): string {
   const notes: string[] = [];
 
-  const tenOrMoreNote = getManyThresholdPlus5Note(params);
+  const tenOrMoreNote = getManyThresholdPlus15Note(params);
 
   if (tenOrMoreNote) {
     notes.push(tenOrMoreNote);

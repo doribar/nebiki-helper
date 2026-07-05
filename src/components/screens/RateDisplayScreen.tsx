@@ -135,15 +135,19 @@ function buildManyThresholdInstruction(
 function buildRateInstructionSteps(params: {
   rateDisplay: RateDisplayData | null;
   showManyProductRate: boolean;
+  showManyThresholdRule: boolean;
   showFewProductRule: boolean;
   manyColor: string;
+  fewColor: string;
   normalColor: string;
 }): RateInstructionStep[] {
   const {
     rateDisplay,
     showManyProductRate,
+    showManyThresholdRule,
     showFewProductRule,
     manyColor,
+    fewColor,
     normalColor,
   } = params;
   if (!rateDisplay) return [];
@@ -165,10 +169,9 @@ function buildRateInstructionSteps(params: {
     ];
   }
 
-  const manyThresholdSteps = buildManyThresholdInstruction(
-    rateDisplay.many.note,
-    manyColor,
-  );
+  const manyThresholdSteps = showManyThresholdRule
+    ? buildManyThresholdInstruction(rateDisplay.many.note, manyColor)
+    : [];
   const manyInstructionLabel =
     manyThresholdSteps.length > 0 ? "それ以外の多い商品" : "多い商品";
 
@@ -186,6 +189,22 @@ function buildRateInstructionSteps(params: {
       rateLine: { main: rateDisplay.many.main },
       color: manyColor,
     },
+    ...(showFewProductRule
+      ? [
+          {
+            key: "few",
+            title: (
+              <>
+                少ないと感じた商品は
+                <br />
+                値引かないでください。
+              </>
+            ),
+            rateLine: rateDisplay.few,
+            color: fewColor,
+          },
+        ]
+      : []),
     {
       key: "normal",
       title: (
@@ -435,8 +454,7 @@ const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
   steadyStandardMinus: {
     content: (
       <>
-        <strong>売れ方が順調な定番・広告商品</strong>は、表示値引率から
-        <strong>-10%</strong>
+        <strong>定番商品</strong>は、表示値引率から<strong>-10%</strong>
       </>
     ),
   },
@@ -445,6 +463,14 @@ const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
       <>
         <strong>夜によく売れる商品</strong>は、表示値引率から
         <strong>-10%</strong>
+      </>
+    ),
+  },
+  advertisementTrendMinus: {
+    content: (
+      <>
+        <strong>広告商品</strong>は、当日の売れ方を見て、
+        売れ方が順調なら表示値引率から<strong>-10%</strong>
       </>
     ),
   },
@@ -508,10 +534,13 @@ export function RateDisplayScreen({
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
+  const fewColor = "#0000ff";
   const normalColor = "#008000";
   const productAmountReferenceText = `${weekdayText}の${timeText}`;
   const showManyProductRate = trainingStepConfig.showManyProductRate;
+  const showManyThresholdRule = trainingStepConfig.showManyThresholdRule;
   const showFewProductRule = trainingStepConfig.showFewProductRule;
+  const showAdvancedReference = trainingStepConfig.showAdvancedReference;
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -551,13 +580,16 @@ export function RateDisplayScreen({
     discountTime,
     rateDisplaySignature,
     showManyProductRate,
+    showManyThresholdRule,
     showFewProductRule,
   ]);
   const rateInstructionSteps = buildRateInstructionSteps({
     rateDisplay,
     showManyProductRate,
+    showManyThresholdRule,
     showFewProductRule,
     manyColor,
+    fewColor,
     normalColor,
   });
   const currentRateInstructionStep =
@@ -646,13 +678,15 @@ export function RateDisplayScreen({
         </section>
       ) : null}
 
-      <WeekdayBasePanel
-        noticeText={basisGuide.noticeText}
-        weekdaySummaryText={basisGuide.weekdaySummaryText}
-        weekdayDetailLines={basisGuide.weekdayDetailLines}
-        bonusSummaryText={basisGuide.bonusSummaryText}
-        bonusDetailLines={basisGuide.bonusDetailLines}
-      />
+      {showAdvancedReference ? (
+        <WeekdayBasePanel
+          noticeText={basisGuide.noticeText}
+          weekdaySummaryText={basisGuide.weekdaySummaryText}
+          weekdayDetailLines={basisGuide.weekdayDetailLines}
+          bonusSummaryText={basisGuide.bonusSummaryText}
+          bonusDetailLines={basisGuide.bonusDetailLines}
+        />
+      ) : null}
 
       {lateSkipNotice ? (
         <section
@@ -682,9 +716,13 @@ export function RateDisplayScreen({
         {!isFinalTime ? (
           <>
             <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
-              <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
-              <span>を基準に考えて</span>
-              <br />
+              {showAdvancedReference ? (
+                <>
+                  <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
+                  <span>を基準に考えて</span>
+                  <br />
+                </>
+              ) : null}
               {!showManyProductRate ? (
                 <span>
                   このエリアの商品は、表示値引率で一律に値引きしてください。

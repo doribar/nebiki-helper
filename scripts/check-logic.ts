@@ -403,7 +403,7 @@ type ManyThresholdPlus5NoteCase = {
 
 const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
   {
-    name: '火木基準は10個以上を+5%目安として表示する',
+    name: '火木基準は10個以上を+15%目安として表示する',
     discountTime: '15',
     weatherBonus: -10,
     expectedNoteIncludes: ['多いのうち10個以上は 5%'],
@@ -415,14 +415,14 @@ const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
     expectedNoteIncludes: ['多いのうち10個以上は 10%'],
   },
   {
-    name: '月水基準でも10個以上を+5%目安として表示する',
+    name: '月水基準でも10個以上を+15%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
     weekdayBase: '月水',
     expectedNoteIncludes: ['多いのうち10個以上は 15%'],
   },
   {
-    name: '金土日基準でも10個以上を+5%目安として表示する',
+    name: '金土日基準でも10個以上を+15%目安として表示する',
     discountTime: '15',
     weatherBonus: 0,
     isSunday: true,
@@ -432,10 +432,10 @@ const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
     ],
   },
   {
-    name: '19時30分は40%上限に当たる場合は多い個数目安の同率注記を表示しない',
+    name: '19時30分も時刻別上限なしで10個以上の追加目安を表示する',
     discountTime: '19',
     weatherBonus: 0,
-    expectedNoteExcludes: ['多いのうち10個以上は 40%'],
+    expectedNoteIncludes: ['多いのうち10個以上は 45%'],
   },
   {
     name: '雨雪補正中も絶対上限50%を超える多い個数目安は表示しない',
@@ -1193,8 +1193,8 @@ try {
     weatherBonus: 15,
     areaJudge: 'many',
   });
-  assert.equal(capped15.normal.main, '20%');
-  assert.equal(capped15.many.main, '20%');
+  assert.equal(capped15.normal.main, '25%');
+  assert.equal(capped15.many.main, '35%');
 
   const capped17 = getNormalTimeRateDisplay({
     discountTime: '17',
@@ -1202,7 +1202,7 @@ try {
     areaJudge: 'many',
   });
   assert.equal(capped17.normal.main, '30%');
-  assert.equal(capped17.many.main, '30%');
+  assert.equal(capped17.many.main, '40%');
 
   const capped19 = getNormalTimeRateDisplay({
     discountTime: '19',
@@ -1210,7 +1210,7 @@ try {
     areaJudge: 'normal',
   });
   assert.equal(capped19.normal.main, '40%');
-  assert.equal(capped19.many.main, '40%');
+  assert.equal(capped19.many.main, '50%');
 
   const uncappedRainOrSnow = getNormalTimeRateDisplay({
     discountTime: '19',
@@ -1221,10 +1221,10 @@ try {
   assert.equal(uncappedRainOrSnow.normal.main, '50%');
   assert.equal(uncappedRainOrSnow.many.main, '50%');
 
-  console.log('PASS: 通常時は時刻別上限、雨雪補正中も絶対上限50%');
+  console.log('PASS: 通常値引は時刻別上限なしで絶対上限50%');
   passed += 1;
 } catch (error) {
-  console.error('FAIL: 通常時は時刻別上限、雨雪補正中も絶対上限50%');
+  console.error('FAIL: 通常値引は時刻別上限なしで絶対上限50%');
   console.error(error);
   process.exitCode = 1;
 }
