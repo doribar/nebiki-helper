@@ -1450,8 +1450,6 @@ try {
 }
 
 
-console.log(`\n${passed} / ${cases.length + scenarioCases.length + manyThresholdPlus5NoteCases.length + 28} checks passed.`);
-
 const finalLow = getFinalTimeGuide({
   weekdayShift: -1,
   rateBonus: 0,
@@ -1485,6 +1483,7 @@ assert.equal(finalBonusLowered.count3OrMore.main, '50%');
 assert.equal(finalBonusLowered.scoreBreakdown.rateBonusPoints, 0);
 
 console.log('PASS: 最終値引き点数ロジック');
+passed += 1;
 
 
 const sundayRateDisplay = getNormalTimeRateDisplay({
@@ -1519,6 +1518,7 @@ assert.equal(Object.hasOwn(sundayEveningRateDisplay, 'slightlyMany'), false);
 assert.equal(sundayEveningRateDisplay.many.main, '20%');
 
 console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず10個以上補足だけを表示する');
+passed += 1;
 
 
 
@@ -1533,6 +1533,7 @@ assert.equal(absoluteCapRateDisplay.many.main, '50%');
 assert.equal(absoluteCapRateDisplay.normal.main, '45%');
 assert.ok(!(absoluteCapRateDisplay.many.note ?? '').includes('55%'));
 console.log('PASS: 通常値引きは雨雪補正やエリア補正込みでも50%を超えない');
+passed += 1;
 
 
 
@@ -1935,5 +1936,8 @@ try {
   console.error(error);
   process.exitCode = 1;
 }
+
+const totalChecks = 74;
+console.log(`\n${passed} / ${totalChecks} checks passed.`);
 
 process.exit(process.exitCode ?? 0);
