@@ -137,15 +137,21 @@ export function getAreaCountFallbackWeekdayGroup(params: {
   // 同じ曜日データが足りない時に近い残り方の曜日データを借りるための補助グループ。
   // 祝日前日は翌日に休み需要が残るため、時刻に関係なく金土日寄りにする。
   // 金曜祝日は連休初日寄り、土曜祝日は通常土曜寄りなので、暫定グループは金土日で見る。
-  // それ以外の祝日・日曜は、15時は休日の売場作りに合わせて金土日寄り、17時以降は売れ方に合わせて火木寄りにする。
+  // それ以外の日曜・祝日は、翌日も休み寄りなら17時以降も金土日、翌日が平日なら17時以降は火木寄りにする。
   const dateString = typeof params.date === "string" ? params.date : null;
   const isHoliday = dateString !== null && isJapaneseHolidayOrObserved(dateString);
   const isDayBeforeHoliday =
     dateString !== null && isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
+  const nextWeekday = (params.weekday + 1) % 7;
+  const isNextDayWeekend = nextWeekday === 0 || nextWeekday === 6;
+  const isNextDayHoliday =
+    dateString !== null && isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
+  const isNextDayOff = isNextDayWeekend || isNextDayHoliday;
   const isSundayOrHoliday = params.weekday === 0 || isHoliday;
 
   if (isDayBeforeHoliday) return "金土日";
   if (isHoliday && (params.weekday === 5 || params.weekday === 6)) return "金土日";
+  if (isSundayOrHoliday && isNextDayOff) return "金土日";
   if (isSundayOrHoliday && params.discountTime !== "15") return "火木";
   if (isSundayOrHoliday && params.discountTime === "15") return "金土日";
   return getActualWeekdayGroup(params.weekday);
