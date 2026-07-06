@@ -138,7 +138,6 @@ function buildRateInstructionSteps(params: {
   showManyThresholdRule: boolean;
   showFewProductRule: boolean;
   manyColor: string;
-  fewColor: string;
   normalColor: string;
 }): RateInstructionStep[] {
   const {
@@ -147,7 +146,6 @@ function buildRateInstructionSteps(params: {
     showManyThresholdRule,
     showFewProductRule,
     manyColor,
-    fewColor,
     normalColor,
   } = params;
   if (!rateDisplay) return [];
@@ -189,22 +187,6 @@ function buildRateInstructionSteps(params: {
       rateLine: { main: rateDisplay.many.main },
       color: manyColor,
     },
-    ...(showFewProductRule
-      ? [
-          {
-            key: "few",
-            title: (
-              <>
-                少ないと感じた商品は
-                <br />
-                値引かないでください。
-              </>
-            ),
-            rateLine: rateDisplay.few,
-            color: fewColor,
-          },
-        ]
-      : []),
     {
       key: "normal",
       title: (
@@ -538,7 +520,6 @@ export function RateDisplayScreen({
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
-  const fewColor = "#0000ff";
   const normalColor = "#008000";
   const productAmountReferenceText = `${weekdayText}の${timeText}`;
   const showManyProductRate = trainingStepConfig.showManyProductRate;
@@ -593,7 +574,6 @@ export function RateDisplayScreen({
     showManyThresholdRule,
     showFewProductRule,
     manyColor,
-    fewColor,
     normalColor,
   });
   const currentRateInstructionStep =

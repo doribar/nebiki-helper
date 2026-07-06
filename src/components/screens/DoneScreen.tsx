@@ -234,11 +234,6 @@ export function DoneScreen({
                             {item.manyNote}
                           </div>
                         ) : null}
-                        {trainingStepConfig.showFewProductRule ? (
-                          <div style={{ fontWeight: 800 }}>
-                            少ない → 引かない
-                          </div>
-                        ) : null}
                         <div style={{ fontWeight: 800 }}>
                           {trainingStepConfig.showFewProductRule ? "どちらでもない" : "多くない"} → {item.normalRateText ?? item.rateText}
                         </div>
