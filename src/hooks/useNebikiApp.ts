@@ -1103,14 +1103,6 @@ function createDailySessionSnapshot(params: {
   };
 }
 
-function isReview19Screen(screen: ScreenName): boolean {
-  return (
-    screen === "review19_weather" ||
-    screen === "review19" ||
-    screen === "review19_done"
-  );
-}
-
 function createReview19DaySnapshot(params: {
   capturedAt: string;
   date: string;
@@ -1124,7 +1116,7 @@ function createReview19DaySnapshot(params: {
     date: params.date,
     rateLogicVersion: "time_basic_rate_v1",
     sessions: params.sessions
-      .filter((session) => session.session.date === params.date && !isReview19Screen(session.screen))
+      .filter((session) => session.session.date === params.date && session.screen === "done")
       .map((session) => JSON.parse(JSON.stringify(session)) as DailySessionSnapshot),
     review19Check: params.review19Check
       ? JSON.parse(JSON.stringify(params.review19Check)) as NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>
@@ -1971,14 +1963,10 @@ const lateSkipNotice = useMemo(() => {
   useEffect(() => {
     if (isTestMode) return;
     if (!state.session) return;
-    if (state.screen === "start") return;
-    if (
-      state.screen === "review19_weather" ||
-      state.screen === "review19" ||
-      state.screen === "review19_done"
-    ) {
-      return;
-    }
+    // 19時チェック用の日次セッションログには、完了した通常値引セッションだけを保存する。
+    // 動作確認中の area_judge / rate_display などを保存すると、19時チェックのエクスポートに
+    // 未完了セッションが混ざって分析時のノイズになる。
+    if (state.screen !== "done") return;
 
     const snapshot = createDailySessionSnapshot({
       capturedAt: getRuntimeNow().toISOString(),
