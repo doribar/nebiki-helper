@@ -30,7 +30,12 @@ import {
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
 import { appendSkipRecordsInMemory } from '../src/domain/storage.ts';
-import { getAreaCountFallbackWeekdayGroup, getAreaCountRecommendation, getAreaCountSameItemLimit } from '../src/domain/areaCountHistory.ts';
+import {
+  getAreaCountFallbackWeekdayGroup,
+  getAreaCountRecommendation,
+  getAreaCountSameItemLimit,
+  shouldForceAreaCountFallbackWeekdayGroup,
+} from '../src/domain/areaCountHistory.ts';
 import type {
   AreaId,
   AppState,
@@ -472,13 +477,119 @@ let passed = 0;
   try {
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '15', date: '2026-07-05' }), '金土日');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-05' }), '火木');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-19' }), '金土日');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '15', date: '2026-07-20' }), '金土日');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-07-20' }), '火木');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-11-02' }), '金土日');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 5, discountTime: '17', date: '2026-07-03' }), '金土日');
-    console.log('PASS: 暫定比較グループは祝日・日曜15時を金土日、17時以降を火木として扱う');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 5, discountTime: '17', date: '2026-03-20' }), '金土日');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 6, discountTime: '17', date: '2028-01-01' }), '金土日');
+    console.log('PASS: 暫定比較グループは祝日前日を金土日、金土の祝日を金土日、その他の祝日・日曜17時以降を火木として扱う');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 暫定比較グループの祝日・日曜扱い');
+    console.error('FAIL: 暫定比較グループの祝日前日・祝日・日曜・金土祝日扱い');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+{
+  try {
+    assert.equal(shouldForceAreaCountFallbackWeekdayGroup({ weekday: 1, date: '2026-11-02' }), true);
+    assert.equal(shouldForceAreaCountFallbackWeekdayGroup({ weekday: 5, date: '2026-03-20' }), true);
+    assert.equal(shouldForceAreaCountFallbackWeekdayGroup({ weekday: 6, date: '2028-01-01' }), false);
+    assert.equal(shouldForceAreaCountFallbackWeekdayGroup({ weekday: 1, date: '2026-07-20' }), true);
+    assert.equal(shouldForceAreaCountFallbackWeekdayGroup({ weekday: 0, date: '2026-07-05' }), false);
+
+    const fridayHolidayRecords = [
+      {
+        date: '2026-03-13',
+        sessionStartedAt: '2026-03-13T08:00:00.000Z',
+        recordedAt: '2026-03-13T08:01:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '17',
+        actualWeekday: '金',
+        actualWeekdayGroup: '金土日',
+        count: 10,
+      },
+      {
+        date: '2026-03-06',
+        sessionStartedAt: '2026-03-06T08:00:00.000Z',
+        recordedAt: '2026-03-06T08:01:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '17',
+        actualWeekday: '金',
+        actualWeekdayGroup: '金土日',
+        count: 12,
+      },
+      {
+        date: '2026-02-27',
+        sessionStartedAt: '2026-02-27T08:00:00.000Z',
+        recordedAt: '2026-02-27T08:01:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '17',
+        actualWeekday: '金',
+        actualWeekdayGroup: '金土日',
+        count: 14,
+      },
+    ];
+    const fridayHolidayRecommendation = getAreaCountRecommendation({
+      records: fridayHolidayRecords,
+      areaId: 'bento_men',
+      discountTime: '17',
+      weekday: 5,
+      date: '2026-03-20',
+      count: 12,
+    });
+    assert.equal(fridayHolidayRecommendation.status, 'ready');
+    assert.equal(fridayHolidayRecommendation.comparisonMode, 'fallback_group');
+
+    const saturdayHolidayRecommendation = getAreaCountRecommendation({
+      records: [
+        {
+          date: '2027-12-25',
+          sessionStartedAt: '2027-12-25T08:00:00.000Z',
+          recordedAt: '2027-12-25T08:01:00.000Z',
+          areaId: 'bento_men',
+          discountTime: '17',
+          actualWeekday: '土',
+          actualWeekdayGroup: '金土日',
+          count: 10,
+        },
+        {
+          date: '2027-12-18',
+          sessionStartedAt: '2027-12-18T08:00:00.000Z',
+          recordedAt: '2027-12-18T08:01:00.000Z',
+          areaId: 'bento_men',
+          discountTime: '17',
+          actualWeekday: '土',
+          actualWeekdayGroup: '金土日',
+          count: 12,
+        },
+        {
+          date: '2027-12-11',
+          sessionStartedAt: '2027-12-11T08:00:00.000Z',
+          recordedAt: '2027-12-11T08:01:00.000Z',
+          areaId: 'bento_men',
+          discountTime: '17',
+          actualWeekday: '土',
+          actualWeekdayGroup: '金土日',
+          count: 14,
+        },
+      ],
+      areaId: 'bento_men',
+      discountTime: '17',
+      weekday: 6,
+      date: '2028-01-01',
+      count: 12,
+    });
+    assert.equal(saturdayHolidayRecommendation.status, 'ready');
+    assert.equal(saturdayHolidayRecommendation.comparisonMode, 'weekday');
+
+    console.log('PASS: 祝日まわりは金曜祝日を暫定固定、土曜祝日は曜日データ優先で扱う');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 祝日まわりの暫定グループ優先ルール');
     console.error(error);
     process.exitCode = 1;
   }
@@ -1937,7 +2048,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 74;
+const totalChecks = 75;
 console.log(`\n${passed} / ${totalChecks} checks passed.`);
 
 process.exit(process.exitCode ?? 0);

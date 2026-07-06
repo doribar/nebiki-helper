@@ -8,7 +8,7 @@ import type {
   DiscountTime,
   WeekdayBaseLabel,
 } from "./types";
-import { isJapaneseHolidayOrObserved } from "./japaneseHoliday.ts";
+import { addDaysToDateString, isJapaneseHolidayOrObserved } from "./japaneseHoliday.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
 
@@ -135,13 +135,45 @@ export function getAreaCountFallbackWeekdayGroup(params: {
 }): ActualWeekdayGroup {
   // 暫定比較グループは値引率の曜日基準ではなく、
   // 同じ曜日データが足りない時に近い残り方の曜日データを借りるための補助グループ。
-  // 祝日・日曜は、15時は休日の売場作りに合わせて金土日寄り、17時以降は売れ方に合わせて火木寄りにする。
-  const isHoliday = typeof params.date === "string" && isJapaneseHolidayOrObserved(params.date);
+  // 祝日前日は翌日に休み需要が残るため、時刻に関係なく金土日寄りにする。
+  // 金曜祝日は連休初日寄り、土曜祝日は通常土曜寄りなので、暫定グループは金土日で見る。
+  // それ以外の祝日・日曜は、15時は休日の売場作りに合わせて金土日寄り、17時以降は売れ方に合わせて火木寄りにする。
+  const dateString = typeof params.date === "string" ? params.date : null;
+  const isHoliday = dateString !== null && isJapaneseHolidayOrObserved(dateString);
+  const isDayBeforeHoliday =
+    dateString !== null && isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
   const isSundayOrHoliday = params.weekday === 0 || isHoliday;
 
+  if (isDayBeforeHoliday) return "金土日";
+  if (isHoliday && (params.weekday === 5 || params.weekday === 6)) return "金土日";
   if (isSundayOrHoliday && params.discountTime !== "15") return "火木";
   if (isSundayOrHoliday && params.discountTime === "15") return "金土日";
   return getActualWeekdayGroup(params.weekday);
+}
+
+export function shouldForceAreaCountFallbackWeekdayGroup(params: {
+  weekday: number;
+  date?: string | null;
+}): boolean {
+  const dateString = typeof params.date === "string" ? params.date : null;
+  if (dateString === null) return false;
+
+  const isHoliday = isJapaneseHolidayOrObserved(dateString);
+  const isDayBeforeHoliday = isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
+
+  // 祝日前日は通常曜日より翌日休みの影響を優先する。
+  if (isDayBeforeHoliday) return true;
+
+  if (!isHoliday) return false;
+
+  // 金曜祝日は普通の金曜より連休初日寄りなので暫定グループ固定。
+  if (params.weekday === 5) return true;
+
+  // 土曜祝日は通常土曜と大きくズレにくいため、土曜単体データがあるなら優先する。
+  if (params.weekday === 6) return false;
+
+  // その他の祝日は通常曜日データより祝日用の暫定グループを優先する。
+  return true;
 }
 
 export function getAreaCountSameItemLimit(_params: {
@@ -538,12 +570,14 @@ function getReferenceRecords(params: {
   discountTime: AreaCountDiscountTime;
   actualWeekday: ActualWeekdayLabel;
   fallbackWeekdayGroup: ActualWeekdayGroup;
+  forceFallbackWeekdayGroup: boolean;
 }): {
   matchedRecords: AreaCountRecord[];
   longMatchedRecords: AreaCountRecord[];
   comparisonMode: "weekday" | "fallback_group";
   weekdaySampleSize: number;
   fallbackSampleSize: number;
+  forceFallbackWeekdayGroup: boolean;
 } {
   const sameWeekdayAllRecords = params.records
     .filter((record) => {
@@ -555,13 +589,14 @@ function getReferenceRecords(params: {
     })
     .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
 
-  if (sameWeekdayAllRecords.length >= REQUIRED_SAMPLE_SIZE) {
+  if (!params.forceFallbackWeekdayGroup && sameWeekdayAllRecords.length >= REQUIRED_SAMPLE_SIZE) {
     return {
       matchedRecords: sameWeekdayAllRecords.slice(-SHORT_REFERENCE_RECORDS),
       longMatchedRecords: sameWeekdayAllRecords.slice(-LONG_REFERENCE_RECORDS),
       comparisonMode: "weekday",
       weekdaySampleSize: sameWeekdayAllRecords.length,
       fallbackSampleSize: 0,
+      forceFallbackWeekdayGroup: false,
     };
   }
 
@@ -581,6 +616,7 @@ function getReferenceRecords(params: {
     comparisonMode: "fallback_group",
     weekdaySampleSize: sameWeekdayAllRecords.length,
     fallbackSampleSize: fallbackAllRecords.length,
+    forceFallbackWeekdayGroup: params.forceFallbackWeekdayGroup,
   };
 }
 
@@ -771,6 +807,10 @@ export function getAreaCountRecommendation(params: {
     discountTime,
     date,
   });
+  const forceFallbackWeekdayGroup = shouldForceAreaCountFallbackWeekdayGroup({
+    weekday: params.weekday,
+    date,
+  });
   // エリア判定の比較サンプルは「今日より前」の履歴だけを使う。
   // 同じ日・同じエリア・同じ時刻で複数記録がある場合は、最新の1件だけを採用する。
   const historicalRecords = getHistoricalAreaCountRecords(params.records, date);
@@ -784,6 +824,7 @@ export function getAreaCountRecommendation(params: {
     discountTime,
     actualWeekday,
     fallbackWeekdayGroup: actualWeekdayGroup,
+    forceFallbackWeekdayGroup,
   });
   const { matchedRecords, comparisonMode } = reference;
 
@@ -802,7 +843,9 @@ export function getAreaCountRecommendation(params: {
         `今日の曜日：${actualWeekday}`,
         `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
         `暫定グループ（${actualWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
-        "同じエリア・同じ時刻・同じ曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
+        reference.forceFallbackWeekdayGroup
+          ? "祝日まわりのため、通常曜日データではなく暫定グループで判定します。"
+          : "同じエリア・同じ時刻・同じ曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
         `今回の${count}個も、判定後に履歴へ保存されます。`,
       ],
     };
@@ -869,6 +912,9 @@ export function getAreaCountRecommendation(params: {
         ? `比較条件：同じ曜日（${actualWeekday}）`
         : `比較条件：暫定グループ（${actualWeekdayGroup}）`,
       `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+      reference.forceFallbackWeekdayGroup
+        ? "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
+        : "通常日は同じ曜日の記録を優先し、足りない時だけ暫定グループを採用。",
       comparisonMode === "weekday"
         ? `短期中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
         : `暫定中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
