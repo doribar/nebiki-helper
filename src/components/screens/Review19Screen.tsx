@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { AreaId, Review19AreaItem } from "../../domain/types";
 import { PrimaryButton } from "../layout/PrimaryButton";
+import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 
 const cardStyle: CSSProperties = {
   border: "1px solid #ddd",
@@ -34,7 +35,7 @@ function getCountText(count?: number): string {
 type Review19ScreenProps = {
   items: Review19AreaItem[];
   onChangeAreaCount: (areaId: AreaId, count: number) => void;
-  onSave: (latestAreaCount?: { areaId: AreaId; count: number }) => void;
+  onSave: (latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) => void;
   onReturnHome: () => void;
 };
 
@@ -45,10 +46,24 @@ export function Review19Screen({
   onReturnHome,
 }: Review19ScreenProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const activeItem = items[activeIndex] ?? null;
+  const [orderedAreaIds, setOrderedAreaIds] = useState<AreaId[]>(() =>
+    items.map((item) => item.areaId),
+  );
+  const activeAreaId = orderedAreaIds[activeIndex] ?? null;
+  const activeItem = activeAreaId
+    ? items.find((item) => item.areaId === activeAreaId) ?? null
+    : null;
   const [countText, setCountText] = useState(() => getCountText(activeItem?.count));
   const parsedCount = parseCount(countText);
-  const isLast = activeIndex >= items.length - 1;
+
+  useEffect(() => {
+    setOrderedAreaIds(items.map((item) => item.areaId));
+    setActiveIndex(0);
+  }, [items.map((item) => item.areaId).join("|")]);
+
+  useEffect(() => {
+    setActiveIndex((index) => Math.min(index, Math.max(0, orderedAreaIds.length - 1)));
+  }, [orderedAreaIds.length]);
 
   useEffect(() => {
     setCountText(getCountText(activeItem?.count));
@@ -63,6 +78,19 @@ export function Review19Screen({
     [items],
   );
 
+  const hasAllCountsAfter = (latestAreaCount?: { areaId: AreaId; count: number }) => {
+    return items
+      .filter((item) => !item.excluded)
+      .every((item) => {
+        if (latestAreaCount?.areaId === item.areaId) return true;
+        return typeof item.count === "number";
+      });
+  };
+
+  const moveToNextArea = () => {
+    setActiveIndex((index) => Math.min(orderedAreaIds.length - 1, index + 1));
+  };
+
   const handleDigit = (digit: string) => {
     setCountText((current) => {
       const next = current === "0" ? digit : `${current}${digit}`;
@@ -74,24 +102,40 @@ export function Review19Screen({
     setCountText((current) => current.slice(0, -1));
   };
 
+
+  const goSkip = () => {
+    if (!activeItem || activeItem.excluded) return;
+    if (orderedAreaIds.length <= 1) return;
+
+    setOrderedAreaIds((current) => {
+      const index = current.indexOf(activeItem.areaId);
+      if (index < 0) return current;
+      const next = current.filter((areaId) => areaId !== activeItem.areaId);
+      next.push(activeItem.areaId);
+      return next;
+    });
+    setActiveIndex((index) => Math.min(index, orderedAreaIds.length - 2));
+  };
+
   const goNext = () => {
     if (!activeItem) return;
+
+    const latestAreaCount =
+      !activeItem.excluded && parsedCount !== null
+        ? { areaId: activeItem.areaId, count: parsedCount }
+        : undefined;
 
     if (!activeItem.excluded) {
       if (parsedCount === null) return;
       onChangeAreaCount(activeItem.areaId, parsedCount);
     }
 
-    if (isLast) {
-      const latestAreaCount =
-        !activeItem.excluded && parsedCount !== null
-          ? { areaId: activeItem.areaId, count: parsedCount }
-          : undefined;
+    if (hasAllCountsAfter(latestAreaCount)) {
       window.setTimeout(() => onSave(latestAreaCount), 0);
       return;
     }
 
-    setActiveIndex((index) => Math.min(items.length - 1, index + 1));
+    moveToNextArea();
   };
 
   if (!activeItem) {
@@ -111,9 +155,18 @@ export function Review19Screen({
   }
 
   const canProceed = activeItem.excluded || parsedCount !== null;
+  const latestAreaCount =
+    activeItem && !activeItem.excluded && parsedCount !== null
+      ? { areaId: activeItem.areaId, count: parsedCount }
+      : undefined;
+  const willComplete = hasAllCountsAfter(latestAreaCount);
+  const swipeToSkipHandlers = useSwipeToSkip({
+    onSwipeLeft: goSkip,
+    enabled: Boolean(activeItem && !activeItem.excluded && orderedAreaIds.length > 1),
+  });
 
   return (
-    <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
+    <main {...swipeToSkipHandlers} style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <section style={cardStyle}>
         <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 8 }}>
           19時残数チェック
@@ -258,14 +311,26 @@ export function Review19Screen({
                   cursor: canProceed ? "pointer" : "not-allowed",
                 }}
               >
-                {isLast ? "記録" : "次へ"}
+                {willComplete ? "記録" : "次へ"}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={goSkip}
+              style={{
+                ...subActionButtonStyle,
+                borderColor: "#ddd",
+                color: "#666",
+                marginTop: 4,
+              }}
+            >
+              今はスキップ（あとで戻る・左スワイプ）
+            </button>
           </>
         )}
 
         {activeItem.excluded ? (
-          <PrimaryButton onClick={goNext}>{isLast ? "記録して終了" : "次へ"}</PrimaryButton>
+          <PrimaryButton onClick={goNext}>{willComplete ? "記録して終了" : "次へ"}</PrimaryButton>
         ) : null}
       </section>
 

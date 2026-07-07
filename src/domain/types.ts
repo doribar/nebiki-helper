@@ -267,7 +267,7 @@ export type Review19Rating =
 
 export type Review19RatingScore = -2 | -1 | 0 | 1 | 2;
 
-export type Review19ExcludeReason = "few_at_15" | "few_at_15_and_17";
+export type Review19ExcludeReason = "few_at_15" | "few_at_15_and_17" | "manual";
 
 export type Review19AreaSnapshot = {
   areaId: AreaId;
@@ -515,8 +515,9 @@ export type UseNebikiAppActions = {
   advanceFinalTimeStep: () => void;
   updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
   updateReview19AreaCount: (areaId: AreaId, count: number) => void;
+  skipReview19Area: (areaId: AreaId) => void;
   startReview19AfterWeather: () => void;
-  saveReview19: (latestAreaCount?: { areaId: AreaId; count: number }) => void;
+  saveReview19: (latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) => void;
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
   exportReview19Records: () => void;

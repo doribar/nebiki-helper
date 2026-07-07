@@ -108,6 +108,25 @@ function parseAreaCount(value: string): number | null {
   return Math.round(parsed);
 }
 
+function normalizeAdditionFormula(value: string): string {
+  return value
+    .replace(/[^0-9+]/g, "")
+    .replace(/\+{2,}/g, "+")
+    .replace(/^\+/, "");
+}
+
+function calculateAdditionResult(value: string): number | null {
+  const normalized = normalizeAdditionFormula(value).replace(/\+$/, "");
+  if (!normalized) return null;
+
+  const parts = normalized.split("+");
+  if (parts.some((part) => part === "")) return null;
+
+  const total = parts.reduce((sum, part) => sum + Number(part), 0);
+  if (!Number.isFinite(total) || total < 0) return null;
+  return Math.round(total);
+}
+
 function getRecommendationColor(recommendation: AreaCountRecommendation | null): string {
   const evaluation = recommendation?.suggestedEvaluation;
   if (evaluation === "many" || evaluation === "slightly_many") return "#b71c1c";
@@ -176,6 +195,8 @@ export function AreaJudgeScreen({
   const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: onSkip });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [areaCountText, setAreaCountText] = useState("");
+  const [showAreaCountCalculator, setShowAreaCountCalculator] = useState(false);
+  const [areaCountCalculatorText, setAreaCountCalculatorText] = useState("");
   const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
   const skipTargetGroups = [
     {
@@ -195,9 +216,12 @@ export function AreaJudgeScreen({
   useEffect(() => {
     setShowSkipTargetPicker(false);
     setAreaCountText("");
+    setShowAreaCountCalculator(false);
+    setAreaCountCalculatorText("");
   }, [areaName]);
 
   const parsedAreaCount = parseAreaCount(areaCountText);
+  const areaCountCalculatorResult = calculateAdditionResult(areaCountCalculatorText);
   const areaCountRecommendation =
     areaCountAssistEnabled && parsedAreaCount !== null && getAreaCountRecommendation
       ? getAreaCountRecommendation(parsedAreaCount)
@@ -227,6 +251,37 @@ export function AreaJudgeScreen({
 
   const handleUseAreaCountRecommendation = () => {
     onJudge("normal", parsedAreaCount);
+  };
+
+  const openAreaCountCalculator = () => {
+    setAreaCountCalculatorText(areaCountText);
+    setShowAreaCountCalculator(true);
+  };
+
+  const handleAreaCountCalculatorDigit = (digit: string) => {
+    setAreaCountCalculatorText((current) => {
+      const next = normalizeAdditionFormula(`${current}${digit}`);
+      return next.replace(/(^|\+)0+(?=\d)/g, "$1");
+    });
+  };
+
+  const handleAreaCountCalculatorPlus = () => {
+    setAreaCountCalculatorText((current) => {
+      const normalized = normalizeAdditionFormula(current);
+      if (!normalized || normalized.endsWith("+")) return normalized;
+      return `${normalized}+`;
+    });
+  };
+
+  const handleAreaCountCalculatorBackspace = () => {
+    setAreaCountCalculatorText((current) => current.slice(0, -1));
+  };
+
+  const closeAreaCountCalculator = () => {
+    if (areaCountCalculatorResult !== null) {
+      setAreaCountText(String(areaCountCalculatorResult));
+    }
+    setShowAreaCountCalculator(false);
   };
 
   const handleAreaCountComplete = () => {
@@ -297,17 +352,183 @@ export function AreaJudgeScreen({
       >
         <div
           style={{
-            fontSize: 18,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 10,
             marginBottom: 14,
-            lineHeight: 1.7,
-            fontWeight: 800,
           }}
         >
-          このエリア全体で、消費期限が今日までの商品数は？
+          <div
+            style={{
+              fontSize: 18,
+              lineHeight: 1.7,
+              fontWeight: 800,
+              flex: 1,
+            }}
+          >
+            このエリア全体で、消費期限が今日までの商品数は？
+          </div>
+          {areaCountAssistEnabled ? (
+            <button
+              type="button"
+              onClick={openAreaCountCalculator}
+              style={{
+                ...subActionButtonStyle,
+                minWidth: 72,
+                padding: "8px 10px",
+                fontSize: 13,
+                flexShrink: 0,
+              }}
+            >
+              電卓
+            </button>
+          ) : null}
         </div>
 
         {areaCountAssistEnabled ? (
           <section style={{ marginBottom: 14 }}>
+            {showAreaCountCalculator ? (
+              <section
+                style={{
+                  border: "1px solid #d6d6d6",
+                  borderRadius: 12,
+                  padding: 12,
+                  background: "#fafafa",
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 8 }}>足し算電卓</div>
+                <div
+                  aria-live="polite"
+                  style={{
+                    minHeight: 44,
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #bbb",
+                    background: "#fff",
+                    fontSize: 20,
+                    fontWeight: 900,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    color: areaCountCalculatorText ? "#111" : "#999",
+                    overflowWrap: "anywhere",
+                    textAlign: "right",
+                  }}
+                >
+                  {areaCountCalculatorText || "0"}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, textAlign: "right", color: "#333" }}>
+                  合計：{areaCountCalculatorResult ?? 0}
+                </div>
+                <div
+                  aria-label="足し算電卓キーパッド"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 8,
+                    marginTop: 10,
+                  }}
+                >
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleAreaCountCalculatorDigit(digit)}
+                      style={{
+                        padding: "10px 0",
+                        borderRadius: 10,
+                        border: "1px solid #ccc",
+                        background: "#fff",
+                        fontSize: 18,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleAreaCountCalculatorDigit("0")}
+                    style={{
+                      padding: "10px 0",
+                      borderRadius: 10,
+                      border: "1px solid #ccc",
+                      background: "#fff",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAreaCountCalculatorPlus}
+                    disabled={!areaCountCalculatorText || areaCountCalculatorText.endsWith("+")}
+                    style={{
+                      padding: "10px 0",
+                      borderRadius: 10,
+                      border: "1px solid #ccc",
+                      background: areaCountCalculatorText && !areaCountCalculatorText.endsWith("+") ? "#fff" : "#eee",
+                      color: areaCountCalculatorText && !areaCountCalculatorText.endsWith("+") ? "#111" : "#999",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      cursor: areaCountCalculatorText && !areaCountCalculatorText.endsWith("+") ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAreaCountCalculatorBackspace}
+                    disabled={!areaCountCalculatorText}
+                    style={{
+                      padding: "10px 0",
+                      borderRadius: 10,
+                      border: "1px solid #ccc",
+                      background: areaCountCalculatorText ? "#fff" : "#eee",
+                      color: areaCountCalculatorText ? "#111" : "#999",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      cursor: areaCountCalculatorText ? "pointer" : "not-allowed",
+                    }}
+                    aria-label="電卓を1文字削除"
+                  >
+                    ⌫
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setAreaCountCalculatorText("")}
+                    style={{ ...subActionButtonStyle, width: "100%" }}
+                  >
+                    クリア
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeAreaCountCalculator}
+                    disabled={areaCountCalculatorResult === null}
+                    style={{
+                      ...subActionButtonStyle,
+                      width: "100%",
+                      border: areaCountCalculatorResult !== null ? "2px solid #2f5ef5" : "1px solid #ccc",
+                      background: areaCountCalculatorResult !== null ? "#e8f0ff" : "#eee",
+                      color: areaCountCalculatorResult !== null ? "#111" : "#999",
+                      cursor: areaCountCalculatorResult !== null ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    閉じる
+                  </button>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.6 }}>
+                  「閉じる」を押すと、合計を残数入力に入れます。
+                </div>
+              </section>
+            ) : null}
             <div style={{ display: "grid", gap: 8 }}>
               <div
                 aria-live="polite"

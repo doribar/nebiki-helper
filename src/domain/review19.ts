@@ -27,6 +27,7 @@ export const REVIEW19_EXPORT_BATCH_SIZE = 10;
 export const REVIEW19_EXCLUDE_REASON_TEXT: Record<string, string> = {
   few_at_15: "対象外：15時・17時ともに「少ない」判定",
   few_at_15_and_17: "対象外：15時・17時ともに「少ない」判定",
+  manual: "スキップ：手動で対象外",
 };
 
 function normalizeExcludedAreaIds(raw: unknown): AreaId[] {
@@ -55,6 +56,10 @@ function createExcludeReasons(
 }
 
 function normalizeExcludeReason(raw: unknown) {
+  if (raw === "manual") {
+    return "manual" as const;
+  }
+
   if (raw === "few_at_15" || raw === "few_at_15_and_17") {
     return "few_at_15_and_17" as const;
   }
@@ -247,12 +252,24 @@ export function normalizeReview19Result(
     }
   }
 
+  const sourceExcludeReasons =
+    raw.excludeReasons && typeof raw.excludeReasons === "object" ? raw.excludeReasons : {};
+  const excludeReasons = { ...base.excludeReasons };
+  for (const areaId of base.excludedAreaIds) {
+    const reason = normalizeExcludeReason(
+      (sourceExcludeReasons as Partial<Record<AreaId, unknown>>)[areaId],
+    );
+    if (reason) {
+      excludeReasons[areaId] = reason;
+    }
+  }
+
   return {
     ...base,
     ratingScores: createReview19RatingScores(base.ratings),
     areaCounts: normalizeReview19AreaCounts((raw as Partial<Review19Result>).areaCounts),
     excludedAreaIds: base.excludedAreaIds,
-    excludeReasons: base.excludeReasons,
+    excludeReasons,
     recordedAt: typeof raw.recordedAt === "string" ? raw.recordedAt : undefined,
     exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : undefined,
     reference: cloneReview19Reference(raw.reference),

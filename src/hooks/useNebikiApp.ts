@@ -95,6 +95,7 @@ import {
   buildReview19ExportPayload,
   getUnexportedReview19Records,
   markReview19RecordsExportedInMemory,
+  REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
 import type { AreaCountRecord } from "../domain/areaCountHistory.ts";
 import type { TrainingStep } from "../domain/trainingMode.ts";
@@ -1993,14 +1994,20 @@ const lateSkipNotice = useMemo(() => {
 
   const review19Items = useMemo(() => {
     const ratings = state.review19?.ratings;
+    const excludedAreaIdSet = new Set(state.review19?.excludedAreaIds ?? []);
 
-    return getReview19AreaItems().map((item) => ({
-      ...item,
-      rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
-      count: state.review19?.areaCounts?.[item.areaId],
-      excluded: false,
-      excludeReasonText: undefined,
-    }));
+    return getReview19AreaItems().map((item) => {
+      const excludeReason = state.review19?.excludeReasons?.[item.areaId];
+      return {
+        ...item,
+        rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
+        count: state.review19?.areaCounts?.[item.areaId],
+        excluded: excludedAreaIdSet.has(item.areaId),
+        excludeReasonText: excludeReason
+          ? REVIEW19_EXCLUDE_REASON_TEXT[excludeReason]
+          : undefined,
+      };
+    });
   }, [state.review19]);
 
   const review19ReferenceLines = useMemo(() => {
@@ -3120,6 +3127,9 @@ const lateSkipNotice = useMemo(() => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
 
       const safeCount = Math.max(0, Math.round(count));
+      const nextExcludedAreaIds = prev.review19.excludedAreaIds.filter((id) => id !== areaId);
+      const nextExcludeReasons = { ...prev.review19.excludeReasons };
+      delete nextExcludeReasons[areaId];
 
       return {
         ...prev,
@@ -3129,19 +3139,70 @@ const lateSkipNotice = useMemo(() => {
             ...prev.review19.areaCounts,
             [areaId]: safeCount,
           },
+          excludedAreaIds: nextExcludedAreaIds,
+          excludeReasons: nextExcludeReasons,
+        },
+      };
+    });
+  }
+
+  function skipReview19Area(areaId: AreaId) {
+    setState((prev) => {
+      if (prev.screen !== "review19" || !prev.review19) return prev;
+
+      const nextAreaCounts = { ...prev.review19.areaCounts };
+      delete nextAreaCounts[areaId];
+
+      const nextExcludedAreaIds = prev.review19.excludedAreaIds.includes(areaId)
+        ? prev.review19.excludedAreaIds
+        : [...prev.review19.excludedAreaIds, areaId];
+
+      return {
+        ...prev,
+        review19: {
+          ...prev.review19,
+          areaCounts: nextAreaCounts,
+          excludedAreaIds: nextExcludedAreaIds,
+          excludeReasons: {
+            ...prev.review19.excludeReasons,
+            [areaId]: "manual",
+          },
         },
       };
     });
   }
 
   function buildRecordedReview19Result(
-    latestAreaCount?: { areaId: AreaId; count: number }
+    latestAreaCount?: { areaId: AreaId; count: number },
+    latestExcludedAreaId?: AreaId
   ): Review19Result | null {
     if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
 
     const latestAreaCounts: Partial<Record<AreaId, number>> = latestAreaCount
       ? { [latestAreaCount.areaId]: Math.max(0, Math.round(latestAreaCount.count)) }
       : {};
+    const excludedAreaIdSet = new Set(state.review19.excludedAreaIds);
+    const excludeReasons = { ...state.review19.excludeReasons };
+
+    if (latestAreaCount) {
+      excludedAreaIdSet.delete(latestAreaCount.areaId);
+      delete excludeReasons[latestAreaCount.areaId];
+    }
+
+    if (latestExcludedAreaId) {
+      excludedAreaIdSet.add(latestExcludedAreaId);
+      excludeReasons[latestExcludedAreaId] = "manual";
+    }
+
+    const recordedAreaCounts: Partial<Record<AreaId, number>> = {
+      ...state.review19.areaCounts,
+      ...latestAreaCounts,
+    };
+    for (const areaId of excludedAreaIdSet) {
+      delete recordedAreaCounts[areaId];
+    }
+
+    const excludedAreaIds = NORMAL_ROUTE.filter((areaId) => excludedAreaIdSet.has(areaId));
     const recordedAt = state.review19.recordedAt ?? getRuntimeNow().toISOString();
     const snapshot = state.session
       ? createReview19Snapshot({
@@ -3152,16 +3213,12 @@ const lateSkipNotice = useMemo(() => {
           basisGuide,
           lateTimeBonus,
           reviewReference: state.review19.reference,
-          excludedAreaIds: [],
+          excludedAreaIds,
           areaProgressMap: state.areaProgressMap,
           doneSummaryItems,
         })
       : state.review19.snapshot;
 
-    const recordedAreaCounts = {
-      ...state.review19.areaCounts,
-      ...latestAreaCounts,
-    };
     const ratingScores = createReview19RatingScores(state.review19.ratings);
     const daySnapshot = createReview19DaySnapshot({
       capturedAt: recordedAt,
@@ -3175,8 +3232,8 @@ const lateSkipNotice = useMemo(() => {
         ratings: JSON.parse(JSON.stringify(state.review19.ratings)) as Review19Result["ratings"],
         ratingScores,
         areaCounts: recordedAreaCounts,
-        excludedAreaIds: [],
-        excludeReasons: {},
+        excludedAreaIds,
+        excludeReasons,
         reference: state.review19.reference,
         snapshot,
       },
@@ -3186,16 +3243,16 @@ const lateSkipNotice = useMemo(() => {
       ...state.review19,
       ratingScores,
       areaCounts: recordedAreaCounts,
-      excludedAreaIds: [],
-      excludeReasons: {},
+      excludedAreaIds,
+      excludeReasons,
       recordedAt,
       snapshot,
       daySnapshot,
     };
   }
 
-  function saveReview19(latestAreaCount?: { areaId: AreaId; count: number }) {
-    const recordedReview = buildRecordedReview19Result(latestAreaCount);
+  function saveReview19(latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) {
+    const recordedReview = buildRecordedReview19Result(latestAreaCount, latestExcludedAreaId);
     if (!recordedReview) return;
 
     if (!isTestMode) {
@@ -3554,6 +3611,7 @@ const lateSkipNotice = useMemo(() => {
       advanceFinalTimeStep,
       updateReview19Rating,
       updateReview19AreaCount,
+      skipReview19Area,
       startReview19AfterWeather,
       saveReview19,
       start19DiscountAfterReview,
