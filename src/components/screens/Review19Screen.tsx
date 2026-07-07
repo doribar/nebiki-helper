@@ -32,6 +32,25 @@ function getCountText(count?: number): string {
   return typeof count === "number" && Number.isFinite(count) ? String(count) : "";
 }
 
+function normalizeAdditionFormula(value: string): string {
+  return value
+    .replace(/[^0-9+]/g, "")
+    .replace(/\+{2,}/g, "+")
+    .replace(/^\+/, "");
+}
+
+function calculateAdditionResult(value: string): number | null {
+  const normalized = normalizeAdditionFormula(value).replace(/\+$/, "");
+  if (!normalized) return null;
+
+  const parts = normalized.split("+");
+  if (parts.some((part) => part === "")) return null;
+
+  const total = parts.reduce((sum, part) => sum + Number(part), 0);
+  if (!Number.isFinite(total) || total < 0) return null;
+  return Math.round(total);
+}
+
 type Review19ScreenProps = {
   items: Review19AreaItem[];
   onChangeAreaCount: (areaId: AreaId, count: number) => void;
@@ -54,7 +73,10 @@ export function Review19Screen({
     ? items.find((item) => item.areaId === activeAreaId) ?? null
     : null;
   const [countText, setCountText] = useState(() => getCountText(activeItem?.count));
+  const [showCountCalculator, setShowCountCalculator] = useState(false);
+  const [countCalculatorText, setCountCalculatorText] = useState("");
   const parsedCount = parseCount(countText);
+  const countCalculatorResult = calculateAdditionResult(countCalculatorText);
 
   useEffect(() => {
     setOrderedAreaIds(items.map((item) => item.areaId));
@@ -67,6 +89,8 @@ export function Review19Screen({
 
   useEffect(() => {
     setCountText(getCountText(activeItem?.count));
+    setShowCountCalculator(false);
+    setCountCalculatorText("");
   }, [activeItem?.areaId, activeItem?.count]);
 
   const recordedCount = useMemo(
@@ -102,6 +126,36 @@ export function Review19Screen({
     setCountText((current) => current.slice(0, -1));
   };
 
+  const openCountCalculator = () => {
+    setCountCalculatorText(countText);
+    setShowCountCalculator(true);
+  };
+
+  const handleCountCalculatorDigit = (digit: string) => {
+    setCountCalculatorText((current) => {
+      const next = normalizeAdditionFormula(`${current}${digit}`);
+      return next.replace(/(^|\+)0+(?=\d)/g, "$1");
+    });
+  };
+
+  const handleCountCalculatorPlus = () => {
+    setCountCalculatorText((current) => {
+      const normalized = normalizeAdditionFormula(current);
+      if (!normalized || normalized.endsWith("+")) return normalized;
+      return `${normalized}+`;
+    });
+  };
+
+  const handleCountCalculatorBackspace = () => {
+    setCountCalculatorText((current) => current.slice(0, -1));
+  };
+
+  const closeCountCalculator = () => {
+    if (countCalculatorResult !== null) {
+      setCountText(String(countCalculatorResult));
+    }
+    setShowCountCalculator(false);
+  };
 
   const goSkip = () => {
     if (!activeItem || activeItem.excluded) return;
@@ -211,9 +265,173 @@ export function Review19Screen({
           </div>
         ) : (
           <>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>
-              19:00時点の残数は？
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 800 }}>
+                19:00時点の残数は？
+              </div>
+              <button
+                type="button"
+                onClick={openCountCalculator}
+                style={{
+                  ...subActionButtonStyle,
+                  width: "auto",
+                  minWidth: 72,
+                  padding: "8px 10px",
+                  fontSize: 13,
+                  flexShrink: 0,
+                }}
+              >
+                電卓
+              </button>
             </div>
+            {showCountCalculator ? (
+              <section
+                style={{
+                  border: "1px solid #d6d6d6",
+                  borderRadius: 12,
+                  padding: 12,
+                  background: "#fafafa",
+                  marginBottom: 12,
+                }}
+              >
+                <div
+                  aria-live="polite"
+                  style={{
+                    minHeight: 44,
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #bbb",
+                    background: "#fff",
+                    fontSize: 20,
+                    fontWeight: 900,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    color: countCalculatorText ? "#111" : "#999",
+                    overflowWrap: "anywhere",
+                    textAlign: "right",
+                  }}
+                >
+                  {countCalculatorText || "0"}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, textAlign: "right", color: "#333" }}>
+                  合計：{countCalculatorResult ?? 0}
+                </div>
+                <div
+                  aria-label="19時残数用電卓キーパッド"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 8,
+                    marginTop: 10,
+                  }}
+                >
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleCountCalculatorDigit(digit)}
+                      style={{
+                        padding: "10px 0",
+                        borderRadius: 10,
+                        border: "1px solid #ccc",
+                        background: "#fff",
+                        fontSize: 18,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleCountCalculatorDigit("0")}
+                    style={{
+                      padding: "10px 0",
+                      borderRadius: 10,
+                      border: "1px solid #ccc",
+                      background: "#fff",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCountCalculatorPlus}
+                    disabled={!countCalculatorText || countCalculatorText.endsWith("+")}
+                    style={{
+                      padding: "10px 0",
+                      borderRadius: 10,
+                      border: "1px solid #ccc",
+                      background: countCalculatorText && !countCalculatorText.endsWith("+") ? "#fff" : "#eee",
+                      color: countCalculatorText && !countCalculatorText.endsWith("+") ? "#111" : "#999",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      cursor: countCalculatorText && !countCalculatorText.endsWith("+") ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCountCalculatorBackspace}
+                    disabled={!countCalculatorText}
+                    style={{
+                      padding: "10px 0",
+                      borderRadius: 10,
+                      border: "1px solid #ccc",
+                      background: countCalculatorText ? "#fff" : "#eee",
+                      color: countCalculatorText ? "#111" : "#999",
+                      fontSize: 18,
+                      fontWeight: 900,
+                      cursor: countCalculatorText ? "pointer" : "not-allowed",
+                    }}
+                    aria-label="電卓を1文字削除"
+                  >
+                    ⌫
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setCountCalculatorText("")}
+                    style={{ ...subActionButtonStyle, width: "100%" }}
+                  >
+                    クリア
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeCountCalculator}
+                    disabled={countCalculatorResult === null}
+                    style={{
+                      ...subActionButtonStyle,
+                      width: "100%",
+                      border: countCalculatorResult !== null ? "2px solid #2f5ef5" : "1px solid #ccc",
+                      background: countCalculatorResult !== null ? "#e8f0ff" : "#eee",
+                      color: countCalculatorResult !== null ? "#111" : "#999",
+                      cursor: countCalculatorResult !== null ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    閉じる
+                  </button>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.6 }}>
+                  「閉じる」を押すと、合計を残数入力に入れます。
+                </div>
+              </section>
+            ) : null}
             <div
               aria-live="polite"
               style={{

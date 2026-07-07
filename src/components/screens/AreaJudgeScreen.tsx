@@ -398,7 +398,6 @@ export function AreaJudgeScreen({
                   marginBottom: 12,
                 }}
               >
-                <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 8 }}>足し算電卓</div>
                 <div
                   aria-live="polite"
                   style={{
