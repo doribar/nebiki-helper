@@ -227,8 +227,6 @@ export function Review19Screen({
         </div>
         <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7 }}>
           17時値引き後、19:00時点で消費期限が今日までの商品が何個残っているかを記録します。
-          <br />
-          値引判断前のエリア残数とは別データとして扱います。
         </div>
       </section>
 
@@ -274,9 +272,7 @@ export function Review19Screen({
                 marginBottom: 8,
               }}
             >
-              <div style={{ fontSize: 15, fontWeight: 800 }}>
-                19:00時点の残数は？
-              </div>
+              <div />
               <button
                 type="button"
                 onClick={openCountCalculator}
@@ -542,7 +538,7 @@ export function Review19Screen({
                 marginTop: 4,
               }}
             >
-              今はスキップ（あとで戻る・左スワイプ）
+              今はスキップ（画面左スワイプ）
             </button>
           </>
         )}
