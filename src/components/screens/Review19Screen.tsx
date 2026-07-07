@@ -240,8 +240,34 @@ export function Review19Screen({
           </div>
         </div>
 
-        <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 10 }}>
-          {activeItem.areaName}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ fontSize: 24, fontWeight: 900, flex: 1 }}>
+            {activeItem.areaName}
+          </div>
+          {!activeItem.excluded ? (
+            <button
+              type="button"
+              onClick={openCountCalculator}
+              style={{
+                ...subActionButtonStyle,
+                width: "auto",
+                minWidth: 72,
+                padding: "8px 10px",
+                fontSize: 13,
+                flexShrink: 0,
+              }}
+            >
+              電卓
+            </button>
+          ) : null}
         </div>
 
         {activeItem.excluded ? (
@@ -263,31 +289,6 @@ export function Review19Screen({
           </div>
         ) : (
           <>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                marginBottom: 8,
-              }}
-            >
-              <div />
-              <button
-                type="button"
-                onClick={openCountCalculator}
-                style={{
-                  ...subActionButtonStyle,
-                  width: "auto",
-                  minWidth: 72,
-                  padding: "8px 10px",
-                  fontSize: 13,
-                  flexShrink: 0,
-                }}
-              >
-                電卓
-              </button>
-            </div>
             {showCountCalculator ? (
               <section
                 style={{
