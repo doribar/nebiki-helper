@@ -95,41 +95,28 @@ type RateInstructionStep = {
   color?: string;
 };
 
-function buildManyThresholdInstruction(
+type ManyThresholdInstruction = {
+  thresholdText: string;
+  rateText: string;
+};
+
+function parseManyThresholdInstruction(
   note: string | undefined,
-  color: string,
-): RateInstructionStep[] {
-  if (!note) return [];
+): ManyThresholdInstruction | null {
+  if (!note) return null;
 
-  return note
+  const line = note
     .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const match = line.match(/^多いのうち(.+?)は\s*(.+)$/);
-      if (!match) {
-        return {
-          key: `many-note-${index}`,
-          title: <>多い商品の追加目安</>,
-          rateLine: { main: line },
-          color,
-        };
-      }
+    .map((item) => item.trim())
+    .find(Boolean);
 
-      const [, thresholdText, rateText] = match;
-      return {
-        key: `many-note-${index}`,
-        title: (
-          <>
-            多いのうち{thresholdText}の商品を
-            <br />
-            {rateText}値引きしてください。
-          </>
-        ),
-        rateLine: { main: rateText },
-        color,
-      };
-    });
+  if (!line) return null;
+
+  const match = line.match(/^多いのうち(.+?)は\s*(.+)$/);
+  if (!match) return null;
+
+  const [, thresholdText, rateText] = match;
+  return { thresholdText, rateText };
 }
 
 function buildRateInstructionSteps(params: {
@@ -167,21 +154,23 @@ function buildRateInstructionSteps(params: {
     ];
   }
 
-  const manyThresholdSteps = showManyThresholdRule
-    ? buildManyThresholdInstruction(rateDisplay.many.note, manyColor)
-    : [];
-  const manyInstructionLabel =
-    manyThresholdSteps.length > 0 ? "それ以外の多い商品" : "多い商品";
+  const manyThresholdInstruction = showManyThresholdRule
+    ? parseManyThresholdInstruction(rateDisplay.many.note)
+    : null;
 
   return [
-    ...manyThresholdSteps,
     {
       key: "many",
       title: (
         <>
-          {manyInstructionLabel}を
-          <br />
-          {rateDisplay.many.main}値引きしてください。
+          多い商品を{rateDisplay.many.main}値引きしてください。
+          {manyThresholdInstruction ? (
+            <>
+              <br />
+              そのうち{manyThresholdInstruction.thresholdText}ある商品は
+              {manyThresholdInstruction.rateText}で値引きしてください。
+            </>
+          ) : null}
         </>
       ),
       rateLine: { main: rateDisplay.many.main },
