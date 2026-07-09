@@ -3212,7 +3212,6 @@ const lateSkipNotice = useMemo(() => {
           weekdayBaseInfo,
           basisGuide,
           lateTimeBonus,
-          reviewReference: state.review19.reference,
           excludedAreaIds,
           areaProgressMap: state.areaProgressMap,
           doneSummaryItems,
@@ -3234,13 +3233,15 @@ const lateSkipNotice = useMemo(() => {
         areaCounts: recordedAreaCounts,
         excludedAreaIds,
         excludeReasons,
-        reference: state.review19.reference,
         snapshot,
       },
     });
 
+    const review19WithoutReference: Review19Result = { ...state.review19 };
+    delete review19WithoutReference.reference;
+
     return {
-      ...state.review19,
+      ...review19WithoutReference,
       ratingScores,
       areaCounts: recordedAreaCounts,
       excludedAreaIds,
