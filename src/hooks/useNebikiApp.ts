@@ -2882,6 +2882,7 @@ const lateSkipNotice = useMemo(() => {
           ...prev.areaProgressMap[currentAreaId],
           status: "completed" as const,
           completedAt: getRuntimeNow().toISOString(),
+          skipReason: undefined,
           ...rateSnapshot,
         },
       };
