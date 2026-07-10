@@ -29,11 +29,12 @@ import {
   createNavigationSnapshot,
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
-import { appendSkipRecordsInMemory } from '../src/domain/storage.ts';
+import { appendSkipRecordsInMemory, isDailySessionSnapshotDateConsistent } from '../src/domain/storage.ts';
 import {
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
   getAreaCountSameItemLimit,
+  normalizeAreaCountRecords,
   shouldForceAreaCountFallbackWeekdayGroup,
 } from '../src/domain/areaCountHistory.ts';
 import type {
@@ -2049,7 +2050,70 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 75;
+const totalChecks = 77;
+
+
+{
+  const normalized = normalizeAreaCountRecords([
+    {
+      date: '2026-07-10',
+      sessionStartedAt: '2026-07-10T07:47:18.899Z',
+      recordedAt: '2026-07-10T08:00:00.000Z',
+      areaId: 'bento_men',
+      discountTime: '17',
+      actualWeekdayGroup: '金土日',
+      count: 146,
+      userJudge: 'slightly_many',
+      suggestedEvaluation: 'slightly_many',
+      areaRateAdjustment: 5,
+    },
+  ]);
+  assert.equal(normalized[0]?.userJudge, 'slightly_many');
+  passed += 1;
+}
+
+{
+  const baseSnapshot = {
+    version: 1 as const,
+    capturedAt: '2026-07-10T09:00:00.000Z',
+    rateLogicVersion: 'time_basic_rate_v1' as const,
+    screen: 'done' as const,
+    session: {
+      date: '2026-07-10',
+      weekday: 5,
+      discountTime: '15' as const,
+      startedAt: '2026-07-10T05:42:33.928Z',
+      manualWeekdayOverride: false,
+      manualDiscountTimeOverride: false,
+      weather: { hourlyForecasts: createDefaultHourlyForecasts(), afterRainSky: null },
+      resolvedWeather: resolveWeatherInputForDiscount(
+        { hourlyForecasts: createDefaultHourlyForecasts(), afterRainSky: null },
+        '15'
+      ),
+    },
+    basis: {
+      rateLogicVersion: 'time_basic_rate_v1' as const,
+      baseRateBonus: 0,
+      lateTimeBonus: 0,
+      totalRateBonus: 0,
+      baseRateBonusReason: [],
+    },
+    areas: {} as never,
+    doneSummaryItems: [],
+    currentAreaId: null,
+    review19ExcludedAreaIds: [],
+  };
+  assert.equal(isDailySessionSnapshotDateConsistent(baseSnapshot), true);
+  assert.equal(
+    isDailySessionSnapshotDateConsistent({
+      ...baseSnapshot,
+      session: { ...baseSnapshot.session, startedAt: '2026-07-09T08:06:25.060Z' },
+    }),
+    false
+  );
+  passed += 1;
+}
+
 console.log(`\n${passed} / ${totalChecks} checks passed.`);
 
 process.exit(process.exitCode ?? 0);

@@ -511,6 +511,12 @@ function isValidAreaCountEvaluation(value: unknown): value is AreaCountEvaluatio
   );
 }
 
+function isValidAreaCountEvaluationSource(
+  value: unknown
+): value is NonNullable<AreaProgress["areaCountEvaluationSource"]> {
+  return value === "manual" || value === "history";
+}
+
 function isValidDiscountTime(value: unknown): value is DiscountTime {
   return (
     value === "15" ||
@@ -570,6 +576,9 @@ function normalizeAreaProgressMap(
           : undefined,
       areaCountEvaluation: isValidAreaCountEvaluation(progress.areaCountEvaluation)
         ? progress.areaCountEvaluation
+        : undefined,
+      areaCountEvaluationSource: isValidAreaCountEvaluationSource(progress.areaCountEvaluationSource)
+        ? progress.areaCountEvaluationSource
         : undefined,
       areaRateAdjustment: isValidAreaRateAdjustment(progress.areaRateAdjustment)
         ? progress.areaRateAdjustment
@@ -1035,6 +1044,9 @@ function buildAreaSnapshotsFromState(params: {
       statusText: summary?.statusText,
       areaJudge: progress?.areaJudge ?? null,
       areaCount: progress?.areaCount,
+      areaCountEvaluation: progress?.areaCountEvaluation,
+      areaCountEvaluationSource: progress?.areaCountEvaluationSource,
+      areaRateAdjustment: progress?.areaRateAdjustment,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
       rateText: summary?.rateText ?? "未完了",
       ratePercent: parseReview19RatePercent(summary?.rateText),
@@ -1159,6 +1171,9 @@ function createReview19Snapshot(params: {
       statusText: summary?.statusText,
       areaJudge: progress?.areaJudge ?? null,
       areaCount: progress?.areaCount,
+      areaCountEvaluation: progress?.areaCountEvaluation,
+      areaCountEvaluationSource: progress?.areaCountEvaluationSource,
+      areaRateAdjustment: progress?.areaRateAdjustment,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
       rateText: summary?.rateText ?? "未完了",
       ratePercent: parseReview19RatePercent(summary?.rateText),
@@ -2321,7 +2336,8 @@ const lateSkipNotice = useMemo(() => {
     areaCountResult?: {
       evaluation?: AreaCountEvaluation;
       rateAdjustment?: AreaRateAdjustment;
-    }
+    },
+    areaCountEvaluationSource?: NonNullable<AreaProgress["areaCountEvaluationSource"]>
   ): AppState {
     if (!prev.currentAreaId) return prev;
     const currentAreaId = prev.currentAreaId;
@@ -2342,6 +2358,7 @@ const lateSkipNotice = useMemo(() => {
             areaJudge: selection,
             areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
             areaCountEvaluation: areaCountResult?.evaluation,
+            areaCountEvaluationSource,
             areaRateAdjustment: areaCountResult?.rateAdjustment,
             visitedAt: getRuntimeNow().toISOString(),
           },
@@ -2362,6 +2379,7 @@ const lateSkipNotice = useMemo(() => {
         areaJudge: "few" as const,
         areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
         areaCountEvaluation: areaCountResult?.evaluation,
+        areaCountEvaluationSource,
         areaRateAdjustment: areaCountResult?.rateAdjustment,
         visitedAt: currentVisitedAt,
       },
@@ -2374,6 +2392,7 @@ const lateSkipNotice = useMemo(() => {
         areaJudge: "few" as const,
         areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
         areaCountEvaluation: areaCountResult?.evaluation,
+        areaCountEvaluationSource,
         areaRateAdjustment: areaCountResult?.rateAdjustment,
         status: "postponed_few" as const,
         skipReason: "few" as const,
@@ -2467,6 +2486,7 @@ const lateSkipNotice = useMemo(() => {
           ? prev.sessionDraft.weatherInputLockedDiscountTime
           : prev.sessionDraft.discountTime;
 
+      const canResumeCurrentSession = prev.session?.date === currentDate;
       const nextSession: SessionData = {
         ...prev.sessionDraft,
         date: currentDate,
@@ -2478,11 +2498,11 @@ const lateSkipNotice = useMemo(() => {
           ...prev.sessionDraft.weather,
           hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
         },
-        startedAt: prev.session?.startedAt ?? startedAt,
+        startedAt: canResumeCurrentSession ? prev.session!.startedAt : startedAt,
       };
 
 
-      if (timeSwitchTarget && prev.session) {
+      if (timeSwitchTarget && prev.session && canResumeCurrentSession) {
         let areaProgressMap = createInitialAreaProgressMap();
         if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
           const consumed = consumeSkipRecordsInMemory({
@@ -2535,7 +2555,7 @@ const lateSkipNotice = useMemo(() => {
         };
       }
 
-      if (prev.session) {
+      if (prev.session && canResumeCurrentSession) {
         const requestedScreen =
           resumeTargetScreen ??
           (prev.session.discountTime === "20" ? "final_time" : "area_judge");
@@ -2682,6 +2702,11 @@ const lateSkipNotice = useMemo(() => {
           }
         : undefined;
     const effectiveAreaCountResult = readyAreaCountResult ?? manualAreaCountResult;
+    const areaCountEvaluationSource = readyAreaCountResult
+      ? "history" as const
+      : manualAreaCountResult
+      ? "manual" as const
+      : undefined;
 
     // エリア残数判定が使える場合、エリア判定は5段階結果で固定する。
     const effectiveJudge: Exclude<AreaJudge, null> = effectiveAreaCountResult ? "normal" : judge;
@@ -2711,7 +2736,7 @@ const lateSkipNotice = useMemo(() => {
           date: state.session.date,
         }),
         count: roundedAreaCount,
-        userJudge: effectiveJudge,
+        userJudge: manualAreaCountEvaluation,
         suggestedEvaluation: effectiveAreaCountResult?.evaluation,
         areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
       };
@@ -2721,7 +2746,13 @@ const lateSkipNotice = useMemo(() => {
     }
 
     setState((prev) =>
-      applyAreaJudgeSelection(prev, effectiveJudge, roundedAreaCount, effectiveAreaCountResult)
+      applyAreaJudgeSelection(
+        prev,
+        effectiveJudge,
+        roundedAreaCount,
+        effectiveAreaCountResult,
+        areaCountEvaluationSource
+      )
     );
   }
 

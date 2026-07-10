@@ -115,6 +115,7 @@ export type AreaProgress = {
   areaJudge: AreaJudge;
   areaCount?: number;
   areaCountEvaluation?: AreaCountEvaluation;
+  areaCountEvaluationSource?: AreaCountEvaluationSource;
   areaRateAdjustment?: AreaRateAdjustment;
   visitedAt?: string;
   completedAt?: string;
@@ -148,6 +149,7 @@ export type WeekdayBaseLabel = "日" | "金土" | "火木" | "月水";
 export type ActualWeekdayLabel = "日" | "月" | "火" | "水" | "木" | "金" | "土";
 export type ActualWeekdayGroup = "月水" | "火木" | "金土日";
 export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
+export type AreaCountEvaluationSource = "manual" | "history";
 export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
 export type RateLogicVersion = "weekday_basis_v1" | "time_basic_rate_v1";
 
@@ -278,6 +280,9 @@ export type Review19AreaSnapshot = {
   statusText?: string;
   areaJudge: AreaJudge;
   areaCount?: number;
+  areaCountEvaluation?: AreaCountEvaluation;
+  areaCountEvaluationSource?: AreaCountEvaluationSource;
+  areaRateAdjustment?: AreaRateAdjustment;
   judgeText: string;
   rateText: string;
   ratePercent?: number;

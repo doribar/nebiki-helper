@@ -25,8 +25,8 @@ export type AreaCountRecord = {
   /** fallback/legacy: 実曜日の記録が足りない時の暫定グループ。 */
   actualWeekdayGroup: ActualWeekdayGroup;
   count: number;
-  /** legacy/manual fallback: 旧3段階の選択。 */
-  userJudge?: Exclude<AreaJudge, null>;
+  /** 手動で選んだ5段階のエリア判定。自動判定時は保存しない。 */
+  userJudge?: AreaCountEvaluation;
   suggestedEvaluation?: AreaCountEvaluation;
   areaRateAdjustment?: AreaRateAdjustment;
   comfortPoint?: number;
@@ -307,10 +307,9 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
 
     if (!actualWeekdayGroup) return [];
 
-    const userJudge =
-      record.userJudge === "many" || record.userJudge === "normal" || record.userJudge === "few"
-        ? record.userJudge
-        : undefined;
+    const userJudge = isAreaCountEvaluation(record.userJudge)
+      ? record.userJudge
+      : undefined;
 
     return [
       {

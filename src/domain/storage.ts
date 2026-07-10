@@ -307,6 +307,21 @@ export function clearReview19SourceState(): void {
   localStorage.removeItem(STORAGE_KEYS.review19SourceState);
 }
 
+
+function formatLocalDateFromTimestamp(value: string): string | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function isDailySessionSnapshotDateConsistent(snapshot: DailySessionSnapshot): boolean {
+  return formatLocalDateFromTimestamp(snapshot.session.startedAt) === snapshot.session.date;
+}
+
 function cloneDailySessionSnapshot(snapshot: DailySessionSnapshot): DailySessionSnapshot {
   return JSON.parse(JSON.stringify(snapshot)) as DailySessionSnapshot;
 }
@@ -325,7 +340,8 @@ export function loadDailySessionSnapshots(): DailySessionSnapshot[] {
         typeof snapshot.capturedAt === "string" &&
         snapshot.session &&
         typeof snapshot.session.date === "string" &&
-        typeof snapshot.session.startedAt === "string"
+        typeof snapshot.session.startedAt === "string" &&
+        isDailySessionSnapshotDateConsistent(snapshot)
       );
     })
     .map(cloneDailySessionSnapshot);
@@ -339,6 +355,8 @@ export function saveDailySessionSnapshots(snapshots: DailySessionSnapshot[]): vo
 }
 
 export function upsertDailySessionSnapshot(snapshot: DailySessionSnapshot): void {
+  if (!isDailySessionSnapshotDateConsistent(snapshot)) return;
+
   const current = loadDailySessionSnapshots();
   const next = [
     ...current.filter((item) => {
