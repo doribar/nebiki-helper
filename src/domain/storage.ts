@@ -388,6 +388,37 @@ export function getDailySessionSnapshotsForDate(date: string): DailySessionSnaps
     });
 }
 
+export function isAppStateSessionCurrentForDate(
+  state: AppState | null,
+  date: string
+): boolean {
+  if (!state?.session) return true;
+
+  return (
+    state.session.date === date &&
+    formatLocalDateFromTimestamp(state.session.startedAt) === date
+  );
+}
+
+export function sanitizePersistedNebikiStateForDate(
+  state: PersistedNebikiState,
+  date: string
+): PersistedNebikiState {
+  const staleCurrentSession = !isAppStateSessionCurrentForDate(state.currentSession, date);
+  const staleCheckpoint = !isAppStateSessionCurrentForDate(
+    state.workSessionCheckpoint,
+    date
+  );
+  const resetRuntimeState = staleCurrentSession || staleCheckpoint;
+
+  return {
+    ...state,
+    currentSession: staleCurrentSession ? null : state.currentSession,
+    workSessionCheckpoint: staleCheckpoint ? null : state.workSessionCheckpoint,
+    runtimeState: resetRuntimeState ? null : state.runtimeState,
+  };
+}
+
 export function loadPersistedNebikiState(): PersistedNebikiState {
   clearLegacyAreaCountRecords();
 
@@ -400,6 +431,25 @@ export function loadPersistedNebikiState(): PersistedNebikiState {
     lastUsedSessionDraft: loadLastUsedSessionDraft(),
     dailyMessageState: loadDailyMessageState(),
   };
+}
+
+export function loadPersistedNebikiStateForDate(date: string): PersistedNebikiState {
+  const loaded = loadPersistedNebikiState();
+  const sanitized = sanitizePersistedNebikiStateForDate(loaded, date);
+
+  if (loaded.currentSession && !sanitized.currentSession) {
+    clearCurrentSession();
+  }
+
+  if (loaded.workSessionCheckpoint && !sanitized.workSessionCheckpoint) {
+    clearWorkSessionCheckpoint();
+  }
+
+  if (loaded.runtimeState && !sanitized.runtimeState) {
+    clearRuntimeState();
+  }
+
+  return sanitized;
 }
 
 export function savePersistedNebikiState(state: PersistedNebikiState): void {

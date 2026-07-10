@@ -43,7 +43,7 @@ import {
 import {
   appendSkipRecordsInMemory,
   consumeSkipRecordsInMemory,
-  loadPersistedNebikiState,
+  loadPersistedNebikiStateForDate,
   normalizeDailyMessageState,
   savePersistedNebikiState,
   saveWorkSessionCheckpoint,
@@ -1288,9 +1288,10 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   const isTestMode = params?.testNow instanceof Date;
   const trainingStep = params?.trainingStep ?? "step5";
   const trainingStepConfig = getTrainingStepConfig(trainingStep);
-  const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
+  const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
 
   if (!initialPersistenceRef.current) {
+    const initialDate = formatLocalDate(getRuntimeNow());
     initialPersistenceRef.current = isTestMode
       ? {
           currentSession: null,
@@ -1301,7 +1302,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
           lastUsedSessionDraft: null,
           dailyMessageState: normalizeDailyMessageState(null),
         }
-      : loadPersistedNebikiState();
+      : loadPersistedNebikiStateForDate(initialDate);
   }
 
   const initialLastUsedSessionDraft = buildStartDefaultDraft(

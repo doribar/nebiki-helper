@@ -29,7 +29,12 @@ import {
   createNavigationSnapshot,
   popNavigationHistory,
 } from '../src/domain/navigationHistory.ts';
-import { appendSkipRecordsInMemory, isDailySessionSnapshotDateConsistent } from '../src/domain/storage.ts';
+import {
+  appendSkipRecordsInMemory,
+  isDailySessionSnapshotDateConsistent,
+  isAppStateSessionCurrentForDate,
+  sanitizePersistedNebikiStateForDate,
+} from '../src/domain/storage.ts';
 import {
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
@@ -2050,7 +2055,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 77;
+const totalChecks = 79;
 
 
 {
@@ -2111,6 +2116,63 @@ const totalChecks = 77;
     }),
     false
   );
+  passed += 1;
+}
+
+{
+  const currentDayState = makeState({
+    session: {
+      ...makeState({}).session!,
+      date: '2026-07-10',
+      startedAt: '2026-07-10T07:47:18.899Z',
+    },
+  });
+  const previousDayState = makeState({
+    screen: 'done',
+    session: {
+      ...makeState({}).session!,
+      date: '2026-07-09',
+      startedAt: '2026-07-09T08:06:25.060Z',
+    },
+  });
+
+  assert.equal(isAppStateSessionCurrentForDate(currentDayState, '2026-07-10'), true);
+  assert.equal(isAppStateSessionCurrentForDate(previousDayState, '2026-07-10'), false);
+  passed += 1;
+}
+
+{
+  const previousDayState = makeState({
+    screen: 'done',
+    session: {
+      ...makeState({}).session!,
+      date: '2026-07-10',
+      startedAt: '2026-07-09T08:06:25.060Z',
+    },
+  });
+  const runtimeState = {
+    areaJudgeSelection: null,
+    resumeTargetScreen: 'done' as const,
+    timeSwitchTarget: null,
+    undoSnapshot: null,
+    screenHistory: [],
+  };
+  const sanitized = sanitizePersistedNebikiStateForDate(
+    {
+      currentSession: previousDayState,
+      workSessionCheckpoint: previousDayState,
+      runtimeState,
+      nextSessionSkipRecords: [],
+      lastSessionWeather: null,
+      lastUsedSessionDraft: null,
+      dailyMessageState: { date: '2026-07-10', shownMessageIds: [] },
+    },
+    '2026-07-10'
+  );
+
+  assert.equal(sanitized.currentSession, null);
+  assert.equal(sanitized.workSessionCheckpoint, null);
+  assert.equal(sanitized.runtimeState, null);
   passed += 1;
 }
 
