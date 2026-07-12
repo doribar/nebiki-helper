@@ -6,6 +6,11 @@ import {
 } from '../src/domain/weekdayBase.ts';
 import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
+import {
+  getEarlyNextMinus5CompletedText,
+  getEarlyNextMinus5NoticeText,
+  getEarlyNextMinus5TargetDiscountTime,
+} from '../src/domain/earlyNextMinus5.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
 import {
@@ -2055,7 +2060,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 79;
+const totalChecks = 82;
 
 
 {
@@ -2173,6 +2178,106 @@ const totalChecks = 79;
   assert.equal(sanitized.currentSession, null);
   assert.equal(sanitized.workSessionCheckpoint, null);
   assert.equal(sanitized.runtimeState, null);
+  passed += 1;
+}
+
+
+{
+  const at = (hours: number, minutes: number) =>
+    new Date(2026, 6, 12, hours, minutes, 0, 0).getTime();
+
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '17',
+      manualDiscountTimeOverride: false,
+      nowMs: at(17, 59),
+    }),
+    null
+  );
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '17',
+      manualDiscountTimeOverride: false,
+      nowMs: at(18, 0),
+    }),
+    '18'
+  );
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '17',
+      manualDiscountTimeOverride: false,
+      nowMs: at(18, 24),
+    }),
+    '18'
+  );
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '17',
+      manualDiscountTimeOverride: false,
+      nowMs: at(18, 25),
+    }),
+    null
+  );
+  passed += 1;
+}
+
+{
+  const at = (hours: number, minutes: number) =>
+    new Date(2026, 6, 12, hours, minutes, 0, 0).getTime();
+
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '18',
+      manualDiscountTimeOverride: false,
+      nowMs: at(18, 59),
+    }),
+    null
+  );
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '18',
+      manualDiscountTimeOverride: false,
+      nowMs: at(19, 0),
+    }),
+    '19'
+  );
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '18',
+      manualDiscountTimeOverride: false,
+      nowMs: at(19, 24),
+    }),
+    '19'
+  );
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '18',
+      manualDiscountTimeOverride: false,
+      nowMs: at(19, 25),
+    }),
+    null
+  );
+  passed += 1;
+}
+
+{
+  const nowMs = new Date(2026, 6, 12, 19, 10, 0, 0).getTime();
+  assert.equal(
+    getEarlyNextMinus5TargetDiscountTime({
+      discountTime: '18',
+      manualDiscountTimeOverride: true,
+      nowMs,
+    }),
+    null
+  );
+  assert.equal(
+    getEarlyNextMinus5NoticeText('19'),
+    '19時を過ぎたため、19時30分の値引率より5%弱めて表示しています。\nこのエリアは19時30分値引ではスキップします。'
+  );
+  assert.equal(
+    getEarlyNextMinus5CompletedText('19'),
+    '19:00以降に、19時30分値引率より5%弱めて値引済みです。'
+  );
   passed += 1;
 }
 

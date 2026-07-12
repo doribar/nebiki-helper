@@ -90,6 +90,7 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
               ? state.areaProgressMap[state.currentAreaId]?.autoSkipKind
               : undefined
           }
+          discountTime={state.session?.discountTime}
           onConfirm={actions.acknowledgeAutoSkippedArea}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}

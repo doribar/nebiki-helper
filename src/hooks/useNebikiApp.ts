@@ -115,6 +115,10 @@ import {
   loadRemoteAreaCountRecords,
   upsertRemoteAreaCountRecord,
 } from "../domain/areaCountRemoteStorage.ts";
+import {
+  getEarlyNextMinus5NoticeText,
+  getEarlyNextMinus5TargetDiscountTime,
+} from "../domain/earlyNextMinus5.ts";
 
 let runtimeNowOverrideMs: number | null = null;
 
@@ -278,16 +282,6 @@ function applyRateOffsetToDisplay(display: RateDisplayData, offset: number): Rat
       note: display.few.note ? applyRateOffsetToText(display.few.note, offset) : undefined,
     },
   };
-}
-
-function isEarlyNextMinus5Window(session: SessionData | null, nowMs: number): boolean {
-  if (!session || session.discountTime !== "17") return false;
-  if (session.manualDiscountTimeOverride) return false;
-
-  const now = new Date(nowMs);
-  const minutes = now.getHours() * 60 + now.getMinutes();
-
-  return minutes >= 18 * 60 && minutes < 18 * 60 + 25;
 }
 
 function getAreaJudgeText(judge: AreaJudge): string {
@@ -1668,10 +1662,14 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
 ]);
 
   const earlyNextMinus5Info = useMemo(() => {
-    if (!isEarlyNextMinus5Window(state.session, nowMs)) return null;
     if (!state.session) return null;
 
-    const targetDiscountTime = "18" as const;
+    const targetDiscountTime = getEarlyNextMinus5TargetDiscountTime({
+      discountTime: state.session.discountTime,
+      manualDiscountTimeOverride: state.session.manualDiscountTimeOverride,
+      nowMs,
+    });
+    if (!targetDiscountTime) return null;
     const resolvedWeather = resolveWeatherInputForDiscount(
       state.session.weather,
       targetDiscountTime
@@ -1721,9 +1719,9 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
     return 0;
   }
 
-  // 18時30分基準の値引中に19時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
+  // 18時30分基準の19:00〜19:24は、+5%ではなく19時30分値引率-5%で表示する。
   if (state.session.discountTime === "18") {
-    return minutes >= 19 * 60 ? 5 : 0;
+    return 0;
   }
 
   // 19時30分基準の値引中に20時を超えたら、ユーザーが値引時刻を切り替えるまで +5% を維持する。
@@ -1758,8 +1756,7 @@ const lateTimeBonusNotice = useMemo(() => {
 
 const lateSkipNotice = useMemo(() => {
   if (earlyNextMinus5Info) {
-    return `18時を過ぎたため、18時30分の値引率より5%弱めて表示しています。
-このエリアは18時30分値引ではスキップします。`;
+    return getEarlyNextMinus5NoticeText(earlyNextMinus5Info.targetDiscountTime);
   }
 
   if (!state.session || lateTimeBonus === 0) return null;
@@ -1880,7 +1877,7 @@ const lateSkipNotice = useMemo(() => {
 
     const isEarlyNextMinus5Summary =
       Boolean(earlyNextMinus5Info) &&
-      session.discountTime === "17" &&
+      (session.discountTime === "17" || session.discountTime === "18") &&
       !session.manualDiscountTimeOverride;
     const discountTime = (isEarlyNextMinus5Summary
       ? earlyNextMinus5Info!.targetDiscountTime
@@ -2924,7 +2921,8 @@ const lateSkipNotice = useMemo(() => {
       // NavigationSnapshot から nextSessionSkipRecords も復元されるため予約も取り消される。
       if (prev.session && !prev.session.manualDiscountTimeOverride) {
         const earlyNextTargetDiscountTime =
-          earlyNextMinus5Info && prev.session.discountTime === "17"
+          earlyNextMinus5Info &&
+          (prev.session.discountTime === "17" || prev.session.discountTime === "18")
             ? earlyNextMinus5Info.targetDiscountTime
             : null;
         const targetDiscountTime =

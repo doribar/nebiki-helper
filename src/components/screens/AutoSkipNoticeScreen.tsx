@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import type { DiscountTime } from "../../domain/types.ts";
+import { getEarlyNextMinus5CompletedText } from "../../domain/earlyNextMinus5.ts";
 import { ScreenHeader } from "../layout/ScreenHeader";
 
 type AutoSkipNoticeScreenProps = {
@@ -7,6 +9,7 @@ type AutoSkipNoticeScreenProps = {
   areaName: string;
   onConfirm: () => void;
   autoSkipKind?: "late_plus5" | "early_next_minus5";
+  discountTime?: DiscountTime;
   onGoBack: () => void;
   onReturnHome: () => void;
 };
@@ -28,6 +31,7 @@ export function AutoSkipNoticeScreen({
   areaName,
   onConfirm,
   autoSkipKind = "late_plus5",
+  discountTime,
   onGoBack,
   onReturnHome,
 }: AutoSkipNoticeScreenProps) {
@@ -61,7 +65,7 @@ export function AutoSkipNoticeScreen({
             <br />
             今回はスキップします。
             <div style={{ marginTop: 10, fontSize: 14, fontWeight: 700, color: "#555" }}>
-              18:00以降に、18時30分値引率より5%弱めて値引済みです。
+              {getEarlyNextMinus5CompletedText(discountTime === "19" ? "19" : "18")}
             </div>
           </div>
         ) : (
