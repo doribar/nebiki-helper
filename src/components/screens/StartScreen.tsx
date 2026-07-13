@@ -403,6 +403,7 @@ export function StartScreen({
       ),
     [startForecastHour],
   );
+  const displayHours = isFinalTime ? activeHours : DISPLAY_FORECAST_HOURS;
   const fieldOrder = useMemo(
     () => createFieldOrder(startForecastHour),
     [startForecastHour],
@@ -416,15 +417,13 @@ export function StartScreen({
     setConfirmedInputs(createEmptyConfirmationMap());
   }, [sessionDraft.discountTime, sessionDraft.date]);
 
-  const currentUnlockIndex = isFinalTime
-    ? -1
-    : fieldOrder.findIndex(
-        ({ hour, field }: { hour: ForecastHourKey; field: InputField }) =>
-          !confirmedInputs[hour][field],
-      );
+  const currentUnlockIndex = fieldOrder.findIndex(
+    ({ hour, field }: { hour: ForecastHourKey; field: InputField }) =>
+      !confirmedInputs[hour][field],
+  );
   const currentUnlockTarget =
     currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
-  const allRequiredInputsConfirmed = isFinalTime || currentUnlockIndex === -1;
+  const allRequiredInputsConfirmed = currentUnlockIndex === -1;
   const wasAllRequiredInputsConfirmedRef = useRef(allRequiredInputsConfirmed);
 
   useEffect(() => {
@@ -450,19 +449,14 @@ export function StartScreen({
       wasAllRequiredInputsConfirmedRef.current;
     wasAllRequiredInputsConfirmedRef.current = allRequiredInputsConfirmed;
 
-    if (
-      isFinalTime ||
-      wasAllRequiredInputsConfirmed ||
-      !allRequiredInputsConfirmed
-    )
-      return;
+    if (wasAllRequiredInputsConfirmed || !allRequiredInputsConfirmed) return;
 
     const timer = window.setTimeout(() => {
       startButtonRef.current?.focus();
     }, 80);
 
     return () => window.clearTimeout(timer);
-  }, [allRequiredInputsConfirmed, isFinalTime]);
+  }, [allRequiredInputsConfirmed]);
 
   const isFieldEnabled = (hour: ForecastHourKey, field: InputField) => {
     if (!isHourAtOrAfter(hour, startForecastHour)) return false;
@@ -736,8 +730,7 @@ export function StartScreen({
         </div>
       </div>
 
-      {!isFinalTime ? (
-        <>
+      <>
           <StartSectionLabel>天候</StartSectionLabel>
           <section
             style={{
@@ -752,13 +745,13 @@ export function StartScreen({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: `repeat(${DISPLAY_FORECAST_HOURS.length}, minmax(72px, 1fr))`,
+                  gridTemplateColumns: `repeat(${displayHours.length}, minmax(72px, 1fr))`,
                   gap: 8,
-                  minWidth: DISPLAY_FORECAST_HOURS.length * 78,
+                  minWidth: displayHours.length * 78,
                   alignItems: "center",
                 }}
               >
-                {DISPLAY_FORECAST_HOURS.map((hour) => (
+                {displayHours.map((hour) => (
                   <div
                     key={`head-${hour}`}
                     style={{ textAlign: "center", fontWeight: 800 }}
@@ -767,7 +760,7 @@ export function StartScreen({
                   </div>
                 ))}
 
-                {DISPLAY_FORECAST_HOURS.map((hour) => {
+                {displayHours.map((hour) => {
                   const forecast = sessionDraft.weather.hourlyForecasts[hour];
                   const enabled = isFieldEnabled(hour, "weather");
                   const isConfirmed = confirmedInputs[hour].weather;
@@ -799,7 +792,7 @@ export function StartScreen({
                   );
                 })}
 
-                {DISPLAY_FORECAST_HOURS.map((hour) => {
+                {displayHours.map((hour) => {
                   const forecast = sessionDraft.weather.hourlyForecasts[hour];
                   const enabled = isFieldEnabled(hour, "temp");
                   const isConfirmed = confirmedInputs[hour].temp;
@@ -833,7 +826,7 @@ export function StartScreen({
                   );
                 })}
 
-                {DISPLAY_FORECAST_HOURS.map((hour) => {
+                {displayHours.map((hour) => {
                   const forecast = sessionDraft.weather.hourlyForecasts[hour];
                   const enabled = isFieldEnabled(hour, "wind");
                   const isConfirmed = confirmedInputs[hour].wind;
@@ -867,7 +860,7 @@ export function StartScreen({
                   );
                 })}
 
-                {DISPLAY_FORECAST_HOURS.map((hour) => (
+                {displayHours.map((hour) => (
                   <div
                     key={`foot-${hour}`}
                     style={{
@@ -882,8 +875,7 @@ export function StartScreen({
               </div>
             </div>
           </section>
-        </>
-      ) : null}
+      </>
 
       {isFinalTime ? (
         <section

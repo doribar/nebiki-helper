@@ -1570,9 +1570,9 @@ try {
 
 
 const finalMinimum = getFinalTimeGuide({
-  date: '2026-07-13',
   weekday: 1,
   weather21: 'sunny',
+  temp21C: 20,
   comfortScore: 0,
 });
 assert.equal(finalMinimum.count3OrMore.main, '50%');
@@ -1580,87 +1580,87 @@ assert.equal(finalMinimum.count2.main, '40%');
 assert.equal(finalMinimum.count1.main, '30%');
 
 const finalMiddle = getFinalTimeGuide({
-  date: '2026-07-13',
   weekday: 1,
   weather21: 'sunny',
+  temp21C: 31,
   comfortScore: 1,
 });
 assert.equal(finalMiddle.count3OrMore.main, '50%');
 assert.equal(finalMiddle.count2.main, '50%');
 assert.equal(finalMiddle.count1.main, '40%');
 
-const finalHotNonWinter = getFinalTimeGuide({
-  date: '2026-07-13',
+const finalHotSevere = getFinalTimeGuide({
   weekday: 1,
   weather21: 'sunny',
+  temp21C: 36,
   comfortScore: 2,
 });
-assert.equal(finalHotNonWinter.count2.main, '50%');
-assert.equal(finalHotNonWinter.count1.main, '40%');
+assert.equal(finalHotSevere.count2.main, '50%');
+assert.equal(finalHotSevere.count1.main, '40%');
 
-const finalMidwinterSevere = getFinalTimeGuide({
-  date: '2026-12-13',
+const finalStrongColdOutsideMidwinter = getFinalTimeGuide({
   weekday: 1,
   weather21: 'sunny',
+  temp21C: 5,
   comfortScore: 2,
 });
-assert.equal(finalMidwinterSevere.count3OrMore.main, '50%');
-assert.equal(finalMidwinterSevere.count2.main, '50%');
-assert.equal(finalMidwinterSevere.count1.main, '50%');
+assert.equal(finalStrongColdOutsideMidwinter.count3OrMore.main, '50%');
+assert.equal(finalStrongColdOutsideMidwinter.count2.main, '50%');
+assert.equal(finalStrongColdOutsideMidwinter.count1.main, '50%');
 
 const finalRainMinimum = getFinalTimeGuide({
-  date: '2026-07-13',
   weekday: 1,
   weather21: 'rain',
+  temp21C: 20,
   comfortScore: 0,
 });
 assert.equal(finalRainMinimum.count2.main, '50%');
 assert.equal(finalRainMinimum.count1.main, '40%');
 
-const finalRainSevere = getFinalTimeGuide({
-  date: '2026-07-13',
+const finalRainStrongCold = getFinalTimeGuide({
   weekday: 1,
   weather21: 'rain',
+  temp21C: 5,
   comfortScore: 2,
 });
-assert.equal(finalRainSevere.count1.main, '50%');
+assert.equal(finalRainStrongCold.count1.main, '50%');
 
 const finalSnowFriday = getFinalTimeGuide({
-  date: '2026-07-17',
   weekday: 5,
   weather21: 'snow',
+  temp21C: 2,
   comfortScore: 0,
 });
 assert.equal(finalSnowFriday.count1.main, '50%');
 
 const finalFridayMiddleToMinimum = getFinalTimeGuide({
-  date: '2026-07-17',
   weekday: 5,
   weather21: 'sunny',
+  temp21C: 31,
   comfortScore: 1,
 });
 assert.equal(finalFridayMiddleToMinimum.count2.main, '40%');
 assert.equal(finalFridayMiddleToMinimum.count1.main, '30%');
 
-const finalSaturdayWinterMaxToMiddle = getFinalTimeGuide({
-  date: '2026-12-19',
+const finalSaturdayStrongColdToMiddle = getFinalTimeGuide({
   weekday: 6,
   weather21: 'sunny',
+  temp21C: 5,
   comfortScore: 2,
 });
-assert.equal(finalSaturdayWinterMaxToMiddle.count2.main, '50%');
-assert.equal(finalSaturdayWinterMaxToMiddle.count1.main, '40%');
+assert.equal(finalSaturdayStrongColdToMiddle.count2.main, '50%');
+assert.equal(finalSaturdayStrongColdToMiddle.count1.main, '40%');
 
 const finalFridayRainMaxToMiddle = getFinalTimeGuide({
-  date: '2026-07-17',
   weekday: 5,
   weather21: 'rain',
+  temp21C: 5,
   comfortScore: 2,
 });
 assert.equal(finalFridayRainMaxToMiddle.count2.main, '50%');
 assert.equal(finalFridayRainMaxToMiddle.count1.main, '40%');
 
-console.log('PASS: 最終値引の天候・真冬・金土補正ロジック');
+console.log('PASS: 最終値引の21時天候・寒さ・金土補正ロジック');
 passed += 1;
 
 

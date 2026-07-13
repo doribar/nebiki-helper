@@ -1866,9 +1866,9 @@ const lateSkipNotice = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
 
   return getFinalTimeGuide({
-    date: state.session.date,
     weekday: state.session.weekday,
     weather21: state.session.weather.hourlyForecasts["21"].weather,
+    temp21C: state.session.weather.hourlyForecasts["21"].tempC,
     comfortScore: weekdayBaseInfo.weekdayShift,
   });
 }, [state.session, weekdayBaseInfo.weekdayShift]);

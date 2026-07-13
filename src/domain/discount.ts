@@ -147,38 +147,27 @@ export function getNormalTimeRateDisplay(params: {
 
 type FinalDiscountTier = 0 | 1 | 2;
 
-function getMonth(date: string): number | null {
-  const match = /^\d{4}-(\d{2})-\d{2}$/.exec(date);
-  if (!match) return null;
-
-  const month = Number(match[1]);
-  return month >= 1 && month <= 12 ? month : null;
-}
-
 function getBaseFinalDiscountTier(params: {
-  date: string;
   weather21: ForecastWeatherKind;
+  temp21C: number;
   comfortScore: number;
 }): FinalDiscountTier {
   if (params.weather21 === "snow") {
     return 2;
   }
 
-  const comfortTier: FinalDiscountTier =
-    params.comfortScore >= 2 ? 2 : params.comfortScore >= 1 ? 1 : 0;
+  const isStrongCold = params.temp21C <= 15 && params.comfortScore >= 2;
 
   if (params.weather21 === "rain") {
-    return Math.max(1, comfortTier) as FinalDiscountTier;
+    return isStrongCold ? 2 : 1;
   }
 
-  const month = getMonth(params.date);
-  const isMidwinter = month === 12 || month === 1;
-
-  if (!isMidwinter && comfortTier === 2) {
-    return 1;
+  if (isStrongCold) {
+    return 2;
   }
 
-  return comfortTier;
+  // 暑さによる強い不快は、夜への来店ずれ込みを考慮してB止まり。
+  return params.comfortScore >= 1 ? 1 : 0;
 }
 
 function applyFridaySaturdayFinalDiscountCorrection(params: {
@@ -199,9 +188,9 @@ function applyFridaySaturdayFinalDiscountCorrection(params: {
 }
 
 export function getFinalTimeGuide(params: {
-  date: string;
   weekday: number;
   weather21: ForecastWeatherKind;
+  temp21C: number;
   comfortScore: number;
 }): FinalGuideData {
   const baseTier = getBaseFinalDiscountTier(params);
