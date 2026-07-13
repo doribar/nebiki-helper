@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { FinalGuideData, FinalTimeStep } from "../../domain/types";
+import { getFinalTimeInstructionSteps } from "../../domain/discount";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
@@ -36,6 +37,9 @@ export function FinalTimeScreen({
   onBack,
   onReturnHome,
 }: FinalTimeScreenProps) {
+  const instructionSteps = getFinalTimeInstructionSteps(finalGuide);
+  const currentInstruction = instructionSteps[finalStep];
+
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
       <ScreenHeader
@@ -91,56 +95,23 @@ export function FinalTimeScreen({
           marginBottom: 16,
         }}
       >
-        {finalStep === 0 ? (
+        {currentInstruction ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
-              3個以上ある商品を
+              {currentInstruction.subject}
               <br />
-              {finalGuide.count3OrMore.main}値引きしてください。
+              {currentInstruction.rate}値引きしてください。
             </div>
 
             <div style={{ marginTop: 20 }}>
               <PrimaryButton onClick={onAdvance}>終わった</PrimaryButton>
             </div>
           </>
-        ) : null}
-
-        {finalStep === 1 ? (
-          <>
-            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
-              2個ある商品を
-              <br />
-              {finalGuide.count2.main}値引きしてください。
-            </div>
-
-            <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={onAdvance}>終わった</PrimaryButton>
-            </div>
-          </>
-        ) : null}
-
-        {finalStep === 2 ? (
-          <>
-            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
-              1個の商品を
-              <br />
-              {finalGuide.count1.main}値引きしてください。
-            </div>
-
-            <div style={{ marginTop: 20 }}>
-              <PrimaryButton onClick={onAdvance}>終わった</PrimaryButton>
-            </div>
-          </>
-        ) : null}
-
-        {finalStep === 3 ? (
-          <>
-            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
-              本日の値引きは以上です。
-            </div>
-
-          </>
-        ) : null}
+        ) : (
+          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.7 }}>
+            本日の値引きは以上です。
+          </div>
+        )}
       </section>
 
       <div style={{ marginTop: 16 }}>

@@ -403,7 +403,7 @@ export function StartScreen({
       ),
     [startForecastHour],
   );
-  const displayHours = isFinalTime ? activeHours : DISPLAY_FORECAST_HOURS;
+  const displayHours = DISPLAY_FORECAST_HOURS;
   const fieldOrder = useMemo(
     () => createFieldOrder(startForecastHour),
     [startForecastHour],
@@ -876,25 +876,6 @@ export function StartScreen({
             </div>
           </section>
       </>
-
-      {isFinalTime ? (
-        <section
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-            background: "#fafafa",
-          }}
-        >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>
-            20時30分以降は最終値引です
-          </div>
-          <div style={{ lineHeight: 1.7 }}>
-            なるべく商品が多いエリアから値引きを始めてください。
-          </div>
-        </section>
-      ) : null}
 
       {startButtonLabel === "再開" ? (
         <div style={{ fontSize: 13, color: "#666", marginBottom: 10 }}>

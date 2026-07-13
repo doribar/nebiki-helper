@@ -4,7 +4,7 @@ import {
   getBasisGuideDisplay,
   getWeekdayBaseInfo,
 } from '../src/domain/weekdayBase.ts';
-import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
+import { getFinalTimeGuide, getFinalTimeInstructionSteps, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import {
   buildCalculatorDraftKey,
   clearCalculatorDraft,
@@ -1578,6 +1578,14 @@ const finalMinimum = getFinalTimeGuide({
 assert.equal(finalMinimum.count3OrMore.main, '50%');
 assert.equal(finalMinimum.count2.main, '40%');
 assert.equal(finalMinimum.count1.main, '30%');
+assert.deepEqual(
+  getFinalTimeInstructionSteps(finalMinimum).map((step) => [step.subject, step.rate]),
+  [
+    ['3個以上ある商品を', '50%'],
+    ['2個ある商品を', '40%'],
+    ['1個の商品を', '30%'],
+  ],
+);
 
 const finalMiddle = getFinalTimeGuide({
   weekday: 1,
@@ -1588,6 +1596,13 @@ const finalMiddle = getFinalTimeGuide({
 assert.equal(finalMiddle.count3OrMore.main, '50%');
 assert.equal(finalMiddle.count2.main, '50%');
 assert.equal(finalMiddle.count1.main, '40%');
+assert.deepEqual(
+  getFinalTimeInstructionSteps(finalMiddle).map((step) => [step.subject, step.rate]),
+  [
+    ['2個以上ある商品を', '50%'],
+    ['1個の商品を', '40%'],
+  ],
+);
 
 const finalHotSevere = getFinalTimeGuide({
   weekday: 1,
@@ -1607,6 +1622,10 @@ const finalStrongColdOutsideMidwinter = getFinalTimeGuide({
 assert.equal(finalStrongColdOutsideMidwinter.count3OrMore.main, '50%');
 assert.equal(finalStrongColdOutsideMidwinter.count2.main, '50%');
 assert.equal(finalStrongColdOutsideMidwinter.count1.main, '50%');
+assert.deepEqual(
+  getFinalTimeInstructionSteps(finalStrongColdOutsideMidwinter).map((step) => [step.subject, step.rate]),
+  [['すべての商品を', '50%']],
+);
 
 const finalRainMinimum = getFinalTimeGuide({
   weekday: 1,

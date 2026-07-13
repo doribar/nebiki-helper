@@ -187,6 +187,35 @@ function applyFridaySaturdayFinalDiscountCorrection(params: {
   return Math.max(0, params.tier - 1) as FinalDiscountTier;
 }
 
+
+export type FinalTimeInstructionStep = {
+  subject: string;
+  rate: string;
+};
+
+export function getFinalTimeInstructionSteps(
+  finalGuide: FinalGuideData,
+): FinalTimeInstructionStep[] {
+  if (finalGuide.score === 2) {
+    return [
+      { subject: "すべての商品を", rate: finalGuide.count1.main },
+    ];
+  }
+
+  if (finalGuide.score === 1) {
+    return [
+      { subject: "2個以上ある商品を", rate: finalGuide.count2.main },
+      { subject: "1個の商品を", rate: finalGuide.count1.main },
+    ];
+  }
+
+  return [
+    { subject: "3個以上ある商品を", rate: finalGuide.count3OrMore.main },
+    { subject: "2個ある商品を", rate: finalGuide.count2.main },
+    { subject: "1個の商品を", rate: finalGuide.count1.main },
+  ];
+}
+
 export function getFinalTimeGuide(params: {
   weekday: number;
   weather21: ForecastWeatherKind;
