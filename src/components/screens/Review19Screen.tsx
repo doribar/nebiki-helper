@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { AreaId, Review19AreaItem } from "../../domain/types";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
+import {
+  buildCalculatorDraftKey,
+  clearCalculatorDraft,
+  loadCalculatorDraft,
+  saveCalculatorDraft,
+} from "../../domain/calculatorDraft";
 
 const cardStyle: CSSProperties = {
   border: "1px solid #ddd",
@@ -53,6 +59,7 @@ function calculateAdditionResult(value: string): number | null {
 
 type Review19ScreenProps = {
   items: Review19AreaItem[];
+  calculatorDraftScope: string;
   onChangeAreaCount: (areaId: AreaId, count: number) => void;
   onSave: (latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) => void;
   onReturnHome: () => void;
@@ -60,6 +67,7 @@ type Review19ScreenProps = {
 
 export function Review19Screen({
   items,
+  calculatorDraftScope,
   onChangeAreaCount,
   onSave,
   onReturnHome,
@@ -88,10 +96,21 @@ export function Review19Screen({
   }, [orderedAreaIds.length]);
 
   useEffect(() => {
+    const calculatorDraftKey = activeItem
+      ? buildCalculatorDraftKey({
+          kind: "review19-count",
+          scopeId: calculatorDraftScope,
+          areaId: activeItem.areaId,
+        })
+      : null;
+    const calculatorDraft = calculatorDraftKey
+      ? loadCalculatorDraft(calculatorDraftKey)
+      : null;
+
     setCountText(getCountText(activeItem?.count));
-    setShowCountCalculator(false);
-    setCountCalculatorText("");
-  }, [activeItem?.areaId, activeItem?.count]);
+    setShowCountCalculator(calculatorDraft?.open ?? false);
+    setCountCalculatorText(calculatorDraft?.text ?? "");
+  }, [activeItem?.areaId, activeItem?.count, calculatorDraftScope]);
 
   const recordedCount = useMemo(
     () => items.filter((item) => !item.excluded && typeof item.count === "number").length,
@@ -150,9 +169,35 @@ export function Review19Screen({
     setCountCalculatorText((current) => current.slice(0, -1));
   };
 
+  const getCountCalculatorDraftKey = (areaId: AreaId) =>
+    buildCalculatorDraftKey({
+      kind: "review19-count",
+      scopeId: calculatorDraftScope,
+      areaId,
+    });
+
+  const clearCountCalculatorDraft = (areaId: AreaId) => {
+    clearCalculatorDraft(getCountCalculatorDraftKey(areaId));
+  };
+
+  const saveCountCalculatorDraft = (areaId: AreaId) => {
+    if (showCountCalculator && countCalculatorText) {
+      saveCalculatorDraft(getCountCalculatorDraftKey(areaId), {
+        text: countCalculatorText,
+        open: true,
+      });
+      return;
+    }
+
+    clearCountCalculatorDraft(areaId);
+  };
+
   const closeCountCalculator = () => {
     if (countCalculatorResult !== null) {
       setCountText(String(countCalculatorResult));
+    }
+    if (activeItem) {
+      clearCountCalculatorDraft(activeItem.areaId);
     }
     setShowCountCalculator(false);
   };
@@ -160,6 +205,8 @@ export function Review19Screen({
   const goSkip = () => {
     if (!activeItem || activeItem.excluded) return;
     if (orderedAreaIds.length <= 1) return;
+
+    saveCountCalculatorDraft(activeItem.areaId);
 
     setOrderedAreaIds((current) => {
       const index = current.indexOf(activeItem.areaId);
@@ -181,6 +228,7 @@ export function Review19Screen({
 
     if (!activeItem.excluded) {
       if (parsedCount === null) return;
+      clearCountCalculatorDraft(activeItem.areaId);
       onChangeAreaCount(activeItem.areaId, parsedCount);
     }
 

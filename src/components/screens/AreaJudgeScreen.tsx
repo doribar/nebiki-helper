@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { AreaCountEvaluation, AreaJudge, SkipTargetOption } from "../../domain/types";
+import type { AreaCountEvaluation, AreaId, AreaJudge, SkipTargetOption } from "../../domain/types";
 import type { TrainingStepConfig } from "../../domain/trainingMode";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
+import { JudgeHintDialog } from "../common/JudgeHintDialog";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
+import {
+  buildCalculatorDraftKey,
+  clearCalculatorDraft,
+  loadCalculatorDraft,
+  saveCalculatorDraft,
+} from "../../domain/calculatorDraft";
 
 type AreaJudgeScreenProps = {
   weekdayText: string;
   timeText: string;
+  areaId: AreaId;
   areaName: string;
+  calculatorDraftScope: string;
   showJudgeGuide?: boolean;
   basisGuide: {
     noticeText?: string;
@@ -177,7 +186,9 @@ function getComparisonNotice(recommendation: AreaCountRecommendation): string | 
 export function AreaJudgeScreen({
   weekdayText,
   timeText,
+  areaId,
   areaName,
+  calculatorDraftScope,
   basisGuide,
   timeSwitchNotice,
   areaCountAssistEnabled = false,
@@ -192,12 +203,17 @@ export function AreaJudgeScreen({
   skipTargetOptions = [],
   onChooseSkipTarget,
 }: AreaJudgeScreenProps) {
-  const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: onSkip });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
+  const [showJudgeHint, setShowJudgeHint] = useState(false);
   const [areaCountText, setAreaCountText] = useState("");
   const [showAreaCountCalculator, setShowAreaCountCalculator] = useState(false);
   const [areaCountCalculatorText, setAreaCountCalculatorText] = useState("");
   const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const areaCountCalculatorDraftKey = buildCalculatorDraftKey({
+    kind: "area-count",
+    scopeId: calculatorDraftScope,
+    areaId,
+  });
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -214,11 +230,14 @@ export function AreaJudgeScreen({
   ].filter((group) => group.options.length > 0);
 
   useEffect(() => {
+    const calculatorDraft = loadCalculatorDraft(areaCountCalculatorDraftKey);
+
     setShowSkipTargetPicker(false);
+    setShowJudgeHint(false);
     setAreaCountText("");
-    setShowAreaCountCalculator(false);
-    setAreaCountCalculatorText("");
-  }, [areaName]);
+    setShowAreaCountCalculator(calculatorDraft?.open ?? false);
+    setAreaCountCalculatorText(calculatorDraft?.text ?? "");
+  }, [areaCountCalculatorDraftKey]);
 
   const parsedAreaCount = parseAreaCount(areaCountText);
   const areaCountCalculatorResult = calculateAdditionResult(areaCountCalculatorText);
@@ -241,15 +260,46 @@ export function AreaJudgeScreen({
     setAreaCountText((current) => current.slice(0, -1));
   };
 
+  const clearAreaCountCalculatorDraft = () => {
+    clearCalculatorDraft(areaCountCalculatorDraftKey);
+  };
+
+  const saveAreaCountCalculatorDraft = () => {
+    if (showAreaCountCalculator && areaCountCalculatorText) {
+      saveCalculatorDraft(areaCountCalculatorDraftKey, {
+        text: areaCountCalculatorText,
+        open: true,
+      });
+      return;
+    }
+
+    clearAreaCountCalculatorDraft();
+  };
+
+  const handleSkip = () => {
+    saveAreaCountCalculatorDraft();
+    onSkip();
+  };
+
+  const handleChooseSkipTarget = (areaId: SkipTargetOption["areaId"]) => {
+    saveAreaCountCalculatorDraft();
+    onChooseSkipTarget?.(areaId);
+  };
+
+  const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: handleSkip });
+
   const handleJudge = (judge: Exclude<AreaJudge, null>) => {
+    clearAreaCountCalculatorDraft();
     onJudge(judge, parsedAreaCount);
   };
 
   const handleManualAreaCountEvaluation = (evaluation: AreaCountEvaluation) => {
+    clearAreaCountCalculatorDraft();
     onJudge("normal", parsedAreaCount, evaluation);
   };
 
   const handleUseAreaCountRecommendation = () => {
+    clearAreaCountCalculatorDraft();
     onJudge("normal", parsedAreaCount);
   };
 
@@ -281,6 +331,7 @@ export function AreaJudgeScreen({
     if (areaCountCalculatorResult !== null) {
       setAreaCountText(String(areaCountCalculatorResult));
     }
+    clearAreaCountCalculatorDraft();
     setShowAreaCountCalculator(false);
   };
 
@@ -690,6 +741,26 @@ export function AreaJudgeScreen({
         {areaCountAssistEnabled && parsedAreaCount === null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
           isStep1 ? null : (
           <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowJudgeHint(true)}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "#555",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  textDecoration: "underline",
+                  textUnderlineOffset: 3,
+                  cursor: "pointer",
+                  padding: "4px 0",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                迷ったら…
+              </button>
+            </div>
             <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
             <JudgeOptionButton label="多い" subLabel="+10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("many")} />
             <JudgeOptionButton label="やや多い" subLabel="+5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_many")} />
@@ -714,7 +785,7 @@ export function AreaJudgeScreen({
       </section>
 
       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
-        <button type="button" onClick={onSkip} style={subActionButtonStyle}>
+        <button type="button" onClick={handleSkip} style={subActionButtonStyle}>
           今はスキップ（画面左スワイプ）
         </button>
 
@@ -750,7 +821,7 @@ export function AreaJudgeScreen({
                       <button
                         key={option.areaId}
                         type="button"
-                        onClick={() => onChooseSkipTarget?.(option.areaId)}
+                        onClick={() => handleChooseSkipTarget(option.areaId)}
                         style={{
                           ...subActionButtonStyle,
                           width: "100%",
@@ -774,6 +845,10 @@ export function AreaJudgeScreen({
           トップに戻る
         </button>
       </div>
+
+      {showJudgeHint ? (
+        <JudgeHintDialog onClose={() => setShowJudgeHint(false)} />
+      ) : null}
     </main>
   );
 }

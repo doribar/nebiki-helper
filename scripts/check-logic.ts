@@ -5,6 +5,12 @@ import {
   getWeekdayBaseInfo,
 } from '../src/domain/weekdayBase.ts';
 import { getFinalTimeGuide, getNormalTimeRateDisplay } from '../src/domain/discount.ts';
+import {
+  buildCalculatorDraftKey,
+  clearCalculatorDraft,
+  loadCalculatorDraft,
+  saveCalculatorDraft,
+} from '../src/domain/calculatorDraft.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import {
   getEarlyNextMinus5CompletedText,
@@ -1258,16 +1264,6 @@ for (const scenarioCase of scenarioCases) {
     assert.ok(basisGuide.weekdaySummaryText?.startsWith('基本値引率：'));
     assert.equal(mergedBonus.bonusSummaryText, scenarioCase.expected.bonusSummary);
 
-    if (scenarioCase.expected.finalRates) {
-      const finalGuide = getFinalTimeGuide({
-        weekdayShift: weekdayInfo.weekdayShift,
-        rateBonus: mergedBonus.bonusTotal,
-      });
-      assert.equal(finalGuide.count3OrMore.main, scenarioCase.expected.finalRates.count3OrMore);
-      assert.equal(finalGuide.count2.main, scenarioCase.expected.finalRates.count2);
-      assert.equal(finalGuide.count1.main, scenarioCase.expected.finalRates.count1);
-    }
-
     console.log(`PASS: ${scenarioCase.name}`);
     passed += 1;
   } catch (error) {
@@ -1573,39 +1569,98 @@ try {
 }
 
 
-const finalLow = getFinalTimeGuide({
-  weekdayShift: -1,
-  rateBonus: 0,
+const finalMinimum = getFinalTimeGuide({
+  date: '2026-07-13',
+  weekday: 1,
+  weather21: 'sunny',
+  comfortScore: 0,
 });
-assert.equal(finalLow.count3OrMore.main, '50%');
-assert.equal(finalLow.count2.main, '40%');
-assert.equal(finalLow.count1.main, '30%');
-assert.equal(finalLow.score, 0);
+assert.equal(finalMinimum.count3OrMore.main, '50%');
+assert.equal(finalMinimum.count2.main, '40%');
+assert.equal(finalMinimum.count1.main, '30%');
 
-const finalHigh = getFinalTimeGuide({
-  weekdayShift: 1,
-  rateBonus: 0,
+const finalMiddle = getFinalTimeGuide({
+  date: '2026-07-13',
+  weekday: 1,
+  weather21: 'sunny',
+  comfortScore: 1,
 });
-assert.equal(finalHigh.count3OrMore.main, '50%');
-assert.equal(finalHigh.count2.main, '40%');
-assert.equal(finalHigh.count1.main, '30%');
-assert.equal(finalHigh.score, 0);
+assert.equal(finalMiddle.count3OrMore.main, '50%');
+assert.equal(finalMiddle.count2.main, '50%');
+assert.equal(finalMiddle.count1.main, '40%');
 
-const finalBonusRaised = getFinalTimeGuide({
-  weekdayShift: 0,
-  rateBonus: 10,
+const finalHotNonWinter = getFinalTimeGuide({
+  date: '2026-07-13',
+  weekday: 1,
+  weather21: 'sunny',
+  comfortScore: 2,
 });
-assert.equal(finalBonusRaised.count3OrMore.main, '50%');
-assert.equal(finalBonusRaised.scoreBreakdown.rateBonusPoints, 0);
+assert.equal(finalHotNonWinter.count2.main, '50%');
+assert.equal(finalHotNonWinter.count1.main, '40%');
 
-const finalBonusLowered = getFinalTimeGuide({
-  weekdayShift: 0,
-  rateBonus: -10,
+const finalMidwinterSevere = getFinalTimeGuide({
+  date: '2026-12-13',
+  weekday: 1,
+  weather21: 'sunny',
+  comfortScore: 2,
 });
-assert.equal(finalBonusLowered.count3OrMore.main, '50%');
-assert.equal(finalBonusLowered.scoreBreakdown.rateBonusPoints, 0);
+assert.equal(finalMidwinterSevere.count3OrMore.main, '50%');
+assert.equal(finalMidwinterSevere.count2.main, '50%');
+assert.equal(finalMidwinterSevere.count1.main, '50%');
 
-console.log('PASS: 最終値引き点数ロジック');
+const finalRainMinimum = getFinalTimeGuide({
+  date: '2026-07-13',
+  weekday: 1,
+  weather21: 'rain',
+  comfortScore: 0,
+});
+assert.equal(finalRainMinimum.count2.main, '50%');
+assert.equal(finalRainMinimum.count1.main, '40%');
+
+const finalRainSevere = getFinalTimeGuide({
+  date: '2026-07-13',
+  weekday: 1,
+  weather21: 'rain',
+  comfortScore: 2,
+});
+assert.equal(finalRainSevere.count1.main, '50%');
+
+const finalSnowFriday = getFinalTimeGuide({
+  date: '2026-07-17',
+  weekday: 5,
+  weather21: 'snow',
+  comfortScore: 0,
+});
+assert.equal(finalSnowFriday.count1.main, '50%');
+
+const finalFridayMiddleToMinimum = getFinalTimeGuide({
+  date: '2026-07-17',
+  weekday: 5,
+  weather21: 'sunny',
+  comfortScore: 1,
+});
+assert.equal(finalFridayMiddleToMinimum.count2.main, '40%');
+assert.equal(finalFridayMiddleToMinimum.count1.main, '30%');
+
+const finalSaturdayWinterMaxToMiddle = getFinalTimeGuide({
+  date: '2026-12-19',
+  weekday: 6,
+  weather21: 'sunny',
+  comfortScore: 2,
+});
+assert.equal(finalSaturdayWinterMaxToMiddle.count2.main, '50%');
+assert.equal(finalSaturdayWinterMaxToMiddle.count1.main, '40%');
+
+const finalFridayRainMaxToMiddle = getFinalTimeGuide({
+  date: '2026-07-17',
+  weekday: 5,
+  weather21: 'rain',
+  comfortScore: 2,
+});
+assert.equal(finalFridayRainMaxToMiddle.count2.main, '50%');
+assert.equal(finalFridayRainMaxToMiddle.count1.main, '40%');
+
+console.log('PASS: 最終値引の天候・真冬・金土補正ロジック');
 passed += 1;
 
 
@@ -2060,7 +2115,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 82;
+const totalChecks = 83;
 
 
 {
@@ -2278,6 +2333,48 @@ const totalChecks = 82;
     getEarlyNextMinus5CompletedText('19'),
     '19:00以降に、19時30分値引率より5%弱めて値引済みです。'
   );
+  passed += 1;
+}
+
+
+{
+  const values = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    key(index: number) {
+      return [...values.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+  };
+  const runtimeGlobal = globalThis as typeof globalThis & {
+    window?: { sessionStorage: Storage };
+  };
+  runtimeGlobal.window = { sessionStorage: storage };
+
+  const key = buildCalculatorDraftKey({
+    kind: 'area-count',
+    scopeId: 'session-1',
+    areaId: 'bento_men',
+  });
+  saveCalculatorDraft(key, { text: '12+8', open: true });
+  assert.deepEqual(loadCalculatorDraft(key), { text: '12+8', open: true });
+  clearCalculatorDraft(key);
+  assert.equal(loadCalculatorDraft(key), null);
+
+  delete runtimeGlobal.window;
   passed += 1;
 }
 

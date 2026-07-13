@@ -1866,10 +1866,12 @@ const lateSkipNotice = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
 
   return getFinalTimeGuide({
-    weekdayShift: weekdayBaseInfo.weekdayShift,
-    rateBonus: weekdayBaseInfo.baseRateBonus,
+    date: state.session.date,
+    weekday: state.session.weekday,
+    weather21: state.session.weather.hourlyForecasts["21"].weather,
+    comfortScore: weekdayBaseInfo.weekdayShift,
   });
-}, [state.session, weekdayBaseInfo.weekdayShift, weekdayBaseInfo.baseRateBonus]);
+}, [state.session, weekdayBaseInfo.weekdayShift]);
 
   const doneSummaryItems = useMemo<DoneSummaryItem[]>(() => {
     const session = state.session;

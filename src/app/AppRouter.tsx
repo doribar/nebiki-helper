@@ -56,7 +56,9 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
         <AreaJudgeScreen
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
+          areaId={state.currentAreaId!}
           areaName={derived.currentAreaName}
+          calculatorDraftScope={state.session?.startedAt ?? "current-session"}
           showJudgeGuide={derived.showBentoJudgeGuide}
           onJudgeGuideShown={actions.markBentoJudgeGuideShown}
           basisGuide={derived.basisGuide}
@@ -159,6 +161,9 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
       return (
         <Review19Screen
           items={derived.review19Items}
+          calculatorDraftScope={
+            state.review19?.sessionStartedAt ?? state.session?.startedAt ?? "review19-session"
+          }
           onChangeAreaCount={actions.updateReview19AreaCount}
           onSave={actions.saveReview19}
           onReturnHome={handleReturnHome}

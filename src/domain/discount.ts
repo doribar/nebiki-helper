@@ -6,6 +6,7 @@ import type {
   AreaJudge,
   AreaRateAdjustment,
   WeekdayBaseLabel,
+  ForecastWeatherKind,
 } from "./types";
 const MAX_DISCOUNT_RATE = 50;
 
@@ -144,19 +145,88 @@ export function getNormalTimeRateDisplay(params: {
   };
 }
 
-export function getFinalTimeGuide(_params: {
-  weekdayShift: number;
-  rateBonus: number;
+type FinalDiscountTier = 0 | 1 | 2;
+
+function getMonth(date: string): number | null {
+  const match = /^\d{4}-(\d{2})-\d{2}$/.exec(date);
+  if (!match) return null;
+
+  const month = Number(match[1]);
+  return month >= 1 && month <= 12 ? month : null;
+}
+
+function getBaseFinalDiscountTier(params: {
+  date: string;
+  weather21: ForecastWeatherKind;
+  comfortScore: number;
+}): FinalDiscountTier {
+  if (params.weather21 === "snow") {
+    return 2;
+  }
+
+  const comfortTier: FinalDiscountTier =
+    params.comfortScore >= 2 ? 2 : params.comfortScore >= 1 ? 1 : 0;
+
+  if (params.weather21 === "rain") {
+    return Math.max(1, comfortTier) as FinalDiscountTier;
+  }
+
+  const month = getMonth(params.date);
+  const isMidwinter = month === 12 || month === 1;
+
+  if (!isMidwinter && comfortTier === 2) {
+    return 1;
+  }
+
+  return comfortTier;
+}
+
+function applyFridaySaturdayFinalDiscountCorrection(params: {
+  tier: FinalDiscountTier;
+  weekday: number;
+  weather21: ForecastWeatherKind;
+}): FinalDiscountTier {
+  const isFridayOrSaturday = params.weekday === 5 || params.weekday === 6;
+  if (!isFridayOrSaturday || params.weather21 === "snow") {
+    return params.tier;
+  }
+
+  if (params.weather21 === "rain") {
+    return Math.max(1, params.tier - 1) as FinalDiscountTier;
+  }
+
+  return Math.max(0, params.tier - 1) as FinalDiscountTier;
+}
+
+export function getFinalTimeGuide(params: {
+  date: string;
+  weekday: number;
+  weather21: ForecastWeatherKind;
+  comfortScore: number;
 }): FinalGuideData {
+  const baseTier = getBaseFinalDiscountTier(params);
+  const tier = applyFridaySaturdayFinalDiscountCorrection({
+    tier: baseTier,
+    weekday: params.weekday,
+    weather21: params.weather21,
+  });
+
+  const rates =
+    tier === 2
+      ? { count1: "50%", count2: "50%", count3OrMore: "50%" }
+      : tier === 1
+        ? { count1: "40%", count2: "50%", count3OrMore: "50%" }
+        : { count1: "30%", count2: "40%", count3OrMore: "50%" };
+
   return {
-    count1: { main: "30%" },
-    count2: { main: "40%" },
-    count3OrMore: { main: "50%" },
-    score: 0,
-    scoreThreshold: 0,
+    count1: { main: rates.count1 },
+    count2: { main: rates.count2 },
+    count3OrMore: { main: rates.count3OrMore },
+    score: tier,
+    scoreThreshold: 1,
     scoreBreakdown: {
-      weekdayShiftPoints: 0,
-      rateBonusPoints: 0,
+      weekdayShiftPoints: baseTier,
+      rateBonusPoints: tier - baseTier,
     },
   };
 }
