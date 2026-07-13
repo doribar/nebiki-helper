@@ -3361,7 +3361,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function openNextSessionInput(
-    targetDiscountTime: Exclude<DiscountTime, "20">,
+    targetDiscountTime: DiscountTime,
     options?: { preserveCurrentSession?: boolean }
   ) {
     const now = getRuntimeNow();
@@ -3433,64 +3433,11 @@ const lateSkipNotice = useMemo(() => {
       }));
     }
 
-    if (nextInfo.targetDiscountTime !== "20") {
-      openNextSessionInput(nextInfo.targetDiscountTime, {
-        preserveCurrentSession: prioritizeUnfinishedAreas,
-      });
-      return;
-    }
-
-    const now = getRuntimeNow();
-    const currentDate = formatLocalDate(now);
-    const currentWeekday = now.getDay();
-    const startedAt = now.toISOString();
-
-    setState((prev) => {
-      if (!prev.session || prev.session.discountTime !== previousDiscountTime) return prev;
-
-      const nextSession: SessionData = {
-        ...prev.sessionDraft,
-        date: currentDate,
-        weekday: prev.sessionDraft.manualWeekdayOverride
-          ? prev.sessionDraft.weekday
-          : currentWeekday,
-        discountTime: "20",
-        weather: {
-          ...prev.sessionDraft.weather,
-          hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
-        },
-        startedAt,
-      };
-
-      return {
-        ...prev,
-        screen: "final_time",
-        session: nextSession,
-        sessionDraft: {
-          ...prev.sessionDraft,
-          date: currentDate,
-          weekday: nextSession.weekday,
-          discountTime: "20",
-          manualDiscountTimeOverride: false,
-          weather: {
-            ...nextSession.weather,
-            hourlyForecasts: cloneHourlyForecasts(nextSession.weather.hourlyForecasts),
-          },
-        },
-        areaProgressMap: createInitialAreaProgressMap(),
-        currentAreaId: null,
-        lastReferenceAreaId: null,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        timeSwitchNotice: null,
-        finalTimeStep: 0,
-      };
+    // 20時30分も他の値引時刻と同じく、20:25から天候入力画面へ移動する。
+    // 21時の天気・気温・風速を確認してから最終値引へ進む。
+    openNextSessionInput(nextInfo.targetDiscountTime, {
+      preserveCurrentSession: prioritizeUnfinishedAreas,
     });
-
-    setResumeTargetScreen(null);
-    setTimeSwitchTarget(null);
-    setUndoSnapshot(null);
-    setUndoNotice(null);
   }
 
   function getReview19ExportFilename(params: {

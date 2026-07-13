@@ -1,17 +1,15 @@
 import type { CSSProperties } from "react";
-import type { DoneNextSessionInfo, DoneSummaryItem } from "../../domain/types";
+import type { DoneSummaryItem } from "../../domain/types";
 import type { TrainingStepConfig } from "../../domain/trainingMode";
 
 type DoneScreenProps = {
   onGoBack: () => void;
-  onStartNextSession: () => void;
   onReturnHome: () => void;
   referenceText?: string;
   timeText?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
   summaryItems: DoneSummaryItem[];
-  nextSessionInfo: DoneNextSessionInfo | null;
   trainingStepConfig: TrainingStepConfig;
 };
 
@@ -84,18 +82,14 @@ function BasisTimeMiniPanel({
 
 export function DoneScreen({
   onGoBack,
-  onStartNextSession,
   onReturnHome,
   referenceText,
   timeText,
   canStartReview19 = false,
   onStartReview19,
   summaryItems,
-  nextSessionInfo,
   trainingStepConfig,
 }: DoneScreenProps) {
-  const canStartNextSession = nextSessionInfo?.canStart ?? false;
-
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 16, marginBottom: 12 }}>
@@ -122,35 +116,6 @@ export function DoneScreen({
         <div style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
           値引作業は完了です。
         </div>
-
-        {nextSessionInfo ? (
-          <>
-            <button
-              type="button"
-              onClick={canStartNextSession ? onStartNextSession : undefined}
-              disabled={!canStartNextSession}
-              style={{
-                width: "100%",
-                border: 0,
-                borderRadius: 14,
-                padding: "14px 16px",
-                background: canStartNextSession ? "#111" : "#ddd",
-                color: canStartNextSession ? "#fff" : "#777",
-                fontSize: 16,
-                fontWeight: 800,
-                cursor: canStartNextSession ? "pointer" : "not-allowed",
-              }}
-            >
-              {nextSessionInfo.label}
-            </button>
-
-            {!canStartNextSession && nextSessionInfo.unlockText ? (
-              <div style={{ marginTop: 8, fontSize: 13, color: "#777" }}>
-                {nextSessionInfo.unlockText}
-              </div>
-            ) : null}
-          </>
-        ) : null}
 
         {canStartReview19 && onStartReview19 ? (
           <div style={{ marginTop: 12 }}>
