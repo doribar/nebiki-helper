@@ -12,7 +12,8 @@ import {
   saveCalculatorDraft,
 } from '../src/domain/calculatorDraft.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
-import { getTrainingStepConfig, parseTrainingStepFromHash } from '../src/domain/trainingMode.ts';
+import { getTrainingStepConfig, parseExplicitTrainingStepFromHash, parseTrainingStepFromHash } from '../src/domain/trainingMode.ts';
+import { isTrainingStep, isValidAdminPinFormat } from '../src/domain/adminSettings.ts';
 import { buildAutomaticDayExportPayload, getAutomaticDayExportFilename } from '../src/domain/dayExport.ts';
 import {
   getEarlyNextMinus5CompletedText,
@@ -2264,7 +2265,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 86;
+const totalChecks = 87;
 
 
 {
@@ -2571,6 +2572,19 @@ const totalChecks = 86;
   const step8 = getTrainingStepConfig('step8');
   assert.equal(step8.showAdvancedReference, true);
   assert.ok(step8.noticeItemIds.includes('advertisementTrendMinus'));
+  passed += 1;
+}
+
+
+{
+  assert.equal(parseExplicitTrainingStepFromHash('#/step3'), 'step3');
+  assert.equal(parseExplicitTrainingStepFromHash(''), null);
+  assert.equal(isTrainingStep('step8'), true);
+  assert.equal(isTrainingStep('step9'), false);
+  assert.equal(isValidAdminPinFormat('1234'), true);
+  assert.equal(isValidAdminPinFormat('12345678'), true);
+  assert.equal(isValidAdminPinFormat('123'), false);
+  assert.equal(isValidAdminPinFormat('12a4'), false);
   passed += 1;
 }
 

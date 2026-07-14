@@ -8,6 +8,18 @@ export type TrainingStep =
   | "step7"
   | "step8";
 
+
+export const TRAINING_STEPS: TrainingStep[] = [
+  "step1",
+  "step2",
+  "step3",
+  "step4",
+  "step5",
+  "step6",
+  "step7",
+  "step8",
+];
+
 export type NoticeItemId =
   | "oneLeftFew"
   | "twoLeftNotMany"
@@ -179,18 +191,14 @@ export function getTrainingStepConfig(step: TrainingStep): TrainingStepConfig {
   return STEP_CONFIGS[step];
 }
 
-export function parseTrainingStepFromHash(hash: string): TrainingStep {
+export function parseExplicitTrainingStepFromHash(
+  hash: string,
+): TrainingStep | null {
   const normalized = hash.replace(/^#\/?/, "").split(/[/?&]/)[0];
+  return TRAINING_STEPS.find((step) => step === normalized) ?? null;
+}
 
-  if (normalized === "step1") return "step1";
-  if (normalized === "step2") return "step2";
-  if (normalized === "step3") return "step3";
-  if (normalized === "step4") return "step4";
-  if (normalized === "step5") return "step5";
-  if (normalized === "step6") return "step6";
-  if (normalized === "step7") return "step7";
-  if (normalized === "step8") return "step8";
-
-  // ハッシュなしURLは、すべての判断を解禁した完成版として扱う。
-  return "step8";
+export function parseTrainingStepFromHash(hash: string): TrainingStep {
+  // 互換用。明示的なstepがないURLは完成版step8として扱う。
+  return parseExplicitTrainingStepFromHash(hash) ?? "step8";
 }

@@ -32,6 +32,7 @@ type StartScreenProps = {
   canStartReview19?: boolean;
   onStartReview19?: () => void;
   onReturnHome?: () => void;
+  onOpenSettings?: () => void;
   now?: Date;
 };
 
@@ -390,6 +391,7 @@ export function StartScreen({
   canStartReview19 = false,
   onStartReview19,
   onReturnHome,
+  onOpenSettings,
   now = new Date(),
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
@@ -568,7 +570,43 @@ export function StartScreen({
             </div>
           </>
         }
-        rightAction={null}
+        rightAction={
+          onOpenSettings ? (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              aria-label="設定を開く"
+              title="設定"
+              style={{
+                width: 48,
+                height: 48,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 14,
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                color: "#111",
+                cursor: "pointer",
+              }}
+            >
+              <svg
+                aria-hidden="true"
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.35.7.6 1 .3.33.7.5 1.1.5H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51.5Z" />
+              </svg>
+            </button>
+          ) : null
+        }
       />
 
       <div style={{ marginBottom: 14 }}>

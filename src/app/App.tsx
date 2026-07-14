@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
-import { parseTrainingStepFromHash } from "../domain/trainingMode";
+import {
+  parseExplicitTrainingStepFromHash,
+  type TrainingStep,
+} from "../domain/trainingMode";
+import {
+  loadPreferredTrainingStep,
+  savePreferredTrainingStep,
+} from "../domain/adminSettings";
+import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
 
 type TestModeConfig = {
   now: Date;
@@ -9,9 +17,13 @@ type TestModeConfig = {
   dateLabel: string;
 };
 
-function getCurrentTrainingStep() {
-  if (typeof window === "undefined") return parseTrainingStepFromHash("");
-  return parseTrainingStepFromHash(window.location.hash);
+function getCurrentTrainingStep(): TrainingStep {
+  if (typeof window === "undefined") return "step8";
+
+  return (
+    parseExplicitTrainingStepFromHash(window.location.hash) ??
+    loadPreferredTrainingStep()
+  );
 }
 
 function formatLocalDate(date = new Date()): string {
@@ -212,6 +224,7 @@ function TestModeBanner({ testMode }: { testMode: TestModeConfig }) {
 export default function App() {
   const testMode = getCurrentTestMode();
   const [trainingStep, setTrainingStep] = useState(getCurrentTrainingStep);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [loadedDate] = useState(() => formatLocalDate(testMode?.now));
   const [todayDate, setTodayDate] = useState(() => formatLocalDate(testMode?.now));
   const app = useNebikiApp({ trainingStep, testNow: testMode?.now ?? null });
@@ -225,6 +238,21 @@ export default function App() {
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
+
+  const handleSaveTrainingStep = (nextStep: TrainingStep) => {
+    savePreferredTrainingStep(nextStep);
+
+    if (window.location.hash) {
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
+    }
+
+    setTrainingStep(nextStep);
+    setSettingsOpen(false);
+  };
 
   useEffect(() => {
     const updateTodayDate = () => {
@@ -249,7 +277,18 @@ export default function App() {
   return (
     <>
       {testMode ? <TestModeBanner testMode={testMode} /> : null}
-      <AppRouter app={app} testNow={testMode?.now ?? null} />
+      <AppRouter
+        app={app}
+        testNow={testMode?.now ?? null}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      {settingsOpen ? (
+        <AdminSettingsDialog
+          currentStep={trainingStep}
+          onSaveStep={handleSaveTrainingStep}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

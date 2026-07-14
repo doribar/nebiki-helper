@@ -12,9 +12,10 @@ import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 type AppRouterProps = {
   app: UseNebikiAppResult;
   testNow?: Date | null;
+  onOpenSettings?: () => void;
 };
 
-export function AppRouter({ app, testNow }: AppRouterProps) {
+export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
   const { state, derived, actions } = app;
 
   const handleReturnHome = () => {
@@ -45,6 +46,7 @@ export function AppRouter({ app, testNow }: AppRouterProps) {
           canStartReview19={derived.canStartReview19Manually && state.sessionDraft.discountTime === "18"}
           onStartReview19={actions.startReview19Manually}
           now={testNow ?? undefined}
+          onOpenSettings={onOpenSettings}
         />
       );
 
