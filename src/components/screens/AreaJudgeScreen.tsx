@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { AreaCountEvaluation, AreaId, AreaJudge, SkipTargetOption } from "../../domain/types";
+import type {
+  AreaCountEvaluation,
+  AreaId,
+  AreaJudge,
+  SkipTargetOption,
+} from "../../domain/types";
 import type { TrainingStepConfig } from "../../domain/trainingMode";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
@@ -41,7 +46,7 @@ type AreaJudgeScreenProps = {
   onJudge: (
     judge: Exclude<AreaJudge, null>,
     areaCount?: number | null,
-    manualAreaCountEvaluation?: AreaCountEvaluation
+    manualAreaCountEvaluation?: AreaCountEvaluation,
   ) => void;
   onSkip: () => void;
   onGoBack: () => void;
@@ -98,10 +103,23 @@ function JudgeOptionButton({
         cursor: "pointer",
       }}
     >
-      <div style={{ fontSize: 16, fontWeight: 800, color: getJudgeLabelColor(label) }}>
+      <div
+        style={{
+          fontSize: 16,
+          fontWeight: 800,
+          color: getJudgeLabelColor(label),
+        }}
+      >
         {label}
         {subLabel ? (
-          <span style={{ fontSize: 13, color: "#555", fontWeight: 600, marginLeft: 6 }}>
+          <span
+            style={{
+              fontSize: 13,
+              color: "#555",
+              fontWeight: 600,
+              marginLeft: 6,
+            }}
+          >
             ({subLabel})
           </span>
         ) : null}
@@ -109,7 +127,6 @@ function JudgeOptionButton({
     </button>
   );
 }
-
 
 function parseAreaCount(value: string): number | null {
   if (!value.trim()) return null;
@@ -137,7 +154,9 @@ function calculateAdditionResult(value: string): number | null {
   return Math.round(total);
 }
 
-function getRecommendationColor(recommendation: AreaCountRecommendation | null): string {
+function getRecommendationColor(
+  recommendation: AreaCountRecommendation | null,
+): string {
   const evaluation = recommendation?.suggestedEvaluation;
   if (evaluation === "many" || evaluation === "slightly_many") return "#b71c1c";
   if (evaluation === "few" || evaluation === "slightly_few") return "#0d47a1";
@@ -177,7 +196,9 @@ function BasisTimeMiniPanel({
   );
 }
 
-function getComparisonNotice(recommendation: AreaCountRecommendation): string | null {
+function getComparisonNotice(
+  recommendation: AreaCountRecommendation,
+): string | null {
   if (recommendation.comparisonMode !== "fallback_group") return null;
 
   const group = recommendation.actualWeekdayGroup ?? "暫定グループ";
@@ -208,7 +229,7 @@ export function AreaJudgeScreen({
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [showJudgeHint, setShowJudgeHint] = useState(false);
   const [areaCountText, setAreaCountText] = useState("");
-  const [showAreaCountCalculator, setShowAreaCountCalculator] = useState(areaCountAssistEnabled);
+  const [areaCountSubmitted, setAreaCountSubmitted] = useState(false);
   const [areaCountCalculatorText, setAreaCountCalculatorText] = useState("");
   const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
   const areaCountCalculatorDraftKey = buildCalculatorDraftKey({
@@ -219,15 +240,21 @@ export function AreaJudgeScreen({
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
-      options: skipTargetOptions.filter((option) => option.status === "skipped_manual"),
+      options: skipTargetOptions.filter(
+        (option) => option.status === "skipped_manual",
+      ),
     },
     {
       label: "少ないため後回ししたエリア",
-      options: skipTargetOptions.filter((option) => option.status === "postponed_few"),
+      options: skipTargetOptions.filter(
+        (option) => option.status === "postponed_few",
+      ),
     },
     {
       label: "未着手のエリア",
-      options: skipTargetOptions.filter((option) => option.status === "unstarted"),
+      options: skipTargetOptions.filter(
+        (option) => option.status === "unstarted",
+      ),
     },
   ].filter((group) => group.options.length > 0);
 
@@ -237,37 +264,30 @@ export function AreaJudgeScreen({
     setShowSkipTargetPicker(false);
     setShowJudgeHint(false);
     setAreaCountText("");
-    setShowAreaCountCalculator(calculatorDraft?.open ?? areaCountAssistEnabled);
+    setAreaCountSubmitted(false);
     setAreaCountCalculatorText(calculatorDraft?.text ?? "");
   }, [areaCountCalculatorDraftKey]);
 
   const parsedAreaCount = parseAreaCount(areaCountText);
-  const areaCountCalculatorResult = calculateAdditionResult(areaCountCalculatorText);
+  const areaCountCalculatorResult = calculateAdditionResult(
+    areaCountCalculatorText,
+  );
   const areaCountRecommendation =
-    areaCountAssistEnabled && parsedAreaCount !== null && getAreaCountRecommendation
+    areaCountAssistEnabled &&
+    parsedAreaCount !== null &&
+    getAreaCountRecommendation
       ? getAreaCountRecommendation(parsedAreaCount)
       : null;
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
   const isStep1 = trainingStepConfig.step === "step1";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
 
-  const handleAreaCountDigit = (digit: string) => {
-    setAreaCountText((current) => {
-      const next = current === "0" ? digit : `${current}${digit}`;
-      return next.replace(/^0+(?=\d)/, "");
-    });
-  };
-
-  const handleAreaCountBackspace = () => {
-    setAreaCountText((current) => current.slice(0, -1));
-  };
-
   const clearAreaCountCalculatorDraft = () => {
     clearCalculatorDraft(areaCountCalculatorDraftKey);
   };
 
   const saveAreaCountCalculatorDraft = () => {
-    if (showAreaCountCalculator && areaCountCalculatorText) {
+    if (areaCountCalculatorText) {
       saveCalculatorDraft(areaCountCalculatorDraftKey, {
         text: areaCountCalculatorText,
         open: true,
@@ -300,16 +320,6 @@ export function AreaJudgeScreen({
     onJudge("normal", parsedAreaCount, evaluation);
   };
 
-  const handleUseAreaCountRecommendation = () => {
-    clearAreaCountCalculatorDraft();
-    onJudge("normal", parsedAreaCount);
-  };
-
-  const openAreaCountCalculator = () => {
-    setAreaCountCalculatorText(areaCountText);
-    setShowAreaCountCalculator(true);
-  };
-
   const handleAreaCountCalculatorDigit = (digit: string) => {
     setAreaCountCalculatorText((current) => {
       const next = normalizeAdditionFormula(`${current}${digit}`);
@@ -329,35 +339,39 @@ export function AreaJudgeScreen({
     setAreaCountCalculatorText((current) => current.slice(0, -1));
   };
 
-  const completeAreaCountCalculator = () => {
-    if (areaCountCalculatorResult !== null) {
-      setAreaCountText(String(areaCountCalculatorResult));
-    }
-    clearAreaCountCalculatorDraft();
-    setShowAreaCountCalculator(false);
-  };
+  const completeAreaCountEntry = () => {
+    if (areaCountCalculatorResult === null) return;
 
-  const handleAreaCountComplete = () => {
-    if (parsedAreaCount === null) return;
+    const completedCount = areaCountCalculatorResult;
+    const completedRecommendation =
+      areaCountAssistEnabled && getAreaCountRecommendation
+        ? getAreaCountRecommendation(completedCount)
+        : null;
+
+    setAreaCountText(String(completedCount));
+    clearAreaCountCalculatorDraft();
 
     if (finalCountMode) {
-      clearAreaCountCalculatorDraft();
-      onJudge("normal", parsedAreaCount);
+      onJudge("normal", completedCount);
       return;
     }
 
-    if (isAreaCountReady) {
-      handleUseAreaCountRecommendation();
+    if (completedRecommendation?.status === "ready") {
+      onJudge("normal", completedCount);
       return;
     }
 
     if (isStep1 && areaCountAssistEnabled) {
-      onJudge("normal", parsedAreaCount);
+      onJudge("normal", completedCount);
       return;
     }
 
+    setAreaCountSubmitted(true);
     window.setTimeout(() => {
-      normalManualJudgeButtonRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      normalManualJudgeButtonRef.current?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
     }, 0);
   };
 
@@ -430,26 +444,11 @@ export function AreaJudgeScreen({
           >
             このエリア全体で、消費期限が今日までの商品数は？
           </div>
-          {areaCountAssistEnabled ? (
-            <button
-              type="button"
-              onClick={openAreaCountCalculator}
-              style={{
-                ...subActionButtonStyle,
-                minWidth: 72,
-                padding: "8px 10px",
-                fontSize: 13,
-                flexShrink: 0,
-              }}
-            >
-              電卓
-            </button>
-          ) : null}
         </div>
 
         {areaCountAssistEnabled ? (
           <section style={{ marginBottom: 14 }}>
-            {showAreaCountCalculator ? (
+            {!areaCountSubmitted ? (
               <section
                 style={{
                   border: "1px solid #d6d6d6",
@@ -479,11 +478,19 @@ export function AreaJudgeScreen({
                 >
                   {areaCountCalculatorText || "0"}
                 </div>
-                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, textAlign: "right", color: "#333" }}>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    textAlign: "right",
+                    color: "#333",
+                  }}
+                >
                   合計：{areaCountCalculatorResult ?? 0}
                 </div>
                 <div
-                  aria-label="足し算電卓キーパッド"
+                  aria-label="残数入力・足し算電卓キーパッド"
                   style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(3, 1fr)",
@@ -491,30 +498,32 @@ export function AreaJudgeScreen({
                     marginTop: 10,
                   }}
                 >
-                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
-                    <button
-                      key={digit}
-                      type="button"
-                      onClick={() => handleAreaCountCalculatorDigit(digit)}
-                      style={{
-                        padding: "10px 0",
-                        borderRadius: 10,
-                        border: "1px solid #ccc",
-                        background: "#fff",
-                        fontSize: 18,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {digit}
-                    </button>
-                  ))}
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(
+                    (digit) => (
+                      <button
+                        key={digit}
+                        type="button"
+                        onClick={() => handleAreaCountCalculatorDigit(digit)}
+                        style={{
+                          padding: "12px 0",
+                          borderRadius: 12,
+                          border: "1px solid #ccc",
+                          background: "#fff",
+                          fontSize: 18,
+                          fontWeight: 900,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {digit}
+                      </button>
+                    ),
+                  )}
                   <button
                     type="button"
                     onClick={() => handleAreaCountCalculatorDigit("0")}
                     style={{
-                      padding: "10px 0",
-                      borderRadius: 10,
+                      padding: "12px 0",
+                      borderRadius: 12,
                       border: "1px solid #ccc",
                       background: "#fff",
                       fontSize: 18,
@@ -527,16 +536,31 @@ export function AreaJudgeScreen({
                   <button
                     type="button"
                     onClick={handleAreaCountCalculatorPlus}
-                    disabled={!areaCountCalculatorText || areaCountCalculatorText.endsWith("+")}
+                    disabled={
+                      !areaCountCalculatorText ||
+                      areaCountCalculatorText.endsWith("+")
+                    }
                     style={{
-                      padding: "10px 0",
-                      borderRadius: 10,
+                      padding: "12px 0",
+                      borderRadius: 12,
                       border: "1px solid #ccc",
-                      background: areaCountCalculatorText && !areaCountCalculatorText.endsWith("+") ? "#fff" : "#eee",
-                      color: areaCountCalculatorText && !areaCountCalculatorText.endsWith("+") ? "#111" : "#999",
+                      background:
+                        areaCountCalculatorText &&
+                        !areaCountCalculatorText.endsWith("+")
+                          ? "#fff"
+                          : "#eee",
+                      color:
+                        areaCountCalculatorText &&
+                        !areaCountCalculatorText.endsWith("+")
+                          ? "#111"
+                          : "#999",
                       fontSize: 18,
                       fontWeight: 900,
-                      cursor: areaCountCalculatorText && !areaCountCalculatorText.endsWith("+") ? "pointer" : "not-allowed",
+                      cursor:
+                        areaCountCalculatorText &&
+                        !areaCountCalculatorText.endsWith("+")
+                          ? "pointer"
+                          : "not-allowed",
                     }}
                   >
                     +
@@ -546,156 +570,77 @@ export function AreaJudgeScreen({
                     onClick={handleAreaCountCalculatorBackspace}
                     disabled={!areaCountCalculatorText}
                     style={{
-                      padding: "10px 0",
-                      borderRadius: 10,
+                      padding: "12px 0",
+                      borderRadius: 12,
                       border: "1px solid #ccc",
                       background: areaCountCalculatorText ? "#fff" : "#eee",
                       color: areaCountCalculatorText ? "#111" : "#999",
                       fontSize: 18,
                       fontWeight: 900,
-                      cursor: areaCountCalculatorText ? "pointer" : "not-allowed",
+                      cursor: areaCountCalculatorText
+                        ? "pointer"
+                        : "not-allowed",
                     }}
                     aria-label="電卓を1文字削除"
                   >
                     ⌫
                   </button>
                 </div>
-                <div style={{ marginTop: 10 }}>
-                  <button
-                    type="button"
-                    onClick={completeAreaCountCalculator}
-                    disabled={areaCountCalculatorResult === null}
-                    style={{
-                      ...subActionButtonStyle,
-                      width: "100%",
-                      border: areaCountCalculatorResult !== null ? "2px solid #2f5ef5" : "1px solid #ccc",
-                      background: areaCountCalculatorResult !== null ? "#e8f0ff" : "#eee",
-                      color: areaCountCalculatorResult !== null ? "#111" : "#999",
-                      cursor: areaCountCalculatorResult !== null ? "pointer" : "not-allowed",
-                    }}
-                  >
-                    完了
-                  </button>
-                </div>
-                <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.6 }}>
-                  「完了」を押すと、合計を残数入力に入れます。
-                </div>
-              </section>
-            ) : null}
-            <div style={{ display: "grid", gap: 8 }}>
-              <div
-                aria-live="polite"
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  minHeight: 48,
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid #bbb",
-                  background: "#fff",
-                  fontSize: 22,
-                  fontWeight: 900,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  color: areaCountText ? "#111" : "#999",
-                  userSelect: "none",
-                }}
-              >
-                {areaCountText || "未入力"}
-              </div>
-              <div
-                aria-label="残数入力キーパッド"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 8,
-                }}
-              >
-                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
-                  <button
-                    key={digit}
-                    type="button"
-                    onClick={() => handleAreaCountDigit(digit)}
-                    style={{
-                      padding: "12px 0",
-                      borderRadius: 12,
-                      border: "1px solid #ccc",
-                      background: "#fff",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {digit}
-                  </button>
-                ))}
                 <button
                   type="button"
-                  onClick={() => handleAreaCountDigit("0")}
+                  onClick={completeAreaCountEntry}
+                  disabled={areaCountCalculatorResult === null}
                   style={{
-                    padding: "12px 0",
-                    borderRadius: 12,
-                    border: "1px solid #ccc",
-                    background: "#fff",
-                    fontSize: 18,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  0
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAreaCountBackspace}
-                  disabled={!areaCountText}
-                  style={{
-                    padding: "12px 0",
-                    borderRadius: 12,
-                    border: "1px solid #ccc",
-                    background: areaCountText ? "#fff" : "#eee",
-                    color: areaCountText ? "#111" : "#999",
-                    fontSize: 18,
-                    fontWeight: 900,
-                    cursor: areaCountText ? "pointer" : "not-allowed",
-                  }}
-                  aria-label="1文字削除"
-                >
-                  ⌫
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAreaCountComplete}
-                  disabled={parsedAreaCount === null}
-                  style={{
-                    padding: "12px 0",
-                    borderRadius: 12,
-                    border: parsedAreaCount !== null ? "2px solid #2f5ef5" : "1px solid #ccc",
-                    background: parsedAreaCount !== null ? "#e8f0ff" : "#eee",
-                    color: parsedAreaCount !== null ? "#111" : "#999",
-                    fontSize: 18,
-                    fontWeight: 900,
-                    cursor: parsedAreaCount !== null ? "pointer" : "not-allowed",
+                    ...subActionButtonStyle,
+                    width: "100%",
+                    marginTop: 10,
+                    border:
+                      areaCountCalculatorResult !== null
+                        ? "2px solid #2f5ef5"
+                        : "1px solid #ccc",
+                    background:
+                      areaCountCalculatorResult !== null ? "#e8f0ff" : "#eee",
+                    color: areaCountCalculatorResult !== null ? "#111" : "#999",
+                    cursor:
+                      areaCountCalculatorResult !== null
+                        ? "pointer"
+                        : "not-allowed",
                   }}
                 >
                   完了
                 </button>
+              </section>
+            ) : (
+              <div
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "#f7f7f7",
+                  border: "1px solid #e0e0e0",
+                  fontSize: 16,
+                  fontWeight: 900,
+                }}
+              >
+                入力した残数：{parsedAreaCount}個
               </div>
-            </div>
+            )}
 
             {areaCountSameItemLimit !== null ? (
-              <div style={{ marginTop: 8, fontSize: 16, color: "#333", lineHeight: 1.7 }}>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 16,
+                  color: "#333",
+                  lineHeight: 1.7,
+                }}
+              >
                 商品名が同じ商品が11個以上ある場合、その商品は10個としてカウントします。
               </div>
             ) : null}
 
-            {areaCountText.trim() && parsedAreaCount === null ? (
-              <div style={{ marginTop: 8, color: "#b71c1c", fontWeight: 700 }}>
-                0以上の数字を入力してください。
-              </div>
-            ) : null}
-
-            {parsedAreaCount !== null && areaCountRecommendation ? (
+            {areaCountSubmitted &&
+            parsedAreaCount !== null &&
+            areaCountRecommendation ? (
               <div
                 style={{
                   marginTop: 10,
@@ -741,42 +686,93 @@ export function AreaJudgeScreen({
           </section>
         ) : null}
 
-        {finalCountMode ? null : areaCountAssistEnabled && parsedAreaCount === null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
+        {finalCountMode ? null : areaCountAssistEnabled &&
+          parsedAreaCount ===
+            null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
           isStep1 ? null : (
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={() => setShowJudgeHint(true)}
-                style={{
-                  border: 0,
-                  background: "transparent",
-                  color: "#555",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  textDecoration: "underline",
-                  textUnderlineOffset: 3,
-                  cursor: "pointer",
-                  padding: "4px 0",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                迷ったら…
-              </button>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowJudgeHint(true)}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    color: "#555",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 3,
+                    cursor: "pointer",
+                    padding: "4px 0",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  迷ったら…
+                </button>
+              </div>
+              <BasisTimeMiniPanel
+                weekdayText={weekdayText}
+                timeText={timeText}
+              />
+              <JudgeOptionButton
+                label="多い"
+                subLabel="+10%"
+                selected={false}
+                onClick={() =>
+                  canUseManualJudge && handleManualAreaCountEvaluation("many")
+                }
+              />
+              <JudgeOptionButton
+                label="やや多い"
+                subLabel="+5%"
+                selected={false}
+                onClick={() =>
+                  canUseManualJudge &&
+                  handleManualAreaCountEvaluation("slightly_many")
+                }
+              />
+              <JudgeOptionButton
+                label="普通"
+                subLabel="±0%"
+                selected={false}
+                buttonRef={normalManualJudgeButtonRef}
+                onClick={() =>
+                  canUseManualJudge && handleManualAreaCountEvaluation("normal")
+                }
+              />
+              <JudgeOptionButton
+                label="やや少ない"
+                subLabel="-5%"
+                selected={false}
+                onClick={() =>
+                  canUseManualJudge &&
+                  handleManualAreaCountEvaluation("slightly_few")
+                }
+              />
+              <JudgeOptionButton
+                label="少ない"
+                subLabel="-10%"
+                selected={false}
+                onClick={() =>
+                  canUseManualJudge && handleManualAreaCountEvaluation("few")
+                }
+              />
             </div>
-            <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
-            <JudgeOptionButton label="多い" subLabel="+10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("many")} />
-            <JudgeOptionButton label="やや多い" subLabel="+5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_many")} />
-            <JudgeOptionButton label="普通" subLabel="±0%" selected={false} buttonRef={normalManualJudgeButtonRef} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("normal")} />
-            <JudgeOptionButton label="やや少ない" subLabel="-5%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("slightly_few")} />
-            <JudgeOptionButton label="少ない" subLabel="-10%" selected={false} onClick={() => canUseManualJudge && handleManualAreaCountEvaluation("few")} />
-          </div>
           )
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
-            <JudgeOptionButton label="多い" selected={false} onClick={() => canUseManualJudge && handleJudge("many")} />
-            <JudgeOptionButton label="どちらでもない" selected={false} onClick={() => canUseManualJudge && handleJudge("normal")} />
+            <JudgeOptionButton
+              label="多い"
+              selected={false}
+              onClick={() => canUseManualJudge && handleJudge("many")}
+            />
+            <JudgeOptionButton
+              label="どちらでもない"
+              selected={false}
+              onClick={() => canUseManualJudge && handleJudge("normal")}
+            />
             <JudgeOptionButton
               label="少ない"
               subLabel="後回しします"
@@ -798,15 +794,26 @@ export function AreaJudgeScreen({
           disabled={!(canChooseSkipTarget && skipTargetOptions.length > 0)}
           style={{
             ...subActionButtonStyle,
-            background: canChooseSkipTarget && skipTargetOptions.length > 0 ? "#fff" : "#eee",
-            color: canChooseSkipTarget && skipTargetOptions.length > 0 ? "#000" : "#999",
-            cursor: canChooseSkipTarget && skipTargetOptions.length > 0 ? "pointer" : "not-allowed",
+            background:
+              canChooseSkipTarget && skipTargetOptions.length > 0
+                ? "#fff"
+                : "#eee",
+            color:
+              canChooseSkipTarget && skipTargetOptions.length > 0
+                ? "#000"
+                : "#999",
+            cursor:
+              canChooseSkipTarget && skipTargetOptions.length > 0
+                ? "pointer"
+                : "not-allowed",
           }}
         >
           スキップ先を選ぶ
         </button>
 
-        {canChooseSkipTarget && skipTargetOptions.length > 0 && showSkipTargetPicker ? (
+        {canChooseSkipTarget &&
+        skipTargetOptions.length > 0 &&
+        showSkipTargetPicker ? (
           <section
             style={{
               border: "1px solid #ddd",
@@ -818,7 +825,9 @@ export function AreaJudgeScreen({
             <div style={{ display: "grid", gap: 12 }}>
               {skipTargetGroups.map((group) => (
                 <div key={group.label}>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>{group.label}</div>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                    {group.label}
+                  </div>
                   <div style={{ display: "grid", gap: 8 }}>
                     {group.options.map((option) => (
                       <button
@@ -842,9 +851,12 @@ export function AreaJudgeScreen({
         ) : null}
       </div>
 
-
       <div style={{ marginTop: 16 }}>
-        <button type="button" onClick={onReturnHome} style={{ ...subActionButtonStyle, width: "100%" }}>
+        <button
+          type="button"
+          onClick={onReturnHome}
+          style={{ ...subActionButtonStyle, width: "100%" }}
+        >
           トップに戻る
         </button>
       </div>

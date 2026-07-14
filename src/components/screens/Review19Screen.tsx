@@ -27,15 +27,10 @@ const subActionButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
-function parseCount(text: string): number | null {
-  if (!/^\d+$/.test(text)) return null;
-  const value = Number(text);
-  if (!Number.isInteger(value) || value < 0) return null;
-  return value;
-}
-
 function getCountText(count?: number): string {
-  return typeof count === "number" && Number.isFinite(count) ? String(count) : "";
+  return typeof count === "number" && Number.isFinite(count)
+    ? String(count)
+    : "";
 }
 
 function normalizeAdditionFormula(value: string): string {
@@ -61,7 +56,10 @@ type Review19ScreenProps = {
   items: Review19AreaItem[];
   calculatorDraftScope: string;
   onChangeAreaCount: (areaId: AreaId, count: number) => void;
-  onSave: (latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) => void;
+  onSave: (
+    latestAreaCount?: { areaId: AreaId; count: number },
+    latestExcludedAreaId?: AreaId,
+  ) => void;
   onReturnHome: () => void;
 };
 
@@ -78,12 +76,11 @@ export function Review19Screen({
   );
   const activeAreaId = orderedAreaIds[activeIndex] ?? null;
   const activeItem = activeAreaId
-    ? items.find((item) => item.areaId === activeAreaId) ?? null
+    ? (items.find((item) => item.areaId === activeAreaId) ?? null)
     : null;
-  const [countText, setCountText] = useState(() => getCountText(activeItem?.count));
-  const [showCountCalculator, setShowCountCalculator] = useState(true);
-  const [countCalculatorText, setCountCalculatorText] = useState("");
-  const parsedCount = parseCount(countText);
+  const [countCalculatorText, setCountCalculatorText] = useState(() =>
+    getCountText(activeItem?.count),
+  );
   const countCalculatorResult = calculateAdditionResult(countCalculatorText);
 
   useEffect(() => {
@@ -92,7 +89,9 @@ export function Review19Screen({
   }, [items.map((item) => item.areaId).join("|")]);
 
   useEffect(() => {
-    setActiveIndex((index) => Math.min(index, Math.max(0, orderedAreaIds.length - 1)));
+    setActiveIndex((index) =>
+      Math.min(index, Math.max(0, orderedAreaIds.length - 1)),
+    );
   }, [orderedAreaIds.length]);
 
   useEffect(() => {
@@ -107,13 +106,15 @@ export function Review19Screen({
       ? loadCalculatorDraft(calculatorDraftKey)
       : null;
 
-    setCountText(getCountText(activeItem?.count));
-    setShowCountCalculator(calculatorDraft?.open ?? true);
-    setCountCalculatorText(calculatorDraft?.text ?? "");
+    setCountCalculatorText(
+      calculatorDraft?.text ?? getCountText(activeItem?.count),
+    );
   }, [activeItem?.areaId, activeItem?.count, calculatorDraftScope]);
 
   const recordedCount = useMemo(
-    () => items.filter((item) => !item.excluded && typeof item.count === "number").length,
+    () =>
+      items.filter((item) => !item.excluded && typeof item.count === "number")
+        .length,
     [items],
   );
   const targetCount = useMemo(
@@ -121,7 +122,10 @@ export function Review19Screen({
     [items],
   );
 
-  const hasAllCountsAfter = (latestAreaCount?: { areaId: AreaId; count: number }) => {
+  const hasAllCountsAfter = (latestAreaCount?: {
+    areaId: AreaId;
+    count: number;
+  }) => {
     return items
       .filter((item) => !item.excluded)
       .every((item) => {
@@ -132,22 +136,6 @@ export function Review19Screen({
 
   const moveToNextArea = () => {
     setActiveIndex((index) => Math.min(orderedAreaIds.length - 1, index + 1));
-  };
-
-  const handleDigit = (digit: string) => {
-    setCountText((current) => {
-      const next = current === "0" ? digit : `${current}${digit}`;
-      return next.replace(/^0+(?=\d)/, "");
-    });
-  };
-
-  const handleBackspace = () => {
-    setCountText((current) => current.slice(0, -1));
-  };
-
-  const openCountCalculator = () => {
-    setCountCalculatorText(countText);
-    setShowCountCalculator(true);
   };
 
   const handleCountCalculatorDigit = (digit: string) => {
@@ -181,7 +169,7 @@ export function Review19Screen({
   };
 
   const saveCountCalculatorDraft = (areaId: AreaId) => {
-    if (showCountCalculator && countCalculatorText) {
+    if (countCalculatorText) {
       saveCalculatorDraft(getCountCalculatorDraftKey(areaId), {
         text: countCalculatorText,
         open: true,
@@ -190,16 +178,6 @@ export function Review19Screen({
     }
 
     clearCountCalculatorDraft(areaId);
-  };
-
-  const completeCountCalculator = () => {
-    if (countCalculatorResult !== null) {
-      setCountText(String(countCalculatorResult));
-    }
-    if (activeItem) {
-      clearCountCalculatorDraft(activeItem.areaId);
-    }
-    setShowCountCalculator(false);
   };
 
   const goSkip = () => {
@@ -218,22 +196,32 @@ export function Review19Screen({
     setActiveIndex((index) => Math.min(index, orderedAreaIds.length - 2));
   };
 
-  const goNext = () => {
-    if (!activeItem) return;
-
-    const latestAreaCount =
-      !activeItem.excluded && parsedCount !== null
-        ? { areaId: activeItem.areaId, count: parsedCount }
-        : undefined;
-
-    if (!activeItem.excluded) {
-      if (parsedCount === null) return;
-      clearCountCalculatorDraft(activeItem.areaId);
-      onChangeAreaCount(activeItem.areaId, parsedCount);
+  const completeCountEntry = () => {
+    if (!activeItem || activeItem.excluded || countCalculatorResult === null) {
+      return;
     }
+
+    const latestAreaCount = {
+      areaId: activeItem.areaId,
+      count: countCalculatorResult,
+    };
+
+    clearCountCalculatorDraft(activeItem.areaId);
+    onChangeAreaCount(activeItem.areaId, countCalculatorResult);
 
     if (hasAllCountsAfter(latestAreaCount)) {
       window.setTimeout(() => onSave(latestAreaCount), 0);
+      return;
+    }
+
+    moveToNextArea();
+  };
+
+  const goNextExcludedArea = () => {
+    if (!activeItem || !activeItem.excluded) return;
+
+    if (hasAllCountsAfter()) {
+      window.setTimeout(() => onSave(), 0);
       return;
     }
 
@@ -256,19 +244,19 @@ export function Review19Screen({
     );
   }
 
-  const canProceed = activeItem.excluded || parsedCount !== null;
-  const latestAreaCount =
-    activeItem && !activeItem.excluded && parsedCount !== null
-      ? { areaId: activeItem.areaId, count: parsedCount }
-      : undefined;
-  const willComplete = hasAllCountsAfter(latestAreaCount);
+  const willCompleteExcluded = activeItem.excluded && hasAllCountsAfter();
   const swipeToSkipHandlers = useSwipeToSkip({
     onSwipeLeft: goSkip,
-    enabled: Boolean(activeItem && !activeItem.excluded && orderedAreaIds.length > 1),
+    enabled: Boolean(
+      activeItem && !activeItem.excluded && orderedAreaIds.length > 1,
+    ),
   });
 
   return (
-    <main {...swipeToSkipHandlers} style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
+    <main
+      {...swipeToSkipHandlers}
+      style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}
+    >
       <section style={cardStyle}>
         <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 8 }}>
           19時残数チェック
@@ -279,7 +267,15 @@ export function Review19Screen({
       </section>
 
       <section style={{ ...cardStyle, marginTop: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 12,
+          }}
+        >
           <div style={{ fontSize: 13, fontWeight: 800, color: "#555" }}>
             {activeIndex + 1} / {items.length}
           </div>
@@ -300,22 +296,6 @@ export function Review19Screen({
           <div style={{ fontSize: 24, fontWeight: 900, flex: 1 }}>
             {activeItem.areaName}
           </div>
-          {!activeItem.excluded ? (
-            <button
-              type="button"
-              onClick={openCountCalculator}
-              style={{
-                ...subActionButtonStyle,
-                width: "auto",
-                minWidth: 72,
-                padding: "8px 10px",
-                fontSize: 13,
-                flexShrink: 0,
-              }}
-            >
-              電卓
-            </button>
-          ) : null}
         </div>
 
         {activeItem.excluded ? (
@@ -337,72 +317,63 @@ export function Review19Screen({
           </div>
         ) : (
           <>
-            {showCountCalculator ? (
-              <section
+            <section
+              style={{
+                border: "1px solid #d6d6d6",
+                borderRadius: 12,
+                padding: 12,
+                background: "#fafafa",
+                marginBottom: 12,
+              }}
+            >
+              <div
+                aria-live="polite"
                 style={{
-                  border: "1px solid #d6d6d6",
-                  borderRadius: 12,
-                  padding: 12,
-                  background: "#fafafa",
-                  marginBottom: 12,
+                  minHeight: 44,
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #bbb",
+                  background: "#fff",
+                  fontSize: 20,
+                  fontWeight: 900,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  color: countCalculatorText ? "#111" : "#999",
+                  overflowWrap: "anywhere",
+                  textAlign: "right",
                 }}
               >
-                <div
-                  aria-live="polite"
-                  style={{
-                    minHeight: 44,
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #bbb",
-                    background: "#fff",
-                    fontSize: 20,
-                    fontWeight: 900,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    color: countCalculatorText ? "#111" : "#999",
-                    overflowWrap: "anywhere",
-                    textAlign: "right",
-                  }}
-                >
-                  {countCalculatorText || "0"}
-                </div>
-                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, textAlign: "right", color: "#333" }}>
-                  合計：{countCalculatorResult ?? 0}
-                </div>
-                <div
-                  aria-label="19時残数用電卓キーパッド"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, 1fr)",
-                    gap: 8,
-                    marginTop: 10,
-                  }}
-                >
-                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
-                    <button
-                      key={digit}
-                      type="button"
-                      onClick={() => handleCountCalculatorDigit(digit)}
-                      style={{
-                        padding: "10px 0",
-                        borderRadius: 10,
-                        border: "1px solid #ccc",
-                        background: "#fff",
-                        fontSize: 18,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {digit}
-                    </button>
-                  ))}
+                {countCalculatorText || "0"}
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  textAlign: "right",
+                  color: "#333",
+                }}
+              >
+                合計：{countCalculatorResult ?? 0}
+              </div>
+              <div
+                aria-label="19時残数入力・足し算電卓キーパッド"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 8,
+                  marginTop: 10,
+                }}
+              >
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
                   <button
+                    key={digit}
                     type="button"
-                    onClick={() => handleCountCalculatorDigit("0")}
+                    onClick={() => handleCountCalculatorDigit(digit)}
                     style={{
-                      padding: "10px 0",
-                      borderRadius: 10,
+                      padding: "12px 0",
+                      borderRadius: 12,
                       border: "1px solid #ccc",
                       background: "#fff",
                       fontSize: 18,
@@ -410,102 +381,12 @@ export function Review19Screen({
                       cursor: "pointer",
                     }}
                   >
-                    0
+                    {digit}
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleCountCalculatorPlus}
-                    disabled={!countCalculatorText || countCalculatorText.endsWith("+")}
-                    style={{
-                      padding: "10px 0",
-                      borderRadius: 10,
-                      border: "1px solid #ccc",
-                      background: countCalculatorText && !countCalculatorText.endsWith("+") ? "#fff" : "#eee",
-                      color: countCalculatorText && !countCalculatorText.endsWith("+") ? "#111" : "#999",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      cursor: countCalculatorText && !countCalculatorText.endsWith("+") ? "pointer" : "not-allowed",
-                    }}
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCountCalculatorBackspace}
-                    disabled={!countCalculatorText}
-                    style={{
-                      padding: "10px 0",
-                      borderRadius: 10,
-                      border: "1px solid #ccc",
-                      background: countCalculatorText ? "#fff" : "#eee",
-                      color: countCalculatorText ? "#111" : "#999",
-                      fontSize: 18,
-                      fontWeight: 900,
-                      cursor: countCalculatorText ? "pointer" : "not-allowed",
-                    }}
-                    aria-label="電卓を1文字削除"
-                  >
-                    ⌫
-                  </button>
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  <button
-                    type="button"
-                    onClick={completeCountCalculator}
-                    disabled={countCalculatorResult === null}
-                    style={{
-                      ...subActionButtonStyle,
-                      width: "100%",
-                      border: countCalculatorResult !== null ? "2px solid #2f5ef5" : "1px solid #ccc",
-                      background: countCalculatorResult !== null ? "#e8f0ff" : "#eee",
-                      color: countCalculatorResult !== null ? "#111" : "#999",
-                      cursor: countCalculatorResult !== null ? "pointer" : "not-allowed",
-                    }}
-                  >
-                    完了
-                  </button>
-                </div>
-                <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.6 }}>
-                  「完了」を押すと、合計を残数入力に入れます。
-                </div>
-              </section>
-            ) : null}
-            <div
-              aria-live="polite"
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                minHeight: 52,
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid #bbb",
-                background: "#fff",
-                fontSize: 24,
-                fontWeight: 900,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                color: countText ? "#111" : "#999",
-                userSelect: "none",
-                marginBottom: 10,
-              }}
-            >
-              {countText || "未入力"}
-            </div>
-            <div
-              aria-label="19時残数入力キーパッド"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 8,
-                marginBottom: 14,
-              }}
-            >
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                ))}
                 <button
-                  key={digit}
                   type="button"
-                  onClick={() => handleDigit(digit)}
+                  onClick={() => handleCountCalculatorDigit("0")}
                   style={{
                     padding: "12px 0",
                     borderRadius: 12,
@@ -516,60 +397,77 @@ export function Review19Screen({
                     cursor: "pointer",
                   }}
                 >
-                  {digit}
+                  0
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={handleCountCalculatorPlus}
+                  disabled={
+                    !countCalculatorText || countCalculatorText.endsWith("+")
+                  }
+                  style={{
+                    padding: "12px 0",
+                    borderRadius: 12,
+                    border: "1px solid #ccc",
+                    background:
+                      countCalculatorText && !countCalculatorText.endsWith("+")
+                        ? "#fff"
+                        : "#eee",
+                    color:
+                      countCalculatorText && !countCalculatorText.endsWith("+")
+                        ? "#111"
+                        : "#999",
+                    fontSize: 18,
+                    fontWeight: 900,
+                    cursor:
+                      countCalculatorText && !countCalculatorText.endsWith("+")
+                        ? "pointer"
+                        : "not-allowed",
+                  }}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCountCalculatorBackspace}
+                  disabled={!countCalculatorText}
+                  style={{
+                    padding: "12px 0",
+                    borderRadius: 12,
+                    border: "1px solid #ccc",
+                    background: countCalculatorText ? "#fff" : "#eee",
+                    color: countCalculatorText ? "#111" : "#999",
+                    fontSize: 18,
+                    fontWeight: 900,
+                    cursor: countCalculatorText ? "pointer" : "not-allowed",
+                  }}
+                  aria-label="電卓を1文字削除"
+                >
+                  ⌫
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={() => handleDigit("0")}
+                onClick={completeCountEntry}
+                disabled={countCalculatorResult === null}
                 style={{
-                  padding: "12px 0",
-                  borderRadius: 12,
-                  border: "1px solid #ccc",
-                  background: "#fff",
-                  fontSize: 18,
-                  fontWeight: 900,
-                  cursor: "pointer",
+                  ...subActionButtonStyle,
+                  width: "100%",
+                  marginTop: 10,
+                  border:
+                    countCalculatorResult !== null
+                      ? "2px solid #2f5ef5"
+                      : "1px solid #ccc",
+                  background:
+                    countCalculatorResult !== null ? "#e8f0ff" : "#eee",
+                  color: countCalculatorResult !== null ? "#111" : "#999",
+                  cursor:
+                    countCalculatorResult !== null ? "pointer" : "not-allowed",
                 }}
               >
-                0
+                完了
               </button>
-              <button
-                type="button"
-                onClick={handleBackspace}
-                disabled={!countText}
-                style={{
-                  padding: "12px 0",
-                  borderRadius: 12,
-                  border: "1px solid #ccc",
-                  background: countText ? "#fff" : "#eee",
-                  color: countText ? "#111" : "#999",
-                  fontSize: 18,
-                  fontWeight: 900,
-                  cursor: countText ? "pointer" : "not-allowed",
-                }}
-                aria-label="1文字削除"
-              >
-                ⌫
-              </button>
-              <button
-                type="button"
-                onClick={goNext}
-                disabled={!canProceed}
-                style={{
-                  padding: "12px 0",
-                  borderRadius: 12,
-                  border: canProceed ? "2px solid #2f5ef5" : "1px solid #ccc",
-                  background: canProceed ? "#e8f0ff" : "#eee",
-                  color: canProceed ? "#111" : "#999",
-                  fontSize: 18,
-                  fontWeight: 900,
-                  cursor: canProceed ? "pointer" : "not-allowed",
-                }}
-              >
-                {willComplete ? "記録" : "次へ"}
-              </button>
-            </div>
+            </section>
             <button
               type="button"
               onClick={goSkip}
@@ -586,12 +484,18 @@ export function Review19Screen({
         )}
 
         {activeItem.excluded ? (
-          <PrimaryButton onClick={goNext}>{willComplete ? "記録して終了" : "次へ"}</PrimaryButton>
+          <PrimaryButton onClick={goNextExcludedArea}>
+            {willCompleteExcluded ? "記録して終了" : "次へ"}
+          </PrimaryButton>
         ) : null}
       </section>
 
       <div style={{ marginTop: 16 }}>
-        <button type="button" onClick={onReturnHome} style={subActionButtonStyle}>
+        <button
+          type="button"
+          onClick={onReturnHome}
+          style={subActionButtonStyle}
+        >
           トップに戻る
         </button>
       </div>
