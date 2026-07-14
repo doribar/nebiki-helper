@@ -393,13 +393,15 @@ export function AreaJudgeScreen({
         </section>
       ) : null}
 
-      <WeekdayBasePanel
-        noticeText={basisGuide.noticeText}
-        weekdaySummaryText={basisGuide.weekdaySummaryText}
-        weekdayDetailLines={basisGuide.weekdayDetailLines}
-        bonusSummaryText={basisGuide.bonusSummaryText}
-        bonusDetailLines={basisGuide.bonusDetailLines}
-      />
+      {!finalCountMode ? (
+        <WeekdayBasePanel
+          noticeText={basisGuide.noticeText}
+          weekdaySummaryText={basisGuide.weekdaySummaryText}
+          weekdayDetailLines={basisGuide.weekdayDetailLines}
+          bonusSummaryText={basisGuide.bonusSummaryText}
+          bonusDetailLines={basisGuide.bonusDetailLines}
+        />
+      ) : null}
 
       <section
         style={{
