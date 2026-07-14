@@ -14,6 +14,7 @@ import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { JudgeHintDialog } from "../common/JudgeHintDialog";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
+import { getFinalTimeInstructionSteps } from "../../domain/discount";
 
 type RateDisplayScreenProps = {
   weekdayText: string;
@@ -58,36 +59,6 @@ const subActionButtonStyle: CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
 };
-
-function RateRow({
-  label,
-  line,
-  color,
-}: {
-  label: string;
-  line: { main: string; note?: string };
-  color?: string;
-}) {
-  return (
-    <div style={{ marginBottom: 10, color }}>
-      <div style={{ fontWeight: 700 }}>
-        {label} → {line.main}
-      </div>
-      {line.note ? (
-        <div
-          style={{
-            fontSize: 14,
-            marginTop: 4,
-            color,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {line.note}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 type RateInstructionStep = {
   key: string;
@@ -480,6 +451,9 @@ export function RateDisplayScreen({
         Math.max(rateInstructionSteps.length - 1, 0),
       )
     ];
+  const finalInstructionSteps = finalGuide
+    ? getFinalTimeInstructionSteps(finalGuide)
+    : [];
 
   function handleRateInstructionDone() {
     if (rateInstructionStepIndex < rateInstructionSteps.length - 1) {
@@ -646,16 +620,29 @@ export function RateDisplayScreen({
         ) : (
           <>
             <div style={{ fontWeight: 800, marginBottom: 8 }}>
-              20時は最終値引です。商品数を見て値引してください
+              20時30分は最終値引です
             </div>
 
-            {finalGuide ? (
-              <>
-                <RateRow label="1個" line={finalGuide.count1} />
-                <RateRow label="2個" line={finalGuide.count2} />
-                <RateRow label="3個以上" line={finalGuide.count3OrMore} />
-              </>
-            ) : null}
+            <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+              {finalInstructionSteps.map((step) => (
+                <div
+                  key={`${step.subject}-${step.rate}`}
+                  style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    background: "#fafafa",
+                    fontSize: 20,
+                    fontWeight: 900,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  {step.subject}
+                  <br />
+                  {step.rate}値引きしてください。
+                </div>
+              ))}
+            </div>
           </>
         )}
       </section>

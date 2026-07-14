@@ -1636,6 +1636,22 @@ const finalRainMinimum = getFinalTimeGuide({
 assert.equal(finalRainMinimum.count2.main, '50%');
 assert.equal(finalRainMinimum.count1.main, '40%');
 
+const finalRainColdFeelsWorse = getFinalTimeGuide({
+  weekday: 1,
+  weather21: 'rain',
+  temp21C: 10,
+  comfortScore: 1,
+});
+assert.equal(finalRainColdFeelsWorse.count1.main, '50%');
+
+const finalDryColdSameConditions = getFinalTimeGuide({
+  weekday: 1,
+  weather21: 'sunny',
+  temp21C: 10,
+  comfortScore: 1,
+});
+assert.equal(finalDryColdSameConditions.count1.main, '40%');
+
 const finalRainStrongCold = getFinalTimeGuide({
   weekday: 1,
   weather21: 'rain',
@@ -1679,8 +1695,120 @@ const finalFridayRainMaxToMiddle = getFinalTimeGuide({
 assert.equal(finalFridayRainMaxToMiddle.count2.main, '50%');
 assert.equal(finalFridayRainMaxToMiddle.count1.main, '40%');
 
-console.log('PASS: 最終値引の21時天候・寒さ・金土補正ロジック');
+const finalCountAboveMovesTowardC = getFinalTimeGuide({
+  weekday: 1,
+  weather21: 'sunny',
+  temp21C: 20,
+  comfortScore: 0,
+  areaCountEvaluation: 'slightly_many',
+});
+assert.equal(finalCountAboveMovesTowardC.count1.main, '40%');
+
+const finalCountBelowMovesTowardA = getFinalTimeGuide({
+  weekday: 1,
+  weather21: 'sunny',
+  temp21C: 5,
+  comfortScore: 2,
+  areaCountEvaluation: 'slightly_few',
+});
+assert.equal(finalCountBelowMovesTowardA.count1.main, '40%');
+
+const finalRainCountBelowKeepsRainFloor = getFinalTimeGuide({
+  weekday: 1,
+  weather21: 'rain',
+  temp21C: 20,
+  comfortScore: 0,
+  areaCountEvaluation: 'few',
+});
+assert.equal(finalRainCountBelowKeepsRainFloor.count1.main, '40%');
+
+const finalSnowCountBelowStaysMaximum = getFinalTimeGuide({
+  weekday: 1,
+  weather21: 'snow',
+  temp21C: 0,
+  comfortScore: 0,
+  areaCountEvaluation: 'few',
+});
+assert.equal(finalSnowCountBelowStaysMaximum.count1.main, '50%');
+
+console.log('PASS: 最終値引の21時天候・雨の体感・金土・20時30分残数補正ロジック');
 passed += 1;
+
+{
+  try {
+    const records = [
+      {
+        date: '2026-06-23',
+        sessionStartedAt: '2026-06-23T11:30:00.000Z',
+        recordedAt: '2026-06-23T11:35:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '20',
+        actualWeekday: '火',
+        actualWeekdayGroup: '火木',
+        count: 10,
+      },
+      {
+        date: '2026-06-30',
+        sessionStartedAt: '2026-06-30T11:30:00.000Z',
+        recordedAt: '2026-06-30T11:35:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '20',
+        actualWeekday: '火',
+        actualWeekdayGroup: '火木',
+        count: 10,
+      },
+      {
+        date: '2026-07-07',
+        sessionStartedAt: '2026-07-07T11:30:00.000Z',
+        recordedAt: '2026-07-07T11:35:00.000Z',
+        areaId: 'bento_men',
+        discountTime: '20',
+        actualWeekday: '火',
+        actualWeekdayGroup: '火木',
+        count: 10,
+      },
+    ] as const;
+
+    const nearMedian = getAreaCountRecommendation({
+      records: [...records],
+      areaId: 'bento_men',
+      discountTime: '20',
+      weekday: 2,
+      date: '2026-07-14',
+      count: 10,
+    });
+    const aboveMedian = getAreaCountRecommendation({
+      records: [...records],
+      areaId: 'bento_men',
+      discountTime: '20',
+      weekday: 2,
+      date: '2026-07-14',
+      count: 12,
+    });
+    const belowMedian = getAreaCountRecommendation({
+      records: [...records],
+      areaId: 'bento_men',
+      discountTime: '20',
+      weekday: 2,
+      date: '2026-07-14',
+      count: 8,
+    });
+
+    assert.equal(nearMedian.status, 'ready');
+    assert.equal(nearMedian.suggestedEvaluation, 'normal');
+    assert.equal(aboveMedian.suggestedEvaluation, 'slightly_many');
+    assert.equal(belowMedian.suggestedEvaluation, 'slightly_few');
+    assert.equal(aboveMedian.summaryText.includes('C側へ1段階'), true);
+    assert.equal(belowMedian.summaryText.includes('A側へ1段階'), true);
+
+    console.log('PASS: 20時30分残数は中央値付近・上寄り・下寄りで最終値引基準を補正できる');
+    passed += 1;
+  } catch (error) {
+    console.error('FAIL: 20時30分残数の中央値補正');
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
 
 
 const sundayRateDisplay = getNormalTimeRateDisplay({
@@ -2134,7 +2262,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 83;
+const totalChecks = 84;
 
 
 {

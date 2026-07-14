@@ -221,10 +221,9 @@ export function isAreaCountAssistTarget(params: {
   areaId: AreaId | null | undefined;
   discountTime: DiscountTime | undefined | null;
 }): params is { areaId: AreaId; discountTime: AreaCountDiscountTime } {
-  if (!params.areaId || !isAreaCountAssistDiscountTime(params.discountTime)) return false;
-
-  // 20時30分は最終値引画面でエリア判定を行わない。
-  return params.discountTime !== "20";
+  return Boolean(
+    params.areaId && isAreaCountAssistDiscountTime(params.discountTime),
+  );
 }
 
 function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
@@ -799,7 +798,7 @@ export function getAreaCountRecommendation(params: {
       requiredSampleSize,
       matchedRecords: [],
       summaryText: "このエリア・時刻ではエリア残数判定は使いません。",
-      detailLines: ["20時30分の最終値引では、従来どおり数量別の最終値引を使います。"],
+      detailLines: [],
     };
   }
 
@@ -866,6 +865,69 @@ export function getAreaCountRecommendation(params: {
     count,
     referenceCount: medianCount,
   });
+
+  if (discountTime === "20") {
+    const suggestedEvaluation = baseEvaluationInfo.evaluation;
+    const areaRateAdjustment = evaluationToRateAdjustment(suggestedEvaluation);
+    const finalTierDirection =
+      suggestedEvaluation === "many" || suggestedEvaluation === "slightly_many"
+        ? "中央値より上寄りのため、最終値引基準をC側へ1段階補正します。"
+        : suggestedEvaluation === "few" || suggestedEvaluation === "slightly_few"
+        ? "中央値より下寄りのため、最終値引基準をA側へ1段階補正します。"
+        : "中央値付近のため、天候・曜日で決まった最終値引基準をそのまま使います。";
+
+    return {
+      status: "ready",
+      count,
+      sampleSize: matchedRecords.length,
+      requiredSampleSize,
+      matchedRecords,
+      actualWeekday,
+      actualWeekdayGroup,
+      comparisonMode,
+      medianCount,
+      shortMedianCount: referenceMedian.shortMedianCount,
+      longMedianCount: referenceMedian.longMedianCount,
+      shortSampleSize: matchedRecords.length,
+      longSampleSize: reference.longMatchedRecords.length,
+      medianDownGuardApplied: referenceMedian.medianDownGuardApplied,
+      smallDifferenceThreshold: baseEvaluationInfo.smallDifferenceThreshold,
+      largeDifferenceThreshold: baseEvaluationInfo.largeDifferenceThreshold,
+      lowerLargeThreshold: baseEvaluationInfo.lowerLargeThreshold,
+      lowerSmallThreshold: baseEvaluationInfo.lowerSmallThreshold,
+      upperSmallThreshold: baseEvaluationInfo.upperSmallThreshold,
+      upperLargeThreshold: baseEvaluationInfo.upperLargeThreshold,
+      baseEvaluation: suggestedEvaluation,
+      suggestedEvaluation,
+      suggestedJudge: evaluationToLegacyJudge(suggestedEvaluation),
+      areaRateAdjustment,
+      summaryText: finalTierDirection,
+      detailLines: [
+        `今日の曜日：${actualWeekday}`,
+        comparisonMode === "weekday"
+          ? `比較条件：同じ曜日（${actualWeekday}）`
+          : `比較条件：暫定グループ（${actualWeekdayGroup}）`,
+        `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+        reference.forceFallbackWeekdayGroup
+          ? "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
+          : "通常日は同じ曜日の記録を優先し、足りない時だけ暫定グループを採用。",
+        comparisonMode === "weekday"
+          ? `短期中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
+          : `暫定中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
+        comparisonMode === "weekday"
+          ? `長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
+          : "暫定グループは短期中央値で判定",
+        referenceMedian.medianDownGuardApplied
+          ? `短期が長期より少ないため、基準を下げすぎないように${medianCount}個で判定。`
+          : `採用基準：${medianCount}個`,
+        `中央値より下寄り：${baseEvaluationInfo.lowerSmallThreshold}個以下`,
+        `中央値付近：${baseEvaluationInfo.lowerSmallThreshold + 1}〜${baseEvaluationInfo.upperSmallThreshold - 1}個`,
+        `中央値より上寄り：${baseEvaluationInfo.upperSmallThreshold}個以上`,
+        `今回：${count}個`,
+      ],
+    };
+  }
+
   const decreaseRecommendation = getDecreaseRecommendation({
     records: recordsForDecrease,
     referenceCurrentRecords: matchedRecords,

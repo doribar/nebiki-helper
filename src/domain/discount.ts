@@ -4,6 +4,7 @@ import type {
   RateDisplayData,
   RateLine,
   AreaJudge,
+  AreaCountEvaluation,
   AreaRateAdjustment,
   WeekdayBaseLabel,
   ForecastWeatherKind,
@@ -159,7 +160,11 @@ function getBaseFinalDiscountTier(params: {
   const isStrongCold = params.temp21C <= 15 && params.comfortScore >= 2;
 
   if (params.weather21 === "rain") {
-    return isStrongCold ? 2 : 1;
+    // 雨の日は、同じ気温・風でも体感が一段不快になるものとして扱う。
+    // 例: 雨なしでは「少し不快」の10℃前後でも、雨なら「不快」相当としてC候補にする。
+    const rainAdjustedComfortScore = Math.min(2, params.comfortScore + 1);
+    const isRainStrongCold = params.temp21C <= 15 && rainAdjustedComfortScore >= 2;
+    return isRainStrongCold ? 2 : 1;
   }
 
   if (isStrongCold) {
@@ -168,6 +173,33 @@ function getBaseFinalDiscountTier(params: {
 
   // 暑さによる強い不快は、夜への来店ずれ込みを考慮してB止まり。
   return params.comfortScore >= 1 ? 1 : 0;
+}
+
+function getFinalAreaCountTierShift(
+  evaluation: AreaCountEvaluation | undefined,
+): -1 | 0 | 1 {
+  if (evaluation === "many" || evaluation === "slightly_many") return 1;
+  if (evaluation === "few" || evaluation === "slightly_few") return -1;
+  return 0;
+}
+
+function applyFinalAreaCountCorrection(params: {
+  tier: FinalDiscountTier;
+  evaluation?: AreaCountEvaluation;
+}): FinalDiscountTier {
+  const shift = getFinalAreaCountTierShift(params.evaluation);
+  return Math.max(0, Math.min(2, params.tier + shift)) as FinalDiscountTier;
+}
+
+function reapplyFinalWeatherFloor(params: {
+  tier: FinalDiscountTier;
+  weather21: ForecastWeatherKind;
+}): FinalDiscountTier {
+  if (params.weather21 === "snow") return 2;
+  if (params.weather21 === "rain") {
+    return Math.max(1, params.tier) as FinalDiscountTier;
+  }
+  return params.tier;
 }
 
 function applyFridaySaturdayFinalDiscountCorrection(params: {
@@ -221,11 +253,20 @@ export function getFinalTimeGuide(params: {
   weather21: ForecastWeatherKind;
   temp21C: number;
   comfortScore: number;
+  areaCountEvaluation?: AreaCountEvaluation;
 }): FinalGuideData {
   const baseTier = getBaseFinalDiscountTier(params);
-  const tier = applyFridaySaturdayFinalDiscountCorrection({
+  const weekdayCorrectedTier = applyFridaySaturdayFinalDiscountCorrection({
     tier: baseTier,
     weekday: params.weekday,
+    weather21: params.weather21,
+  });
+  const areaCountCorrectedTier = applyFinalAreaCountCorrection({
+    tier: weekdayCorrectedTier,
+    evaluation: params.areaCountEvaluation,
+  });
+  const tier = reapplyFinalWeatherFloor({
+    tier: areaCountCorrectedTier,
     weather21: params.weather21,
   });
 

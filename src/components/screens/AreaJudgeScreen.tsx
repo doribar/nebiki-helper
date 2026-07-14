@@ -35,6 +35,7 @@ type AreaJudgeScreenProps = {
   timeSwitchNotice?: string | null;
   areaCountAssistEnabled?: boolean;
   areaCountSameItemLimit?: number | null;
+  finalCountMode?: boolean;
   trainingStepConfig: TrainingStepConfig;
   getAreaCountRecommendation?: (count: number) => AreaCountRecommendation;
   onJudge: (
@@ -193,6 +194,7 @@ export function AreaJudgeScreen({
   timeSwitchNotice,
   areaCountAssistEnabled = false,
   areaCountSameItemLimit = null,
+  finalCountMode = false,
   trainingStepConfig,
   getAreaCountRecommendation,
   onJudge,
@@ -337,6 +339,12 @@ export function AreaJudgeScreen({
 
   const handleAreaCountComplete = () => {
     if (parsedAreaCount === null) return;
+
+    if (finalCountMode) {
+      clearAreaCountCalculatorDraft();
+      onJudge("normal", parsedAreaCount);
+      return;
+    }
 
     if (isAreaCountReady) {
       handleUseAreaCountRecommendation();
@@ -738,7 +746,7 @@ export function AreaJudgeScreen({
           </section>
         ) : null}
 
-        {areaCountAssistEnabled && parsedAreaCount === null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
+        {finalCountMode ? null : areaCountAssistEnabled && parsedAreaCount === null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
           isStep1 ? null : (
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>

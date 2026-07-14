@@ -1870,8 +1870,9 @@ const lateSkipNotice = useMemo(() => {
     weather21: state.session.weather.hourlyForecasts["21"].weather,
     temp21C: state.session.weather.hourlyForecasts["21"].tempC,
     comfortScore: weekdayBaseInfo.weekdayShift,
+    areaCountEvaluation: currentAreaProgress?.areaCountEvaluation,
   });
-}, [state.session, weekdayBaseInfo.weekdayShift]);
+}, [state.session, weekdayBaseInfo.weekdayShift, currentAreaProgress?.areaCountEvaluation]);
 
   const doneSummaryItems = useMemo<DoneSummaryItem[]>(() => {
     const session = state.session;
@@ -2141,21 +2142,6 @@ const lateSkipNotice = useMemo(() => {
     const effectiveDeferredAreaIds =
       params.deferredAreaIds ?? params.prev.pendingDeferredAreaIds;
 
-    if (params.nextSession?.discountTime === "20") {
-      return {
-        ...params.prev,
-        session: params.nextSession,
-        timeSwitchNotice: params.timeSwitchNotice,
-        areaProgressMap: params.updatedMap,
-        currentAreaId: null,
-        lastReferenceAreaId: params.referenceAreaId,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        finalTimeStep: 0,
-        screen: "final_time",
-      };
-    }
-
     const nextCandidate = getNextPendingCandidate({
       areaProgressMap: params.updatedMap,
       referenceAreaId: params.referenceAreaId,
@@ -2268,16 +2254,7 @@ const lateSkipNotice = useMemo(() => {
     return buildNavigationSnapshot(baseState);
   }
 
-  function resolveResumeState(prev: AppState, nextSession: SessionData, requestedScreen: ScreenName) {
-    if (nextSession.discountTime === "20") {
-      return {
-        screen: "final_time" as const,
-        currentAreaId: null,
-        lastReferenceAreaId: prev.lastReferenceAreaId,
-        finalTimeStep: prev.finalTimeStep,
-      };
-    }
-
+  function resolveResumeState(prev: AppState, requestedScreen: ScreenName) {
     const fallbackAreaId =
       prev.currentAreaId ??
       prev.lastReferenceAreaId ??
@@ -2400,22 +2377,6 @@ const lateSkipNotice = useMemo(() => {
       },
     };
 
-    if (nextSession?.discountTime === "20") {
-      return {
-        ...prev,
-        session: nextSession,
-        timeSwitchNotice,
-        review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
-        areaProgressMap: updatedMap,
-        currentAreaId: null,
-        lastReferenceAreaId: currentAreaId,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        finalTimeStep: 0,
-        screen: "final_time",
-      };
-    }
-
     if (!hasRemainingNormalFlowArea(judgedCurrentMap, currentAreaId)) {
       return {
         ...prev,
@@ -2518,10 +2479,7 @@ const lateSkipNotice = useMemo(() => {
           });
         }
 
-        const firstAreaId =
-          nextSession.discountTime === "20"
-            ? null
-            : getFirstNormalFlowAreaId(areaProgressMap);
+        const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
         const nextReview19ExcludedAreaIds =
           prev.session.discountTime === "15" && nextSession.discountTime === "17"
             ? normalizeReview19ExcludedAreaIds([
@@ -2534,12 +2492,9 @@ const lateSkipNotice = useMemo(() => {
 
         return {
           ...prev,
-          screen:
-            nextSession.discountTime === "20"
-              ? "final_time"
-              : firstAreaId
-              ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
-              : "done",
+          screen: firstAreaId
+            ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
+            : "done",
           session: {
             ...nextSession,
             startedAt,
@@ -2556,11 +2511,9 @@ const lateSkipNotice = useMemo(() => {
       }
 
       if (prev.session && canResumeCurrentSession) {
-        const requestedScreen =
-          resumeTargetScreen ??
-          (prev.session.discountTime === "20" ? "final_time" : "area_judge");
+        const requestedScreen = resumeTargetScreen ?? "area_judge";
 
-        const resumeState = resolveResumeState(prev, nextSession, requestedScreen);
+        const resumeState = resolveResumeState(prev, requestedScreen);
 
         return {
           ...prev,
@@ -2587,19 +2540,13 @@ const lateSkipNotice = useMemo(() => {
         );
       }
 
-      const firstAreaId =
-        nextSession.discountTime === "20"
-          ? null
-          : getFirstNormalFlowAreaId(areaProgressMap);
+      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
 
       return {
         ...prev,
-        screen:
-          nextSession.discountTime === "20"
-            ? "final_time"
-            : firstAreaId
-            ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
-            : "done",
+        screen: firstAreaId
+          ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
+          : "done",
         session: nextSession,
         areaProgressMap,
         currentAreaId: firstAreaId,
@@ -2819,21 +2766,6 @@ const lateSkipNotice = useMemo(() => {
         },
       };
 
-      if (nextSession?.discountTime === "20") {
-        return {
-          ...prev,
-          session: nextSession,
-          timeSwitchNotice,
-          areaProgressMap: updatedMap,
-          currentAreaId: null,
-          lastReferenceAreaId: currentAreaId,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          finalTimeStep: 0,
-          screen: "final_time",
-        };
-      }
-
       const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
 
       if (nextAreaId) {
@@ -2959,21 +2891,6 @@ const lateSkipNotice = useMemo(() => {
           nextSession,
           timeSwitchNotice,
         });
-      }
-
-      if (nextSession?.discountTime === "20") {
-        return {
-          ...prev,
-          session: nextSession,
-          timeSwitchNotice,
-          areaProgressMap: updatedMap,
-          currentAreaId: null,
-          lastReferenceAreaId: currentAreaId,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          finalTimeStep: 0,
-          screen: "final_time",
-        };
       }
 
       const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
