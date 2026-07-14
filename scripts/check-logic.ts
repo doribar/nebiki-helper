@@ -12,6 +12,7 @@ import {
   saveCalculatorDraft,
 } from '../src/domain/calculatorDraft.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
+import { buildAutomaticDayExportPayload, getAutomaticDayExportFilename } from '../src/domain/dayExport.ts';
 import {
   getEarlyNextMinus5CompletedText,
   getEarlyNextMinus5NoticeText,
@@ -2262,7 +2263,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 84;
+const totalChecks = 85;
 
 
 {
@@ -2522,6 +2523,28 @@ const totalChecks = 84;
   assert.equal(loadCalculatorDraft(key), null);
 
   delete runtimeGlobal.window;
+  passed += 1;
+}
+
+{
+  const daySnapshot = {
+    version: 1 as const,
+    capturedAt: '2026-07-14T11:30:00.000Z',
+    date: '2026-07-14',
+    rateLogicVersion: 'time_basic_rate_v1' as const,
+    sessions: [],
+    areaCountRecords: [],
+  };
+  const payload = buildAutomaticDayExportPayload({
+    exportedAt: '2026-07-14T11:30:00.000Z',
+    date: '2026-07-14',
+    daySnapshot,
+  });
+
+  assert.equal(payload.format, 'nebiki-helper-day-export');
+  assert.equal(payload.trigger, 'final-counts-complete');
+  assert.equal(payload.daySnapshot.date, '2026-07-14');
+  assert.equal(getAutomaticDayExportFilename('2026-07-14'), 'nebiki-day-2026-07-14.json');
   passed += 1;
 }
 

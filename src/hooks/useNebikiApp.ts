@@ -28,6 +28,7 @@ import type {
   AreaRateAdjustment,
   RateDisplayData,
   DailySessionSnapshot,
+  Review19DayCheckSnapshot,
 } from "../domain/types";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
 import {
@@ -38,6 +39,7 @@ import {
 } from "../domain/weekdayBase";
 import {
   getFinalTimeGuide,
+  getFinalTimeInstructionSteps,
   getNormalTimeRateDisplay,
 } from "../domain/discount";
 import {
@@ -58,6 +60,8 @@ import {
   clearReview19SourceState,
   getDailySessionSnapshotsForDate,
   upsertDailySessionSnapshot,
+  hasFinalDayAutoExported,
+  markFinalDayAutoExported,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -97,6 +101,10 @@ import {
   markReview19RecordsExportedInMemory,
   REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
+import {
+  buildAutomaticDayExportPayload,
+  getAutomaticDayExportFilename,
+} from "../domain/dayExport.ts";
 import type { AreaCountRecord } from "../domain/areaCountHistory.ts";
 import type { TrainingStep } from "../domain/trainingMode.ts";
 import { getTrainingStepConfig } from "../domain/trainingMode.ts";
@@ -1110,6 +1118,67 @@ function createDailySessionSnapshot(params: {
   };
 }
 
+function getFinalGuideSummaryText(guide: ReturnType<typeof getFinalTimeGuide>): string {
+  return getFinalTimeInstructionSteps(guide)
+    .map((step) => `${step.subject}${step.rate}`)
+    .join("・");
+}
+
+function buildFinalSessionDoneSummaryItems(params: {
+  session: SessionData;
+  areaProgressMap: Record<AreaId, AreaProgress>;
+  comfortScore: number;
+}): DoneSummaryItem[] {
+  return DONE_SUMMARY_ROUTE.map((areaId) => {
+    const progress = params.areaProgressMap[areaId];
+    const guide = getFinalTimeGuide({
+      weekday: params.session.weekday,
+      weather21: params.session.weather.hourlyForecasts["21"].weather,
+      temp21C: params.session.weather.hourlyForecasts["21"].tempC,
+      comfortScore: params.comfortScore,
+      areaCountEvaluation: progress?.areaCountEvaluation,
+    });
+    const rateText = getFinalGuideSummaryText(guide);
+
+    return {
+      areaId,
+      areaName: getAreaName(areaId),
+      judgeText: progress?.areaCountEvaluation
+        ? getAreaCountEvaluationText(progress.areaCountEvaluation)
+        : "履歴不足（残数補正なし）",
+      rateText,
+      normalRateText: rateText,
+      statusText: typeof progress?.areaCount === "number" ? undefined : "残数未入力",
+    };
+  });
+}
+
+function getLatestReview19DayCheck(date: string): Review19DayCheckSnapshot | undefined {
+  const latest = loadReview19Records()
+    .filter((record) => record.date === date && Boolean(record.recordedAt))
+    .sort((a, b) => (a.recordedAt ?? "").localeCompare(b.recordedAt ?? ""))
+    .at(-1);
+
+  if (!latest?.recordedAt) return undefined;
+  if (latest.daySnapshot?.review19Check) {
+    return JSON.parse(JSON.stringify(latest.daySnapshot.review19Check)) as Review19DayCheckSnapshot;
+  }
+
+  return {
+    version: 1,
+    recordedAt: latest.recordedAt,
+    sessionStartedAt: latest.sessionStartedAt,
+    ratings: JSON.parse(JSON.stringify(latest.ratings)) as Review19DayCheckSnapshot["ratings"],
+    ratingScores: JSON.parse(JSON.stringify(latest.ratingScores)) as Review19DayCheckSnapshot["ratingScores"],
+    areaCounts: JSON.parse(JSON.stringify(latest.areaCounts)) as Review19DayCheckSnapshot["areaCounts"],
+    excludedAreaIds: [...latest.excludedAreaIds],
+    excludeReasons: JSON.parse(JSON.stringify(latest.excludeReasons)) as Review19DayCheckSnapshot["excludeReasons"],
+    snapshot: latest.snapshot
+      ? JSON.parse(JSON.stringify(latest.snapshot)) as Review19Snapshot
+      : undefined,
+  };
+}
+
 function createReview19DaySnapshot(params: {
   capturedAt: string;
   date: string;
@@ -1876,7 +1945,14 @@ const lateSkipNotice = useMemo(() => {
 
   const doneSummaryItems = useMemo<DoneSummaryItem[]>(() => {
     const session = state.session;
-    if (!session || session.discountTime === "20") return [];
+    if (!session) return [];
+    if (session.discountTime === "20") {
+      return buildFinalSessionDoneSummaryItems({
+        session,
+        areaProgressMap: state.areaProgressMap,
+        comfortScore: weekdayBaseInfo.weekdayShift,
+      });
+    }
 
     const isEarlyNextMinus5Summary =
       Boolean(earlyNextMinus5Info) &&
@@ -1971,6 +2047,7 @@ const lateSkipNotice = useMemo(() => {
     state.session,
     state.areaProgressMap,
     weekdayBaseInfo.baseRateBonus,
+    weekdayBaseInfo.weekdayShift,
     lateTimeBonus,
     ignoreNormalTimeRateCap,
     weekdayBaseInfo.adjusted,
@@ -2616,6 +2693,100 @@ const lateSkipNotice = useMemo(() => {
   }
 
 
+  function autoDownloadFinalDayData(params: {
+    nextState: AppState;
+    nextAreaCountRecords: AreaCountRecord[];
+    exportedAt: string;
+  }): void {
+    const session = params.nextState.session;
+    if (isTestMode || !session || session.discountTime !== "20") return;
+    if (hasFinalDayAutoExported(session.date)) return;
+
+    const allFinalCountsEntered = NORMAL_ROUTE.every(
+      (areaId) => typeof params.nextState.areaProgressMap[areaId]?.areaCount === "number",
+    );
+    if (!allFinalCountsEntered) return;
+
+    const completedAreaProgressMap = NORMAL_ROUTE.reduce((acc, areaId) => {
+      const progress = params.nextState.areaProgressMap[areaId];
+      acc[areaId] = {
+        ...progress,
+        areaJudge: progress.areaJudge ?? "normal",
+        status: "completed",
+        skipReason: undefined,
+        visitedAt: progress.visitedAt ?? params.exportedAt,
+        completedAt: progress.completedAt ?? params.exportedAt,
+      };
+      return acc;
+    }, {} as Record<AreaId, AreaProgress>);
+
+    const finalDoneSummaryItems = buildFinalSessionDoneSummaryItems({
+      session,
+      areaProgressMap: completedAreaProgressMap,
+      comfortScore: weekdayBaseInfo.weekdayShift,
+    });
+    const exportState: AppState = {
+      ...params.nextState,
+      screen: "done",
+      areaProgressMap: completedAreaProgressMap,
+      currentAreaId: null,
+      currentFlow: "normal",
+      pendingDeferredAreaIds: [],
+      finalTimeStep: 0,
+    };
+    const finalSessionSnapshot = createDailySessionSnapshot({
+      capturedAt: params.exportedAt,
+      state: exportState,
+      resolvedWeather: sessionSourceResolvedWeather,
+      weekdayBaseInfo,
+      basisGuide,
+      lateTimeBonus,
+      doneSummaryItems: finalDoneSummaryItems,
+    });
+    if (!finalSessionSnapshot) return;
+
+    upsertDailySessionSnapshot(finalSessionSnapshot);
+    const sessions = [
+      ...getDailySessionSnapshotsForDate(session.date).filter((snapshot) => {
+        return !(
+          snapshot.session.discountTime === "20" &&
+          snapshot.session.startedAt === session.startedAt
+        );
+      }),
+      finalSessionSnapshot,
+    ].sort((a, b) => {
+      const timeCompare = a.session.discountTime.localeCompare(b.session.discountTime);
+      if (timeCompare !== 0) return timeCompare;
+      return a.capturedAt.localeCompare(b.capturedAt);
+    });
+
+    const daySnapshot = createReview19DaySnapshot({
+      capturedAt: params.exportedAt,
+      date: session.date,
+      areaCountRecords: params.nextAreaCountRecords,
+      sessions,
+      review19Check: getLatestReview19DayCheck(session.date),
+    });
+    const payload = buildAutomaticDayExportPayload({
+      exportedAt: params.exportedAt,
+      date: session.date,
+      daySnapshot,
+    });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = getAutomaticDayExportFilename(session.date);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    markFinalDayAutoExported(session.date);
+  }
+
+
   function judgeCurrentArea(
     judge: Exclude<AreaJudge, null>,
     areaCount?: number | null,
@@ -2659,6 +2830,9 @@ const lateSkipNotice = useMemo(() => {
     const effectiveJudge: Exclude<AreaJudge, null> = effectiveAreaCountResult ? "normal" : judge;
     setAreaJudgeSelection(effectiveJudge);
 
+    const actionAt = getRuntimeNow().toISOString();
+    let nextAreaCountRecords = areaCountRecords;
+
     if (
       !isTestMode &&
       roundedAreaCount !== null &&
@@ -2669,11 +2843,10 @@ const lateSkipNotice = useMemo(() => {
         discountTime: state.session.discountTime,
       })
     ) {
-      const recordedAt = getRuntimeNow().toISOString();
       const nextRecord: AreaCountRecord = {
         date: state.session.date,
         sessionStartedAt: state.session.startedAt,
-        recordedAt,
+        recordedAt: actionAt,
         areaId: state.currentAreaId,
         discountTime: state.session.discountTime,
         actualWeekday: getActualWeekdayLabel(state.session.weekday),
@@ -2688,9 +2861,18 @@ const lateSkipNotice = useMemo(() => {
         areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
       };
 
-      setAreaCountRecords((current) => upsertAreaCountRecord(current, nextRecord));
+      nextAreaCountRecords = upsertAreaCountRecord(areaCountRecords, nextRecord);
+      setAreaCountRecords(nextAreaCountRecords);
       void upsertRemoteAreaCountRecord(nextRecord);
     }
+
+    const nextStateForAction = applyAreaJudgeSelection(
+      state,
+      effectiveJudge,
+      roundedAreaCount,
+      effectiveAreaCountResult,
+      areaCountEvaluationSource,
+    );
 
     setState((prev) =>
       applyAreaJudgeSelection(
@@ -2701,6 +2883,12 @@ const lateSkipNotice = useMemo(() => {
         areaCountEvaluationSource
       )
     );
+
+    autoDownloadFinalDayData({
+      nextState: nextStateForAction,
+      nextAreaCountRecords,
+      exportedAt: actionAt,
+    });
   }
 
   function goBackOneScreen() {

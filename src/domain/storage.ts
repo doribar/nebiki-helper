@@ -24,6 +24,7 @@ export const STORAGE_KEYS = {
   review19Records: "nebiki-helper/review19-records",
   review19SourceState: "nebiki-helper/review19-source-state",
   dailySessionSnapshots: "nebiki-helper/daily-session-snapshots",
+  finalDayAutoExportDates: "nebiki-helper/final-day-auto-export-dates",
 } as const;
 
 export type PersistedRuntimeState = {
@@ -270,6 +271,23 @@ export function saveDailyMessageState(state: DailyMessageState): void {
   );
 }
 
+
+
+
+export function hasFinalDayAutoExported(date: string): boolean {
+  const raw = localStorage.getItem(STORAGE_KEYS.finalDayAutoExportDates);
+  const dates = safeParseJSON<string[]>(raw, []);
+  return Array.isArray(dates) && dates.includes(date);
+}
+
+export function markFinalDayAutoExported(date: string): void {
+  const raw = localStorage.getItem(STORAGE_KEYS.finalDayAutoExportDates);
+  const dates = safeParseJSON<string[]>(raw, []);
+  const next = Array.from(new Set([...(Array.isArray(dates) ? dates : []), date]))
+    .sort()
+    .slice(-120);
+  localStorage.setItem(STORAGE_KEYS.finalDayAutoExportDates, JSON.stringify(next));
+}
 
 export function loadReview19Records(): Review19Result[] {
   const raw = localStorage.getItem(STORAGE_KEYS.review19Records);

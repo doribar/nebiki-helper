@@ -400,6 +400,18 @@ AI写真判定は廃止済み。写真撮影画面・写真判定サーバー・
 - プロジェクト直下の `.npmrc` でも公開npmレジストリを固定する。
 - `npm install` が15分以上くるくるしたままなら中断し、ZIP内の `package-lock.json` に `packages.applied-caas-gateway` が残っていないか確認する。
 
+
+### 20時30分完了時の日次データ自動ダウンロード
+
+- 20時30分で全12エリアの残数入力が揃った瞬間、ユーザー操作を追加で要求せず、その日の総データJSONを自動ダウンロードする。
+- ファイル名は `nebiki-day-YYYY-MM-DD.json`。スマホのダウンロード領域へ1日1ファイルずつ溜める。
+- 出力形式は `nebiki-helper-day-export` version 1。`trigger` は `final-counts-complete`。
+- `daySnapshot` には、その日の完了済み通常値引セッション、19:00チェック、15時〜20時30分の残数履歴をまとめる。
+- 20時30分セッションは、各エリアの残数評価と最終値引A/B/Cの指示内容も保存する。
+- 同じ日付では二重自動ダウンロードしない。端末内の `nebiki-helper/final-day-auto-export-dates` で完了日を記録する。
+- `?testTime=...` の動作確認モードでは、本番データ混入とテストファイル蓄積を防ぐため自動ダウンロードしない。
+- 実装箇所は `src/hooks/useNebikiApp.ts`、出力payloadは `src/domain/dayExport.ts`、二重出力防止は `src/domain/storage.ts`。
+
 ## 13. 直近の重要修正（2026-07-05〜07-14）
 
 - 通常値引の時刻別上限を廃止し、0〜50%だけに統一。
@@ -430,12 +442,13 @@ AI写真判定は廃止済み。写真撮影画面・写真判定サーバー・
 - 20時30分の最終値引指示画面でも、上部の「基本値引率・値引率補正」パネルを表示しない。エリア名は画面ヘッダーで表示する。
 - 通常値引・20時30分残数入力・19:00チェックでは足し算電卓を最初から開いて表示する。電卓の`閉じる`を`完了`へ変更し、クリアボタンを削除した。
 - 残数入力と足し算電卓を別々の二段階画面にせず、一つの入力画面へ統合した。数字をそのまま入力しても足し算しても、`完了`は1回だけでよい。通常値引では履歴判定が使える場合はそのまま値引指示へ進み、履歴不足時は手動5段階エリア判定を表示する。20時30分はそのまま最終値引指示へ進み、19:00チェックは次のエリアまたは記録完了へ進む。
+- 20時30分で全エリアの残数入力が揃った瞬間、その日の全セッション・19:00チェック・残数履歴をまとめた `nebiki-day-YYYY-MM-DD.json` をスマホへ自動ダウンロードするようにした。同日二重出力は防止し、動作確認モードでは出力しない。
 
 このZIP作成時の確認:
 
-- `npm run check:logic`: 84 / 84 checks passed。
-- `npx tsc -b --pretty false`: 成功。
-- `npm run build`: 成功（Vite 8、46 modules transformed、PWA生成成功）。
+- `npm run check:logic`: 85 / 85 checks passed。
+- `npx tsc -p tsconfig.app.json --pretty false`: 成功。
+- `npm run build`: 配布先Windows環境で実行すること。この作業環境ではWindows由来node_modulesのRolldownネイティブバインディングがLinuxで読めず、フルビルド確認は未実施。
 
 ## 14. ZIP返却前の最終確認
 
@@ -443,7 +456,7 @@ AI写真判定は廃止済み。写真撮影画面・写真判定サーバー・
 - [ ] `CHATGPT_HANDOFF.md` を実ファイルとして更新した。
 - [ ] `wc -l CHATGPT_HANDOFF.md` が1000以下。
 - [ ] `npm run check:logic` が成功。
-- [ ] `npx tsc -b --pretty false` または `npm run build` が成功。
+- [ ] `npx tsc -p tsconfig.app.json --pretty false` が成功し、可能な環境では `npm run build` も成功。
 - [ ] ZIPに `.git`、`node_modules`、`dist`、`.env`、秘密情報、別ZIPが入っていない。
 - [ ] ZIP名が日本時間の `nebiki-helper-YYYYMMDD-HHMM.zip`。
 - [ ] 作成後のZIP内に更新済み `CHATGPT_HANDOFF.md` が入っている。
