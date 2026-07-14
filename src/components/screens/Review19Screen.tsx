@@ -81,7 +81,7 @@ export function Review19Screen({
     ? items.find((item) => item.areaId === activeAreaId) ?? null
     : null;
   const [countText, setCountText] = useState(() => getCountText(activeItem?.count));
-  const [showCountCalculator, setShowCountCalculator] = useState(false);
+  const [showCountCalculator, setShowCountCalculator] = useState(true);
   const [countCalculatorText, setCountCalculatorText] = useState("");
   const parsedCount = parseCount(countText);
   const countCalculatorResult = calculateAdditionResult(countCalculatorText);
@@ -108,7 +108,7 @@ export function Review19Screen({
       : null;
 
     setCountText(getCountText(activeItem?.count));
-    setShowCountCalculator(calculatorDraft?.open ?? false);
+    setShowCountCalculator(calculatorDraft?.open ?? true);
     setCountCalculatorText(calculatorDraft?.text ?? "");
   }, [activeItem?.areaId, activeItem?.count, calculatorDraftScope]);
 
@@ -192,7 +192,7 @@ export function Review19Screen({
     clearCountCalculatorDraft(areaId);
   };
 
-  const closeCountCalculator = () => {
+  const completeCountCalculator = () => {
     if (countCalculatorResult !== null) {
       setCountText(String(countCalculatorResult));
     }
@@ -448,17 +448,10 @@ export function Review19Screen({
                     ⌫
                   </button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                <div style={{ marginTop: 10 }}>
                   <button
                     type="button"
-                    onClick={() => setCountCalculatorText("")}
-                    style={{ ...subActionButtonStyle, width: "100%" }}
-                  >
-                    クリア
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeCountCalculator}
+                    onClick={completeCountCalculator}
                     disabled={countCalculatorResult === null}
                     style={{
                       ...subActionButtonStyle,
@@ -469,11 +462,11 @@ export function Review19Screen({
                       cursor: countCalculatorResult !== null ? "pointer" : "not-allowed",
                     }}
                   >
-                    閉じる
+                    完了
                   </button>
                 </div>
                 <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.6 }}>
-                  「閉じる」を押すと、合計を残数入力に入れます。
+                  「完了」を押すと、合計を残数入力に入れます。
                 </div>
               </section>
             ) : null}

@@ -208,7 +208,7 @@ export function AreaJudgeScreen({
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [showJudgeHint, setShowJudgeHint] = useState(false);
   const [areaCountText, setAreaCountText] = useState("");
-  const [showAreaCountCalculator, setShowAreaCountCalculator] = useState(false);
+  const [showAreaCountCalculator, setShowAreaCountCalculator] = useState(areaCountAssistEnabled);
   const [areaCountCalculatorText, setAreaCountCalculatorText] = useState("");
   const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
   const areaCountCalculatorDraftKey = buildCalculatorDraftKey({
@@ -237,7 +237,7 @@ export function AreaJudgeScreen({
     setShowSkipTargetPicker(false);
     setShowJudgeHint(false);
     setAreaCountText("");
-    setShowAreaCountCalculator(calculatorDraft?.open ?? false);
+    setShowAreaCountCalculator(calculatorDraft?.open ?? areaCountAssistEnabled);
     setAreaCountCalculatorText(calculatorDraft?.text ?? "");
   }, [areaCountCalculatorDraftKey]);
 
@@ -329,7 +329,7 @@ export function AreaJudgeScreen({
     setAreaCountCalculatorText((current) => current.slice(0, -1));
   };
 
-  const closeAreaCountCalculator = () => {
+  const completeAreaCountCalculator = () => {
     if (areaCountCalculatorResult !== null) {
       setAreaCountText(String(areaCountCalculatorResult));
     }
@@ -560,17 +560,10 @@ export function AreaJudgeScreen({
                     ⌫
                   </button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                <div style={{ marginTop: 10 }}>
                   <button
                     type="button"
-                    onClick={() => setAreaCountCalculatorText("")}
-                    style={{ ...subActionButtonStyle, width: "100%" }}
-                  >
-                    クリア
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeAreaCountCalculator}
+                    onClick={completeAreaCountCalculator}
                     disabled={areaCountCalculatorResult === null}
                     style={{
                       ...subActionButtonStyle,
@@ -581,11 +574,11 @@ export function AreaJudgeScreen({
                       cursor: areaCountCalculatorResult !== null ? "pointer" : "not-allowed",
                     }}
                   >
-                    閉じる
+                    完了
                   </button>
                 </div>
                 <div style={{ marginTop: 8, fontSize: 13, color: "#555", lineHeight: 1.6 }}>
-                  「閉じる」を押すと、合計を残数入力に入れます。
+                  「完了」を押すと、合計を残数入力に入れます。
                 </div>
               </section>
             ) : null}
