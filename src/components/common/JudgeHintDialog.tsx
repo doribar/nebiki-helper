@@ -1,30 +1,34 @@
 import { PrimaryButton } from "../layout/PrimaryButton";
 
-function JudgeHintContent() {
+function JudgeHintContent({ compact = false }: { compact?: boolean }) {
   return (
     <div style={{ lineHeight: 1.8 }}>
-      <div>
-        ・アウトパック
-        <span style={{ color: "#00897b", fontWeight: 700 }}>
-          ➡多い側に寄せる
-        </span>
-      </div>
-      <div>
-        ・商品が大パックと小パックで分かれている
-        <span style={{ color: "#ab47bc", fontWeight: 700 }}>
-          ➡大パックだけ値引
-        </span>
-      </div>
-      <div>
-        ・期限が近いものと遠いもので分かれている
-        <span style={{ color: "#ab47bc", fontWeight: 700 }}>
-          ➡近いものだけ値引
-        </span>
-      </div>
+      {!compact ? (
+        <>
+          <div>
+            ・アウトパック
+            <span style={{ color: "#00897b", fontWeight: 700 }}>
+              ➡多い側に寄せる
+            </span>
+          </div>
+          <div>
+            ・商品が大パックと小パックで分かれている
+            <span style={{ color: "#ab47bc", fontWeight: 700 }}>
+              ➡大パックだけ値引
+            </span>
+          </div>
+          <div>
+            ・期限が近いものと遠いもので分かれている
+            <span style={{ color: "#ab47bc", fontWeight: 700 }}>
+              ➡近いものだけ値引
+            </span>
+          </div>
 
-      <div style={{ marginTop: 14, marginBottom: 8 }}>
-        ・分かれていなければ値引時刻が
-      </div>
+          <div style={{ marginTop: 14, marginBottom: 8 }}>
+            ・分かれていなければ値引時刻が
+          </div>
+        </>
+      ) : null}
       <div>
         15時
         <span style={{ color: "#e65100", fontWeight: 700 }}>
@@ -47,7 +51,13 @@ function JudgeHintContent() {
   );
 }
 
-export function JudgeHintDialog({ onClose }: { onClose: () => void }) {
+export function JudgeHintDialog({
+  onClose,
+  compact = false,
+}: {
+  onClose: () => void;
+  compact?: boolean;
+}) {
   return (
     <div
       role="dialog"
@@ -83,7 +93,7 @@ export function JudgeHintDialog({ onClose }: { onClose: () => void }) {
           迷った時の判断基準
         </div>
 
-        <JudgeHintContent />
+        <JudgeHintContent compact={compact} />
 
         <div style={{ marginTop: 18 }}>
           <PrimaryButton onClick={onClose}>OK</PrimaryButton>

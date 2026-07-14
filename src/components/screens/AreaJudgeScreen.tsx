@@ -862,7 +862,10 @@ export function AreaJudgeScreen({
       </div>
 
       {showJudgeHint ? (
-        <JudgeHintDialog onClose={() => setShowJudgeHint(false)} />
+        <JudgeHintDialog
+          compact
+          onClose={() => setShowJudgeHint(false)}
+        />
       ) : null}
     </main>
   );
