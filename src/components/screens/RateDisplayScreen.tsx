@@ -533,7 +533,7 @@ export function RateDisplayScreen({
         </section>
       ) : null}
 
-      {showAdvancedReference ? (
+      {showAdvancedReference && !isFinalTime ? (
         <WeekdayBasePanel
           noticeText={basisGuide.noticeText}
           weekdaySummaryText={basisGuide.weekdaySummaryText}
