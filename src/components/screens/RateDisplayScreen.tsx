@@ -282,14 +282,6 @@ const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
       </>
     ),
   },
-  fewNoDiscountExceptFinal: {
-    content: (
-      <>
-        <strong>少ない判定</strong>の商品は、
-        <strong>最終値引以外では引かない</strong>
-      </>
-    ),
-  },
   badAppearancePlus: {
     content: (
       <>
@@ -317,6 +309,17 @@ const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
       <>
         <strong>夜によく売れる商品</strong>は、表示値引率から
         <strong>-10%</strong>
+      </>
+    ),
+  },
+  manyTenPlusAfterJudge: {
+    content: (
+      <>
+        <strong>10個以上あるだけで「多い」になるわけではありません。</strong>
+        <br />
+        曜日・時刻を基準に「多い」と判断してください。
+        <br />
+        そのうち10個以上ある商品だけさらに<strong>+5%</strong>
       </>
     ),
   },
@@ -393,6 +396,8 @@ export function RateDisplayScreen({
   const showManyProductRate = trainingStepConfig.showManyProductRate;
   const showManyThresholdRule = trainingStepConfig.showManyThresholdRule;
   const showFewProductRule = trainingStepConfig.showFewProductRule;
+  const showProductAmountReference =
+    trainingStepConfig.showProductAmountReference;
   const showAdvancedReference = trainingStepConfig.showAdvancedReference;
   const skipTargetGroups = [
     {
@@ -435,6 +440,7 @@ export function RateDisplayScreen({
     showManyProductRate,
     showManyThresholdRule,
     showFewProductRule,
+    showProductAmountReference,
   ]);
   const rateInstructionSteps = buildRateInstructionSteps({
     rateDisplay,
@@ -571,7 +577,7 @@ export function RateDisplayScreen({
         {!isFinalTime ? (
           <>
             <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
-              {showAdvancedReference ? (
+              {showProductAmountReference ? (
                 <>
                   <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
                   <span>を基準に考えて</span>

@@ -1,10 +1,18 @@
-export type TrainingStep = "step1" | "step2" | "step3" | "step4" | "step5";
+export type TrainingStep =
+  | "step1"
+  | "step2"
+  | "step3"
+  | "step4"
+  | "step5"
+  | "step6"
+  | "step7"
+  | "step8";
 
 export type NoticeItemId =
   | "oneLeftFew"
   | "twoLeftNotMany"
+  | "manyTenPlusAfterJudge"
   | "judgeIncludesTrend"
-  | "fewNoDiscountExceptFinal"
   | "badAppearancePlus"
   | "unpopularPlus"
   | "steadyStandardMinus"
@@ -19,6 +27,7 @@ export type TrainingStepConfig = {
   showManyProductRate: boolean;
   showManyThresholdRule: boolean;
   showFewProductRule: boolean;
+  showProductAmountReference: boolean;
   showAdvancedReference: boolean;
   noticeItemIds: NoticeItemId[];
 };
@@ -32,71 +41,134 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
     showManyProductRate: false,
     showManyThresholdRule: false,
     showFewProductRule: false,
+    showProductAmountReference: false,
     showAdvancedReference: false,
     noticeItemIds: [],
   },
   step2: {
     step: "step2",
-    label: "ステップ2：多い商品だけ+10%",
+    label: "ステップ2：曜日・時刻を基準に多い商品を強める",
     shortLabel: "多い商品+10%",
-    description: "多い商品だけ、表示値引率より+10%で値引きします。",
+    description:
+      "曜日・時刻を基準に多い商品を判断し、表示値引率より+10%で値引きします。",
     showManyProductRate: true,
     showManyThresholdRule: false,
     showFewProductRule: false,
+    showProductAmountReference: true,
     showAdvancedReference: false,
     noticeItemIds: ["twoLeftNotMany"],
   },
   step3: {
     step: "step3",
-    label: "ステップ3：少ない商品は値引かない",
-    shortLabel: "少ない商品除外",
-    description: "10個以上の商品は+15%、多い商品は+10%、少ない商品は値引きしません。",
+    label: "ステップ3：多い・少ない・どちらでもないを分ける",
+    shortLabel: "3分類",
+    description:
+      "商品の量を多い・少ない・どちらでもないに分け、画面に表示された値引指示を行います。",
     showManyProductRate: true,
-    showManyThresholdRule: true,
+    showManyThresholdRule: false,
     showFewProductRule: true,
+    showProductAmountReference: true,
     showAdvancedReference: false,
-    noticeItemIds: [
-      "twoLeftNotMany",
-      "oneLeftFew",
-      "fewNoDiscountExceptFinal",
-    ],
+    noticeItemIds: ["twoLeftNotMany", "oneLeftFew"],
   },
   step4: {
     step: "step4",
-    label: "ステップ4：個別に±10%",
-    shortLabel: "個別±10%",
-    description: "見た目が悪い商品・不人気商品は+10%、定番商品・夜売れる商品は-10%で調整します。",
+    label: "ステップ4：多い商品のうち10個以上をさらに強める",
+    shortLabel: "多い中の10個以上",
+    description:
+      "まず多い商品を判断し、その中で10個以上ある商品だけをさらに+5%強めます。",
     showManyProductRate: true,
     showManyThresholdRule: true,
     showFewProductRule: true,
+    showProductAmountReference: true,
     showAdvancedReference: false,
     noticeItemIds: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "fewNoDiscountExceptFinal",
-      "badAppearancePlus",
-      "unpopularPlus",
-      "steadyStandardMinus",
-      "nightSellerMinus",
+      "manyTenPlusAfterJudge",
     ],
   },
   step5: {
     step: "step5",
-    label: "ステップ5：全解禁",
-    shortLabel: "全解禁",
-    description: "曜日・時刻の基準、広告商品の当日の売れ方まで含めて判断します。",
+    label: "ステップ5：売れる商品を弱める",
+    shortLabel: "売れる商品-10%",
+    description:
+      "定番商品・夜によく売れる商品は、表示値引率から-10%で調整します。",
     showManyProductRate: true,
     showManyThresholdRule: true,
     showFewProductRule: true,
+    showProductAmountReference: true,
+    showAdvancedReference: false,
+    noticeItemIds: [
+      "twoLeftNotMany",
+      "oneLeftFew",
+      "manyTenPlusAfterJudge",
+      "steadyStandardMinus",
+      "nightSellerMinus",
+    ],
+  },
+  step6: {
+    step: "step6",
+    label: "ステップ6：売れにくい商品を強める",
+    shortLabel: "売れにくい商品+10%",
+    description:
+      "見た目が悪い商品・不人気商品は、表示値引率に+10%して調整します。",
+    showManyProductRate: true,
+    showManyThresholdRule: true,
+    showFewProductRule: true,
+    showProductAmountReference: true,
+    showAdvancedReference: false,
+    noticeItemIds: [
+      "twoLeftNotMany",
+      "oneLeftFew",
+      "manyTenPlusAfterJudge",
+      "steadyStandardMinus",
+      "nightSellerMinus",
+      "badAppearancePlus",
+      "unpopularPlus",
+    ],
+  },
+  step7: {
+    step: "step7",
+    label: "ステップ7：今日の減り方を見る",
+    shortLabel: "今日の減り方",
+    description:
+      "現在の残数だけでなく、前回の値引時刻からの商品の減り方も判断に含めます。",
+    showManyProductRate: true,
+    showManyThresholdRule: true,
+    showFewProductRule: true,
+    showProductAmountReference: true,
+    showAdvancedReference: false,
+    noticeItemIds: [
+      "twoLeftNotMany",
+      "oneLeftFew",
+      "manyTenPlusAfterJudge",
+      "steadyStandardMinus",
+      "nightSellerMinus",
+      "badAppearancePlus",
+      "unpopularPlus",
+      "judgeIncludesTrend",
+    ],
+  },
+  step8: {
+    step: "step8",
+    label: "ステップ8：広告商品の当日の動きまで見る",
+    shortLabel: "全解禁",
+    description:
+      "広告商品の当日の売れ方まで含め、すべての判断基準を使います。",
+    showManyProductRate: true,
+    showManyThresholdRule: true,
+    showFewProductRule: true,
+    showProductAmountReference: true,
     showAdvancedReference: true,
     noticeItemIds: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "fewNoDiscountExceptFinal",
-      "badAppearancePlus",
-      "unpopularPlus",
+      "manyTenPlusAfterJudge",
       "steadyStandardMinus",
       "nightSellerMinus",
+      "badAppearancePlus",
+      "unpopularPlus",
       "judgeIncludesTrend",
       "advertisementTrendMinus",
     ],
@@ -115,7 +187,10 @@ export function parseTrainingStepFromHash(hash: string): TrainingStep {
   if (normalized === "step3") return "step3";
   if (normalized === "step4") return "step4";
   if (normalized === "step5") return "step5";
+  if (normalized === "step6") return "step6";
+  if (normalized === "step7") return "step7";
+  if (normalized === "step8") return "step8";
 
-  // 既存URLは、これまで作り込んできた完成版として扱う。
-  return "step5";
+  // ハッシュなしURLは、すべての判断を解禁した完成版として扱う。
+  return "step8";
 }

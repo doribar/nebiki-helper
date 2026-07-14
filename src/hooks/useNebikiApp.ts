@@ -1349,7 +1349,7 @@ function createReview19WeatherDraft(session: SessionData): SessionDraft {
 export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: Date | null }): UseNebikiAppResult {
   setRuntimeNowOverride(params?.testNow ?? null);
   const isTestMode = params?.testNow instanceof Date;
-  const trainingStep = params?.trainingStep ?? "step5";
+  const trainingStep = params?.trainingStep ?? "step8";
   const trainingStepConfig = getTrainingStepConfig(trainingStep);
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
 

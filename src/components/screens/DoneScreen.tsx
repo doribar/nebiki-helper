@@ -154,7 +154,7 @@ export function DoneScreen({
             全エリアの値引率
           </div>
 
-          {trainingStepConfig.showAdvancedReference && referenceText && timeText ? (
+          {trainingStepConfig.showProductAmountReference && referenceText && timeText ? (
             <BasisTimeMiniPanel referenceText={referenceText} timeText={timeText} />
           ) : null}
 

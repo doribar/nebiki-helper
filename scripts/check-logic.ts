@@ -12,6 +12,7 @@ import {
   saveCalculatorDraft,
 } from '../src/domain/calculatorDraft.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
+import { getTrainingStepConfig, parseTrainingStepFromHash } from '../src/domain/trainingMode.ts';
 import { buildAutomaticDayExportPayload, getAutomaticDayExportFilename } from '../src/domain/dayExport.ts';
 import {
   getEarlyNextMinus5CompletedText,
@@ -2263,7 +2264,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 85;
+const totalChecks = 86;
 
 
 {
@@ -2545,6 +2546,31 @@ const totalChecks = 85;
   assert.equal(payload.trigger, 'final-counts-complete');
   assert.equal(payload.daySnapshot.date, '2026-07-14');
   assert.equal(getAutomaticDayExportFilename('2026-07-14'), 'nebiki-day-2026-07-14.json');
+  passed += 1;
+}
+
+
+{
+  assert.equal(parseTrainingStepFromHash('#/step1'), 'step1');
+  assert.equal(parseTrainingStepFromHash('#/step6'), 'step6');
+  assert.equal(parseTrainingStepFromHash('#/step8'), 'step8');
+  assert.equal(parseTrainingStepFromHash(''), 'step8');
+
+  const step2 = getTrainingStepConfig('step2');
+  assert.equal(step2.showProductAmountReference, true);
+  assert.equal(step2.showManyThresholdRule, false);
+
+  const step4 = getTrainingStepConfig('step4');
+  assert.equal(step4.showManyThresholdRule, true);
+  assert.ok(step4.noticeItemIds.includes('manyTenPlusAfterJudge'));
+
+  const step5 = getTrainingStepConfig('step5');
+  assert.ok(step5.noticeItemIds.includes('steadyStandardMinus'));
+  assert.equal(step5.noticeItemIds.includes('badAppearancePlus'), false);
+
+  const step8 = getTrainingStepConfig('step8');
+  assert.equal(step8.showAdvancedReference, true);
+  assert.ok(step8.noticeItemIds.includes('advertisementTrendMinus'));
   passed += 1;
 }
 
