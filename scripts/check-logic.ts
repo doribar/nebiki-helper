@@ -14,12 +14,20 @@ import {
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import { getTrainingStepConfig, parseExplicitTrainingStepFromHash, parseTrainingStepFromHash } from '../src/domain/trainingMode.ts';
 import { isTrainingStep, isValidAdminPinFormat } from '../src/domain/adminSettings.ts';
-import { SYSTEM_BACK_GUARD_STATE_KEY, withSystemBackGuardState } from '../src/domain/systemBackGuard.ts';
+import {
+  SYSTEM_BACK_GUARD_ID_KEY,
+  SYSTEM_BACK_GUARD_LEVEL_KEY,
+  SYSTEM_BACK_GUARD_MAX_LEVEL,
+  SYSTEM_BACK_GUARD_STATE_KEY,
+  readSystemBackGuardState,
+  withSystemBackGuardState,
+} from '../src/domain/systemBackGuard.ts';
 import { buildAutomaticDayExportPayload, getAutomaticDayExportFilename } from '../src/domain/dayExport.ts';
 import {
   getEarlyNextMinus5CompletedText,
   getEarlyNextMinus5NoticeText,
   getEarlyNextMinus5TargetDiscountTime,
+  shouldReserveEarlyNextMinus5OnAutoTransition,
 } from '../src/domain/earlyNextMinus5.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
@@ -46,6 +54,7 @@ import {
 } from '../src/domain/navigationHistory.ts';
 import {
   appendSkipRecordsInMemory,
+  consumeSkipRecordsInMemory,
   isDailySessionSnapshotDateConsistent,
   isAppStateSessionCurrentForDate,
   sanitizePersistedNebikiStateForDate,
@@ -2266,7 +2275,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 88;
+const totalChecks = 89;
 
 
 {
@@ -2487,6 +2496,56 @@ const totalChecks = 88;
   passed += 1;
 }
 
+{
+  assert.equal(
+    shouldReserveEarlyNextMinus5OnAutoTransition({
+      screen: 'rate_display',
+      currentTargetDiscountTime: '19',
+      nextTargetDiscountTime: '19',
+    }),
+    true
+  );
+  assert.equal(
+    shouldReserveEarlyNextMinus5OnAutoTransition({
+      screen: 'area_judge',
+      currentTargetDiscountTime: '19',
+      nextTargetDiscountTime: '19',
+    }),
+    false
+  );
+  assert.equal(
+    shouldReserveEarlyNextMinus5OnAutoTransition({
+      screen: 'rate_display',
+      currentTargetDiscountTime: '18',
+      nextTargetDiscountTime: '19',
+    }),
+    false
+  );
+
+  const reserved = appendSkipRecordsInMemory({
+    currentRecords: [],
+    recordsToAdd: [
+      {
+        date: '2026-07-15',
+        targetDiscountTime: '19',
+        areaId: 'bento_men',
+        skipKind: 'early_next_minus5',
+        previousNormalRateText: '25%',
+      },
+    ],
+  });
+  const consumed = consumeSkipRecordsInMemory({
+    currentRecords: reserved,
+    date: '2026-07-15',
+    targetDiscountTime: '19',
+  });
+  assert.deepEqual(consumed.skippedAreaIds, ['bento_men']);
+  assert.equal(consumed.skippedRecords[0]?.skipKind, 'early_next_minus5');
+  assert.equal(consumed.remainingRecords.length, 0);
+  passed += 1;
+}
+
+
 
 {
   const values = new Map<string, string>();
@@ -2591,10 +2650,15 @@ const totalChecks = 88;
 
 
 {
-  const guarded = withSystemBackGuardState({ existing: 'kept' });
+  const guarded = withSystemBackGuardState({ existing: 'kept' }, 'guard-1', 3);
   assert.equal(guarded.existing, 'kept');
   assert.equal(guarded[SYSTEM_BACK_GUARD_STATE_KEY], true);
+  assert.equal(guarded[SYSTEM_BACK_GUARD_ID_KEY], 'guard-1');
+  assert.equal(guarded[SYSTEM_BACK_GUARD_LEVEL_KEY], 3);
+  assert.deepEqual(readSystemBackGuardState(guarded), { guardId: 'guard-1', level: 3 });
+  assert.equal(readSystemBackGuardState({ [SYSTEM_BACK_GUARD_STATE_KEY]: true }), null);
   assert.equal(withSystemBackGuardState(null)[SYSTEM_BACK_GUARD_STATE_KEY], true);
+  assert.equal(SYSTEM_BACK_GUARD_MAX_LEVEL, 8);
   passed += 1;
 }
 

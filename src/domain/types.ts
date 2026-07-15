@@ -129,6 +129,11 @@ export type AreaProgress = {
   previousManyNote?: string;
   previousNormalRateText?: string;
   autoSkipKind?: "late_plus5" | "early_next_minus5";
+  /**
+   * このエリアの値引指示画面を、次回基準-5%の時間帯に表示した記録。
+   * 19:25などの自動移行時には現在時刻だけでは判定できないため保持する。
+   */
+  earlyNextMinus5TargetDiscountTime?: "18" | "19";
 };
 
 

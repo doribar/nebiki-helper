@@ -50,3 +50,15 @@ export function getEarlyNextMinus5CompletedText(
 
   return "18:00以降に、18時30分値引率より5%弱めて値引済みです。";
 }
+export function shouldReserveEarlyNextMinus5OnAutoTransition(params: {
+  screen: string;
+  currentTargetDiscountTime: EarlyNextMinus5TargetDiscountTime | null;
+  nextTargetDiscountTime: string;
+}): boolean {
+  return (
+    params.screen === "rate_display" &&
+    params.currentTargetDiscountTime !== null &&
+    params.currentTargetDiscountTime === params.nextTargetDiscountTime
+  );
+}
+

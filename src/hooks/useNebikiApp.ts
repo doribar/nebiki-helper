@@ -126,6 +126,7 @@ import {
 import {
   getEarlyNextMinus5NoticeText,
   getEarlyNextMinus5TargetDiscountTime,
+  shouldReserveEarlyNextMinus5OnAutoTransition,
 } from "../domain/earlyNextMinus5.ts";
 
 let runtimeNowOverrideMs: number | null = null;
@@ -1389,6 +1390,26 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
   );
+  const nextSessionSkipRecordsRef = useRef<NextSessionSkipRecord[]>(
+    cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
+  );
+
+  function replaceNextSessionSkipRecords(records: NextSessionSkipRecord[]): void {
+    const cloned = cloneSkipRecords(records);
+    nextSessionSkipRecordsRef.current = cloned;
+    setNextSessionSkipRecords(cloned);
+  }
+
+  function appendNextSessionSkipRecords(recordsToAdd: NextSessionSkipRecord[]): void {
+    if (recordsToAdd.length === 0) return;
+
+    replaceNextSessionSkipRecords(
+      appendSkipRecordsInMemory({
+        currentRecords: nextSessionSkipRecordsRef.current,
+        recordsToAdd,
+      })
+    );
+  }
   const [lastSessionWeather, setLastSessionWeather] = useState(() =>
     cloneLastSessionWeatherRecord(initialPersistenceRef.current?.lastSessionWeather ?? null)
   );
@@ -1421,13 +1442,13 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
       state: baseState,
       areaJudgeSelection,
       resumeTargetScreen,
-      nextSessionSkipRecords,
+      nextSessionSkipRecords: nextSessionSkipRecordsRef.current,
       lastSessionWeather,
     });
   }
 
   function restoreNavigationSnapshot(snapshot: NavigationSnapshot): void {
-    setNextSessionSkipRecords(cloneSkipRecords(snapshot.nextSessionSkipRecords));
+    replaceNextSessionSkipRecords(snapshot.nextSessionSkipRecords);
     setLastSessionWeather(cloneLastSessionWeatherRecord(snapshot.lastSessionWeather));
     setState(cloneAppState(snapshot.state));
     setAreaJudgeSelection(snapshot.areaJudgeSelection);
@@ -1766,6 +1787,38 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   }, [
     state.session,
     nowMs,
+  ]);
+
+  useEffect(() => {
+    const areaId = state.currentAreaId;
+    if (state.screen !== "rate_display" || !areaId || !earlyNextMinus5Info) return;
+
+    setState((prev) => {
+      if (prev.screen !== "rate_display" || prev.currentAreaId !== areaId) return prev;
+      const progress = prev.areaProgressMap[areaId];
+      if (
+        progress.earlyNextMinus5TargetDiscountTime ===
+        earlyNextMinus5Info.targetDiscountTime
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        areaProgressMap: {
+          ...prev.areaProgressMap,
+          [areaId]: {
+            ...progress,
+            earlyNextMinus5TargetDiscountTime:
+              earlyNextMinus5Info.targetDiscountTime,
+          },
+        },
+      };
+    });
+  }, [
+    state.screen,
+    state.currentAreaId,
+    earlyNextMinus5Info?.targetDiscountTime,
   ]);
 
   const lateTimeBonus = useMemo(() => {
@@ -2512,101 +2565,98 @@ const lateSkipNotice = useMemo(() => {
     const startedAt = now.toISOString();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
-    let nextSkipRecords = nextSessionSkipRecords;
+    const prev = state;
 
-    setState((prev) => {
-      // 開始時は、クリック時点の現在時刻で再解決せず、画面に表示されている値引時刻をそのまま使う。
-      // そうしないと、天候入力中や開始ボタン押下直前に時刻境界を跨いだとき、
-      // 19時30分で入力したのに20時30分の値引へ進むことがある。
-      const resolvedDiscountTime =
-        !prev.sessionDraft.manualDiscountTimeOverride &&
-        isValidDiscountTime(prev.sessionDraft.weatherInputLockedDiscountTime)
-          ? prev.sessionDraft.weatherInputLockedDiscountTime
-          : prev.sessionDraft.discountTime;
+    // 開始時は、クリック時点の現在時刻で再解決せず、画面に表示されている値引時刻をそのまま使う。
+    // そうしないと、天候入力中や開始ボタン押下直前に時刻境界を跨いだとき、
+    // 19時30分で入力したのに20時30分の値引へ進むことがある。
+    const resolvedDiscountTime =
+      !prev.sessionDraft.manualDiscountTimeOverride &&
+      isValidDiscountTime(prev.sessionDraft.weatherInputLockedDiscountTime)
+        ? prev.sessionDraft.weatherInputLockedDiscountTime
+        : prev.sessionDraft.discountTime;
 
-      const canResumeCurrentSession = prev.session?.date === currentDate;
-      const nextSession: SessionData = {
-        ...prev.sessionDraft,
-        date: currentDate,
-        weekday: prev.sessionDraft.manualWeekdayOverride
-          ? prev.sessionDraft.weekday
-          : currentWeekday,
-        discountTime: resolvedDiscountTime,
-        weather: {
-          ...prev.sessionDraft.weather,
-          hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
-        },
-        startedAt: canResumeCurrentSession ? prev.session!.startedAt : startedAt,
-      };
+    const canResumeCurrentSession = prev.session?.date === currentDate;
+    const nextSession: SessionData = {
+      ...prev.sessionDraft,
+      date: currentDate,
+      weekday: prev.sessionDraft.manualWeekdayOverride
+        ? prev.sessionDraft.weekday
+        : currentWeekday,
+      discountTime: resolvedDiscountTime,
+      weather: {
+        ...prev.sessionDraft.weather,
+        hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
+      },
+      startedAt: canResumeCurrentSession ? prev.session!.startedAt : startedAt,
+    };
 
+    let nextSkipRecords = cloneSkipRecords(nextSessionSkipRecordsRef.current);
+    let nextState: AppState;
 
-      if (timeSwitchTarget && prev.session && canResumeCurrentSession) {
-        let areaProgressMap = createInitialAreaProgressMap();
-        if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
-          const consumed = consumeSkipRecordsInMemory({
-            currentRecords: nextSkipRecords,
-            date: nextSession.date,
-            targetDiscountTime: nextSession.discountTime,
-          });
-
-          nextSkipRecords = consumed.remainingRecords;
-          areaProgressMap = createAreaProgressMapForTimeSwitch({
-            previousMap: prev.areaProgressMap,
-            skippedRecords: consumed.skippedRecords,
-          });
-        }
-
-        const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
-        const nextReview19ExcludedAreaIds =
-          prev.session.discountTime === "15" && nextSession.discountTime === "17"
-            ? normalizeReview19ExcludedAreaIds([
-                ...prev.review19ExcludedAreaIds,
-                ...NORMAL_ROUTE.filter((areaId) => prev.areaProgressMap[areaId]?.areaJudge === "few"),
-              ])
-            : nextSession.discountTime === "15"
-            ? []
-            : prev.review19ExcludedAreaIds;
-
-        return {
-          ...prev,
-          screen: firstAreaId
-            ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
-            : "done",
-          session: {
-            ...nextSession,
-            startedAt,
-          },
-          areaProgressMap,
-          currentAreaId: firstAreaId,
-          lastReferenceAreaId: firstAreaId,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          timeSwitchNotice: buildTimeSwitchNotice(nextSession.discountTime),
-          review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
-          finalTimeStep: 0,
-        };
-      }
-
-      if (prev.session && canResumeCurrentSession) {
-        const requestedScreen = resumeTargetScreen ?? "area_judge";
-
-        const resumeState = resolveResumeState(prev, requestedScreen);
-
-        return {
-          ...prev,
-          session: nextSession,
-          screen: resumeState.screen,
-          currentAreaId: resumeState.currentAreaId,
-          lastReferenceAreaId: resumeState.lastReferenceAreaId,
-          timeSwitchNotice: null,
-          finalTimeStep: resumeState.finalTimeStep,
-        };
-      }
-
+    if (timeSwitchTarget && prev.session && canResumeCurrentSession) {
       let areaProgressMap = createInitialAreaProgressMap();
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
-          currentRecords: nextSessionSkipRecords,
+          currentRecords: nextSkipRecords,
+          date: nextSession.date,
+          targetDiscountTime: nextSession.discountTime,
+        });
+
+        nextSkipRecords = consumed.remainingRecords;
+        areaProgressMap = createAreaProgressMapForTimeSwitch({
+          previousMap: prev.areaProgressMap,
+          skippedRecords: consumed.skippedRecords,
+        });
+      }
+
+      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
+      const nextReview19ExcludedAreaIds =
+        prev.session.discountTime === "15" && nextSession.discountTime === "17"
+          ? normalizeReview19ExcludedAreaIds([
+              ...prev.review19ExcludedAreaIds,
+              ...NORMAL_ROUTE.filter((areaId) => prev.areaProgressMap[areaId]?.areaJudge === "few"),
+            ])
+          : nextSession.discountTime === "15"
+          ? []
+          : prev.review19ExcludedAreaIds;
+
+      nextState = {
+        ...prev,
+        screen: firstAreaId
+          ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
+          : "done",
+        session: {
+          ...nextSession,
+          startedAt,
+        },
+        areaProgressMap,
+        currentAreaId: firstAreaId,
+        lastReferenceAreaId: firstAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: buildTimeSwitchNotice(nextSession.discountTime),
+        review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
+        finalTimeStep: 0,
+      };
+    } else if (prev.session && canResumeCurrentSession) {
+      const requestedScreen = resumeTargetScreen ?? "area_judge";
+      const resumeState = resolveResumeState(prev, requestedScreen);
+
+      nextState = {
+        ...prev,
+        session: nextSession,
+        screen: resumeState.screen,
+        currentAreaId: resumeState.currentAreaId,
+        lastReferenceAreaId: resumeState.lastReferenceAreaId,
+        timeSwitchNotice: null,
+        finalTimeStep: resumeState.finalTimeStep,
+      };
+    } else {
+      let areaProgressMap = createInitialAreaProgressMap();
+      if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
+        const consumed = consumeSkipRecordsInMemory({
+          currentRecords: nextSkipRecords,
           date: nextSession.date,
           targetDiscountTime: nextSession.discountTime,
         });
@@ -2619,7 +2669,7 @@ const lateSkipNotice = useMemo(() => {
 
       const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
 
-      return {
+      nextState = {
         ...prev,
         screen: firstAreaId
           ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId)
@@ -2633,9 +2683,10 @@ const lateSkipNotice = useMemo(() => {
         timeSwitchNotice: null,
         finalTimeStep: 0,
       };
-    });
+    }
 
-    setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
+    setState(nextState);
+    replaceNextSessionSkipRecords(nextSkipRecords);
     setResumeTargetScreen(null);
     setTimeSwitchTarget(null);
     setUndoSnapshot(null);
@@ -3013,75 +3064,77 @@ const lateSkipNotice = useMemo(() => {
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
-    let nextSkipRecords = nextSessionSkipRecords;
+    const clickedAreaId = state.currentAreaId;
+    const clickedProgress = clickedAreaId ? state.areaProgressMap[clickedAreaId] : null;
+    const completedAt = getRuntimeNow().toISOString();
+    const clickedRateSnapshot = clickedAreaId && clickedProgress
+      ? buildCompletedRateSnapshot({
+          session: state.session,
+          progress: clickedProgress,
+          weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+          weekdayBase: weekdayBaseInfo.adjusted,
+          rateDisplayOverride: rateDisplay,
+        })
+      : null;
+
+    let skipRecordToAdd: NextSessionSkipRecord | null = null;
+    if (
+      clickedAreaId &&
+      clickedRateSnapshot &&
+      state.session &&
+      !state.session.manualDiscountTimeOverride
+    ) {
+      const earlyNextTargetDiscountTime =
+        clickedProgress?.earlyNextMinus5TargetDiscountTime ??
+        (earlyNextMinus5Info &&
+        (state.session.discountTime === "17" || state.session.discountTime === "18")
+          ? earlyNextMinus5Info.targetDiscountTime
+          : null);
+      const targetDiscountTime =
+        earlyNextTargetDiscountTime ??
+        (lateTimeBonus > 0
+          ? getNextSkipTargetDiscountTime(state.session.discountTime)
+          : null);
+
+      if (targetDiscountTime) {
+        skipRecordToAdd = buildNextSessionSkipRecord({
+          date: state.session.date,
+          targetDiscountTime,
+          areaId: clickedAreaId,
+          rateSnapshot: clickedRateSnapshot,
+          skipKind: earlyNextTargetDiscountTime
+            ? "early_next_minus5"
+            : "late_plus5",
+        });
+      }
+    }
 
     setState((prev) => {
-      if (!prev.currentAreaId) return prev;
-      const currentAreaId = prev.currentAreaId;
+      if (!clickedAreaId || prev.currentAreaId !== clickedAreaId || !clickedRateSnapshot) return prev;
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
-      const rateSnapshot = buildCompletedRateSnapshot({
-        session: prev.session,
-        progress: prev.areaProgressMap[currentAreaId],
-        weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
-        weekdayBase: weekdayBaseInfo.adjusted,
-        rateDisplayOverride: rateDisplay,
-      });
 
       const updatedMap = {
         ...prev.areaProgressMap,
-        [currentAreaId]: {
-          ...prev.areaProgressMap[currentAreaId],
+        [clickedAreaId]: {
+          ...prev.areaProgressMap[clickedAreaId],
           status: "completed" as const,
-          completedAt: getRuntimeNow().toISOString(),
+          completedAt,
           skipReason: undefined,
-          ...rateSnapshot,
+          ...clickedRateSnapshot,
         },
       };
-
-      // 次回スキップ予約は「次のエリアへ」で完遂した時点で作る。
-      // ただし直後に「戻る」または取り消しを押した場合は、
-      // NavigationSnapshot から nextSessionSkipRecords も復元されるため予約も取り消される。
-      if (prev.session && !prev.session.manualDiscountTimeOverride) {
-        const earlyNextTargetDiscountTime =
-          earlyNextMinus5Info &&
-          (prev.session.discountTime === "17" || prev.session.discountTime === "18")
-            ? earlyNextMinus5Info.targetDiscountTime
-            : null;
-        const targetDiscountTime =
-          earlyNextTargetDiscountTime ??
-          (lateTimeBonus > 0
-            ? getNextSkipTargetDiscountTime(prev.session.discountTime)
-            : null);
-
-        if (targetDiscountTime) {
-          nextSkipRecords = appendSkipRecordsInMemory({
-            currentRecords: nextSkipRecords,
-            recordsToAdd: [
-              buildNextSessionSkipRecord({
-                date: prev.session.date,
-                targetDiscountTime,
-                areaId: currentAreaId,
-                rateSnapshot,
-                skipKind: earlyNextTargetDiscountTime
-                  ? "early_next_minus5"
-                  : "late_plus5",
-              }),
-            ],
-          });
-        }
-      }
 
       if (prev.currentFlow === "pending") {
         return moveToNextPendingOrDone({
           prev,
           updatedMap,
-          referenceAreaId: currentAreaId,
+          referenceAreaId: clickedAreaId,
           nextSession,
           timeSwitchNotice,
         });
       }
 
-      const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
+      const nextAreaId = getNextNormalFlowAreaId(updatedMap, clickedAreaId);
 
       if (nextAreaId) {
         return {
@@ -3090,7 +3143,7 @@ const lateSkipNotice = useMemo(() => {
           timeSwitchNotice,
           areaProgressMap: updatedMap,
           currentAreaId: nextAreaId,
-          lastReferenceAreaId: currentAreaId,
+          lastReferenceAreaId: clickedAreaId,
           pendingDeferredAreaIds: [],
           finalTimeStep: 0,
           screen: getNormalFlowScreenForArea(updatedMap, nextAreaId),
@@ -3100,13 +3153,15 @@ const lateSkipNotice = useMemo(() => {
       return moveToNextPendingOrDone({
         prev,
         updatedMap,
-        referenceAreaId: currentAreaId,
+        referenceAreaId: clickedAreaId,
         nextSession,
         timeSwitchNotice,
       });
     });
 
-    setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
+    if (skipRecordToAdd) {
+      appendNextSessionSkipRecords([skipRecordToAdd]);
+    }
   }
 
   function acknowledgeAutoSkippedArea() {
@@ -3413,52 +3468,47 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function start19DiscountAfterReview() {
+    if (state.screen !== "review19" && state.screen !== "review19_done") return;
+
     const now = getRuntimeNow();
     const startedAt = now.toISOString();
-    let nextSkipRecords = nextSessionSkipRecords;
+    const draft = normalizeSessionDraft({
+      ...state.sessionDraft,
+      discountTime: "19",
+    });
+    const nextSession: SessionData = {
+      ...draft,
+      discountTime: "19",
+      weather: {
+        ...draft.weather,
+        hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
+      },
+      startedAt,
+    };
 
-    setState((prev) => {
-      if (prev.screen !== "review19" && prev.screen !== "review19_done") return prev;
-
-      const draft = normalizeSessionDraft({
-        ...prev.sessionDraft,
-        discountTime: "19",
-      });
-      const nextSession: SessionData = {
-        ...draft,
-        discountTime: "19",
-        weather: {
-          ...draft.weather,
-          hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
-        },
-        startedAt,
-      };
-
-      const consumed = consumeSkipRecordsInMemory({
-        currentRecords: nextSkipRecords,
-        date: nextSession.date,
-        targetDiscountTime: "19",
-      });
-
-      nextSkipRecords = consumed.remainingRecords;
-      const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedRecords);
-      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
-
-      return {
-        ...prev,
-        screen: firstAreaId ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId) : "done",
-        session: nextSession,
-        areaProgressMap,
-        currentAreaId: firstAreaId,
-        lastReferenceAreaId: firstAreaId,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        timeSwitchNotice: null,
-        finalTimeStep: 0,
-      };
+    const consumed = consumeSkipRecordsInMemory({
+      currentRecords: nextSessionSkipRecordsRef.current,
+      date: nextSession.date,
+      targetDiscountTime: "19",
     });
 
-    setNextSessionSkipRecords(cloneSkipRecords(nextSkipRecords));
+    const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedRecords);
+    const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
+
+    setState({
+      ...state,
+      screen: firstAreaId ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId) : "done",
+      session: nextSession,
+      areaProgressMap,
+      currentAreaId: firstAreaId,
+      lastReferenceAreaId: firstAreaId,
+      currentFlow: "normal",
+      pendingDeferredAreaIds: [],
+      timeSwitchNotice: null,
+      finalTimeStep: 0,
+    });
+
+    replaceNextSessionSkipRecords(consumed.remainingRecords);
     setResumeTargetScreen(null);
     setTimeSwitchTarget(null);
     setUndoSnapshot(null);
@@ -3529,6 +3579,45 @@ const lateSkipNotice = useMemo(() => {
     const prioritizeUnfinishedAreas =
       (options?.autoTransition ?? false) &&
       shouldPrioritizeUnfinishedAreasOnAutoTransition(state.screen);
+
+    const currentAreaEarlyNextTarget = state.currentAreaId
+      ? state.areaProgressMap[state.currentAreaId]?.earlyNextMinus5TargetDiscountTime ??
+        earlyNextMinus5Info?.targetDiscountTime ??
+        null
+      : null;
+    const shouldReserveCurrentArea =
+      (options?.autoTransition ?? false) &&
+      shouldReserveEarlyNextMinus5OnAutoTransition({
+        screen: state.screen,
+        currentTargetDiscountTime: currentAreaEarlyNextTarget,
+        nextTargetDiscountTime: nextInfo.targetDiscountTime,
+      });
+
+    if (
+      shouldReserveCurrentArea &&
+      state.currentAreaId &&
+      state.session &&
+      !state.session.manualDiscountTimeOverride
+    ) {
+      const progress = state.areaProgressMap[state.currentAreaId];
+      const rateSnapshot = buildCompletedRateSnapshot({
+        session: state.session,
+        progress,
+        weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
+        weekdayBase: weekdayBaseInfo.adjusted,
+        rateDisplayOverride: rateDisplay,
+      });
+
+      appendNextSessionSkipRecords([
+        buildNextSessionSkipRecord({
+          date: state.session.date,
+          targetDiscountTime: currentAreaEarlyNextTarget!,
+          areaId: state.currentAreaId,
+          rateSnapshot,
+          skipKind: "early_next_minus5",
+        }),
+      ]);
+    }
 
     if (options?.autoTransition) {
       window.alert(buildAutoTimeSwitchDialogText({
