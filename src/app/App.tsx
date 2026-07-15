@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
 import {
@@ -10,6 +10,9 @@ import {
   savePreferredTrainingStep,
 } from "../domain/adminSettings";
 import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
+import { withSystemBackGuardState } from "../domain/systemBackGuard";
+
+let systemBackGuardEntryCreatedForDocument = false;
 
 type TestModeConfig = {
   now: Date;
@@ -225,10 +228,35 @@ export default function App() {
   const testMode = getCurrentTestMode();
   const [trainingStep, setTrainingStep] = useState(getCurrentTrainingStep);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const systemBackGuardUrlRef = useRef(
+    typeof window === "undefined" ? "" : window.location.href,
+  );
   const [loadedDate] = useState(() => formatLocalDate(testMode?.now));
   const [todayDate, setTodayDate] = useState(() => formatLocalDate(testMode?.now));
   const app = useNebikiApp({ trainingStep, testNow: testMode?.now ?? null });
   const hasDateChanged = !testMode && todayDate !== loadedDate;
+
+  useEffect(() => {
+    const handleSystemBack = () => {
+      window.history.pushState(
+        withSystemBackGuardState(window.history.state),
+        "",
+        systemBackGuardUrlRef.current,
+      );
+    };
+
+    if (!systemBackGuardEntryCreatedForDocument) {
+      window.history.pushState(
+        withSystemBackGuardState(window.history.state),
+        "",
+        systemBackGuardUrlRef.current,
+      );
+      systemBackGuardEntryCreatedForDocument = true;
+    }
+
+    window.addEventListener("popstate", handleSystemBack);
+    return () => window.removeEventListener("popstate", handleSystemBack);
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -243,10 +271,12 @@ export default function App() {
     savePreferredTrainingStep(nextStep);
 
     if (window.location.hash) {
+      const nextUrl = `${window.location.pathname}${window.location.search}`;
+      systemBackGuardUrlRef.current = new URL(nextUrl, window.location.href).href;
       window.history.replaceState(
-        null,
+        withSystemBackGuardState(window.history.state),
         "",
-        `${window.location.pathname}${window.location.search}`,
+        nextUrl,
       );
     }
 
