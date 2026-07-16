@@ -19,7 +19,6 @@ import type {
   ScreenName,
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
-  Review19Rating,
   Review19Result,
   Review19Snapshot,
   Review19Reference,
@@ -92,7 +91,7 @@ import {
 } from "../domain/hourlyWeather.ts";
 import {
   createInitialReview19Result,
-  createReview19RatingScores,
+  buildReview19DataQuality,
   getReview19AreaItems,
   parseReview19RatePercent,
   normalizeReview19Result,
@@ -105,11 +104,15 @@ import {
   buildAutomaticDayExportPayload,
   getAutomaticDayExportFilename,
 } from "../domain/dayExport.ts";
-import type { AreaCountRecord } from "../domain/areaCountHistory.ts";
+import type {
+  AreaCountDecisionBasis,
+  AreaCountRecord,
+} from "../domain/areaCountHistory.ts";
 import type { TrainingStep } from "../domain/trainingMode.ts";
 import { getTrainingStepConfig } from "../domain/trainingMode.ts";
 import {
   cloneAreaCountRecords,
+  buildAreaCountDecisionBasis,
   evaluationText as getAreaCountEvaluationText,
   evaluationToRateAdjustment as getAreaCountRateAdjustment,
   getActualWeekdayLabel,
@@ -117,6 +120,7 @@ import {
   getAreaCountRecommendation as buildAreaCountRecommendation,
   getAreaCountSameItemLimit,
   isAreaCountAssistTarget,
+  normalizeAreaCountDecisionBasis,
   upsertAreaCountRecord,
 } from "../domain/areaCountHistory.ts";
 import {
@@ -583,6 +587,7 @@ function normalizeAreaProgressMap(
       areaCountEvaluationSource: isValidAreaCountEvaluationSource(progress.areaCountEvaluationSource)
         ? progress.areaCountEvaluationSource
         : undefined,
+      areaCountDecisionBasis: normalizeAreaCountDecisionBasis(progress.areaCountDecisionBasis),
       areaRateAdjustment: isValidAreaRateAdjustment(progress.areaRateAdjustment)
         ? progress.areaRateAdjustment
         : undefined,
@@ -1049,6 +1054,9 @@ function buildAreaSnapshotsFromState(params: {
       areaCount: progress?.areaCount,
       areaCountEvaluation: progress?.areaCountEvaluation,
       areaCountEvaluationSource: progress?.areaCountEvaluationSource,
+      areaCountDecisionBasis: progress?.areaCountDecisionBasis
+        ? JSON.parse(JSON.stringify(progress.areaCountDecisionBasis)) as AreaCountDecisionBasis
+        : undefined,
       areaRateAdjustment: progress?.areaRateAdjustment,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
       rateText: summary?.rateText ?? "未完了",
@@ -1169,11 +1177,20 @@ function getLatestReview19DayCheck(date: string): Review19DayCheckSnapshot | und
     version: 1,
     recordedAt: latest.recordedAt,
     sessionStartedAt: latest.sessionStartedAt,
-    ratings: JSON.parse(JSON.stringify(latest.ratings)) as Review19DayCheckSnapshot["ratings"],
-    ratingScores: JSON.parse(JSON.stringify(latest.ratingScores)) as Review19DayCheckSnapshot["ratingScores"],
+    reviewStartedAt: latest.reviewStartedAt,
+    reviewCompletedAt: latest.reviewCompletedAt ?? latest.recordedAt,
+    areaCountRecordedAt: JSON.parse(JSON.stringify(latest.areaCountRecordedAt)) as Review19DayCheckSnapshot["areaCountRecordedAt"],
+    ratingStatus: latest.ratingStatus,
+    ratings: latest.ratings
+      ? JSON.parse(JSON.stringify(latest.ratings)) as Review19DayCheckSnapshot["ratings"]
+      : null,
+    ratingScores: latest.ratingScores
+      ? JSON.parse(JSON.stringify(latest.ratingScores)) as Review19DayCheckSnapshot["ratingScores"]
+      : null,
     areaCounts: JSON.parse(JSON.stringify(latest.areaCounts)) as Review19DayCheckSnapshot["areaCounts"],
     excludedAreaIds: [...latest.excludedAreaIds],
     excludeReasons: JSON.parse(JSON.stringify(latest.excludeReasons)) as Review19DayCheckSnapshot["excludeReasons"],
+    dataQuality: JSON.parse(JSON.stringify(latest.dataQuality)) as Review19DayCheckSnapshot["dataQuality"],
     snapshot: latest.snapshot
       ? JSON.parse(JSON.stringify(latest.snapshot)) as Review19Snapshot
       : undefined,
@@ -1237,6 +1254,9 @@ function createReview19Snapshot(params: {
       areaCount: progress?.areaCount,
       areaCountEvaluation: progress?.areaCountEvaluation,
       areaCountEvaluationSource: progress?.areaCountEvaluationSource,
+      areaCountDecisionBasis: progress?.areaCountDecisionBasis
+        ? JSON.parse(JSON.stringify(progress.areaCountDecisionBasis)) as AreaCountDecisionBasis
+        : undefined,
       areaRateAdjustment: progress?.areaRateAdjustment,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
       rateText: summary?.rateText ?? "未完了",
@@ -2139,14 +2159,12 @@ const lateSkipNotice = useMemo(() => {
   ]);
 
   const review19Items = useMemo(() => {
-    const ratings = state.review19?.ratings;
     const excludedAreaIdSet = new Set(state.review19?.excludedAreaIds ?? []);
 
     return getReview19AreaItems().map((item) => {
       const excludeReason = state.review19?.excludeReasons?.[item.areaId];
       return {
         ...item,
-        rating: ratings?.[item.areaId] ?? ("just_right" as Review19Rating),
         count: state.review19?.areaCounts?.[item.areaId],
         excluded: excludedAreaIdSet.has(item.areaId),
         excludeReasonText: excludeReason
@@ -2444,7 +2462,8 @@ const lateSkipNotice = useMemo(() => {
       evaluation?: AreaCountEvaluation;
       rateAdjustment?: AreaRateAdjustment;
     },
-    areaCountEvaluationSource?: NonNullable<AreaProgress["areaCountEvaluationSource"]>
+    areaCountEvaluationSource?: NonNullable<AreaProgress["areaCountEvaluationSource"]>,
+    areaCountDecisionBasis?: AreaCountDecisionBasis,
   ): AppState {
     if (!prev.currentAreaId) return prev;
     const currentAreaId = prev.currentAreaId;
@@ -2466,6 +2485,7 @@ const lateSkipNotice = useMemo(() => {
             areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
             areaCountEvaluation: areaCountResult?.evaluation,
             areaCountEvaluationSource,
+            areaCountDecisionBasis,
             areaRateAdjustment: areaCountResult?.rateAdjustment,
             visitedAt: getRuntimeNow().toISOString(),
           },
@@ -2487,6 +2507,7 @@ const lateSkipNotice = useMemo(() => {
         areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
         areaCountEvaluation: areaCountResult?.evaluation,
         areaCountEvaluationSource,
+        areaCountDecisionBasis,
         areaRateAdjustment: areaCountResult?.rateAdjustment,
         visitedAt: currentVisitedAt,
       },
@@ -2500,6 +2521,7 @@ const lateSkipNotice = useMemo(() => {
         areaCount: areaCount ?? prev.areaProgressMap[currentAreaId].areaCount,
         areaCountEvaluation: areaCountResult?.evaluation,
         areaCountEvaluationSource,
+        areaCountDecisionBasis,
         areaRateAdjustment: areaCountResult?.rateAdjustment,
         status: "postponed_few" as const,
         skipReason: "few" as const,
@@ -2876,6 +2898,14 @@ const lateSkipNotice = useMemo(() => {
       : manualAreaCountResult
       ? "manual" as const
       : undefined;
+    const areaCountDecisionBasis = areaCountRecommendation
+      ? buildAreaCountDecisionBasis({
+          recommendation: areaCountRecommendation,
+          evaluationSource: areaCountEvaluationSource,
+          finalEvaluation: effectiveAreaCountResult?.evaluation,
+          areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
+        })
+      : undefined;
 
     // エリア残数判定が使える場合、エリア判定は5段階結果で固定する。
     const effectiveJudge: Exclude<AreaJudge, null> = effectiveAreaCountResult ? "normal" : judge;
@@ -2910,6 +2940,8 @@ const lateSkipNotice = useMemo(() => {
         userJudge: manualAreaCountEvaluation,
         suggestedEvaluation: effectiveAreaCountResult?.evaluation,
         areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
+        evaluationSource: areaCountEvaluationSource,
+        decisionBasis: areaCountDecisionBasis,
       };
 
       nextAreaCountRecords = upsertAreaCountRecord(areaCountRecords, nextRecord);
@@ -2923,6 +2955,7 @@ const lateSkipNotice = useMemo(() => {
       roundedAreaCount,
       effectiveAreaCountResult,
       areaCountEvaluationSource,
+      areaCountDecisionBasis,
     );
 
     setState((prev) =>
@@ -2931,7 +2964,8 @@ const lateSkipNotice = useMemo(() => {
         effectiveJudge,
         roundedAreaCount,
         effectiveAreaCountResult,
-        areaCountEvaluationSource
+        areaCountEvaluationSource,
+        areaCountDecisionBasis,
       )
     );
 
@@ -3257,7 +3291,8 @@ const lateSkipNotice = useMemo(() => {
       const initialReview19 = createInitialReview19Result({
         date: session.date,
         sessionStartedAt: session.startedAt,
-        excludedAreaIds: [],
+        reviewStartedAt: now.toISOString(),
+        excludedAreaIds: sourceStateForReview.review19ExcludedAreaIds,
       });
 
       return {
@@ -3288,28 +3323,8 @@ const lateSkipNotice = useMemo(() => {
         screen: "review19",
         review19: {
           ...prev.review19,
+          reviewStartedAt: prev.review19.reviewStartedAt ?? getRuntimeNow().toISOString(),
           reference: createReview19Reference(prev.sessionDraft),
-        },
-      };
-    });
-  }
-
-  function updateReview19Rating(areaId: AreaId, rating: Review19Rating) {
-    setState((prev) => {
-      if (prev.screen !== "review19" || !prev.review19) return prev;
-
-      return {
-        ...prev,
-        review19: {
-          ...prev.review19,
-          ratings: {
-            ...prev.review19.ratings,
-            [areaId]: rating,
-          },
-          ratingScores: createReview19RatingScores({
-            ...prev.review19.ratings,
-            [areaId]: rating,
-          }),
         },
       };
     });
@@ -3320,20 +3335,31 @@ const lateSkipNotice = useMemo(() => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
 
       const safeCount = Math.max(0, Math.round(count));
+      const recordedAt = getRuntimeNow().toISOString();
       const nextExcludedAreaIds = prev.review19.excludedAreaIds.filter((id) => id !== areaId);
       const nextExcludeReasons = { ...prev.review19.excludeReasons };
       delete nextExcludeReasons[areaId];
+      const nextAreaCounts = {
+        ...prev.review19.areaCounts,
+        [areaId]: safeCount,
+      };
 
       return {
         ...prev,
         review19: {
           ...prev.review19,
-          areaCounts: {
-            ...prev.review19.areaCounts,
-            [areaId]: safeCount,
+          areaCounts: nextAreaCounts,
+          areaCountRecordedAt: {
+            ...prev.review19.areaCountRecordedAt,
+            [areaId]: recordedAt,
           },
           excludedAreaIds: nextExcludedAreaIds,
           excludeReasons: nextExcludeReasons,
+          dataQuality: buildReview19DataQuality({
+            date: prev.review19.date,
+            areaCounts: nextAreaCounts,
+            excludedAreaIds: nextExcludedAreaIds,
+          }),
         },
       };
     });
@@ -3345,6 +3371,8 @@ const lateSkipNotice = useMemo(() => {
 
       const nextAreaCounts = { ...prev.review19.areaCounts };
       delete nextAreaCounts[areaId];
+      const nextAreaCountRecordedAt = { ...prev.review19.areaCountRecordedAt };
+      delete nextAreaCountRecordedAt[areaId];
 
       const nextExcludedAreaIds = prev.review19.excludedAreaIds.includes(areaId)
         ? prev.review19.excludedAreaIds
@@ -3355,11 +3383,17 @@ const lateSkipNotice = useMemo(() => {
         review19: {
           ...prev.review19,
           areaCounts: nextAreaCounts,
+          areaCountRecordedAt: nextAreaCountRecordedAt,
           excludedAreaIds: nextExcludedAreaIds,
           excludeReasons: {
             ...prev.review19.excludeReasons,
             [areaId]: "manual",
           },
+          dataQuality: buildReview19DataQuality({
+            date: prev.review19.date,
+            areaCounts: nextAreaCounts,
+            excludedAreaIds: nextExcludedAreaIds,
+          }),
         },
       };
     });
@@ -3371,6 +3405,7 @@ const lateSkipNotice = useMemo(() => {
   ): Review19Result | null {
     if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
 
+    const completedAt = getRuntimeNow().toISOString();
     const latestAreaCounts: Partial<Record<AreaId, number>> = latestAreaCount
       ? { [latestAreaCount.areaId]: Math.max(0, Math.round(latestAreaCount.count)) }
       : {};
@@ -3394,9 +3429,23 @@ const lateSkipNotice = useMemo(() => {
     for (const areaId of excludedAreaIdSet) {
       delete recordedAreaCounts[areaId];
     }
+    const areaCountRecordedAt = {
+      ...state.review19.areaCountRecordedAt,
+    };
+    if (latestAreaCount) {
+      areaCountRecordedAt[latestAreaCount.areaId] = completedAt;
+    }
+    for (const areaId of excludedAreaIdSet) {
+      delete areaCountRecordedAt[areaId];
+    }
 
     const excludedAreaIds = NORMAL_ROUTE.filter((areaId) => excludedAreaIdSet.has(areaId));
-    const recordedAt = state.review19.recordedAt ?? getRuntimeNow().toISOString();
+    const recordedAt = state.review19.recordedAt ?? completedAt;
+    const dataQuality = buildReview19DataQuality({
+      date: state.review19.date,
+      areaCounts: recordedAreaCounts,
+      excludedAreaIds,
+    });
     const snapshot = state.session
       ? createReview19Snapshot({
           capturedAt: recordedAt,
@@ -3411,7 +3460,6 @@ const lateSkipNotice = useMemo(() => {
         })
       : state.review19.snapshot;
 
-    const ratingScores = createReview19RatingScores(state.review19.ratings);
     const daySnapshot = createReview19DaySnapshot({
       capturedAt: recordedAt,
       date: state.review19.date,
@@ -3421,11 +3469,16 @@ const lateSkipNotice = useMemo(() => {
         version: 1,
         recordedAt,
         sessionStartedAt: state.review19.sessionStartedAt,
-        ratings: JSON.parse(JSON.stringify(state.review19.ratings)) as Review19Result["ratings"],
-        ratingScores,
+        reviewStartedAt: state.review19.reviewStartedAt,
+        reviewCompletedAt: completedAt,
+        areaCountRecordedAt,
+        ratingStatus: "not_collected",
+        ratings: null,
+        ratingScores: null,
         areaCounts: recordedAreaCounts,
         excludedAreaIds,
         excludeReasons,
+        dataQuality,
         snapshot,
       },
     });
@@ -3435,10 +3488,15 @@ const lateSkipNotice = useMemo(() => {
 
     return {
       ...review19WithoutReference,
-      ratingScores,
+      ratingStatus: "not_collected",
+      ratings: null,
+      ratingScores: null,
       areaCounts: recordedAreaCounts,
+      areaCountRecordedAt,
       excludedAreaIds,
       excludeReasons,
+      reviewCompletedAt: completedAt,
+      dataQuality,
       recordedAt,
       snapshot,
       daySnapshot,
@@ -3784,7 +3842,6 @@ const lateSkipNotice = useMemo(() => {
       goToNextArea,
       acknowledgeAutoSkippedArea,
       advanceFinalTimeStep,
-      updateReview19Rating,
       updateReview19AreaCount,
       skipReview19Area,
       startReview19AfterWeather,

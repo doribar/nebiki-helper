@@ -12,14 +12,31 @@ create table if not exists public.area_count_records (
   actual_weekday text check (actual_weekday in ('日', '月', '火', '水', '木', '金', '土')),
   actual_weekday_group text not null check (actual_weekday_group in ('月水', '火木', '金土日')),
   count integer not null check (count >= 0),
-  user_judge text check (user_judge in ('many', 'normal', 'few')),
+  user_judge text check (user_judge in ('many', 'slightly_many', 'normal', 'slightly_few', 'few')),
   suggested_evaluation text check (suggested_evaluation in ('many', 'slightly_many', 'normal', 'slightly_few', 'few')),
   area_rate_adjustment integer check (area_rate_adjustment in (-10, -5, 0, 5, 10)),
+  evaluation_source text check (evaluation_source in ('manual', 'history')),
+  decision_basis jsonb,
   comfort_point integer check (comfort_point between -1 and 3),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (date, session_started_at, area_id, discount_time)
 );
+
+-- 既存テーブルを使っている場合も、このSQLを再実行すれば新しい判定根拠列を追加できます。
+alter table public.area_count_records
+  add column if not exists evaluation_source text check (evaluation_source in ('manual', 'history'));
+
+alter table public.area_count_records
+  add column if not exists decision_basis jsonb;
+
+-- 旧版はuser_judgeを3段階に制限していたため、現在の5段階入力を保存できるよう更新します。
+alter table public.area_count_records
+  drop constraint if exists area_count_records_user_judge_check;
+
+alter table public.area_count_records
+  add constraint area_count_records_user_judge_check
+  check (user_judge in ('many', 'slightly_many', 'normal', 'slightly_few', 'few'));
 
 create index if not exists area_count_records_lookup_idx
   on public.area_count_records (area_id, discount_time, actual_weekday, recorded_at desc);

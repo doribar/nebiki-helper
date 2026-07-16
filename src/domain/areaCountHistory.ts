@@ -2,6 +2,7 @@ import type {
   ActualWeekdayGroup,
   ActualWeekdayLabel,
   AreaCountEvaluation,
+  AreaCountEvaluationSource,
   AreaId,
   AreaJudge,
   AreaRateAdjustment,
@@ -11,6 +12,44 @@ import type {
 import { addDaysToDateString, isJapaneseHolidayOrObserved } from "./japaneseHoliday.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
+
+export const AREA_COUNT_DECISION_RULE_VERSION = "area_count_median_v1" as const;
+
+export type AreaCountDecisionBasis = {
+  ruleVersion: typeof AREA_COUNT_DECISION_RULE_VERSION;
+  evaluationSource?: AreaCountEvaluationSource;
+  recommendationStatus: AreaCountRecommendation["status"];
+  actualWeekday?: ActualWeekdayLabel;
+  actualWeekdayGroup?: ActualWeekdayGroup;
+  comparisonMode?: "weekday" | "fallback_group";
+  sampleSize: number;
+  requiredSampleSize: number;
+  medianCount?: number;
+  shortMedianCount?: number;
+  longMedianCount?: number;
+  shortSampleSize?: number;
+  longSampleSize?: number;
+  medianDownGuardApplied?: boolean;
+  smallDifferenceThreshold?: number;
+  largeDifferenceThreshold?: number;
+  lowerLargeThreshold?: number;
+  lowerSmallThreshold?: number;
+  upperSmallThreshold?: number;
+  upperLargeThreshold?: number;
+  baseEvaluation?: AreaCountEvaluation;
+  finalEvaluation?: AreaCountEvaluation;
+  areaRateAdjustment?: AreaRateAdjustment;
+  decreaseAdjustment?: {
+    canUse: boolean;
+    sampleSize: number;
+    requiredSampleSize: number;
+    previousDiscountTime?: AreaCountDiscountTime;
+    previousCount?: number;
+    currentDecreaseRate?: number;
+    medianDecreaseRate?: number;
+    direction: DecreaseAdjustmentDirection;
+  };
+};
 
 export type AreaCountRecord = {
   date: string;
@@ -29,6 +68,10 @@ export type AreaCountRecord = {
   userJudge?: AreaCountEvaluation;
   suggestedEvaluation?: AreaCountEvaluation;
   areaRateAdjustment?: AreaRateAdjustment;
+  /** 判定元が手動か履歴中央値かを明示する。 */
+  evaluationSource?: AreaCountEvaluationSource;
+  /** 判定時点の中央値・閾値・減り方補正を、後から検証できる形で保存する。 */
+  decisionBasis?: AreaCountDecisionBasis;
   comfortPoint?: number;
 };
 
@@ -82,11 +125,11 @@ const LONG_REFERENCE_RECORDS = 52;
 const MEDIAN_DOWN_GUARD_MAX_DROP = 2;
 const DECREASE_RATE_THRESHOLD = 0.2;
 
+// 15→17時の減り方比較を使える、追加製造が基本的にないエリア。
+// 涼味・フライ鶏惣菜・焼鳥・中華魚惣菜・寿司・太巻中巻は追加製造があり得るため含めない。
 const NO_AFTERNOON_ADD_AREA_IDS = new Set<AreaId>([
   "bento_men",
   "tempura",
-  "ryomi",
-  "yakitori",
   "onigiri",
   "inari",
   "hosomaki",
@@ -240,6 +283,10 @@ function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
     userJudge: record.userJudge,
     suggestedEvaluation: record.suggestedEvaluation,
     areaRateAdjustment: record.areaRateAdjustment,
+    evaluationSource: record.evaluationSource,
+    decisionBasis: record.decisionBasis
+      ? JSON.parse(JSON.stringify(record.decisionBasis)) as AreaCountDecisionBasis
+      : undefined,
     comfortPoint: record.comfortPoint,
   };
 }
@@ -268,6 +315,158 @@ function isActualWeekdayGroup(value: unknown): value is ActualWeekdayGroup {
 
 function isActualWeekdayLabel(value: unknown): value is ActualWeekdayLabel {
   return value === "日" || value === "月" || value === "火" || value === "水" || value === "木" || value === "金" || value === "土";
+}
+
+function isAreaCountEvaluationSource(value: unknown): value is AreaCountEvaluationSource {
+  return value === "manual" || value === "history";
+}
+
+function isRecommendationStatus(
+  value: unknown,
+): value is AreaCountRecommendation["status"] {
+  return value === "disabled" || value === "insufficient" || value === "ready";
+}
+
+function isComparisonMode(value: unknown): value is "weekday" | "fallback_group" {
+  return value === "weekday" || value === "fallback_group";
+}
+
+function isDecreaseAdjustmentDirection(value: unknown): value is DecreaseAdjustmentDirection {
+  return value === "more_many" || value === "more_few" || value === "none";
+}
+
+function normalizeFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeNonNegativeInteger(value: unknown): number | undefined {
+  const numberValue = normalizeFiniteNumber(value);
+  return numberValue === undefined || numberValue < 0 ? undefined : Math.round(numberValue);
+}
+
+export function normalizeAreaCountDecisionBasis(
+  raw: unknown,
+): AreaCountDecisionBasis | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const basis = raw as Partial<AreaCountDecisionBasis>;
+  if (basis.ruleVersion !== AREA_COUNT_DECISION_RULE_VERSION) return undefined;
+  if (!isRecommendationStatus(basis.recommendationStatus)) return undefined;
+
+  const sampleSize = normalizeNonNegativeInteger(basis.sampleSize);
+  const requiredSampleSize = normalizeNonNegativeInteger(basis.requiredSampleSize);
+  if (sampleSize === undefined || requiredSampleSize === undefined) return undefined;
+
+  let decreaseAdjustment: AreaCountDecisionBasis["decreaseAdjustment"];
+  const rawDecrease = basis.decreaseAdjustment;
+  if (rawDecrease && typeof rawDecrease === "object") {
+    const decreaseSampleSize = normalizeNonNegativeInteger(rawDecrease.sampleSize);
+    const decreaseRequiredSampleSize = normalizeNonNegativeInteger(rawDecrease.requiredSampleSize);
+    if (
+      typeof rawDecrease.canUse === "boolean" &&
+      decreaseSampleSize !== undefined &&
+      decreaseRequiredSampleSize !== undefined &&
+      isDecreaseAdjustmentDirection(rawDecrease.direction)
+    ) {
+      decreaseAdjustment = {
+        canUse: rawDecrease.canUse,
+        sampleSize: decreaseSampleSize,
+        requiredSampleSize: decreaseRequiredSampleSize,
+        previousDiscountTime: isAreaCountAssistDiscountTime(rawDecrease.previousDiscountTime)
+          ? rawDecrease.previousDiscountTime
+          : undefined,
+        previousCount: normalizeNonNegativeInteger(rawDecrease.previousCount),
+        currentDecreaseRate: normalizeFiniteNumber(rawDecrease.currentDecreaseRate),
+        medianDecreaseRate: normalizeFiniteNumber(rawDecrease.medianDecreaseRate),
+        direction: rawDecrease.direction,
+      };
+    }
+  }
+
+  return {
+    ruleVersion: AREA_COUNT_DECISION_RULE_VERSION,
+    evaluationSource: isAreaCountEvaluationSource(basis.evaluationSource)
+      ? basis.evaluationSource
+      : undefined,
+    recommendationStatus: basis.recommendationStatus,
+    actualWeekday: isActualWeekdayLabel(basis.actualWeekday) ? basis.actualWeekday : undefined,
+    actualWeekdayGroup: isActualWeekdayGroup(basis.actualWeekdayGroup)
+      ? basis.actualWeekdayGroup
+      : undefined,
+    comparisonMode: isComparisonMode(basis.comparisonMode) ? basis.comparisonMode : undefined,
+    sampleSize,
+    requiredSampleSize,
+    medianCount: normalizeNonNegativeInteger(basis.medianCount),
+    shortMedianCount: normalizeNonNegativeInteger(basis.shortMedianCount),
+    longMedianCount: normalizeNonNegativeInteger(basis.longMedianCount),
+    shortSampleSize: normalizeNonNegativeInteger(basis.shortSampleSize),
+    longSampleSize: normalizeNonNegativeInteger(basis.longSampleSize),
+    medianDownGuardApplied:
+      typeof basis.medianDownGuardApplied === "boolean"
+        ? basis.medianDownGuardApplied
+        : undefined,
+    smallDifferenceThreshold: normalizeNonNegativeInteger(basis.smallDifferenceThreshold),
+    largeDifferenceThreshold: normalizeNonNegativeInteger(basis.largeDifferenceThreshold),
+    lowerLargeThreshold: normalizeNonNegativeInteger(basis.lowerLargeThreshold),
+    lowerSmallThreshold: normalizeNonNegativeInteger(basis.lowerSmallThreshold),
+    upperSmallThreshold: normalizeNonNegativeInteger(basis.upperSmallThreshold),
+    upperLargeThreshold: normalizeNonNegativeInteger(basis.upperLargeThreshold),
+    baseEvaluation: isAreaCountEvaluation(basis.baseEvaluation)
+      ? basis.baseEvaluation
+      : undefined,
+    finalEvaluation: isAreaCountEvaluation(basis.finalEvaluation)
+      ? basis.finalEvaluation
+      : undefined,
+    areaRateAdjustment: isAreaRateAdjustment(basis.areaRateAdjustment)
+      ? basis.areaRateAdjustment
+      : undefined,
+    decreaseAdjustment,
+  };
+}
+
+export function buildAreaCountDecisionBasis(params: {
+  recommendation: AreaCountRecommendation;
+  evaluationSource?: AreaCountEvaluationSource;
+  finalEvaluation?: AreaCountEvaluation;
+  areaRateAdjustment?: AreaRateAdjustment;
+}): AreaCountDecisionBasis {
+  const decrease = params.recommendation.decreaseRecommendation;
+  return {
+    ruleVersion: AREA_COUNT_DECISION_RULE_VERSION,
+    evaluationSource: params.evaluationSource,
+    recommendationStatus: params.recommendation.status,
+    actualWeekday: params.recommendation.actualWeekday,
+    actualWeekdayGroup: params.recommendation.actualWeekdayGroup,
+    comparisonMode: params.recommendation.comparisonMode,
+    sampleSize: params.recommendation.sampleSize,
+    requiredSampleSize: params.recommendation.requiredSampleSize,
+    medianCount: params.recommendation.medianCount,
+    shortMedianCount: params.recommendation.shortMedianCount,
+    longMedianCount: params.recommendation.longMedianCount,
+    shortSampleSize: params.recommendation.shortSampleSize,
+    longSampleSize: params.recommendation.longSampleSize,
+    medianDownGuardApplied: params.recommendation.medianDownGuardApplied,
+    smallDifferenceThreshold: params.recommendation.smallDifferenceThreshold,
+    largeDifferenceThreshold: params.recommendation.largeDifferenceThreshold,
+    lowerLargeThreshold: params.recommendation.lowerLargeThreshold,
+    lowerSmallThreshold: params.recommendation.lowerSmallThreshold,
+    upperSmallThreshold: params.recommendation.upperSmallThreshold,
+    upperLargeThreshold: params.recommendation.upperLargeThreshold,
+    baseEvaluation: params.recommendation.baseEvaluation,
+    finalEvaluation: params.finalEvaluation,
+    areaRateAdjustment: params.areaRateAdjustment,
+    decreaseAdjustment: decrease
+      ? {
+          canUse: decrease.canUse,
+          sampleSize: decrease.sampleSize,
+          requiredSampleSize: decrease.requiredSampleSize,
+          previousDiscountTime: decrease.previousDiscountTime,
+          previousCount: decrease.previousCount,
+          currentDecreaseRate: decrease.currentDecreaseRate,
+          medianDecreaseRate: decrease.medianDecreaseRate,
+          direction: decrease.direction,
+        }
+      : undefined,
+  };
 }
 
 function inferWeekdayLabelFromDate(dateText: string): ActualWeekdayLabel | undefined {
@@ -328,6 +527,10 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
         areaRateAdjustment: isAreaRateAdjustment(record.areaRateAdjustment)
           ? record.areaRateAdjustment
           : undefined,
+        evaluationSource: isAreaCountEvaluationSource(record.evaluationSource)
+          ? record.evaluationSource
+          : undefined,
+        decisionBasis: normalizeAreaCountDecisionBasis(record.decisionBasis),
         comfortPoint:
           typeof record.comfortPoint === "number" && Number.isFinite(record.comfortPoint)
             ? Math.max(-1, Math.min(3, Math.round(record.comfortPoint)))
@@ -547,7 +750,8 @@ function getPreviousDiscountTimeForDecrease(params: {
     return NO_AFTERNOON_ADD_AREA_IDS.has(params.areaId) ? "15" : null;
   }
 
-  if (params.discountTime === "18") return "17";
+  // 18時30分はバラ商品をパック化して値引対象へ加えるため、17時との単純な減少率比較はしない。
+  if (params.discountTime === "18") return null;
   if (params.discountTime === "19") return "18";
   return null;
 }

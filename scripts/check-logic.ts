@@ -22,7 +22,10 @@ import {
   readSystemBackGuardState,
   withSystemBackGuardState,
 } from '../src/domain/systemBackGuard.ts';
-import { buildAutomaticDayExportPayload, getAutomaticDayExportFilename } from '../src/domain/dayExport.ts';
+import {
+  buildAutomaticDayExportPayload,
+  getAutomaticDayExportFilename,
+} from '../src/domain/dayExport.ts';
 import {
   getEarlyNextMinus5CompletedText,
   getEarlyNextMinus5NoticeText,
@@ -33,6 +36,7 @@ import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/p
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
 import {
   appendReview19RecordInMemory,
+  buildReview19DataQuality,
   buildReview19ExportPayload,
   createInitialReview19Result,
   getReview19ExportBatch,
@@ -60,6 +64,7 @@ import {
   sanitizePersistedNebikiStateForDate,
 } from '../src/domain/storage.ts';
 import {
+  buildAreaCountDecisionBasis,
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
   getAreaCountSameItemLimit,
@@ -1515,8 +1520,9 @@ try {
   assert.equal(normalized?.snapshot?.areas.bento_men.ratePercent, 20);
   assert.equal(normalized?.snapshot?.areas.bento_men.manyRatePercent, 30);
   assert.equal(normalized?.snapshot?.areas.bento_men.normalRatePercent, 0);
-  assert.equal(normalized?.ratingScores.bento_men, 1);
-  assert.equal(normalized?.ratingScores.tempura, 0);
+  assert.equal(normalized?.ratingStatus, 'recorded');
+  assert.equal(normalized?.ratingScores?.bento_men, 1);
+  assert.equal(normalized?.ratingScores?.tempura, 0);
   assert.equal(normalized?.reference?.discountTime, '19');
   assert.equal(normalized?.reference?.basis.adjustedWeekdayBase, '火木');
 
@@ -1528,11 +1534,41 @@ try {
   assert.equal(records[0].snapshot?.version, 1);
   assert.equal(records[0].snapshot?.areas.bento_men.rateText, '20%');
   assert.equal(records[0].snapshot?.areas.bento_men.ratePercent, 20);
-  assert.equal(records[0].ratingScores.bento_men, 1);
+  assert.equal(records[0].ratingScores?.bento_men, 1);
   console.log('PASS: 19時チェックは値引状況スナップショット・点数・値引率数値を保持する');
   passed += 1;
 } catch (error) {
   console.error('FAIL: 19時チェックは値引状況スナップショット・点数・値引率数値を保持する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const currentCountBasedRecord = normalizeReview19Result({
+    date: '2026-07-10',
+    sessionStartedAt: '2026-07-10T07:47:18.899Z',
+    ratings: { bento_men: 'just_right' } as never,
+    ratingScores: { bento_men: 0 } as never,
+    areaCounts: { bento_men: 100 },
+    excludedAreaIds: [],
+    excludeReasons: {},
+  });
+
+  assert.equal(currentCountBasedRecord?.ratingStatus, 'not_collected');
+  assert.equal(currentCountBasedRecord?.ratings, null);
+  assert.equal(currentCountBasedRecord?.ratingScores, null);
+
+  const initial = createInitialReview19Result({
+    date: '2026-07-15',
+    sessionStartedAt: '2026-07-15T08:00:00.000Z',
+  });
+  assert.equal(initial.ratingStatus, 'not_collected');
+  assert.equal(initial.ratings, null);
+  assert.equal(initial.ratingScores, null);
+  console.log('PASS: 残数入力方式の19時チェックは未収集評価をちょうどいいとして保存しない');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 残数入力方式の19時チェックは未収集評価をちょうどいいとして保存しない');
   console.error(error);
   process.exitCode = 1;
 }
@@ -2275,7 +2311,131 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 89;
+const totalChecks = 93;
+
+
+{
+  const historicalDates = ['2026-06-19', '2026-06-26', '2026-07-03'];
+  const records = historicalDates.flatMap((date, index) => [
+    {
+      date,
+      sessionStartedAt: `${date}T08:00:00.000Z`,
+      recordedAt: `${date}T10:00:00.000Z`,
+      areaId: 'bento_men' as const,
+      discountTime: '19' as const,
+      actualWeekday: '金' as const,
+      actualWeekdayGroup: '金土日' as const,
+      count: 98 + index * 2,
+    },
+  ]);
+  const recommendation = getAreaCountRecommendation({
+    records,
+    areaId: 'bento_men',
+    discountTime: '19',
+    weekday: 5,
+    date: '2026-07-10',
+    count: 130,
+  });
+  const basis = buildAreaCountDecisionBasis({
+    recommendation,
+    evaluationSource: 'history',
+    finalEvaluation: recommendation.suggestedEvaluation,
+    areaRateAdjustment: recommendation.areaRateAdjustment,
+  });
+  const normalized = normalizeAreaCountRecords([{
+    date: '2026-07-10',
+    sessionStartedAt: '2026-07-10T08:00:00.000Z',
+    recordedAt: '2026-07-10T10:00:00.000Z',
+    areaId: 'bento_men',
+    discountTime: '19',
+    actualWeekday: '金',
+    actualWeekdayGroup: '金土日',
+    count: 130,
+    evaluationSource: 'history',
+    decisionBasis: basis,
+  }]);
+
+  assert.equal(normalized[0]?.evaluationSource, 'history');
+  assert.equal(normalized[0]?.decisionBasis?.recommendationStatus, 'ready');
+  assert.equal(normalized[0]?.decisionBasis?.medianCount, 100);
+  assert.equal(normalized[0]?.decisionBasis?.comparisonMode, 'weekday');
+  assert.equal(normalized[0]?.decisionBasis?.finalEvaluation, 'many');
+
+  const repackRecommendation = getAreaCountRecommendation({
+    records: historicalDates.map((date) => ({
+      date,
+      sessionStartedAt: `${date}T08:00:00.000Z`,
+      recordedAt: `${date}T09:00:00.000Z`,
+      areaId: 'bento_men',
+      discountTime: '18',
+      actualWeekday: '金',
+      actualWeekdayGroup: '金土日',
+      count: 100,
+    })),
+    areaId: 'bento_men',
+    discountTime: '18',
+    weekday: 5,
+    date: '2026-07-10',
+    count: 120,
+  });
+  assert.equal(repackRecommendation.decreaseRecommendation?.previousDiscountTime, undefined);
+
+  const addedProductionRecommendation = getAreaCountRecommendation({
+    records: historicalDates.map((date) => ({
+      date,
+      sessionStartedAt: `${date}T08:00:00.000Z`,
+      recordedAt: `${date}T09:00:00.000Z`,
+      areaId: 'ryomi',
+      discountTime: '17',
+      actualWeekday: '金',
+      actualWeekdayGroup: '金土日',
+      count: 100,
+    })),
+    areaId: 'ryomi',
+    discountTime: '17',
+    weekday: 5,
+    date: '2026-07-10',
+    count: 120,
+  });
+  assert.equal(addedProductionRecommendation.decreaseRecommendation?.previousDiscountTime, undefined);
+  passed += 1;
+}
+
+
+{
+  const date = '2026-07-15';
+  const missingAreaId = NORMAL_ROUTE.at(-1) as AreaId;
+  const areaCounts = Object.fromEntries(
+    NORMAL_ROUTE.filter((areaId) => areaId !== missingAreaId).map((areaId, index) => [areaId, index]),
+  ) as Partial<Record<AreaId, number>>;
+  const normalized = normalizeReview19Result({
+    date,
+    sessionStartedAt: '2026-07-15T08:00:00.000Z',
+    reviewStartedAt: '2026-07-15T10:00:00.000Z',
+    areaCountRecordedAt: { bento_men: '2026-07-15T10:01:00.000Z' },
+    ratingStatus: 'not_collected',
+    ratings: null,
+    ratingScores: null,
+    areaCounts,
+    excludedAreaIds: [],
+    excludeReasons: {},
+    recordedAt: '2026-07-15T10:10:00.000Z',
+  });
+
+  assert.equal(normalized?.reviewCompletedAt, '2026-07-15T10:10:00.000Z');
+  assert.equal(normalized?.areaCountRecordedAt.bento_men, '2026-07-15T10:01:00.000Z');
+  assert.equal(normalized?.dataQuality.complete, false);
+  assert.deepEqual(normalized?.dataQuality.missingAreaIds, [missingAreaId]);
+
+  const completedQuality = buildReview19DataQuality({
+    date,
+    areaCounts,
+    excludedAreaIds: [missingAreaId],
+  });
+  assert.equal(completedQuality.complete, true);
+  assert.equal(completedQuality.recordedAreaCount + completedQuality.excludedAreaCount, NORMAL_ROUTE.length);
+  passed += 1;
+}
 
 
 {
@@ -2607,6 +2767,54 @@ const totalChecks = 89;
   assert.equal(payload.trigger, 'final-counts-complete');
   assert.equal(payload.daySnapshot.date, '2026-07-14');
   assert.equal(getAutomaticDayExportFilename('2026-07-14'), 'nebiki-day-2026-07-14.json');
+  passed += 1;
+}
+
+
+{
+  const date = '2026-07-14';
+  const missingAreaId = NORMAL_ROUTE.at(-1) as AreaId;
+  const areaCountRecords = (['15', '17', '18', '19', '20'] as DiscountTime[]).flatMap(
+    (discountTime) => NORMAL_ROUTE
+      .filter((areaId) => discountTime !== '15' || areaId !== missingAreaId)
+      .map((areaId, index) => ({
+        date,
+        sessionStartedAt: `${date}T05:00:00.000Z`,
+        recordedAt: `${date}T${String(6 + index).padStart(2, '0')}:00:00.000Z`,
+        areaId,
+        discountTime,
+        actualWeekday: '火' as const,
+        actualWeekdayGroup: '火木' as const,
+        count: index,
+      })),
+  );
+  areaCountRecords.push({
+    ...areaCountRecords.find((record) => record.discountTime === '17' && record.areaId === 'bento_men')!,
+    sessionStartedAt: `${date}T05:30:00.000Z`,
+    recordedAt: `${date}T10:30:00.000Z`,
+  });
+  const payload = buildAutomaticDayExportPayload({
+    exportedAt: `${date}T12:00:00.000Z`,
+    date,
+    daySnapshot: {
+      version: 1,
+      capturedAt: `${date}T12:00:00.000Z`,
+      date,
+      sessions: [],
+      areaCountRecords,
+    },
+  });
+  const fifteenQuality = payload.dataQuality.coverageByDiscountTime.find(
+    (item) => item.discountTime === '15',
+  );
+  const seventeenQuality = payload.dataQuality.coverageByDiscountTime.find(
+    (item) => item.discountTime === '17',
+  );
+
+  assert.equal(payload.dataQuality.complete, false);
+  assert.equal(payload.dataQuality.completeDiscountTimeCount, 3);
+  assert.deepEqual(fifteenQuality?.missingAreaIds, [missingAreaId]);
+  assert.deepEqual(seventeenQuality?.duplicateAreaIds, ['bento_men']);
   passed += 1;
 }
 

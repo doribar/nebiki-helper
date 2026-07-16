@@ -1,4 +1,8 @@
-import type { AreaCountRecommendation, AreaCountRecord } from "./areaCountHistory.ts";
+import type {
+  AreaCountDecisionBasis,
+  AreaCountRecommendation,
+  AreaCountRecord,
+} from "./areaCountHistory.ts";
 import type { TrainingStep, TrainingStepConfig } from "./trainingMode.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 
@@ -116,6 +120,7 @@ export type AreaProgress = {
   areaCount?: number;
   areaCountEvaluation?: AreaCountEvaluation;
   areaCountEvaluationSource?: AreaCountEvaluationSource;
+  areaCountDecisionBasis?: AreaCountDecisionBasis;
   areaRateAdjustment?: AreaRateAdjustment;
   visitedAt?: string;
   completedAt?: string;
@@ -274,7 +279,18 @@ export type Review19Rating =
 
 export type Review19RatingScore = -2 | -1 | 0 | 1 | 2;
 
+export type Review19RatingStatus = "recorded" | "not_collected";
+
 export type Review19ExcludeReason = "few_at_15" | "few_at_15_and_17" | "manual";
+
+export type AreaCountDataQuality = {
+  expectedAreaCount: number;
+  recordedAreaCount: number;
+  excludedAreaCount: number;
+  missingAreaIds: AreaId[];
+  duplicateAreaIds: AreaId[];
+  complete: boolean;
+};
 
 export type Review19AreaSnapshot = {
   areaId: AreaId;
@@ -287,6 +303,7 @@ export type Review19AreaSnapshot = {
   areaCount?: number;
   areaCountEvaluation?: AreaCountEvaluation;
   areaCountEvaluationSource?: AreaCountEvaluationSource;
+  areaCountDecisionBasis?: AreaCountDecisionBasis;
   areaRateAdjustment?: AreaRateAdjustment;
   judgeText: string;
   rateText: string;
@@ -405,11 +422,17 @@ export type Review19DayCheckSnapshot = {
   version: 1;
   recordedAt: string;
   sessionStartedAt: string;
-  ratings: Record<AreaId, Review19Rating>;
-  ratingScores: Record<AreaId, Review19RatingScore>;
+  reviewStartedAt?: string;
+  reviewCompletedAt?: string;
+  areaCountRecordedAt: Partial<Record<AreaId, string>>;
+  /** 旧手動評価データだけ recorded。現在の残数入力方式では not_collected。 */
+  ratingStatus: Review19RatingStatus;
+  ratings: Record<AreaId, Review19Rating> | null;
+  ratingScores: Record<AreaId, Review19RatingScore> | null;
   areaCounts: Partial<Record<AreaId, number>>;
   excludedAreaIds: AreaId[];
   excludeReasons: Partial<Record<AreaId, Review19ExcludeReason>>;
+  dataQuality: AreaCountDataQuality;
   reference?: Review19Reference;
   snapshot?: Review19Snapshot;
 };
@@ -430,11 +453,17 @@ export type Review19DaySnapshot = {
 export type Review19Result = {
   date: string;
   sessionStartedAt: string;
-  ratings: Record<AreaId, Review19Rating>;
-  ratingScores: Record<AreaId, Review19RatingScore>;
+  reviewStartedAt?: string;
+  reviewCompletedAt?: string;
+  areaCountRecordedAt: Partial<Record<AreaId, string>>;
+  /** 旧手動評価データだけ recorded。現在の残数入力方式では not_collected。 */
+  ratingStatus: Review19RatingStatus;
+  ratings: Record<AreaId, Review19Rating> | null;
+  ratingScores: Record<AreaId, Review19RatingScore> | null;
   areaCounts: Partial<Record<AreaId, number>>;
   excludedAreaIds: AreaId[];
   excludeReasons: Partial<Record<AreaId, Review19ExcludeReason>>;
+  dataQuality: AreaCountDataQuality;
   recordedAt?: string;
   exportedAt?: string;
   reference?: Review19Reference;
@@ -445,7 +474,6 @@ export type Review19Result = {
 export type Review19AreaItem = {
   areaId: AreaId;
   areaName: string;
-  rating: Review19Rating;
   count?: number;
   excluded: boolean;
   excludeReasonText?: string;
@@ -523,7 +551,6 @@ export type UseNebikiAppActions = {
   goToNextArea: () => void;
   acknowledgeAutoSkippedArea: () => void;
   advanceFinalTimeStep: () => void;
-  updateReview19Rating: (areaId: AreaId, rating: Review19Rating) => void;
   updateReview19AreaCount: (areaId: AreaId, count: number) => void;
   skipReview19Area: (areaId: AreaId) => void;
   startReview19AfterWeather: () => void;

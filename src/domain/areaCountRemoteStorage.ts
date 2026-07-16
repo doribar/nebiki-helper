@@ -1,4 +1,4 @@
-import type { AreaCountRecord } from "./areaCountHistory.ts";
+import type { AreaCountDecisionBasis, AreaCountRecord } from "./areaCountHistory.ts";
 import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
 
 type SupabaseConfig = {
@@ -19,6 +19,8 @@ type AreaCountRecordRow = {
   user_judge?: string | null;
   suggested_evaluation?: string | null;
   area_rate_adjustment?: number | null;
+  evaluation_source?: string | null;
+  decision_basis?: AreaCountDecisionBasis | null;
   comfort_point?: number | null;
 };
 
@@ -69,6 +71,8 @@ function rowToRecord(row: AreaCountRecordRow): Partial<AreaCountRecord> {
     userJudge: row.user_judge ?? undefined,
     suggestedEvaluation: row.suggested_evaluation ?? undefined,
     areaRateAdjustment: row.area_rate_adjustment ?? undefined,
+    evaluationSource: row.evaluation_source ?? undefined,
+    decisionBasis: row.decision_basis ?? undefined,
     comfortPoint: row.comfort_point ?? undefined,
   } as Partial<AreaCountRecord>;
 }
@@ -87,6 +91,8 @@ function recordToRow(record: AreaCountRecord): AreaCountRecordRow {
     user_judge: record.userJudge ?? null,
     suggested_evaluation: record.suggestedEvaluation ?? null,
     area_rate_adjustment: record.areaRateAdjustment ?? null,
+    evaluation_source: record.evaluationSource ?? null,
+    decision_basis: record.decisionBasis ?? null,
     comfort_point: record.comfortPoint ?? null,
   };
 }
@@ -128,20 +134,27 @@ export async function upsertRemoteAreaCountRecord(
   if (!config) return { status: "disabled" };
 
   try {
-    const response = await fetch(
-      `${config.url}/rest/v1/${TABLE_NAME}?on_conflict=date,session_started_at,area_id,discount_time`,
-      {
-        method: "POST",
-        headers: {
-          ...buildHeaders(config),
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify([recordToRow(record)]),
+    const url = `${config.url}/rest/v1/${TABLE_NAME}?on_conflict=date,session_started_at,area_id,discount_time`;
+    const requestInit = (body: unknown): RequestInit => ({
+      method: "POST",
+      headers: {
+        ...buildHeaders(config),
+        Prefer: "resolution=merge-duplicates,return=minimal",
       },
-    );
+      body: JSON.stringify([body]),
+    });
+    const row = recordToRow(record);
+    const response = await fetch(url, requestInit(row));
 
     if (!response.ok) {
-      return { status: "error", message: `HTTP ${response.status}` };
+      // 更新SQLをまだ実行していない既存環境でも、従来項目の保存は止めない。
+      const legacyRow: Partial<AreaCountRecordRow> = { ...row };
+      delete legacyRow.evaluation_source;
+      delete legacyRow.decision_basis;
+      const legacyResponse = await fetch(url, requestInit(legacyRow));
+      if (!legacyResponse.ok) {
+        return { status: "error", message: `HTTP ${response.status}` };
+      }
     }
 
     return { status: "saved" };

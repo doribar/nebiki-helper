@@ -1,4 +1,5 @@
-import { NORMAL_ROUTE, getAreaName } from "./area.ts";
+import { NORMAL_ROUTE, getAreaName, getNormalRoute } from "./area.ts";
+import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
 import type {
   AreaId,
   Review19AreaSnapshot,
@@ -7,6 +8,7 @@ import type {
   Review19Reference,
   Review19Result,
   Review19Snapshot,
+  Review19DayCheckSnapshot,
   Review19DaySnapshot,
 } from "./types.ts";
 
@@ -23,6 +25,7 @@ export const REVIEW19_RATINGS: Array<{
 ];
 
 export const REVIEW19_EXPORT_BATCH_SIZE = 10;
+const REVIEW19_COUNT_INPUT_STARTED_DATE = "2026-06-27";
 
 export const REVIEW19_EXCLUDE_REASON_TEXT: Record<string, string> = {
   few_at_15: "対象外：15時・17時ともに「少ない」判定",
@@ -98,9 +101,9 @@ export function createDefaultReview19Ratings(): Record<AreaId, Review19Rating> {
 export function createInitialReview19Result(params: {
   date: string;
   sessionStartedAt: string;
+  reviewStartedAt?: string;
   excludedAreaIds?: AreaId[];
 }): Review19Result {
-  const ratings = createDefaultReview19Ratings();
   const excludedAreaIds = normalizeExcludedAreaIds(
     params.excludedAreaIds ?? [],
   );
@@ -108,11 +111,45 @@ export function createInitialReview19Result(params: {
   return {
     date: params.date,
     sessionStartedAt: params.sessionStartedAt,
-    ratings,
-    ratingScores: createReview19RatingScores(ratings),
+    reviewStartedAt: params.reviewStartedAt,
+    reviewCompletedAt: undefined,
+    areaCountRecordedAt: {},
+    ratingStatus: "not_collected",
+    ratings: null,
+    ratingScores: null,
     areaCounts: {},
     excludedAreaIds,
     excludeReasons: createExcludeReasons(excludedAreaIds),
+    dataQuality: buildReview19DataQuality({
+      date: params.date,
+      areaCounts: {},
+      excludedAreaIds,
+    }),
+  };
+}
+
+export function buildReview19DataQuality(params: {
+  date: string;
+  areaCounts: Partial<Record<AreaId, number>>;
+  excludedAreaIds: AreaId[];
+}) {
+  const expectedAreaIds = getNormalRoute(params.date);
+  const excludedAreaIdSet = new Set(params.excludedAreaIds);
+  const recordedAreaIds = expectedAreaIds.filter((areaId) => {
+    return !excludedAreaIdSet.has(areaId) && typeof params.areaCounts[areaId] === "number";
+  });
+  const excludedAreaIds = expectedAreaIds.filter((areaId) => excludedAreaIdSet.has(areaId));
+  const missingAreaIds = expectedAreaIds.filter((areaId) => {
+    return !excludedAreaIdSet.has(areaId) && typeof params.areaCounts[areaId] !== "number";
+  });
+
+  return {
+    expectedAreaCount: expectedAreaIds.length,
+    recordedAreaCount: recordedAreaIds.length,
+    excludedAreaCount: excludedAreaIds.length,
+    missingAreaIds,
+    duplicateAreaIds: [],
+    complete: missingAreaIds.length === 0,
   };
 }
 
@@ -171,6 +208,99 @@ function normalizeReview19Snapshot(
   return cloned;
 }
 
+function normalizeLegacyReview19Ratings(
+  raw: unknown,
+): Record<AreaId, Review19Rating> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const ratings = createDefaultReview19Ratings();
+  let hasValidRating = false;
+
+  for (const areaId of NORMAL_ROUTE) {
+    const rating = (raw as Partial<Record<AreaId, unknown>>)[areaId];
+    if (!isValidReview19Rating(rating)) continue;
+    ratings[areaId] = rating;
+    hasValidRating = true;
+  }
+
+  return hasValidRating ? ratings : null;
+}
+
+function normalizeReview19RatingData(params: {
+  date: string;
+  ratingStatus: unknown;
+  ratings: unknown;
+  hasAreaCountsField: boolean;
+}): Pick<Review19Result, "ratingStatus" | "ratings" | "ratingScores"> {
+  const legacyRatings = normalizeLegacyReview19Ratings(params.ratings);
+  const explicitlyRecorded = params.ratingStatus === "recorded";
+  const explicitlyNotCollected = params.ratingStatus === "not_collected";
+  const predatesCountInput = params.date < REVIEW19_COUNT_INPUT_STARTED_DATE;
+  const preserveLegacyRatings =
+    !explicitlyNotCollected &&
+    legacyRatings !== null &&
+    (explicitlyRecorded || !params.hasAreaCountsField || predatesCountInput);
+
+  if (!preserveLegacyRatings) {
+    return {
+      ratingStatus: "not_collected",
+      ratings: null,
+      ratingScores: null,
+    };
+  }
+
+  return {
+    ratingStatus: "recorded",
+    ratings: legacyRatings,
+    ratingScores: createReview19RatingScores(legacyRatings),
+  };
+}
+
+function normalizeReview19DayCheckSnapshot(
+  raw: Partial<Review19DayCheckSnapshot> | null | undefined,
+  date: string,
+): Review19DayCheckSnapshot | undefined {
+  if (!raw || typeof raw !== "object" || raw.version !== 1) return undefined;
+  if (typeof raw.recordedAt !== "string" || typeof raw.sessionStartedAt !== "string") {
+    return undefined;
+  }
+
+  const ratingData = normalizeReview19RatingData({
+    date,
+    ratingStatus: raw.ratingStatus,
+    ratings: raw.ratings,
+    hasAreaCountsField: Object.prototype.hasOwnProperty.call(raw, "areaCounts"),
+  });
+
+  const areaCounts = normalizeReview19AreaCounts(raw.areaCounts);
+  const excludedAreaIds = normalizeExcludedAreaIds(raw.excludedAreaIds);
+  for (const areaId of excludedAreaIds) {
+    delete areaCounts[areaId];
+  }
+  const areaCountRecordedAt = normalizeAreaCountRecordedAt(
+    raw.areaCountRecordedAt,
+    date,
+    excludedAreaIds,
+  );
+
+  return JSON.parse(JSON.stringify({
+    ...raw,
+    ...ratingData,
+    reviewStartedAt:
+      typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
+    reviewCompletedAt:
+      typeof raw.reviewCompletedAt === "string" ? raw.reviewCompletedAt : raw.recordedAt,
+    areaCountRecordedAt,
+    areaCounts,
+    excludedAreaIds,
+    excludeReasons:
+      raw.excludeReasons && typeof raw.excludeReasons === "object"
+        ? raw.excludeReasons
+        : {},
+    dataQuality: buildReview19DataQuality({ date, areaCounts, excludedAreaIds }),
+  })) as Review19DayCheckSnapshot;
+}
+
 
 function normalizeReview19DaySnapshot(
   raw?: Partial<Review19DaySnapshot> | null,
@@ -189,10 +319,8 @@ function normalizeReview19DaySnapshot(
   return JSON.parse(JSON.stringify({
     ...raw,
     sessions,
-    review19Check: raw.review19Check && typeof raw.review19Check === "object"
-      ? raw.review19Check
-      : undefined,
-    areaCountRecords: Array.isArray(raw.areaCountRecords) ? raw.areaCountRecords : [],
+    review19Check: normalizeReview19DayCheckSnapshot(raw.review19Check, raw.date),
+    areaCountRecords: normalizeAreaCountRecords(raw.areaCountRecords),
   })) as Review19DaySnapshot;
 }
 
@@ -226,6 +354,24 @@ function normalizeReview19AreaCounts(raw: unknown): Partial<Record<AreaId, numbe
   return result;
 }
 
+function normalizeAreaCountRecordedAt(
+  raw: unknown,
+  date: string,
+  excludedAreaIds: AreaId[],
+): Partial<Record<AreaId, string>> {
+  const result: Partial<Record<AreaId, string>> = {};
+  if (!raw || typeof raw !== "object") return result;
+  const excludedAreaIdSet = new Set(excludedAreaIds);
+
+  for (const areaId of getNormalRoute(date)) {
+    if (excludedAreaIdSet.has(areaId)) continue;
+    const value = (raw as Partial<Record<AreaId, unknown>>)[areaId];
+    if (typeof value === "string") result[areaId] = value;
+  }
+
+  return result;
+}
+
 export function normalizeReview19Result(
   raw?: Partial<Review19Result> | null,
 ): Review19Result | null {
@@ -242,15 +388,12 @@ export function normalizeReview19Result(
     excludedAreaIds: rawExcludedAreaIds,
   });
 
-  const sourceRatings =
-    raw.ratings && typeof raw.ratings === "object" ? raw.ratings : {};
-
-  for (const areaId of NORMAL_ROUTE) {
-    const rating = (sourceRatings as Partial<Record<AreaId, unknown>>)[areaId];
-    if (isValidReview19Rating(rating)) {
-      base.ratings[areaId] = rating;
-    }
-  }
+  const ratingData = normalizeReview19RatingData({
+    date: raw.date,
+    ratingStatus: raw.ratingStatus,
+    ratings: raw.ratings,
+    hasAreaCountsField: Object.prototype.hasOwnProperty.call(raw, "areaCounts"),
+  });
 
   const sourceExcludeReasons =
     raw.excludeReasons && typeof raw.excludeReasons === "object" ? raw.excludeReasons : {};
@@ -264,13 +407,34 @@ export function normalizeReview19Result(
     }
   }
 
+  const areaCounts = normalizeReview19AreaCounts((raw as Partial<Review19Result>).areaCounts);
+  for (const areaId of base.excludedAreaIds) {
+    delete areaCounts[areaId];
+  }
+  const areaCountRecordedAt = normalizeAreaCountRecordedAt(
+    raw.areaCountRecordedAt,
+    raw.date,
+    base.excludedAreaIds,
+  );
+  const recordedAt = typeof raw.recordedAt === "string" ? raw.recordedAt : undefined;
+
   return {
     ...base,
-    ratingScores: createReview19RatingScores(base.ratings),
-    areaCounts: normalizeReview19AreaCounts((raw as Partial<Review19Result>).areaCounts),
+    ...ratingData,
+    reviewStartedAt:
+      typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
+    reviewCompletedAt:
+      typeof raw.reviewCompletedAt === "string" ? raw.reviewCompletedAt : recordedAt,
+    areaCountRecordedAt,
+    areaCounts,
     excludedAreaIds: base.excludedAreaIds,
     excludeReasons,
-    recordedAt: typeof raw.recordedAt === "string" ? raw.recordedAt : undefined,
+    dataQuality: buildReview19DataQuality({
+      date: raw.date,
+      areaCounts,
+      excludedAreaIds: base.excludedAreaIds,
+    }),
+    recordedAt,
     exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : undefined,
     reference: cloneReview19Reference(raw.reference),
     snapshot: normalizeReview19Snapshot(raw.snapshot),
@@ -349,11 +513,23 @@ export function buildReview19ExportPayload(params: {
   exportedAt: string;
 }) {
   const records = cloneReview19Records(params.records);
+  const incompleteRecords = records
+    .filter((record) => !record.dataQuality.complete)
+    .map((record) => ({
+      date: record.date,
+      sessionStartedAt: record.sessionStartedAt,
+      missingAreaIds: [...record.dataQuality.missingAreaIds],
+    }));
   return {
     format: "nebiki-helper-review19-export",
     version: 1,
     exportedAt: params.exportedAt,
     count: records.length,
+    dataQuality: {
+      completeRecordCount: records.length - incompleteRecords.length,
+      incompleteRecordCount: incompleteRecords.length,
+      incompleteRecords,
+    },
     records,
   };
 }
@@ -373,4 +549,3 @@ export function markReview19RecordsExportedInMemory(params: {
     };
   });
 }
-
