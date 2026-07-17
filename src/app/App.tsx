@@ -282,6 +282,10 @@ export default function App() {
       {settingsOpen ? (
         <AdminSettingsDialog
           currentStep={trainingStep}
+          review19UnexportedCount={app.derived.review19Export.unexportedCount}
+          review19TotalCount={app.derived.review19Export.totalCount}
+          onExportReview19Unexported={app.actions.exportReview19Records}
+          onExportAllReview19={app.actions.exportAllReview19Records}
           onSaveStep={handleSaveTrainingStep}
           onClose={() => setSettingsOpen(false)}
         />

@@ -14,6 +14,10 @@ import {
 
 type AdminSettingsDialogProps = {
   currentStep: TrainingStep;
+  review19UnexportedCount: number;
+  review19TotalCount: number;
+  onExportReview19Unexported: () => void;
+  onExportAllReview19: () => void;
   onSaveStep: (step: TrainingStep) => void;
   onClose: () => void;
 };
@@ -45,6 +49,10 @@ const inputStyle = {
 
 export function AdminSettingsDialog({
   currentStep,
+  review19UnexportedCount,
+  review19TotalCount,
+  onExportReview19Unexported,
+  onExportAllReview19,
   onSaveStep,
   onClose,
 }: AdminSettingsDialogProps) {
@@ -365,6 +373,70 @@ export function AdminSettingsDialog({
             >
               このステップに変更する
             </button>
+
+            <section
+              style={{
+                marginTop: 24,
+                paddingTop: 20,
+                borderTop: "1px solid #e2e8f0",
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
+                19:00チェックデータ
+              </div>
+              <div
+                style={{
+                  color: "#475569",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  marginBottom: 12,
+                }}
+              >
+                未出力：{review19UnexportedCount}回分
+                <br />
+                保存済み：{review19TotalCount}回分
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={onExportReview19Unexported}
+                  disabled={review19UnexportedCount === 0}
+                  style={{
+                    width: "100%",
+                    minHeight: 58,
+                    border: 0,
+                    borderRadius: 14,
+                    background:
+                      review19UnexportedCount === 0 ? "#e2e8f0" : "#b91c1c",
+                    color: review19UnexportedCount === 0 ? "#94a3b8" : "#fff",
+                    fontSize: 18,
+                    fontWeight: 900,
+                    cursor:
+                      review19UnexportedCount === 0 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  未出力データを出力
+                </button>
+                <button
+                  type="button"
+                  onClick={onExportAllReview19}
+                  disabled={review19TotalCount === 0}
+                  style={{
+                    width: "100%",
+                    minHeight: 52,
+                    borderRadius: 14,
+                    border: "1px solid #cbd5e1",
+                    background: review19TotalCount === 0 ? "#f1f5f9" : "#fff",
+                    color: review19TotalCount === 0 ? "#94a3b8" : "#0f172a",
+                    fontSize: 16,
+                    fontWeight: 800,
+                    cursor: review19TotalCount === 0 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  全データを出力
+                </button>
+              </div>
+            </section>
           </>
         ) : null}
       </section>
