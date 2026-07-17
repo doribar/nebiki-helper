@@ -31,6 +31,7 @@ type StartScreenProps = {
   startButtonLabel?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
+  onMarkReview19NotApplicable?: () => void;
   onReturnHome?: () => void;
   onOpenSettings?: () => void;
   now?: Date;
@@ -390,6 +391,7 @@ export function StartScreen({
   startButtonLabel,
   canStartReview19 = false,
   onStartReview19,
+  onMarkReview19NotApplicable,
   onReturnHome,
   onOpenSettings,
   now = new Date(),
@@ -953,7 +955,7 @@ export function StartScreen({
       ) : null}
 
       {canStartReview19 && onStartReview19 ? (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
           <button
             type="button"
             onClick={onStartReview19}
@@ -971,6 +973,25 @@ export function StartScreen({
           >
             19:00チェックを始める
           </button>
+          {onMarkReview19NotApplicable ? (
+            <button
+              type="button"
+              onClick={onMarkReview19NotApplicable}
+              style={{
+                width: "100%",
+                border: "1px solid #ccc",
+                borderRadius: 12,
+                padding: "10px 14px",
+                background: "#fff",
+                color: "#555",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              今日は19:00チェック対象外
+            </button>
+          ) : null}
         </div>
       ) : null}
     </main>

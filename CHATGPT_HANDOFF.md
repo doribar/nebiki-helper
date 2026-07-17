@@ -1,6 +1,6 @@
 # ChatGPT 引き継ぎメモ — 値引ヘルパー
 
-最終更新: 2026-07-16（日本時間）
+最終更新: 2026-07-17（日本時間）
 
 このファイルは、値引ヘルパー本体ZIPに同梱する引き継ぎ用メモです。次のChatGPTセッションでは、ユーザーがZIPを渡したら、最初にこのファイルを読んでから作業してください。
 
@@ -272,7 +272,7 @@ AI写真判定は廃止済み。写真撮影画面・写真判定サーバー・
 
 各 `AreaCountRecord` と作業中のエリア進捗には `decisionBasis` も保存する。ルール版は `area_count_median_v1`。主な項目は比較方式、サンプル件数、採用中央値、短期・長期中央値、中央値低下ガード、5段階閾値、補正前後の評価、減り方補正。参照履歴レコード本体は重複保存しない。
 
-Supabase側は `evaluation_source` と `decision_basis`（jsonb）を使う。既存環境でも更新版 `supabase_area_count_records.sql` を再実行する。SQL未更新時は旧列だけで保存を再試行するため作業は止まらないが、判定根拠はSupabaseへ残らない。
+Supabase側は `evaluation_source`、`decision_basis`（jsonb）、`data_schema_version`、`app_version` を使う。既存環境でも更新版 `supabase_area_count_records.sql` を再実行する。SQL未更新時は追加列を外して段階的に保存を再試行するため作業は止まらないが、未追加の列はSupabaseへ残らない。
 
 ## 8. 通常値引のスキップ・後回し
 
@@ -318,6 +318,8 @@ Supabase側は `evaluation_source` と `decision_basis`（jsonb）を使う。�
 - `reviewStartedAt` / `reviewCompletedAt`: 19:00チェック全体の開始・完了時刻。
 - `areaCountRecordedAt`: エリアごとの残数確定時刻。
 - `dataQuality`: 予定エリア数、入力済み数、対象外数、未入力エリア、完全性。旧データは開始時刻を復元できないため未設定、完了時刻は従来の `recordedAt` を引き継ぐ。
+- `review19Status`: 実施済み `recorded`、未実施 `not_performed`、対象外 `not_applicable` を区別する。19時チェックを行わない日は、開始ボタン下の「今日は19:00チェック対象外」から明示的に保存する。
+- `dataSchemaVersion` / `appVersion`: 新規の19時チェック、1日データ、通常残数履歴へ保存する。現行はデータ形式版2、アプリ版は`package.json`のバージョンをビルド時に埋め込む。
 
 現在の新規保存では以下を入れない。
 
@@ -481,6 +483,8 @@ Supabase側は `evaluation_source` と `decision_basis`（jsonb）を使う。�
 - 19:00チェック全体と各エリアの確定時刻、19時・日次出力の欠損／重複を示す `dataQuality` を追加した。
 - 15時・17時とも少ないエリアを、19:00チェック開始時の対象外へ正しく引き継ぐよう修正した。
 - 18時30分のパック化と15→17時の追加製造を通常の減少率として誤判定しないよう、減り方比較の対象を制限した。
+- 通常残数履歴・19時チェック・1日データへ `dataSchemaVersion` と `appVersion` を追加した。Supabaseにも同列を追加し、アプリ版はビルド時のpackage versionから保存する。
+- 19時チェックへ `review19Status` を追加し、実施済み・未実施・対象外を区別した。「今日は19:00チェック対象外」は確認後に対象外記録として保存し、同日の二重記録も防止する。
 
 このZIP作成時の確認:
 

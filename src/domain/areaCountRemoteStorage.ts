@@ -7,6 +7,8 @@ type SupabaseConfig = {
 };
 
 type AreaCountRecordRow = {
+  data_schema_version?: number | null;
+  app_version?: string | null;
   date: string;
   session_started_at: string;
   recorded_at: string;
@@ -59,6 +61,8 @@ function buildHeaders(config: SupabaseConfig): HeadersInit {
 
 function rowToRecord(row: AreaCountRecordRow): Partial<AreaCountRecord> {
   return {
+    dataSchemaVersion: row.data_schema_version ?? undefined,
+    appVersion: row.app_version ?? undefined,
     date: row.date,
     sessionStartedAt: row.session_started_at,
     recordedAt: row.recorded_at,
@@ -79,6 +83,8 @@ function rowToRecord(row: AreaCountRecordRow): Partial<AreaCountRecord> {
 
 function recordToRow(record: AreaCountRecord): AreaCountRecordRow {
   return {
+    data_schema_version: record.dataSchemaVersion ?? null,
+    app_version: record.appVersion ?? null,
     date: record.date,
     session_started_at: record.sessionStartedAt,
     recorded_at: record.recordedAt,
@@ -147,8 +153,18 @@ export async function upsertRemoteAreaCountRecord(
     const response = await fetch(url, requestInit(row));
 
     if (!response.ok) {
-      // 更新SQLをまだ実行していない既存環境でも、従来項目の保存は止めない。
-      const legacyRow: Partial<AreaCountRecordRow> = { ...row };
+      // バージョン列追加SQLが未実行でも、判定根拠など既存の新項目は保存する。
+      const withoutVersionRow: Partial<AreaCountRecordRow> = { ...row };
+      delete withoutVersionRow.data_schema_version;
+      delete withoutVersionRow.app_version;
+      const withoutVersionResponse = await fetch(
+        url,
+        requestInit(withoutVersionRow),
+      );
+      if (withoutVersionResponse.ok) return { status: "saved" };
+
+      // さらに古い環境でも、従来項目の保存自体は止めない。
+      const legacyRow: Partial<AreaCountRecordRow> = { ...withoutVersionRow };
       delete legacyRow.evaluation_source;
       delete legacyRow.decision_basis;
       const legacyResponse = await fetch(url, requestInit(legacyRow));

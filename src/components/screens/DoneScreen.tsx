@@ -9,6 +9,7 @@ type DoneScreenProps = {
   timeText?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
+  onMarkReview19NotApplicable?: () => void;
   summaryItems: DoneSummaryItem[];
   trainingStepConfig: TrainingStepConfig;
 };
@@ -87,6 +88,7 @@ export function DoneScreen({
   timeText,
   canStartReview19 = false,
   onStartReview19,
+  onMarkReview19NotApplicable,
   summaryItems,
   trainingStepConfig,
 }: DoneScreenProps) {
@@ -118,7 +120,7 @@ export function DoneScreen({
         </div>
 
         {canStartReview19 && onStartReview19 ? (
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
             <button
               type="button"
               onClick={onStartReview19}
@@ -136,6 +138,15 @@ export function DoneScreen({
             >
               19:00残数チェック
             </button>
+            {onMarkReview19NotApplicable ? (
+              <button
+                type="button"
+                onClick={onMarkReview19NotApplicable}
+                style={subActionButtonStyle}
+              >
+                今日は19:00チェック対象外
+              </button>
+            ) : null}
           </div>
         ) : null}
       </section>

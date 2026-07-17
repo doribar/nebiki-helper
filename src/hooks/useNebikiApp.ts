@@ -132,6 +132,7 @@ import {
   getEarlyNextMinus5TargetDiscountTime,
   shouldReserveEarlyNextMinus5OnAutoTransition,
 } from "../domain/earlyNextMinus5.ts";
+import { getCurrentDataVersionInfo } from "../domain/dataVersion.ts";
 
 let runtimeNowOverrideMs: number | null = null;
 
@@ -240,11 +241,19 @@ function getNextDoneDiscountInfo(
 function canStartReview19FromCurrentState(params: {
   state: AppState;
   now: Date;
+  records?: Review19Result[];
 }): boolean {
   const { state, now } = params;
 
   const currentDate = formatLocalDate(now);
   if (state.review19?.date === currentDate && state.review19.recordedAt) return false;
+  if (
+    params.records?.some(
+      (record) => record.date === currentDate && Boolean(record.recordedAt),
+    )
+  ) {
+    return false;
+  }
 
   return true;
 }
@@ -1089,6 +1098,7 @@ function createDailySessionSnapshot(params: {
 
   return {
     version: 1,
+    ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
     rateLogicVersion: "time_basic_rate_v1",
     screen: params.state.screen,
@@ -1175,6 +1185,9 @@ function getLatestReview19DayCheck(date: string): Review19DayCheckSnapshot | und
 
   return {
     version: 1,
+    dataSchemaVersion: latest.dataSchemaVersion,
+    appVersion: latest.appVersion,
+    review19Status: latest.review19Status,
     recordedAt: latest.recordedAt,
     sessionStartedAt: latest.sessionStartedAt,
     reviewStartedAt: latest.reviewStartedAt,
@@ -1206,9 +1219,11 @@ function createReview19DaySnapshot(params: {
 }): NonNullable<Review19Result["daySnapshot"]> {
   return {
     version: 1,
+    ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
     date: params.date,
     rateLogicVersion: "time_basic_rate_v1",
+    review19Status: params.review19Check?.review19Status ?? "not_performed",
     sessions: params.sessions
       .filter((session) => session.session.date === params.date && session.screen === "done")
       .map((session) => JSON.parse(JSON.stringify(session)) as DailySessionSnapshot),
@@ -1276,6 +1291,7 @@ function createReview19Snapshot(params: {
 
   return {
     version: 1,
+    ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
     session: {
       date: params.session.date,
@@ -2198,20 +2214,23 @@ const lateSkipNotice = useMemo(() => {
     return lines;
   }, [state.review19]);
 
-  const review19Export = (() => {
+  const savedReview19Records = (() => {
     void review19RecordsVersion;
-    const records = loadReview19Records();
-    const unexportedCount = getUnexportedReview19Records(records).length;
-    return {
-      unexportedCount,
-      totalCount: records.length,
-      shouldRecommendExport: unexportedCount >= 10,
-    };
+    return loadReview19Records();
   })();
+  const review19UnexportedCount = getUnexportedReview19Records(
+    savedReview19Records,
+  ).length;
+  const review19Export = {
+    unexportedCount: review19UnexportedCount,
+    totalCount: savedReview19Records.length,
+    shouldRecommendExport: review19UnexportedCount >= 10,
+  };
 
   const canStartReview19Manually = canStartReview19FromCurrentState({
     state,
     now: new Date(nowMs),
+    records: savedReview19Records,
   });
 
 
@@ -2925,6 +2944,7 @@ const lateSkipNotice = useMemo(() => {
       })
     ) {
       const nextRecord: AreaCountRecord = {
+        ...getCurrentDataVersionInfo(),
         date: state.session.date,
         sessionStartedAt: state.session.startedAt,
         recordedAt: actionAt,
@@ -3264,7 +3284,15 @@ const lateSkipNotice = useMemo(() => {
     setState((prev) => {
       if (prev.screen !== "done" && prev.screen !== "start") return prev;
       const now = new Date(nowMs);
-      if (!canStartReview19FromCurrentState({ state: prev, now })) return prev;
+      if (
+        !canStartReview19FromCurrentState({
+          state: prev,
+          now,
+          records: loadReview19Records(),
+        })
+      ) {
+        return prev;
+      }
 
       const currentDate = formatLocalDate(now);
       const currentWeekday = now.getDay();
@@ -3312,6 +3340,84 @@ const lateSkipNotice = useMemo(() => {
         },
       };
     });
+  }
+
+  function markReview19NotApplicable() {
+    if (state.screen !== "done" && state.screen !== "start") return;
+
+    const ok = window.confirm(
+      "今日の19:00チェックを「対象外」として記録しますか？",
+    );
+    if (!ok) return;
+
+    const now = getRuntimeNow();
+    const savedRecords = loadReview19Records();
+    if (
+      !canStartReview19FromCurrentState({
+        state,
+        now,
+        records: savedRecords,
+      })
+    ) {
+      return;
+    }
+
+    const currentDate = formatLocalDate(now);
+    const recordedAt = now.toISOString();
+    const sourceState =
+      state.session?.date === currentDate
+        ? state
+        : normalizeLoadedState(loadReview19SourceState(), state.sessionDraft);
+    const sourceSession =
+      sourceState.session?.date === currentDate ? sourceState.session : null;
+    const initialReview19 = createInitialReview19Result({
+      date: currentDate,
+      sessionStartedAt: sourceSession?.startedAt ?? recordedAt,
+      review19Status: "not_applicable",
+    });
+    const review19Check: Review19DayCheckSnapshot = {
+      version: 1,
+      ...getCurrentDataVersionInfo(),
+      review19Status: "not_applicable",
+      recordedAt,
+      sessionStartedAt: initialReview19.sessionStartedAt,
+      reviewCompletedAt: recordedAt,
+      areaCountRecordedAt: {},
+      ratingStatus: "not_collected",
+      ratings: null,
+      ratingScores: null,
+      areaCounts: {},
+      excludedAreaIds: [],
+      excludeReasons: {},
+      dataQuality: initialReview19.dataQuality,
+    };
+    const recordedReview: Review19Result = {
+      ...initialReview19,
+      reviewCompletedAt: recordedAt,
+      recordedAt,
+      daySnapshot: createReview19DaySnapshot({
+        capturedAt: recordedAt,
+        date: currentDate,
+        areaCountRecords,
+        sessions: getDailySessionSnapshotsForDate(currentDate),
+        review19Check,
+      }),
+    };
+
+    if (!isTestMode) {
+      appendReview19Record(recordedReview);
+      clearReview19SourceState();
+      setReview19RecordsVersion((version) => version + 1);
+    }
+
+    setUndoSnapshot(null);
+    setUndoNotice(null);
+    setState((prev) => ({
+      ...prev,
+      session: sourceSession ?? prev.session,
+      screen: "review19_done",
+      review19: recordedReview,
+    }));
   }
 
   function startReview19AfterWeather() {
@@ -3467,6 +3573,8 @@ const lateSkipNotice = useMemo(() => {
       sessions: getDailySessionSnapshotsForDate(state.review19.date),
       review19Check: {
         version: 1,
+        ...getCurrentDataVersionInfo(),
+        review19Status: "recorded",
         recordedAt,
         sessionStartedAt: state.review19.sessionStartedAt,
         reviewStartedAt: state.review19.reviewStartedAt,
@@ -3488,6 +3596,8 @@ const lateSkipNotice = useMemo(() => {
 
     return {
       ...review19WithoutReference,
+      ...getCurrentDataVersionInfo(),
+      review19Status: "recorded",
       ratingStatus: "not_collected",
       ratings: null,
       ratingScores: null,
@@ -3851,6 +3961,7 @@ const lateSkipNotice = useMemo(() => {
       exportReview19Records,
       exportAllReview19Records,
       startReview19Manually,
+      markReview19NotApplicable,
       resetApp,
     },
   };

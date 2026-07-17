@@ -3,6 +3,11 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  define: {
+    __NEBIKI_APP_VERSION__: JSON.stringify(
+      process.env.npm_package_version ?? "unknown",
+    ),
+  },
   plugins: [
     react(),
     VitePWA({

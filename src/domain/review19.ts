@@ -1,5 +1,9 @@
 import { NORMAL_ROUTE, getAreaName, getNormalRoute } from "./area.ts";
 import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
+import {
+  getCurrentDataVersionInfo,
+  normalizeDataVersionInfo,
+} from "./dataVersion.ts";
 import type {
   AreaId,
   Review19AreaSnapshot,
@@ -103,12 +107,15 @@ export function createInitialReview19Result(params: {
   sessionStartedAt: string;
   reviewStartedAt?: string;
   excludedAreaIds?: AreaId[];
+  review19Status?: "recorded" | "not_applicable";
 }): Review19Result {
   const excludedAreaIds = normalizeExcludedAreaIds(
     params.excludedAreaIds ?? [],
   );
 
   return {
+    ...getCurrentDataVersionInfo(),
+    review19Status: params.review19Status ?? "recorded",
     date: params.date,
     sessionStartedAt: params.sessionStartedAt,
     reviewStartedAt: params.reviewStartedAt,
@@ -124,6 +131,7 @@ export function createInitialReview19Result(params: {
       date: params.date,
       areaCounts: {},
       excludedAreaIds,
+      review19Status: params.review19Status,
     }),
   };
 }
@@ -132,7 +140,19 @@ export function buildReview19DataQuality(params: {
   date: string;
   areaCounts: Partial<Record<AreaId, number>>;
   excludedAreaIds: AreaId[];
+  review19Status?: "recorded" | "not_applicable";
 }) {
+  if (params.review19Status === "not_applicable") {
+    return {
+      expectedAreaCount: 0,
+      recordedAreaCount: 0,
+      excludedAreaCount: 0,
+      missingAreaIds: [],
+      duplicateAreaIds: [],
+      complete: true,
+    };
+  }
+
   const expectedAreaIds = getNormalRoute(params.date);
   const excludedAreaIdSet = new Set(params.excludedAreaIds);
   const recordedAreaIds = expectedAreaIds.filter((areaId) => {
@@ -282,9 +302,14 @@ function normalizeReview19DayCheckSnapshot(
     date,
     excludedAreaIds,
   );
+  const review19Status =
+    raw.review19Status === "not_applicable" ? "not_applicable" : "recorded";
+  const dataVersion = normalizeDataVersionInfo(raw);
 
   return JSON.parse(JSON.stringify({
     ...raw,
+    ...dataVersion,
+    review19Status,
     ...ratingData,
     reviewStartedAt:
       typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
@@ -297,7 +322,12 @@ function normalizeReview19DayCheckSnapshot(
       raw.excludeReasons && typeof raw.excludeReasons === "object"
         ? raw.excludeReasons
         : {},
-    dataQuality: buildReview19DataQuality({ date, areaCounts, excludedAreaIds }),
+    dataQuality: buildReview19DataQuality({
+      date,
+      areaCounts,
+      excludedAreaIds,
+      review19Status,
+    }),
   })) as Review19DayCheckSnapshot;
 }
 
@@ -315,11 +345,20 @@ function normalizeReview19DaySnapshot(
         return screen !== "review19_weather" && screen !== "review19" && screen !== "review19_done";
       })
     : [];
+  const review19Check = normalizeReview19DayCheckSnapshot(raw.review19Check, raw.date);
+  const review19Status =
+    raw.review19Status === "recorded" ||
+    raw.review19Status === "not_performed" ||
+    raw.review19Status === "not_applicable"
+      ? raw.review19Status
+      : review19Check?.review19Status ?? "not_performed";
 
   return JSON.parse(JSON.stringify({
     ...raw,
+    ...normalizeDataVersionInfo(raw),
     sessions,
-    review19Check: normalizeReview19DayCheckSnapshot(raw.review19Check, raw.date),
+    review19Status,
+    review19Check,
     areaCountRecords: normalizeAreaCountRecords(raw.areaCountRecords),
   })) as Review19DaySnapshot;
 }
@@ -386,6 +425,8 @@ export function normalizeReview19Result(
     date: raw.date,
     sessionStartedAt: raw.sessionStartedAt,
     excludedAreaIds: rawExcludedAreaIds,
+    review19Status:
+      raw.review19Status === "not_applicable" ? "not_applicable" : "recorded",
   });
 
   const ratingData = normalizeReview19RatingData({
@@ -420,6 +461,7 @@ export function normalizeReview19Result(
 
   return {
     ...base,
+    ...normalizeDataVersionInfo(raw),
     ...ratingData,
     reviewStartedAt:
       typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
@@ -433,6 +475,7 @@ export function normalizeReview19Result(
       date: raw.date,
       areaCounts,
       excludedAreaIds: base.excludedAreaIds,
+      review19Status: base.review19Status,
     }),
     recordedAt,
     exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : undefined,
@@ -523,9 +566,14 @@ export function buildReview19ExportPayload(params: {
   return {
     format: "nebiki-helper-review19-export",
     version: 1,
+    ...getCurrentDataVersionInfo(),
     exportedAt: params.exportedAt,
     count: records.length,
     dataQuality: {
+      recordedCount: records.filter((record) => record.review19Status === "recorded").length,
+      notApplicableCount: records.filter(
+        (record) => record.review19Status === "not_applicable",
+      ).length,
       completeRecordCount: records.length - incompleteRecords.length,
       incompleteRecordCount: incompleteRecords.length,
       incompleteRecords,

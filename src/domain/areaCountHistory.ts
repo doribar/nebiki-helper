@@ -52,6 +52,8 @@ export type AreaCountDecisionBasis = {
 };
 
 export type AreaCountRecord = {
+  dataSchemaVersion?: number;
+  appVersion?: string;
   date: string;
   sessionStartedAt: string;
   recordedAt: string;
@@ -271,6 +273,8 @@ export function isAreaCountAssistTarget(params: {
 
 function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
   return {
+    dataSchemaVersion: record.dataSchemaVersion,
+    appVersion: record.appVersion,
     date: record.date,
     sessionStartedAt: record.sessionStartedAt,
     recordedAt: record.recordedAt,
@@ -511,6 +515,16 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
 
     return [
       {
+        dataSchemaVersion:
+          typeof record.dataSchemaVersion === "number" &&
+          Number.isInteger(record.dataSchemaVersion) &&
+          record.dataSchemaVersion >= 1
+            ? record.dataSchemaVersion
+            : undefined,
+        appVersion:
+          typeof record.appVersion === "string" && record.appVersion.trim()
+            ? record.appVersion
+            : undefined,
         date: record.date,
         sessionStartedAt: record.sessionStartedAt,
         recordedAt: record.recordedAt,

@@ -1,7 +1,9 @@
 import type { CSSProperties } from "react";
+import type { Review19Result } from "../../domain/types";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
 type Review19DoneScreenProps = {
+  review19Status: Review19Result["review19Status"];
   unexportedCount: number;
   totalCount: number;
   shouldRecommendExport: boolean;
@@ -19,6 +21,7 @@ const cardStyle: CSSProperties = {
 };
 
 export function Review19DoneScreen({
+  review19Status,
   unexportedCount,
   totalCount,
   shouldRecommendExport,
@@ -35,9 +38,19 @@ export function Review19DoneScreen({
         }}
       >
         <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 12 }}>
-          19時売場チェックを
-          <br />
-          記録しました
+          {review19Status === "not_applicable" ? (
+            <>
+              19時売場チェックを
+              <br />
+              対象外として記録しました
+            </>
+          ) : (
+            <>
+              19時売場チェックを
+              <br />
+              記録しました
+            </>
+          )}
         </div>
         <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7 }}>
           値引終了画面とは別に、振り返りデータの保存状況を確認できます。

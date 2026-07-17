@@ -4,6 +4,7 @@ import type {
   DiscountTime,
   Review19DaySnapshot,
 } from "./types.ts";
+import { getCurrentDataVersionInfo } from "./dataVersion.ts";
 
 const DAY_EXPORT_DISCOUNT_TIMES: DiscountTime[] = ["15", "17", "18", "19", "20"];
 
@@ -17,6 +18,8 @@ export type AutomaticDayExportDataQuality = {
 export type AutomaticDayExportPayload = {
   format: "nebiki-helper-day-export";
   version: 1;
+  dataSchemaVersion: number;
+  appVersion: string;
   exportedAt: string;
   date: string;
   trigger: "final-counts-complete";
@@ -75,6 +78,7 @@ export function buildAutomaticDayExportPayload(params: {
   return {
     format: "nebiki-helper-day-export",
     version: 1,
+    ...getCurrentDataVersionInfo(),
     exportedAt: params.exportedAt,
     date: params.date,
     trigger: "final-counts-complete",

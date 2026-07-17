@@ -1565,6 +1565,18 @@ try {
   assert.equal(initial.ratingStatus, 'not_collected');
   assert.equal(initial.ratings, null);
   assert.equal(initial.ratingScores, null);
+  assert.equal(initial.review19Status, 'recorded');
+  assert.equal(initial.dataSchemaVersion, 2);
+  assert.ok(initial.appVersion);
+
+  const notApplicable = createInitialReview19Result({
+    date: '2026-07-15',
+    sessionStartedAt: '2026-07-15T08:00:00.000Z',
+    review19Status: 'not_applicable',
+  });
+  assert.equal(notApplicable.review19Status, 'not_applicable');
+  assert.equal(notApplicable.dataQuality.complete, true);
+  assert.equal(notApplicable.dataQuality.expectedAreaCount, 0);
   console.log('PASS: 残数入力方式の19時チェックは未収集評価をちょうどいいとして保存しない');
   passed += 1;
 } catch (error) {
@@ -2295,6 +2307,10 @@ try {
   });
   assert.equal(payload.count, 10);
   assert.equal(payload.format, 'nebiki-helper-review19-export');
+  assert.equal(payload.dataSchemaVersion, 2);
+  assert.ok(payload.appVersion);
+  assert.equal(payload.dataQuality.recordedCount, 10);
+  assert.equal(payload.dataQuality.notApplicableCount, 0);
 
   const marked = markReview19RecordsExportedInMemory({
     currentRecords: records,
@@ -2751,6 +2767,7 @@ const totalChecks = 93;
 {
   const daySnapshot = {
     version: 1 as const,
+    review19Status: 'not_performed' as const,
     capturedAt: '2026-07-14T11:30:00.000Z',
     date: '2026-07-14',
     rateLogicVersion: 'time_basic_rate_v1' as const,
@@ -2764,6 +2781,8 @@ const totalChecks = 93;
   });
 
   assert.equal(payload.format, 'nebiki-helper-day-export');
+  assert.equal(payload.dataSchemaVersion, 2);
+  assert.ok(payload.appVersion);
   assert.equal(payload.trigger, 'final-counts-complete');
   assert.equal(payload.daySnapshot.date, '2026-07-14');
   assert.equal(getAutomaticDayExportFilename('2026-07-14'), 'nebiki-day-2026-07-14.json');
@@ -2798,6 +2817,7 @@ const totalChecks = 93;
     date,
     daySnapshot: {
       version: 1,
+      review19Status: 'not_performed',
       capturedAt: `${date}T12:00:00.000Z`,
       date,
       sessions: [],

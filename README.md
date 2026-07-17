@@ -64,7 +64,7 @@ AI写真判定は廃止済みです。写真判定サーバー、写真撮影画
 
 ### 1. Supabase側の準備
 
-SupabaseのSQL editorで `supabase_area_count_records.sql` を実行してください。既にテーブルを作成済みの場合も、判定根拠用の列と5段階手動判定の制約を追加するため、更新後のSQLをもう一度実行してください。
+SupabaseのSQL editorで `supabase_area_count_records.sql` を実行してください。既にテーブルを作成済みの場合も、判定根拠・データ形式版・アプリ版の列と5段階手動判定の制約を追加するため、更新後のSQLをもう一度実行してください。
 
 ### 2. Vercel環境変数
 
@@ -84,6 +84,9 @@ VITE_SUPABASE_ANON_KEY=Supabaseのanon public key
 
 ## 出力データの品質情報
 
+- 新しく保存する残数履歴・19時チェック・1日データには `dataSchemaVersion` と `appVersion` を保存します。
+- 1日データの `review19Status` は、実施済み `recorded`、未実施 `not_performed`、対象外 `not_applicable` を区別します。
+- 19時チェックを行わない日は「今日は19:00チェック対象外」から明示的に対象外記録を保存できます。
 - 19時チェックは、チェック全体の開始・完了時刻と、各エリアの残数確定時刻を保存します。
 - 19時チェックの各記録には、入力済み・対象外・未入力の件数と未入力エリアを `dataQuality` として保存します。
 - 20時30分完了時の1日データにも、15時 / 17時 / 18時30分 / 19時30分 / 20時30分ごとの欠損・重複を `dataQuality` として保存します。

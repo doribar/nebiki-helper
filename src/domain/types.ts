@@ -281,6 +281,8 @@ export type Review19RatingScore = -2 | -1 | 0 | 1 | 2;
 
 export type Review19RatingStatus = "recorded" | "not_collected";
 
+export type Review19Status = "recorded" | "not_performed" | "not_applicable";
+
 export type Review19ExcludeReason = "few_at_15" | "few_at_15_and_17" | "manual";
 
 export type AreaCountDataQuality = {
@@ -346,6 +348,8 @@ export type Review19Reference = {
 
 export type Review19Snapshot = {
   version: 1;
+  dataSchemaVersion?: number;
+  appVersion?: string;
   capturedAt: string;
   session: {
     date: string;
@@ -384,6 +388,8 @@ export type Review19Snapshot = {
 
 export type DailySessionSnapshot = {
   version: 1;
+  dataSchemaVersion?: number;
+  appVersion?: string;
   capturedAt: string;
   rateLogicVersion?: RateLogicVersion;
   screen: ScreenName;
@@ -420,6 +426,9 @@ export type DailySessionSnapshot = {
 
 export type Review19DayCheckSnapshot = {
   version: 1;
+  dataSchemaVersion?: number;
+  appVersion?: string;
+  review19Status: Exclude<Review19Status, "not_performed">;
   recordedAt: string;
   sessionStartedAt: string;
   reviewStartedAt?: string;
@@ -439,9 +448,12 @@ export type Review19DayCheckSnapshot = {
 
 export type Review19DaySnapshot = {
   version: 1;
+  dataSchemaVersion?: number;
+  appVersion?: string;
   capturedAt: string;
   date: string;
   rateLogicVersion?: RateLogicVersion;
+  review19Status: Review19Status;
   /** その日の通常値引セッションログ。19:00チェックはreview19Checkへ分けて保存する。 */
   sessions: DailySessionSnapshot[];
   /** 19:00チェックの記録。daySnapshot内でも1日のログとして参照できるように保存する。 */
@@ -451,6 +463,9 @@ export type Review19DaySnapshot = {
 };
 
 export type Review19Result = {
+  dataSchemaVersion?: number;
+  appVersion?: string;
+  review19Status: Exclude<Review19Status, "not_performed">;
   date: string;
   sessionStartedAt: string;
   reviewStartedAt?: string;
@@ -560,6 +575,7 @@ export type UseNebikiAppActions = {
   exportReview19Records: () => void;
   exportAllReview19Records: () => void;
   startReview19Manually: () => void;
+  markReview19NotApplicable: () => void;
   resetApp: () => void;
 };
 
