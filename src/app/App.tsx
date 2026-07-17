@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
 import {
@@ -10,12 +10,6 @@ import {
   savePreferredTrainingStep,
 } from "../domain/adminSettings";
 import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
-import {
-  SYSTEM_BACK_GUARD_MAX_LEVEL,
-  createSystemBackGuardId,
-  readSystemBackGuardState,
-  withSystemBackGuardState,
-} from "../domain/systemBackGuard";
 
 type TestModeConfig = {
   now: Date;
@@ -231,90 +225,10 @@ export default function App() {
   const testMode = getCurrentTestMode();
   const [trainingStep, setTrainingStep] = useState(getCurrentTrainingStep);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const systemBackGuardUrlRef = useRef(
-    typeof window === "undefined" ? "" : window.location.href,
-  );
-  const systemBackGuardIdRef = useRef("");
-  const systemBackGuardRestoringRef = useRef(false);
   const [loadedDate] = useState(() => formatLocalDate(testMode?.now));
   const [todayDate, setTodayDate] = useState(() => formatLocalDate(testMode?.now));
   const app = useNebikiApp({ trainingStep, testNow: testMode?.now ?? null });
   const hasDateChanged = !testMode && todayDate !== loadedDate;
-
-  const armSystemBackGuard = useCallback(() => {
-    const guardId = createSystemBackGuardId();
-    const guardedUrl = systemBackGuardUrlRef.current || window.location.href;
-    systemBackGuardIdRef.current = guardId;
-    systemBackGuardRestoringRef.current = false;
-
-    window.history.replaceState(
-      withSystemBackGuardState(window.history.state, guardId, 0),
-      "",
-      guardedUrl,
-    );
-
-    for (let level = 1; level <= SYSTEM_BACK_GUARD_MAX_LEVEL; level += 1) {
-      window.history.pushState(
-        withSystemBackGuardState(window.history.state, guardId, level),
-        "",
-        guardedUrl,
-      );
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    armSystemBackGuard();
-
-    const restoreTopGuardEntry = (state: unknown) => {
-      const guardState = readSystemBackGuardState(state);
-      const currentGuardId = systemBackGuardIdRef.current;
-
-      if (!guardState || guardState.guardId !== currentGuardId) {
-        armSystemBackGuard();
-        return;
-      }
-
-      const forwardCount = SYSTEM_BACK_GUARD_MAX_LEVEL - guardState.level;
-      if (forwardCount <= 0 || systemBackGuardRestoringRef.current) return;
-
-      systemBackGuardRestoringRef.current = true;
-      window.setTimeout(() => {
-        window.history.go(forwardCount);
-        window.setTimeout(() => {
-          systemBackGuardRestoringRef.current = false;
-        }, 100);
-      }, 0);
-    };
-
-    const handleSystemBack = (event: PopStateEvent) => {
-      restoreTopGuardEntry(event.state);
-    };
-
-    const handlePageShow = () => {
-      const guardState = readSystemBackGuardState(window.history.state);
-      if (
-        !guardState ||
-        guardState.guardId !== systemBackGuardIdRef.current ||
-        guardState.level !== SYSTEM_BACK_GUARD_MAX_LEVEL
-      ) {
-        armSystemBackGuard();
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") handlePageShow();
-    };
-
-    window.addEventListener("popstate", handleSystemBack);
-    window.addEventListener("pageshow", handlePageShow);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("popstate", handleSystemBack);
-      window.removeEventListener("pageshow", handlePageShow);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [armSystemBackGuard]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -330,8 +244,7 @@ export default function App() {
 
     if (window.location.hash) {
       const nextUrl = `${window.location.pathname}${window.location.search}`;
-      systemBackGuardUrlRef.current = new URL(nextUrl, window.location.href).href;
-      armSystemBackGuard();
+      window.history.replaceState(window.history.state, "", nextUrl);
     }
 
     setTrainingStep(nextStep);

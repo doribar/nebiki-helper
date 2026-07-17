@@ -15,14 +15,6 @@ import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
 import { getTrainingStepConfig, parseExplicitTrainingStepFromHash, parseTrainingStepFromHash } from '../src/domain/trainingMode.ts';
 import { isTrainingStep, isValidAdminPinFormat } from '../src/domain/adminSettings.ts';
 import {
-  SYSTEM_BACK_GUARD_ID_KEY,
-  SYSTEM_BACK_GUARD_LEVEL_KEY,
-  SYSTEM_BACK_GUARD_MAX_LEVEL,
-  SYSTEM_BACK_GUARD_STATE_KEY,
-  readSystemBackGuardState,
-  withSystemBackGuardState,
-} from '../src/domain/systemBackGuard.ts';
-import {
   buildAutomaticDayExportPayload,
   getAutomaticDayExportFilename,
 } from '../src/domain/dayExport.ts';
@@ -2327,7 +2319,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 93;
+const totalChecks = 92;
 
 
 {
@@ -2877,18 +2869,6 @@ const totalChecks = 93;
 }
 
 
-{
-  const guarded = withSystemBackGuardState({ existing: 'kept' }, 'guard-1', 3);
-  assert.equal(guarded.existing, 'kept');
-  assert.equal(guarded[SYSTEM_BACK_GUARD_STATE_KEY], true);
-  assert.equal(guarded[SYSTEM_BACK_GUARD_ID_KEY], 'guard-1');
-  assert.equal(guarded[SYSTEM_BACK_GUARD_LEVEL_KEY], 3);
-  assert.deepEqual(readSystemBackGuardState(guarded), { guardId: 'guard-1', level: 3 });
-  assert.equal(readSystemBackGuardState({ [SYSTEM_BACK_GUARD_STATE_KEY]: true }), null);
-  assert.equal(withSystemBackGuardState(null)[SYSTEM_BACK_GUARD_STATE_KEY], true);
-  assert.equal(SYSTEM_BACK_GUARD_MAX_LEVEL, 8);
-  passed += 1;
-}
 
 console.log(`\n${passed} / ${totalChecks} checks passed.`);
 
