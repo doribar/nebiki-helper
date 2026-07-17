@@ -485,10 +485,11 @@ Supabase側は `evaluation_source`、`decision_basis`（jsonb）、`data_schema_
 - 18時30分のパック化と15→17時の追加製造を通常の減少率として誤判定しないよう、減り方比較の対象を制限した。
 - 通常残数履歴・19時チェック・1日データへ `dataSchemaVersion` と `appVersion` を追加した。Supabaseにも同列を追加し、アプリ版はビルド時のpackage versionから保存する。
 - 19時チェックへ `review19Status` を追加し、実施済み・未実施・対象外を区別した。「今日は19:00チェック対象外」は確認後に対象外記録として保存し、同日の二重記録も防止する。
+- 20時30分の最終値引は、最後のエリア完了後に長い完了一覧を表示せず、そのままトップ画面へ戻す。15時・17時・18時30分・19時30分の完了画面と、最終値引完了時の1日データ自動出力は維持する。
 
 このZIP作成時の確認:
 
-- `npm run check:logic`: 93 / 93 checks passed。
+- `npm run check:logic`: 92 / 92 checks passed。
 - `npx tsc -p tsconfig.app.json --pretty false`: 成功。
 - `npm run build`: 成功。Vite本番ビルドとPWA生成を確認。
 
@@ -514,4 +515,4 @@ Supabase側は `evaluation_source`、`decision_basis`（jsonb）、`data_schema_
 ## 2026-07-17 追加更新
 - 設定画面から19:00チェックの未出力データ／全データをいつでも出力できるようにした。
 - 19:00チェック完了画面で出力せずトップへ戻っても、保存済みデータは設定画面から再出力できる。
-- アプリ版: `2026.7.17-3`。データ形式変更なし、Supabase SQL再実行不要。
+- アプリ版: `2026.7.17-4`。データ形式変更なし、Supabase SQL再実行不要。

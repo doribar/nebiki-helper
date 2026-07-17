@@ -17,6 +17,8 @@ type AppRouterProps = {
 
 export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
   const { state, derived, actions } = app;
+  const shouldSkipFinalDoneScreen =
+    state.screen === "done" && state.session?.discountTime === "20";
 
   const handleReturnHome = () => {
     const ok = window.confirm(
@@ -31,6 +33,11 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [state.screen, state.currentAreaId, state.finalTimeStep]);
+
+  useEffect(() => {
+    if (!shouldSkipFinalDoneScreen) return;
+    actions.resetApp();
+  }, [actions, shouldSkipFinalDoneScreen]);
 
   switch (state.screen) {
     case "start":
@@ -148,6 +155,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       );
 
     case "done":
+      if (shouldSkipFinalDoneScreen) return null;
+
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
