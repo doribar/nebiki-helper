@@ -503,19 +503,19 @@ let passed = 0;
 {
   try {
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '15', date: '2026-07-05' }), '金土日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-05' }), '火木');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-19' }), '金土日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '15', date: '2026-07-20' }), '金土日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-07-20' }), '火木');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-11-02' }), '金土日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 5, discountTime: '17', date: '2026-07-03' }), '金土日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 5, discountTime: '17', date: '2026-03-20' }), '金土日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 6, discountTime: '17', date: '2028-01-01' }), '金土日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-05-03' }), '金土日');
-    console.log('PASS: 暫定比較グループは祝日前日・翌日休みの日曜祝日を金土日、翌日平日の日曜祝日17時以降を火木として扱う');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-05' }), '火木日');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-19' }), '金土');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '15', date: '2026-07-20' }), '月水');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-07-20' }), '月水');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-11-02' }), '金土');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 5, discountTime: '17', date: '2026-07-03' }), '金土');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 5, discountTime: '17', date: '2026-03-20' }), '金土');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 6, discountTime: '17', date: '2028-01-01' }), '金土');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-05-03' }), '金土');
+    console.log('PASS: 暫定比較グループは時刻別3グループと祝前日例外を適用する');
     passed += 1;
   } catch (error) {
-    console.error('FAIL: 暫定比較グループの祝日前日・祝日・日曜・金土祝日扱い');
+    console.error('FAIL: 暫定比較グループの時刻別3グループ・祝前日例外');
     console.error(error);
     process.exitCode = 1;
   }

@@ -9,7 +9,11 @@ import type {
   DiscountTime,
   WeekdayBaseLabel,
 } from "./types";
-import { addDaysToDateString, isJapaneseHolidayOrObserved } from "./japaneseHoliday.ts";
+import {
+  addDaysToDateString,
+  isDayBeforeJapaneseHoliday,
+  isJapaneseHolidayOrObserved,
+} from "./japaneseHoliday.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
 
@@ -157,19 +161,23 @@ export function getActualWeekdayLabel(weekday: number): ActualWeekdayLabel {
   }
 }
 
-export function getActualWeekdayGroup(weekday: number): ActualWeekdayGroup {
+export function getActualWeekdayGroup(
+  weekday: number,
+  discountTime: AreaCountDiscountTime = "15",
+): ActualWeekdayGroup {
   switch (weekday) {
     case 1:
     case 3:
       return "月水";
     case 2:
     case 4:
-      return "火木";
-    case 0:
+      return discountTime === "15" ? "火木" : "火木日";
     case 5:
     case 6:
+      return discountTime === "15" ? "金土日" : "金土";
+    case 0:
     default:
-      return "金土日";
+      return discountTime === "15" ? "金土日" : "火木日";
   }
 }
 
@@ -178,28 +186,12 @@ export function getAreaCountFallbackWeekdayGroup(params: {
   discountTime: AreaCountDiscountTime;
   date?: string | null;
 }): ActualWeekdayGroup {
-  // 暫定比較グループは値引率の曜日基準ではなく、
-  // 同じ曜日データが足りない時に近い残り方の曜日データを借りるための補助グループ。
-  // 祝日前日は翌日に休み需要が残るため、時刻に関係なく金土日寄りにする。
-  // 金曜祝日は連休初日寄り、土曜祝日は通常土曜寄りなので、暫定グループは金土日で見る。
-  // それ以外の日曜・祝日は、翌日も休み寄りなら17時以降も金土日、翌日が平日なら17時以降は火木寄りにする。
   const dateString = typeof params.date === "string" ? params.date : null;
-  const isHoliday = dateString !== null && isJapaneseHolidayOrObserved(dateString);
-  const isDayBeforeHoliday =
-    dateString !== null && isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
-  const nextWeekday = (params.weekday + 1) % 7;
-  const isNextDayWeekend = nextWeekday === 0 || nextWeekday === 6;
-  const isNextDayHoliday =
-    dateString !== null && isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
-  const isNextDayOff = isNextDayWeekend || isNextDayHoliday;
-  const isSundayOrHoliday = params.weekday === 0 || isHoliday;
+  if (dateString !== null && isDayBeforeJapaneseHoliday(dateString)) {
+    return params.discountTime === "15" ? "金土日" : "金土";
+  }
 
-  if (isDayBeforeHoliday) return "金土日";
-  if (isHoliday && (params.weekday === 5 || params.weekday === 6)) return "金土日";
-  if (isSundayOrHoliday && isNextDayOff) return "金土日";
-  if (isSundayOrHoliday && params.discountTime !== "15") return "火木";
-  if (isSundayOrHoliday && params.discountTime === "15") return "金土日";
-  return getActualWeekdayGroup(params.weekday);
+  return getActualWeekdayGroup(params.weekday, params.discountTime);
 }
 
 export function shouldForceAreaCountFallbackWeekdayGroup(params: {
@@ -236,15 +228,19 @@ export function getAreaCountSameItemLimit(_params: {
   return 10;
 }
 
-function legacyWeekdayBaseToActualWeekdayGroup(weekdayBase: WeekdayBaseLabel | undefined): ActualWeekdayGroup | null {
+function legacyWeekdayBaseToActualWeekdayGroup(
+  weekdayBase: WeekdayBaseLabel | undefined,
+  discountTime: AreaCountDiscountTime,
+): ActualWeekdayGroup | null {
   switch (weekdayBase) {
     case "月水":
       return "月水";
     case "火木":
-      return "火木";
+      return discountTime === "15" ? "火木" : "火木日";
     case "金土":
+      return discountTime === "15" ? "金土日" : "金土";
     case "日":
-      return "金土日";
+      return discountTime === "15" ? "金土日" : "火木日";
     default:
       return null;
   }
@@ -314,7 +310,13 @@ function isAreaRateAdjustment(value: unknown): value is AreaRateAdjustment {
 }
 
 function isActualWeekdayGroup(value: unknown): value is ActualWeekdayGroup {
-  return value === "月水" || value === "火木" || value === "金土日";
+  return (
+    value === "月水" ||
+    value === "火木" ||
+    value === "金土日" ||
+    value === "火木日" ||
+    value === "金土"
+  );
 }
 
 function isActualWeekdayLabel(value: unknown): value is ActualWeekdayLabel {
@@ -479,6 +481,25 @@ function inferWeekdayLabelFromDate(dateText: string): ActualWeekdayLabel | undef
   return getActualWeekdayLabel(date.getDay());
 }
 
+function actualWeekdayLabelToNumber(actualWeekday: ActualWeekdayLabel): number {
+  switch (actualWeekday) {
+    case "日":
+      return 0;
+    case "月":
+      return 1;
+    case "火":
+      return 2;
+    case "水":
+      return 3;
+    case "木":
+      return 4;
+    case "金":
+      return 5;
+    case "土":
+      return 6;
+  }
+}
+
 export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
   if (!Array.isArray(raw)) return [];
 
@@ -503,9 +524,17 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
     const actualWeekday = isActualWeekdayLabel(record.actualWeekday)
       ? record.actualWeekday
       : inferWeekdayLabelFromDate(record.date);
-    const actualWeekdayGroup = isActualWeekdayGroup(record.actualWeekdayGroup)
-      ? record.actualWeekdayGroup
-      : legacyWeekdayBaseToActualWeekdayGroup(legacyWeekdayBase);
+    // 旧レコードの保存済みグループ名は時刻別仕様と一致しない場合があるため、
+    // 解決済みの実曜日・日付・値引時刻から現行仕様へ読み替える。
+    const actualWeekdayGroup = actualWeekday
+      ? getAreaCountFallbackWeekdayGroup({
+          weekday: actualWeekdayLabelToNumber(actualWeekday),
+          discountTime: record.discountTime,
+          date: record.date,
+        })
+      : isActualWeekdayGroup(record.actualWeekdayGroup)
+        ? record.actualWeekdayGroup
+        : legacyWeekdayBaseToActualWeekdayGroup(legacyWeekdayBase, record.discountTime);
 
     if (!actualWeekdayGroup) return [];
 
@@ -1035,10 +1064,13 @@ export function getAreaCountRecommendation(params: {
   });
   // エリア判定の比較サンプルは「今日より前」の履歴だけを使う。
   // 同じ日・同じエリア・同じ時刻で複数記録がある場合は、最新の1件だけを採用する。
-  const historicalRecords = getHistoricalAreaCountRecords(params.records, date);
+  // 呼び出し元がローカル・Supabase・混在データのどれでも、比較直前に
+  // 旧曜日グループを現行仕様へ正規化してから参照する。
+  const normalizedRecords = normalizeAreaCountRecords(params.records);
+  const historicalRecords = getHistoricalAreaCountRecords(normalizedRecords, date);
   const recordsForDecrease = [
     ...historicalRecords,
-    ...getCurrentDateAreaCountRecords(params.records, date),
+    ...getCurrentDateAreaCountRecords(normalizedRecords, date),
   ];
   const reference = getReferenceRecords({
     records: historicalRecords,

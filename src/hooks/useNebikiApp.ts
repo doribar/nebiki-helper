@@ -29,6 +29,7 @@ import type {
   DailySessionSnapshot,
   Review19DayCheckSnapshot,
 } from "../domain/types";
+import { isDayBeforeJapaneseHoliday } from "../domain/japaneseHoliday";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName } from "../domain/area";
 import {
   getBasisGuideDisplay,
@@ -1812,6 +1813,7 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   }, [state.sessionDraft.weather, state.sessionDraft.discountTime]);
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
   const activeSessionDate = state.session?.date ?? state.sessionDraft.date;
+  const showDayBeforeHolidayNotice = isDayBeforeJapaneseHoliday(activeSessionDate);
 
   const showBentoJudgeGuide =
     state.screen === "area_judge" &&
@@ -4003,6 +4005,7 @@ const lateSkipNotice = useMemo(() => {
   areaCountAssistEnabled,
   areaCountSameItemLimit,
   showDailyNoticeBeforeRate,
+  showDayBeforeHolidayNotice,
   areaJudgeSelection,
   isResuming: resumeTargetScreen !== null,
   startButtonLabel: timeSwitchTarget

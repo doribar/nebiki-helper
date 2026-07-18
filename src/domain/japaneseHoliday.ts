@@ -154,6 +154,11 @@ export function isJapaneseHolidayOrObserved(dateString: string): boolean {
   return getHolidaySet(parts.year).has(dateString);
 }
 
+export function isDayBeforeJapaneseHoliday(dateString: string): boolean {
+  if (!parseDateString(dateString)) return false;
+  return isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
+}
+
 export function isWeekendDate(dateString: string): boolean {
   const weekday = getWeekday(dateString);
   return weekday === 0 || weekday === 6;

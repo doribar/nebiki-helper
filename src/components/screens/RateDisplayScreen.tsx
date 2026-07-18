@@ -13,6 +13,7 @@ import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { JudgeHintDialog } from "../common/JudgeHintDialog";
+import { DayBeforeHolidayNotice } from "../common/DayBeforeHolidayNotice";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
 
@@ -38,6 +39,7 @@ type RateDisplayScreenProps = {
   rateDisplay: RateDisplayData | null;
   trainingStepConfig: TrainingStepConfig;
   showDailyNotice?: boolean;
+  showDayBeforeHolidayNotice?: boolean;
   onConfirmDailyNotice?: () => void;
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
@@ -373,6 +375,7 @@ export function RateDisplayScreen({
   rateDisplay,
   trainingStepConfig,
   showDailyNotice = false,
+  showDayBeforeHolidayNotice = false,
   onConfirmDailyNotice,
   finalGuide,
   onNextArea,
@@ -613,6 +616,8 @@ export function RateDisplayScreen({
               )}
             </div>
 
+            <DayBeforeHolidayNotice visible={showDayBeforeHolidayNotice} />
+
             {currentRateInstructionStep ? (
               <RateInstructionCard
                 step={currentRateInstructionStep}
@@ -628,6 +633,8 @@ export function RateDisplayScreen({
             <div style={{ fontWeight: 800, marginBottom: 8 }}>
               20時30分は最終値引です
             </div>
+
+            <DayBeforeHolidayNotice visible={showDayBeforeHolidayNotice} />
 
             <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
               {finalInstructionSteps.map((step) => (

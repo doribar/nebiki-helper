@@ -12,7 +12,7 @@ create table if not exists public.area_count_records (
   discount_time text not null check (discount_time in ('15', '17', '18', '19', '20')),
   weekday_base text check (weekday_base in ('日', '金土', '火木', '月水')),
   actual_weekday text check (actual_weekday in ('日', '月', '火', '水', '木', '金', '土')),
-  actual_weekday_group text not null check (actual_weekday_group in ('月水', '火木', '金土日')),
+  actual_weekday_group text not null check (actual_weekday_group in ('月水', '火木', '金土日', '火木日', '金土')),
   count integer not null check (count >= 0),
   user_judge text check (user_judge in ('many', 'slightly_many', 'normal', 'slightly_few', 'few')),
   suggested_evaluation text check (suggested_evaluation in ('many', 'slightly_many', 'normal', 'slightly_few', 'few')),
@@ -37,6 +37,15 @@ alter table public.area_count_records
 
 alter table public.area_count_records
   add column if not exists decision_basis jsonb;
+
+-- 時刻別の新グループ名を保存できるよう、既存列の許可値だけを拡張します。
+-- 旧グループ名は読み込み時の互換変換に必要なため、引き続き許可します。
+alter table public.area_count_records
+  drop constraint if exists area_count_records_actual_weekday_group_check;
+
+alter table public.area_count_records
+  add constraint area_count_records_actual_weekday_group_check
+  check (actual_weekday_group in ('月水', '火木', '金土日', '火木日', '金土'));
 
 -- 旧版はuser_judgeを3段階に制限していたため、現在の5段階入力を保存できるよう更新します。
 alter table public.area_count_records
