@@ -5,9 +5,10 @@ import type {
   RateDisplayData,
   SkipTargetOption,
 } from "../../domain/types";
-import type {
-  NoticeItemId,
-  TrainingStepConfig,
+import {
+  STEP4_TEN_OR_MORE_NOTICE_TEXT,
+  type NoticeItemId,
+  type TrainingStepConfig,
 } from "../../domain/trainingMode";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
@@ -275,6 +276,9 @@ const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
         <strong>残り2個</strong>の商品は<strong>「多い」にしない</strong>
       </>
     ),
+  },
+  step4TenOrMoreNotAlwaysMany: {
+    content: <strong>{STEP4_TEN_OR_MORE_NOTICE_TEXT}</strong>,
   },
   judgeIncludesTrend: {
     content: (

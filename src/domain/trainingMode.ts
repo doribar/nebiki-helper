@@ -23,6 +23,7 @@ export const TRAINING_STEPS: TrainingStep[] = [
 export type NoticeItemId =
   | "oneLeftFew"
   | "twoLeftNotMany"
+  | "step4TenOrMoreNotAlwaysMany"
   | "manyTenPlusAfterJudge"
   | "judgeIncludesTrend"
   | "badAppearancePlus"
@@ -30,6 +31,9 @@ export type NoticeItemId =
   | "steadyStandardMinus"
   | "nightSellerMinus"
   | "advertisementTrendMinus";
+
+export const STEP4_TEN_OR_MORE_NOTICE_TEXT =
+  "10個以上あっても、必ず「多い」になるわけではありません。";
 
 export type TrainingStepConfig = {
   step: TrainingStep;
@@ -97,7 +101,7 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
     noticeItemIds: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
     ],
   },
   step5: {

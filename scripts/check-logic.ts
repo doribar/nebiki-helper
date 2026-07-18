@@ -2843,9 +2843,15 @@ const totalChecks = 92;
 
   const step4 = getTrainingStepConfig('step4');
   assert.equal(step4.showManyThresholdRule, true);
-  assert.ok(step4.noticeItemIds.includes('manyTenPlusAfterJudge'));
+  assert.deepEqual(step4.noticeItemIds, [
+    'twoLeftNotMany',
+    'oneLeftFew',
+    'step4TenOrMoreNotAlwaysMany',
+  ]);
 
   const step5 = getTrainingStepConfig('step5');
+  assert.ok(step5.noticeItemIds.includes('manyTenPlusAfterJudge'));
+  assert.equal(step5.noticeItemIds.includes('step4TenOrMoreNotAlwaysMany'), false);
   assert.ok(step5.noticeItemIds.includes('steadyStandardMinus'));
   assert.equal(step5.noticeItemIds.includes('badAppearancePlus'), false);
 

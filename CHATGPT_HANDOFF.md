@@ -525,3 +525,10 @@ Supabase側は `evaluation_source`、`decision_basis`（jsonb）、`data_schema_
 - アプリ版: `2026.7.18-2`。`dataSchemaVersion` は2のまま。
 - Supabase列は変更しないが、`actual_weekday_group` のCHECK制約へ `火木日` / `金土` を追加するため、`supabase_area_count_records.sql` の再実行が必要。
 - 確認コマンド: `npm run check:logic` 92/92、`npm run check:integration` 8/8、`npm run check:weekday-groups` 24/24。
+
+## 2026-07-18 Step4注意事項更新
+- Step4の注意事項を「残り2個は多いにしない」「残り1個は少ないにする」「10個以上あっても必ず多いになるわけではない」の3項目だけにした。
+- Step4専用の注意項目IDを追加し、Step5以降が使う従来の `manyTenPlusAfterJudge` は変更していない。
+- 10個以上の商品を、多い商品の値引率からさらに+5%する計算・値引指示は変更していない。
+- アプリ版: `2026.7.18-3`。`dataSchemaVersion` は2のまま。Supabase SQL変更なし、今回の変更に伴う再実行不要。
+- 確認コマンド: `npm run check:logic` 92/92、`npm run check:integration` 8/8、`npm run check:weekday-groups` 24/24、`npm run check:step4-notice` 5/5、型チェック・本番ビルド成功。
