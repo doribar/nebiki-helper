@@ -499,6 +499,8 @@ export type AppState = {
   session: SessionData | null;
   sessionDraft: SessionDraft;
   areaProgressMap: Record<AreaId, AreaProgress>;
+  /** 自動時刻切替時に、前時刻の未完了エリアを先頭へ並べるための通常処理順。 */
+  normalFlowOrder?: AreaId[];
   currentAreaId: AreaId | null;
   lastReferenceAreaId: AreaId | null;
   currentFlow: FlowMode;

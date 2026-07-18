@@ -29,7 +29,7 @@ import type {
   DailySessionSnapshot,
   Review19DayCheckSnapshot,
 } from "../domain/types";
-import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName, getNextNormalArea } from "../domain/area";
+import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName } from "../domain/area";
 import {
   getBasisGuideDisplay,
   getWeatherGuideText,
@@ -437,38 +437,44 @@ function getNormalFlowScreenForArea(
 }
 
 function getFirstNormalFlowAreaId(
-  areaProgressMap: Record<AreaId, AreaProgress>
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE
 ): AreaId | null {
-  return NORMAL_ROUTE.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ?? null;
+  return normalFlowOrder.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ?? null;
 }
 
 function getNextNormalFlowAreaId(
   areaProgressMap: Record<AreaId, AreaProgress>,
-  currentAreaId: AreaId
+  currentAreaId: AreaId,
+  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE
 ): AreaId | null {
-  const currentIndex = NORMAL_ROUTE.indexOf(currentAreaId);
-  const afterCurrent = currentIndex >= 0 ? NORMAL_ROUTE.slice(currentIndex + 1) : NORMAL_ROUTE;
+  const currentIndex = normalFlowOrder.indexOf(currentAreaId);
+  const afterCurrent = currentIndex >= 0
+    ? normalFlowOrder.slice(currentIndex + 1)
+    : normalFlowOrder;
 
   return afterCurrent.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ?? null;
 }
 
 function getNextNormalFlowAreaIdWithWrap(
   areaProgressMap: Record<AreaId, AreaProgress>,
-  currentAreaId: AreaId
+  currentAreaId: AreaId,
+  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE
 ): AreaId | null {
   return (
-    getNextNormalFlowAreaId(areaProgressMap, currentAreaId) ??
-    NORMAL_ROUTE.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ??
+    getNextNormalFlowAreaId(areaProgressMap, currentAreaId, normalFlowOrder) ??
+    normalFlowOrder.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ??
     null
   );
 }
 
 function hasRemainingNormalFlowArea(
   areaProgressMap: Record<AreaId, AreaProgress>,
-  currentAreaId: AreaId
+  currentAreaId: AreaId,
+  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE
 ): boolean {
-  return Object.values(areaProgressMap).some((progress) => {
-    return progress.areaId !== currentAreaId && isNormalFlowWorkArea(progress);
+  return normalFlowOrder.some((areaId) => {
+    return areaId !== currentAreaId && isNormalFlowWorkArea(areaProgressMap[areaId]);
   });
 }
 
@@ -543,6 +549,13 @@ function isValidDiscountTime(value: unknown): value is DiscountTime {
   );
 }
 
+export function getInitialTimeSwitchTarget(
+  raw: unknown,
+  isTestMode: boolean
+): DiscountTime | null {
+  return !isTestMode && isValidDiscountTime(raw) ? raw : null;
+}
+
 function isValidAreaRateAdjustment(value: unknown): value is AreaRateAdjustment {
   return value === -10 || value === -5 || value === 0 || value === 5 || value === 10;
 }
@@ -561,6 +574,28 @@ function normalizeReview19ExcludedAreaIds(raw: unknown): AreaId[] {
   return [...unique];
 }
 
+export function normalizeNormalFlowOrder(raw: unknown): AreaId[] {
+  const normalized: AreaId[] = [];
+
+  if (Array.isArray(raw)) {
+    for (const value of raw) {
+      if (
+        isValidAreaId(value) &&
+        NORMAL_ROUTE.includes(value) &&
+        !normalized.includes(value)
+      ) {
+        normalized.push(value);
+      }
+    }
+  }
+
+  for (const areaId of NORMAL_ROUTE) {
+    if (!normalized.includes(areaId)) normalized.push(areaId);
+  }
+
+  return normalized;
+}
+
 function addReview19ExcludedAreaId(current: AreaId[], areaId: AreaId): AreaId[] {
   return current.includes(areaId) ? current : [...current, areaId];
 }
@@ -569,7 +604,7 @@ function removeReview19ExcludedAreaId(current: AreaId[], areaId: AreaId): AreaId
   return current.filter((currentAreaId) => currentAreaId !== areaId);
 }
 
-function normalizeAreaProgressMap(
+export function normalizeAreaProgressMap(
   raw?: Partial<Record<string, AreaProgress>> | null
 ): Record<AreaId, AreaProgress> {
   const base = createInitialAreaProgressMap();
@@ -642,6 +677,16 @@ function normalizeAreaProgressMap(
         typeof progress.previousNormalRateText === "string"
           ? progress.previousNormalRateText
           : undefined,
+      autoSkipKind:
+        progress.autoSkipKind === "late_plus5" ||
+        progress.autoSkipKind === "early_next_minus5"
+          ? progress.autoSkipKind
+          : undefined,
+      earlyNextMinus5TargetDiscountTime:
+        progress.earlyNextMinus5TargetDiscountTime === "18" ||
+        progress.earlyNextMinus5TargetDiscountTime === "19"
+          ? progress.earlyNextMinus5TargetDiscountTime
+          : undefined,
     };
   }
 
@@ -655,6 +700,7 @@ function createInitialState(initialSessionDraft: SessionDraft = createInitialSes
     session: null,
     sessionDraft: initialSessionDraft,
     areaProgressMap: createInitialAreaProgressMap(),
+    normalFlowOrder: [...NORMAL_ROUTE],
     currentAreaId: null,
     lastReferenceAreaId: null,
     currentFlow: "normal",
@@ -840,7 +886,7 @@ function syncAfterRainSelection(
   });
 }
 
-function normalizeLoadedState(
+export function normalizeLoadedState(
   loaded: AppState | null,
   initialSessionDraft: SessionDraft
 ): AppState {
@@ -873,6 +919,7 @@ function normalizeLoadedState(
     session,
     sessionDraft,
     areaProgressMap,
+    normalFlowOrder: normalizeNormalFlowOrder((loaded as Partial<AppState>).normalFlowOrder),
     currentAreaId,
     lastReferenceAreaId,
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",
@@ -886,6 +933,29 @@ function normalizeLoadedState(
     review19,
     review19ExcludedAreaIds: normalizeReview19ExcludedAreaIds((loaded as Partial<AppState>).review19ExcludedAreaIds),
   };
+}
+
+export function selectReview19SourceState(params: {
+  currentState: AppState;
+  savedSourceState: AppState | null;
+  currentDate: string;
+}): AppState | null {
+  if (
+    params.currentState.session?.date === params.currentDate &&
+    params.currentState.session.discountTime === "17"
+  ) {
+    return params.currentState;
+  }
+
+  const savedSourceState = normalizeLoadedState(
+    params.savedSourceState,
+    params.currentState.sessionDraft
+  );
+
+  return savedSourceState.session?.date === params.currentDate &&
+    savedSourceState.session.discountTime === "17"
+    ? savedSourceState
+    : null;
 }
 
 function getWeekdayText(weekday: number): string {
@@ -926,30 +996,50 @@ function createAreaProgressMapWithAutoSkippedAreas(
   return base;
 }
 
-function createAreaProgressMapForTimeSwitch(params: {
+function isPreviousTimeUnfinished(progress: AreaProgress | undefined): boolean {
+  if (!progress) return false;
+
+  switch (progress.status) {
+    case "unstarted":
+    case "skipped_manual":
+    case "postponed_few":
+      return true;
+    case "completed":
+    case "auto_skipped_late_time":
+      return false;
+  }
+}
+
+export function createTimeSwitchPlan(params: {
   previousMap: Record<AreaId, AreaProgress>;
   skippedRecords: NextSessionSkipRecord[];
-}): Record<AreaId, AreaProgress> {
-  const base = createInitialAreaProgressMap();
-  const completedAt = getRuntimeNow().toISOString();
-
-  const markCompleted = (areaId: AreaId, patch?: Partial<AreaProgress>) => {
-    if (!isValidAreaId(areaId) || !base[areaId]) return;
-
-    base[areaId] = {
-      ...base[areaId],
-      status: "completed",
-      skipReason: "late_time",
-      completedAt,
-      ...patch,
-    };
-  };
+  targetDiscountTime: DiscountTime;
+  completedAt?: string;
+}): {
+  areaProgressMap: Record<AreaId, AreaProgress>;
+  normalFlowOrder: AreaId[];
+} {
+  const areaProgressMap = createInitialAreaProgressMap();
+  const completedAt = params.completedAt ?? getRuntimeNow().toISOString();
+  const unfinishedAreaIds = params.targetDiscountTime === "20"
+    ? []
+    : NORMAL_ROUTE.filter((areaId) => isPreviousTimeUnfinished(params.previousMap[areaId]));
+  const normalFlowOrder = normalizeNormalFlowOrder([
+    ...unfinishedAreaIds,
+    ...NORMAL_ROUTE,
+  ]);
 
   const markAutoSkipped = (record: NextSessionSkipRecord) => {
-    if (!isValidAreaId(record.areaId) || !base[record.areaId]) return;
+    if (
+      record.skipKind !== "early_next_minus5" ||
+      !isValidAreaId(record.areaId) ||
+      !areaProgressMap[record.areaId]
+    ) {
+      return;
+    }
 
-    base[record.areaId] = {
-      ...base[record.areaId],
+    areaProgressMap[record.areaId] = {
+      ...areaProgressMap[record.areaId],
       status: "auto_skipped_late_time",
       skipReason: "late_time",
       completedAt,
@@ -957,30 +1047,15 @@ function createAreaProgressMapForTimeSwitch(params: {
       previousManyRateText: record.previousManyRateText,
       previousManyNote: record.previousManyNote,
       previousNormalRateText: record.previousNormalRateText,
-      autoSkipKind: record.skipKind ?? "late_plus5",
+      autoSkipKind: "early_next_minus5",
     };
   };
-
-  for (const areaId of NORMAL_ROUTE) {
-    const previous = params.previousMap[areaId];
-    if (!previous) continue;
-
-    if (previous.status === "completed" || previous.status === "auto_skipped_late_time") {
-      markCompleted(areaId, {
-        previousRateText: previous.completedRateText ?? previous.previousRateText,
-        previousManyRateText: previous.completedManyRateText ?? previous.previousManyRateText,
-        previousManyNote: previous.completedManyNote ?? previous.previousManyNote,
-        previousNormalRateText: previous.completedNormalRateText ?? previous.previousNormalRateText,
-        autoSkipKind: previous.autoSkipKind,
-      });
-    }
-  }
 
   for (const record of params.skippedRecords) {
     markAutoSkipped(record);
   }
 
-  return base;
+  return { areaProgressMap, normalFlowOrder };
 }
 
 function buildAutoTimeSwitchDialogText(params: {
@@ -1005,20 +1080,10 @@ function shouldPrioritizeUnfinishedAreasOnAutoTransition(screen: ScreenName): bo
 }
 
 function getFirstAvailableAreaId(
-  areaProgressMap: Record<AreaId, AreaProgress>
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE
 ): AreaId | null {
-  let current: AreaId | null = "bento_men";
-
-  while (current) {
-    const progress = areaProgressMap[current];
-    if (progress.status === "unstarted") {
-      return current;
-    }
-
-    current = getNextNormalArea(current);
-  }
-
-  return null;
+  return normalFlowOrder.find((areaId) => areaProgressMap[areaId]?.status === "unstarted") ?? null;
 }
 
 function refreshSessionDiscountTime(session: SessionData | null): {
@@ -1236,7 +1301,7 @@ function createReview19DaySnapshot(params: {
   };
 }
 
-function createReview19Snapshot(params: {
+export function createReview19Snapshot(params: {
   capturedAt: string;
   session: SessionData;
   resolvedWeather: ReturnType<typeof resolveWeatherInputForDiscount>;
@@ -1464,7 +1529,12 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   const [resumeTargetScreen, setResumeTargetScreen] = useState<ScreenName | null>(
     initialPersistenceRef.current?.runtimeState?.resumeTargetScreen ?? null
   );
-  const [timeSwitchTarget, setTimeSwitchTarget] = useState<DiscountTime | null>(null);
+  const [timeSwitchTarget, setTimeSwitchTarget] = useState<DiscountTime | null>(() =>
+    getInitialTimeSwitchTarget(
+      initialPersistenceRef.current?.runtimeState?.timeSwitchTarget,
+      isTestMode
+    )
+  );
   const [undoSnapshot, setUndoSnapshot] = useState<NavigationSnapshot | null>(
     initialPersistenceRef.current?.runtimeState?.undoSnapshot ?? null
   );
@@ -2319,7 +2389,8 @@ const lateSkipNotice = useMemo(() => {
     if (!nextCandidate) {
       const nextNormalFlowAreaId = getNextNormalFlowAreaIdWithWrap(
         params.updatedMap,
-        params.referenceAreaId
+        params.referenceAreaId,
+        params.prev.normalFlowOrder
       );
 
       if (nextNormalFlowAreaId) {
@@ -2425,7 +2496,7 @@ const lateSkipNotice = useMemo(() => {
     const fallbackAreaId =
       prev.currentAreaId ??
       prev.lastReferenceAreaId ??
-      getFirstAvailableAreaId(prev.areaProgressMap);
+      getFirstAvailableAreaId(prev.areaProgressMap, prev.normalFlowOrder);
 
     if (!fallbackAreaId) {
       return {
@@ -2548,7 +2619,7 @@ const lateSkipNotice = useMemo(() => {
       },
     };
 
-    if (!hasRemainingNormalFlowArea(judgedCurrentMap, currentAreaId)) {
+    if (!hasRemainingNormalFlowArea(judgedCurrentMap, currentAreaId, prev.normalFlowOrder)) {
       return {
         ...prev,
         session: nextSession,
@@ -2575,7 +2646,11 @@ const lateSkipNotice = useMemo(() => {
       });
     }
 
-    const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
+    const nextAreaId = getNextNormalFlowAreaId(
+      updatedMap,
+      currentAreaId,
+      prev.normalFlowOrder
+    );
 
     if (nextAreaId) {
       return {
@@ -2636,7 +2711,7 @@ const lateSkipNotice = useMemo(() => {
     let nextState: AppState;
 
     if (timeSwitchTarget && prev.session && canResumeCurrentSession) {
-      let areaProgressMap = createInitialAreaProgressMap();
+      let skippedRecords: NextSessionSkipRecord[] = [];
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
           currentRecords: nextSkipRecords,
@@ -2645,13 +2720,17 @@ const lateSkipNotice = useMemo(() => {
         });
 
         nextSkipRecords = consumed.remainingRecords;
-        areaProgressMap = createAreaProgressMapForTimeSwitch({
-          previousMap: prev.areaProgressMap,
-          skippedRecords: consumed.skippedRecords,
-        });
+        skippedRecords = consumed.skippedRecords;
       }
 
-      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
+      const timeSwitchPlan = createTimeSwitchPlan({
+        previousMap: prev.areaProgressMap,
+        skippedRecords,
+        targetDiscountTime: nextSession.discountTime,
+        completedAt: startedAt,
+      });
+      const { areaProgressMap, normalFlowOrder } = timeSwitchPlan;
+      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap, normalFlowOrder);
       const nextReview19ExcludedAreaIds =
         prev.session.discountTime === "15" && nextSession.discountTime === "17"
           ? normalizeReview19ExcludedAreaIds([
@@ -2672,6 +2751,7 @@ const lateSkipNotice = useMemo(() => {
           startedAt,
         },
         areaProgressMap,
+        normalFlowOrder,
         currentAreaId: firstAreaId,
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
@@ -2695,6 +2775,7 @@ const lateSkipNotice = useMemo(() => {
       };
     } else {
       let areaProgressMap = createInitialAreaProgressMap();
+      const normalFlowOrder = [...NORMAL_ROUTE];
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
           currentRecords: nextSkipRecords,
@@ -2708,7 +2789,7 @@ const lateSkipNotice = useMemo(() => {
         );
       }
 
-      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
+      const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap, normalFlowOrder);
 
       nextState = {
         ...prev,
@@ -2717,6 +2798,7 @@ const lateSkipNotice = useMemo(() => {
           : "done",
         session: nextSession,
         areaProgressMap,
+        normalFlowOrder,
         currentAreaId: firstAreaId,
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
@@ -3059,7 +3141,11 @@ const lateSkipNotice = useMemo(() => {
         },
       };
 
-      const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
+      const nextAreaId = getNextNormalFlowAreaId(
+        updatedMap,
+        currentAreaId,
+        prev.normalFlowOrder
+      );
 
       if (nextAreaId) {
         return {
@@ -3188,7 +3274,11 @@ const lateSkipNotice = useMemo(() => {
         });
       }
 
-      const nextAreaId = getNextNormalFlowAreaId(updatedMap, clickedAreaId);
+      const nextAreaId = getNextNormalFlowAreaId(
+        updatedMap,
+        clickedAreaId,
+        prev.normalFlowOrder
+      );
 
       if (nextAreaId) {
         return {
@@ -3239,7 +3329,11 @@ const lateSkipNotice = useMemo(() => {
         },
       };
 
-      const nextAreaId = getNextNormalFlowAreaId(updatedMap, currentAreaId);
+      const nextAreaId = getNextNormalFlowAreaId(
+        updatedMap,
+        currentAreaId,
+        prev.normalFlowOrder
+      );
 
       if (nextAreaId) {
         return {
@@ -3295,25 +3389,13 @@ const lateSkipNotice = useMemo(() => {
       }
 
       const currentDate = formatLocalDate(now);
-      const currentWeekday = now.getDay();
-      const sourceState = prev.session?.date === currentDate
-        ? prev
-        : normalizeLoadedState(loadReview19SourceState(), prev.sessionDraft);
-      const sourceSession = sourceState.session?.date === currentDate ? sourceState.session : null;
-      const session: SessionData = sourceSession ?? {
-        ...prev.sessionDraft,
-        date: currentDate,
-        weekday: prev.sessionDraft.manualWeekdayOverride
-          ? prev.sessionDraft.weekday
-          : currentWeekday,
-        discountTime: "17",
-        weather: {
-          ...prev.sessionDraft.weather,
-          hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
-        },
-        startedAt: now.toISOString(),
-      };
-      const sourceStateForReview = sourceSession ? sourceState : prev;
+      const sourceStateForReview = selectReview19SourceState({
+        currentState: prev,
+        savedSourceState: loadReview19SourceState(),
+        currentDate,
+      });
+      const session = sourceStateForReview?.session;
+      if (!session) return prev;
 
       const reviewDraft = createReview19WeatherDraft(session);
       const initialReview19 = createInitialReview19Result({
@@ -3661,13 +3743,15 @@ const lateSkipNotice = useMemo(() => {
     });
 
     const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedRecords);
-    const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap);
+    const normalFlowOrder = [...NORMAL_ROUTE];
+    const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap, normalFlowOrder);
 
     setState({
       ...state,
       screen: firstAreaId ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId) : "done",
       session: nextSession,
       areaProgressMap,
+      normalFlowOrder,
       currentAreaId: firstAreaId,
       lastReferenceAreaId: firstAreaId,
       currentFlow: "normal",
