@@ -318,17 +318,6 @@ const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
       </>
     ),
   },
-  manyTenPlusAfterJudge: {
-    content: (
-      <>
-        <strong>10個以上あるだけで「多い」になるわけではありません。</strong>
-        <br />
-        曜日・時刻を基準に「多い」と判断してください。
-        <br />
-        そのうち10個以上ある商品だけさらに<strong>+5%</strong>
-      </>
-    ),
-  },
   advertisementTrendMinus: {
     content: (
       <>

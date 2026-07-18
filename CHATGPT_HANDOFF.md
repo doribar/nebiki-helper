@@ -532,3 +532,8 @@ Supabase側は `evaluation_source`、`decision_basis`（jsonb）、`data_schema_
 - 10個以上の商品を、多い商品の値引率からさらに+5%する計算・値引指示は変更していない。
 - アプリ版: `2026.7.18-3`。`dataSchemaVersion` は2のまま。Supabase SQL変更なし、今回の変更に伴う再実行不要。
 - 確認コマンド: `npm run check:logic` 92/92、`npm run check:integration` 8/8、`npm run check:weekday-groups` 24/24、`npm run check:step4-notice` 5/5、型チェック・本番ビルド成功。
+
+## 2026-07-18 Step5〜8注意事項更新
+- Step5〜8の共通注意事項をStep4と同じ3項目へ統一した。Step固有の注意事項と値引ロジックは変更していない。
+- アプリ版: `2026.7.18-4`。`dataSchemaVersion` は2のまま。Supabase SQL変更なし、今回の変更に伴う再実行不要。
+- 確認コマンド: `npm run check:logic`、`npm run check:integration`、`npm run check:weekday-groups`、`npm run check:step4-notice`、`npm run check:step5-8-notices`、型チェック、本番ビルド。

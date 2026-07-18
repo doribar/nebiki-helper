@@ -46,7 +46,7 @@ test("2. Step4の新文言が完全一致し、旧文言と削除対象2行を�
   );
 });
 
-test("3. Step1〜3とStep5以降の注意事項構成は変更しない", () => {
+test("3. Step1〜3を維持し、Step5以降の共通項目をStep4と統一", () => {
   const expected: Partial<Record<TrainingStep, NoticeItemId[]>> = {
     step1: [],
     step2: ["twoLeftNotMany"],
@@ -54,14 +54,14 @@ test("3. Step1〜3とStep5以降の注意事項構成は変更しない", () => 
     step5: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
     ],
     step6: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
       "badAppearancePlus",
@@ -70,7 +70,7 @@ test("3. Step1〜3とStep5以降の注意事項構成は変更しない", () => 
     step7: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
       "badAppearancePlus",
@@ -80,7 +80,7 @@ test("3. Step1〜3とStep5以降の注意事項構成は変更しない", () => 
     step8: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
       "badAppearancePlus",

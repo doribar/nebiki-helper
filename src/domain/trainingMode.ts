@@ -24,7 +24,6 @@ export type NoticeItemId =
   | "oneLeftFew"
   | "twoLeftNotMany"
   | "step4TenOrMoreNotAlwaysMany"
-  | "manyTenPlusAfterJudge"
   | "judgeIncludesTrend"
   | "badAppearancePlus"
   | "unpopularPlus"
@@ -118,7 +117,7 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
     noticeItemIds: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
     ],
@@ -137,7 +136,7 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
     noticeItemIds: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
       "badAppearancePlus",
@@ -158,7 +157,7 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
     noticeItemIds: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
       "badAppearancePlus",
@@ -180,7 +179,7 @@ const STEP_CONFIGS: Record<TrainingStep, TrainingStepConfig> = {
     noticeItemIds: [
       "twoLeftNotMany",
       "oneLeftFew",
-      "manyTenPlusAfterJudge",
+      "step4TenOrMoreNotAlwaysMany",
       "steadyStandardMinus",
       "nightSellerMinus",
       "badAppearancePlus",

@@ -2850,8 +2850,7 @@ const totalChecks = 92;
   ]);
 
   const step5 = getTrainingStepConfig('step5');
-  assert.ok(step5.noticeItemIds.includes('manyTenPlusAfterJudge'));
-  assert.equal(step5.noticeItemIds.includes('step4TenOrMoreNotAlwaysMany'), false);
+  assert.ok(step5.noticeItemIds.includes('step4TenOrMoreNotAlwaysMany'));
   assert.ok(step5.noticeItemIds.includes('steadyStandardMinus'));
   assert.equal(step5.noticeItemIds.includes('badAppearancePlus'), false);
 
