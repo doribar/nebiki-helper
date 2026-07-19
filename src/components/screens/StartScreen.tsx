@@ -5,7 +5,6 @@ import type {
   ForecastWeatherKind,
   SessionDraft,
 } from "../../domain/types";
-import type { TrainingStepConfig } from "../../domain/trainingMode";
 import {
   cloneHourlyForecasts,
   FORECAST_HOUR_KEYS,
@@ -27,7 +26,6 @@ type StartScreenProps = {
   showAfterRainRecoverySelector: boolean;
   onChangeSessionDraft: (patch: Partial<SessionDraft>) => void;
   onStart: () => void;
-  trainingStepConfig: TrainingStepConfig;
   startButtonLabel?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;

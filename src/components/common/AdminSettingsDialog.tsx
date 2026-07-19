@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ADMIN_PIN_MAX_LENGTH,
   hasAdminPin,
@@ -6,19 +6,12 @@ import {
   saveAdminPin,
   verifyAdminPin,
 } from "../../domain/adminSettings";
-import {
-  TRAINING_STEPS,
-  getTrainingStepConfig,
-  type TrainingStep,
-} from "../../domain/trainingMode";
 
 type AdminSettingsDialogProps = {
-  currentStep: TrainingStep;
   review19UnexportedCount: number;
   review19TotalCount: number;
   onExportReview19Unexported: () => void;
   onExportAllReview19: () => void;
-  onSaveStep: (step: TrainingStep) => void;
   onClose: () => void;
 };
 
@@ -48,12 +41,10 @@ const inputStyle = {
 };
 
 export function AdminSettingsDialog({
-  currentStep,
   review19UnexportedCount,
   review19TotalCount,
   onExportReview19Unexported,
   onExportAllReview19,
-  onSaveStep,
   onClose,
 }: AdminSettingsDialogProps) {
   const [phase, setPhase] = useState<DialogPhase>(() =>
@@ -61,14 +52,8 @@ export function AdminSettingsDialog({
   );
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
-  const [selectedStep, setSelectedStep] = useState<TrainingStep>(currentStep);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const currentConfig = useMemo(
-    () => getTrainingStepConfig(selectedStep),
-    [selectedStep],
-  );
 
   const normalizePinInput = (value: string) =>
     value.replace(/\D/g, "").slice(0, ADMIN_PIN_MAX_LENGTH);
@@ -295,92 +280,7 @@ export function AdminSettingsDialog({
         ) : null}
 
         {phase === "settings" ? (
-          <>
-            <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 10 }}>
-              使用するステップ
-            </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {TRAINING_STEPS.map((step) => {
-                const config = getTrainingStepConfig(step);
-                const selected = step === selectedStep;
-                return (
-                  <button
-                    key={step}
-                    type="button"
-                    onClick={() => setSelectedStep(step)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      borderRadius: 14,
-                      border: selected
-                        ? "3px solid #b91c1c"
-                        : "1px solid #cbd5e1",
-                      background: selected ? "#fff1f2" : "#fff",
-                      padding: "14px 16px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ fontWeight: 900, fontSize: 17 }}>
-                      {config.label}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 5,
-                        color: "#475569",
-                        lineHeight: 1.5,
-                        fontSize: 14,
-                      }}
-                    >
-                      {config.description}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <section
-              style={{
-                marginTop: 16,
-                borderRadius: 14,
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                padding: 14,
-              }}
-            >
-              <div style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
-                選択中
-              </div>
-              <div style={{ marginTop: 4, fontWeight: 900 }}>
-                {currentConfig.label}
-              </div>
-            </section>
-
-            <button
-              type="button"
-              onClick={() => onSaveStep(selectedStep)}
-              style={{
-                width: "100%",
-                minHeight: 62,
-                marginTop: 18,
-                border: 0,
-                borderRadius: 14,
-                background: "#b91c1c",
-                color: "#fff",
-                fontSize: 20,
-                fontWeight: 900,
-                cursor: "pointer",
-              }}
-            >
-              このステップに変更する
-            </button>
-
-            <section
-              style={{
-                marginTop: 24,
-                paddingTop: 20,
-                borderTop: "1px solid #e2e8f0",
-              }}
-            >
+          <section>
               <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
                 19:00チェックデータ
               </div>
@@ -436,8 +336,7 @@ export function AdminSettingsDialog({
                   全データを出力
                 </button>
               </div>
-            </section>
-          </>
+          </section>
         ) : null}
       </section>
     </div>

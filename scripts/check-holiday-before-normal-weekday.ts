@@ -31,7 +31,6 @@ import {
   createDefaultHourlyForecasts,
   resolveWeatherInputForDiscount,
 } from "../src/domain/hourlyWeather.ts";
-import { TRAINING_STEPS, type TrainingStep } from "../src/domain/trainingMode.ts";
 import type {
   ActualWeekdayGroup,
   ActualWeekdayLabel,
@@ -108,11 +107,10 @@ function normalGroupRecords(discountTime: DiscountTime, count: number): AreaCoun
   return dates.map((date) => makeRecord({ date, discountTime, count }));
 }
 
-function targetNotice(date: string, discountTime: DiscountTime, trainingStep: TrainingStep) {
+function targetNotice(date: string, discountTime: DiscountTime) {
   return shouldShowHolidayBeforeNormalWeekdayNotice({
     sessionDate: date,
     discountTime,
-    trainingStep,
   });
 }
 
@@ -294,17 +292,15 @@ test("28. 新旧履歴混在時に重複や欠落がない", () => {
   assert.ok(normalized.every((record) => record.actualWeekdayGroup === "翌日平日祝日"));
 });
 
-test("29. 対象日のStep1では専用注意を表示しない", () => {
+test("29. 対象日は全値引時刻で専用注意を表示", () => {
   for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
-    assert.equal(targetNotice("2026-07-20", discountTime, "step1"), false);
+    assert.equal(targetNotice("2026-07-20", discountTime), true);
   }
 });
 
-test("30. 対象日のStep2〜Step8では専用注意を表示", () => {
-  for (const trainingStep of TRAINING_STEPS.filter((step) => step !== "step1")) {
-    assert.equal(targetNotice("2026-07-20", "15", trainingStep), true);
-    assert.equal(targetNotice("2026-07-20", "17", trainingStep), true);
-  }
+test("30. 対象日の専用注意は完成版で常に表示", () => {
+  assert.equal(targetNotice("2026-07-20", "15"), true);
+  assert.equal(targetNotice("2026-07-20", "17"), true);
   const markup = renderToStaticMarkup(createElement(HolidayBeforeNormalWeekdayNotice, { visible: true }));
   assert.ok(markup.includes(HOLIDAY_BEFORE_NORMAL_WEEKDAY_NOTICE_TEXT));
   assert.ok(markup.includes("border:"));
@@ -312,28 +308,28 @@ test("30. 対象日のStep2〜Step8では専用注意を表示", () => {
 });
 
 test("31. 15時でも専用注意を表示", () => {
-  assert.equal(targetNotice("2026-07-20", "15", "step2"), true);
+  assert.equal(targetNotice("2026-07-20", "15"), true);
 });
 
 test("32. 17時以降でも専用注意を表示", () => {
   for (const discountTime of ["17", "18", "19", "20"] as const) {
-    assert.equal(targetNotice("2026-07-20", discountTime, "step8"), true);
+    assert.equal(targetNotice("2026-07-20", discountTime), true);
   }
 });
 
 test("33. 三連休中日の注意と二重表示しない", () => {
-  assert.equal(targetNotice("2026-07-19", "17", "step5"), false);
-  assert.equal(shouldShowThreeDayHolidayMiddleNotice({ sessionDate: "2026-07-19", discountTime: "17", trainingStep: "step5" }), true);
+  assert.equal(targetNotice("2026-07-19", "17"), false);
+  assert.equal(shouldShowThreeDayHolidayMiddleNotice({ sessionDate: "2026-07-19", discountTime: "17" }), true);
 });
 
 test("34. 一般の祝前日注意と二重表示しない", () => {
-  assert.equal(targetNotice("2026-07-20", "17", "step5"), true);
-  assert.equal(shouldShowDayBeforeHolidayNotice({ sessionDate: "2026-07-20", discountTime: "17", trainingStep: "step5" }), false);
+  assert.equal(targetNotice("2026-07-20", "17"), true);
+  assert.equal(shouldShowDayBeforeHolidayNotice({ sessionDate: "2026-07-20", discountTime: "17" }), false);
 });
 
 test("35. 通常日には専用注意を表示しない", () => {
-  assert.equal(targetNotice("2026-07-21", "15", "step5"), false);
-  assert.equal(targetNotice("2026-07-12", "17", "step5"), false);
+  assert.equal(targetNotice("2026-07-21", "15"), false);
+  assert.equal(targetNotice("2026-07-12", "17"), false);
 });
 
 test("36. 基準案内は全時刻で日曜日の同時刻と一致", () => {
@@ -364,7 +360,7 @@ test("37. 表示条件によって値引計算結果は変化しない", () => {
     weekdayBase: "月水" as const,
   };
   const before = getNormalTimeRateDisplay(input);
-  targetNotice("2026-07-20", "17", "step5");
+  targetNotice("2026-07-20", "17");
   const after = getNormalTimeRateDisplay(input);
   assert.deepEqual(after, before);
 

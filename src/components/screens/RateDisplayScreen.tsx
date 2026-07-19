@@ -5,11 +5,7 @@ import type {
   RateDisplayData,
   SkipTargetOption,
 } from "../../domain/types";
-import {
-  STEP4_TEN_OR_MORE_NOTICE_TEXT,
-  type NoticeItemId,
-  type TrainingStepConfig,
-} from "../../domain/trainingMode";
+import { FULL_MODE_NOTICE_ITEMS } from "../../domain/fullMode";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { PrimaryButton } from "../layout/PrimaryButton";
@@ -42,7 +38,6 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
-  trainingStepConfig: TrainingStepConfig;
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
   showThreeDayHolidayMiddleNotice?: boolean;
@@ -102,42 +97,19 @@ function parseManyThresholdInstruction(
 
 function buildRateInstructionSteps(params: {
   rateDisplay: RateDisplayData | null;
-  showManyProductRate: boolean;
-  showManyThresholdRule: boolean;
-  showFewProductRule: boolean;
   manyColor: string;
   normalColor: string;
 }): RateInstructionStep[] {
   const {
     rateDisplay,
-    showManyProductRate,
-    showManyThresholdRule,
-    showFewProductRule,
     manyColor,
     normalColor,
   } = params;
   if (!rateDisplay) return [];
 
-  if (!showManyProductRate) {
-    return [
-      {
-        key: "normal-only",
-        title: (
-          <>
-            このエリアの商品を
-            <br />
-            {rateDisplay.normal.main}値引きしてください。
-          </>
-        ),
-        rateLine: rateDisplay.normal,
-        color: normalColor,
-      },
-    ];
-  }
-
-  const manyThresholdInstruction = showManyThresholdRule
-    ? parseManyThresholdInstruction(rateDisplay.many.note)
-    : null;
+  const manyThresholdInstruction = parseManyThresholdInstruction(
+    rateDisplay.many.note,
+  );
 
   return [
     {
@@ -161,7 +133,7 @@ function buildRateInstructionSteps(params: {
       key: "normal",
       title: (
         <>
-          {showFewProductRule ? "どちらでもない商品" : "多くない商品"}を
+          どちらでもない商品を
           <br />
           {rateDisplay.normal.main}値引きしてください。
         </>
@@ -176,13 +148,11 @@ function RateInstructionCard({
   step,
   currentIndex,
   totalCount,
-  showJudgeHintButton,
   onDone,
 }: {
   step: RateInstructionStep;
   currentIndex: number;
   totalCount: number;
-  showJudgeHintButton: boolean;
   onDone: () => void;
 }) {
   const [showJudgeHint, setShowJudgeHint] = useState(false);
@@ -210,26 +180,24 @@ function RateInstructionCard({
           </div>
         ) : null}
 
-        {showJudgeHintButton ? (
-          <button
-            type="button"
-            onClick={() => setShowJudgeHint(true)}
-            style={{
-              border: 0,
-              background: "transparent",
-              color: "#555",
-              fontSize: 14,
-              fontWeight: 700,
-              textDecoration: "underline",
-              textUnderlineOffset: 3,
-              cursor: "pointer",
-              padding: "4px 0",
-              whiteSpace: "nowrap",
-            }}
-          >
-            迷ったら…
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => setShowJudgeHint(true)}
+          style={{
+            border: 0,
+            background: "transparent",
+            color: "#555",
+            fontSize: 14,
+            fontWeight: 700,
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+            cursor: "pointer",
+            padding: "4px 0",
+            whiteSpace: "nowrap",
+          }}
+        >
+          迷ったら…
+        </button>
       </div>
 
       <div
@@ -268,85 +236,26 @@ function RateInstructionCard({
   );
 }
 
-const NOTICE_ITEMS: Record<NoticeItemId, { content: ReactNode }> = {
-  oneLeftFew: {
-    content: (
-      <>
-        <strong>残り1個</strong>の商品は<strong>「少ない」にする</strong>
-      </>
-    ),
-  },
-  twoLeftNotMany: {
-    content: (
-      <>
-        <strong>残り2個</strong>の商品は<strong>「多い」にしない</strong>
-      </>
-    ),
-  },
-  step4TenOrMoreNotAlwaysMany: {
-    content: <strong>{STEP4_TEN_OR_MORE_NOTICE_TEXT}</strong>,
-  },
-  judgeIncludesTrend: {
-    content: (
-      <>
-        <strong>多い・少ないの判断</strong>は、残り数だけでなく
-        <strong>商品の減り方</strong>も含める
-      </>
-    ),
-  },
-  badAppearancePlus: {
-    content: (
-      <>
-        <strong>見た目が悪い個別商品</strong>は、表示値引率に
-        <strong>+10%</strong>
-      </>
-    ),
-  },
-  unpopularPlus: {
-    content: (
-      <>
-        <strong>不人気な商品</strong>は、表示値引率に<strong>+10%</strong>
-      </>
-    ),
-  },
-  steadyStandardMinus: {
-    content: (
-      <>
-        <strong>定番商品</strong>は、表示値引率から<strong>-10%</strong>
-      </>
-    ),
-  },
-  nightSellerMinus: {
-    content: (
-      <>
-        <strong>夜によく売れる商品</strong>は、表示値引率から
-        <strong>-10%</strong>
-      </>
-    ),
-  },
-  advertisementTrendMinus: {
-    content: (
-      <>
-        <strong>広告商品</strong>は、当日の売れ方を見て、
-        売れ方が順調なら表示値引率から<strong>-10%</strong>
-      </>
-    ),
-  },
-};
-
-export function NoticeItems({ itemIds }: { itemIds: NoticeItemId[] }) {
+export function NoticeItems() {
   return (
     <div style={{ lineHeight: 1.8 }}>
-      {itemIds.map((itemId) => (
-        <div key={itemId}>・{NOTICE_ITEMS[itemId].content}</div>
+      {FULL_MODE_NOTICE_ITEMS.map((segments, itemIndex) => (
+        <div key={itemIndex}>
+          ・
+          {segments.map((segment, segmentIndex) =>
+            segment.emphasis ? (
+              <strong key={segmentIndex}>{segment.text}</strong>
+            ) : (
+              <span key={segmentIndex}>{segment.text}</span>
+            ),
+          )}
+        </div>
       ))}
     </div>
   );
 }
 
-function NoticeSection({ itemIds }: { itemIds: NoticeItemId[] }) {
-  if (itemIds.length === 0) return null;
-
+function NoticeSection() {
   return (
     <section
       style={{
@@ -358,7 +267,7 @@ function NoticeSection({ itemIds }: { itemIds: NoticeItemId[] }) {
       }}
     >
       <div style={{ fontWeight: 800, marginBottom: 8 }}>注意事項</div>
-      <NoticeItems itemIds={itemIds} />
+      <NoticeItems />
     </section>
   );
 }
@@ -372,7 +281,6 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
-  trainingStepConfig,
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
   showThreeDayHolidayMiddleNotice = false,
@@ -400,12 +308,6 @@ export function RateDisplayScreen({
     /を基準に考えて$/,
     "",
   );
-  const showManyProductRate = trainingStepConfig.showManyProductRate;
-  const showManyThresholdRule = trainingStepConfig.showManyThresholdRule;
-  const showFewProductRule = trainingStepConfig.showFewProductRule;
-  const showProductAmountReference =
-    trainingStepConfig.showProductAmountReference;
-  const showAdvancedReference = trainingStepConfig.showAdvancedReference;
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -444,16 +346,9 @@ export function RateDisplayScreen({
     canChooseSkipTarget,
     discountTime,
     rateDisplaySignature,
-    showManyProductRate,
-    showManyThresholdRule,
-    showFewProductRule,
-    showProductAmountReference,
   ]);
   const rateInstructionSteps = buildRateInstructionSteps({
     rateDisplay,
-    showManyProductRate,
-    showManyThresholdRule,
-    showFewProductRule,
     manyColor,
     normalColor,
   });
@@ -495,7 +390,7 @@ export function RateDisplayScreen({
           }
         />
 
-        <NoticeSection itemIds={trainingStepConfig.noticeItemIds} />
+        <NoticeSection />
 
         <PrimaryButton onClick={onConfirmDailyNotice ?? (() => {})}>
           OK
@@ -546,7 +441,7 @@ export function RateDisplayScreen({
         </section>
       ) : null}
 
-      {showAdvancedReference && !isFinalTime ? (
+      {!isFinalTime ? (
         <WeekdayBasePanel
           noticeText={basisGuide.noticeText}
           weekdaySummaryText={basisGuide.weekdaySummaryText}
@@ -584,40 +479,22 @@ export function RateDisplayScreen({
         {!isFinalTime ? (
           <>
             <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
-              {showProductAmountReference ? (
-                <>
-                  <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
-                  <span>を基準に考えて</span>
-                  <br />
-                </>
-              ) : null}
-              {!showManyProductRate ? (
-                <span>
-                  step1では、このエリアの商品は表示値引率で一律に値引きしてください。
-                </span>
-              ) : showFewProductRule ? (
-                <>
-                  <span>各商品の量が「</span>
-                  <span style={{ color: "#ff0000", fontWeight: 700 }}>
-                    多い
-                  </span>
-                  <span>・</span>
-                  <span style={{ color: "#0000ff", fontWeight: 700 }}>
-                    少ない
-                  </span>
-                  <span>・</span>
-                  <span style={{ color: "#008000", fontWeight: 700 }}>
-                    どちらでもない
-                  </span>
-                  <span>」のどれかを確認してください。</span>
-                </>
-              ) : (
-                <>
-                  <span>多い商品だけ表示値引率より強めます。</span>
-                  <br />
-                  <span>多くない商品は表示値引率で値引きしてください。</span>
-                </>
-              )}
+              <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
+              <span>を基準に考えて</span>
+              <br />
+              <span>各商品の量が「</span>
+              <span style={{ color: "#ff0000", fontWeight: 700 }}>
+                多い
+              </span>
+              <span>・</span>
+              <span style={{ color: "#0000ff", fontWeight: 700 }}>
+                少ない
+              </span>
+              <span>・</span>
+              <span style={{ color: "#008000", fontWeight: 700 }}>
+                どちらでもない
+              </span>
+              <span>」のどれかを確認してください。</span>
             </div>
 
             <DayBeforeHolidayNotice visible={showDayBeforeHolidayNotice} />
@@ -633,7 +510,6 @@ export function RateDisplayScreen({
                 step={currentRateInstructionStep}
                 currentIndex={rateInstructionStepIndex}
                 totalCount={rateInstructionSteps.length}
-                showJudgeHintButton={trainingStepConfig.step !== "step1"}
                 onDone={handleRateInstructionDone}
               />
             ) : null}
@@ -749,7 +625,7 @@ export function RateDisplayScreen({
       </div>
 
       {!isFinalTime ? (
-        <NoticeSection itemIds={trainingStepConfig.noticeItemIds} />
+        <NoticeSection />
       ) : null}
 
       <div style={{ marginTop: 16 }}>

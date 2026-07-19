@@ -48,7 +48,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
           onChangeSessionDraft={actions.updateSessionDraft}
           onStart={actions.startSession}
-          trainingStepConfig={derived.trainingStepConfig}
           startButtonLabel={derived.startButtonLabel}
           canStartReview19={derived.canStartReview19Manually && state.sessionDraft.discountTime === "18"}
           onStartReview19={actions.startReview19Manually}
@@ -77,7 +76,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           areaCountAssistEnabled={derived.areaCountAssistEnabled}
           areaCountSameItemLimit={derived.areaCountSameItemLimit}
           finalCountMode={state.session?.discountTime === "20"}
-          trainingStepConfig={derived.trainingStepConfig}
           getAreaCountRecommendation={actions.getCurrentAreaCountRecommendation}
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
@@ -124,7 +122,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
-          trainingStepConfig={derived.trainingStepConfig}
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           showDayBeforeHolidayNotice={derived.showDayBeforeHolidayNotice}
           showThreeDayHolidayMiddleNotice={derived.showThreeDayHolidayMiddleNotice}
@@ -163,7 +160,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
-          trainingStepConfig={derived.trainingStepConfig}
           referenceText={derived.basisGuide.referenceText}
           timeText={derived.timeText}
           canStartReview19={

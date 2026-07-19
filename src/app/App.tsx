@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
-import {
-  parseExplicitTrainingStepFromHash,
-  type TrainingStep,
-} from "../domain/trainingMode";
-import {
-  loadPreferredTrainingStep,
-  savePreferredTrainingStep,
-} from "../domain/adminSettings";
+import { getCanonicalUrlForLegacyHash } from "../domain/fullMode";
 import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
 
 type TestModeConfig = {
@@ -16,15 +9,6 @@ type TestModeConfig = {
   timeLabel: string;
   dateLabel: string;
 };
-
-function getCurrentTrainingStep(): TrainingStep {
-  if (typeof window === "undefined") return "step8";
-
-  return (
-    parseExplicitTrainingStepFromHash(window.location.hash) ??
-    loadPreferredTrainingStep()
-  );
-}
 
 function formatLocalDate(date = new Date()): string {
   const year = date.getFullYear();
@@ -223,33 +207,28 @@ function TestModeBanner({ testMode }: { testMode: TestModeConfig }) {
 
 export default function App() {
   const testMode = getCurrentTestMode();
-  const [trainingStep, setTrainingStep] = useState(getCurrentTrainingStep);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loadedDate] = useState(() => formatLocalDate(testMode?.now));
   const [todayDate, setTodayDate] = useState(() => formatLocalDate(testMode?.now));
-  const app = useNebikiApp({ trainingStep, testNow: testMode?.now ?? null });
+  const app = useNebikiApp({ testNow: testMode?.now ?? null });
   const hasDateChanged = !testMode && todayDate !== loadedDate;
 
   useEffect(() => {
-    const handleHashChange = () => {
-      setTrainingStep(getCurrentTrainingStep());
+    const normalizeLegacyUrl = () => {
+      const canonicalUrl = getCanonicalUrlForLegacyHash({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+      });
+      if (canonicalUrl) {
+        window.history.replaceState(window.history.state, "", canonicalUrl);
+      }
     };
 
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    normalizeLegacyUrl();
+    window.addEventListener("hashchange", normalizeLegacyUrl);
+    return () => window.removeEventListener("hashchange", normalizeLegacyUrl);
   }, []);
-
-  const handleSaveTrainingStep = (nextStep: TrainingStep) => {
-    savePreferredTrainingStep(nextStep);
-
-    if (window.location.hash) {
-      const nextUrl = `${window.location.pathname}${window.location.search}`;
-      window.history.replaceState(window.history.state, "", nextUrl);
-    }
-
-    setTrainingStep(nextStep);
-    setSettingsOpen(false);
-  };
 
   useEffect(() => {
     const updateTodayDate = () => {
@@ -281,12 +260,10 @@ export default function App() {
       />
       {settingsOpen ? (
         <AdminSettingsDialog
-          currentStep={trainingStep}
           review19UnexportedCount={app.derived.review19Export.unexportedCount}
           review19TotalCount={app.derived.review19Export.totalCount}
           onExportReview19Unexported={app.actions.exportReview19Records}
           onExportAllReview19={app.actions.exportAllReview19Records}
-          onSaveStep={handleSaveTrainingStep}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

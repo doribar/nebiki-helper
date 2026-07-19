@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
 import type { DoneSummaryItem } from "../../domain/types";
-import type { TrainingStepConfig } from "../../domain/trainingMode";
 
 type DoneScreenProps = {
   onGoBack: () => void;
@@ -11,7 +10,6 @@ type DoneScreenProps = {
   onStartReview19?: () => void;
   onMarkReview19NotApplicable?: () => void;
   summaryItems: DoneSummaryItem[];
-  trainingStepConfig: TrainingStepConfig;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -90,7 +88,6 @@ export function DoneScreen({
   onStartReview19,
   onMarkReview19NotApplicable,
   summaryItems,
-  trainingStepConfig,
 }: DoneScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
@@ -165,7 +162,7 @@ export function DoneScreen({
             全エリアの値引率
           </div>
 
-          {trainingStepConfig.showProductAmountReference && referenceText && timeText ? (
+          {referenceText && timeText ? (
             <BasisTimeMiniPanel referenceText={referenceText} timeText={timeText} />
           ) : null}
 
@@ -196,25 +193,17 @@ export function DoneScreen({
                   </>
                 ) : (
                   <>
-                    {!trainingStepConfig.showManyProductRate ? (
-                      <div style={{ fontWeight: 800 }}>
-                        表示値引率 → {item.normalRateText ?? item.rateText}
+                    <div style={{ fontWeight: 800 }}>
+                      多い → {item.manyRateText ?? item.rateText}
+                    </div>
+                    {item.manyNote ? (
+                      <div style={{ color: "#666", whiteSpace: "pre-line" }}>
+                        {item.manyNote}
                       </div>
-                    ) : (
-                      <>
-                        <div style={{ fontWeight: 800 }}>
-                          多い → {item.manyRateText ?? item.rateText}
-                        </div>
-                        {trainingStepConfig.showManyThresholdRule && item.manyNote ? (
-                          <div style={{ color: "#666", whiteSpace: "pre-line" }}>
-                            {item.manyNote}
-                          </div>
-                        ) : null}
-                        <div style={{ fontWeight: 800 }}>
-                          {trainingStepConfig.showFewProductRule ? "どちらでもない" : "多くない"} → {item.normalRateText ?? item.rateText}
-                        </div>
-                      </>
-                    )}
+                    ) : null}
+                    <div style={{ fontWeight: 800 }}>
+                      どちらでもない → {item.normalRateText ?? item.rateText}
+                    </div>
                     {item.statusText ? (
                       <div style={{ color: "#666", whiteSpace: "pre-line" }}>
                         {item.statusText}

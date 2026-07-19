@@ -113,8 +113,6 @@ import type {
   AreaCountDecisionBasis,
   AreaCountRecord,
 } from "../domain/areaCountHistory.ts";
-import type { TrainingStep } from "../domain/trainingMode.ts";
-import { getTrainingStepConfig } from "../domain/trainingMode.ts";
 import {
   cloneAreaCountRecords,
   buildAreaCountDecisionBasis,
@@ -897,6 +895,13 @@ export function normalizeLoadedState(
 ): AppState {
   if (!loaded) return createInitialState(initialSessionDraft);
 
+  const loadedWithoutLegacyTrainingFields = { ...loaded } as AppState & {
+    trainingStep?: unknown;
+    trainingStepConfig?: unknown;
+  };
+  delete loadedWithoutLegacyTrainingFields.trainingStep;
+  delete loadedWithoutLegacyTrainingFields.trainingStepConfig;
+
   const areaProgressMap = normalizeAreaProgressMap(loaded.areaProgressMap);
   const currentAreaId = isValidAreaId(loaded.currentAreaId)
     ? loaded.currentAreaId
@@ -919,7 +924,7 @@ export function normalizeLoadedState(
       : normalizeSessionDraft(loaded.sessionDraft);
 
   return {
-    ...loaded,
+    ...loadedWithoutLegacyTrainingFields,
     screen,
     session,
     sessionDraft,
@@ -1453,11 +1458,9 @@ function createReview19WeatherDraft(session: SessionData): SessionDraft {
     },
   };
 }
-export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: Date | null }): UseNebikiAppResult {
+export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppResult {
   setRuntimeNowOverride(params?.testNow ?? null);
   const isTestMode = params?.testNow instanceof Date;
-  const trainingStep = params?.trainingStep ?? "step8";
-  const trainingStepConfig = getTrainingStepConfig(trainingStep);
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
 
   if (!initialPersistenceRef.current) {
@@ -1820,18 +1823,15 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   const showDayBeforeHolidayNotice = shouldShowDayBeforeHolidayNotice({
     sessionDate: activeSessionDate,
     discountTime: sessionSource.discountTime,
-    trainingStep,
   });
   const showThreeDayHolidayMiddleNotice = shouldShowThreeDayHolidayMiddleNotice({
     sessionDate: activeSessionDate,
     discountTime: sessionSource.discountTime,
-    trainingStep,
   });
   const showHolidayBeforeNormalWeekdayNotice =
     shouldShowHolidayBeforeNormalWeekdayNotice({
       sessionDate: activeSessionDate,
       discountTime: sessionSource.discountTime,
-      trainingStep,
     });
 
   const showBentoJudgeGuide =
@@ -1840,7 +1840,6 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
     dailyMessageState.bentoJudgeGuideShownDate !== activeSessionDate;
 
   const showDailyNoticeBeforeRate =
-    trainingStepConfig.noticeItemIds.length > 0 &&
     state.screen === "rate_display" &&
     state.session?.discountTime !== "20" &&
     dailyMessageState.rateNoticeShownDate !== activeSessionDate;
@@ -4007,8 +4006,6 @@ const lateSkipNotice = useMemo(() => {
   return {
     state,
     derived: {
-  trainingStep,
-  trainingStepConfig,
   currentAreaName,
   weekdayText,
   timeText: effectiveTimeText,

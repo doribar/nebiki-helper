@@ -22,10 +22,6 @@ import {
   THREE_DAY_HOLIDAY_MIDDLE_NOTICE_TEXT,
 } from "../src/components/common/DayBeforeHolidayNotice.ts";
 import {
-  TRAINING_STEPS,
-  type TrainingStep,
-} from "../src/domain/trainingMode.ts";
-import {
   createDefaultHourlyForecasts,
   resolveWeatherInputForDiscount,
 } from "../src/domain/hourlyWeather.ts";
@@ -222,81 +218,74 @@ test("18. 新旧形式混在履歴を欠落・増殖なく中央値計算に利�
 function getNoticeVisibility(params: {
   date: string;
   discountTime: DiscountTime;
-  trainingStep: TrainingStep;
 }) {
   return shouldShowDayBeforeHolidayNotice({
     sessionDate: params.date,
     discountTime: params.discountTime,
-    trainingStep: params.trainingStep,
   });
 }
 
 function getMiddleNoticeVisibility(params: {
   date: string;
   discountTime: DiscountTime;
-  trainingStep: TrainingStep;
 }) {
   return shouldShowThreeDayHolidayMiddleNotice({
     sessionDate: params.date,
     discountTime: params.discountTime,
-    trainingStep: params.trainingStep,
   });
 }
 
-test("注意1. 翌日が祝日のStep1・15時では注意文を表示しない", () => {
+test("注意1. 三連休中日の15時では一般注意も専用注意も表示しない", () => {
   const visible = getNoticeVisibility({
     date: "2026-07-19",
     discountTime: "15",
-    trainingStep: "step1",
   });
   assert.equal(visible, false);
+  assert.equal(getMiddleNoticeVisibility({ date: "2026-07-19", discountTime: "15" }), false);
   assert.equal(
     renderToStaticMarkup(createElement(DayBeforeHolidayNotice, { visible })),
     "",
   );
 });
 
-test("注意2. 翌日が祝日のStep1・17時では注意文を表示しない", () => {
+test("注意2. 三連休中日の17時では一般注意を表示しない", () => {
   assert.equal(
     getNoticeVisibility({
       date: "2026-07-19",
       discountTime: "17",
-      trainingStep: "step1",
     }),
     false,
   );
 });
 
-test("注意3. 翌日が祝日のStep1・20時30分では注意文を表示しない", () => {
+test("注意3. 三連休中日の20時30分では専用注意を表示する", () => {
   assert.equal(
-    getNoticeVisibility({
+    getMiddleNoticeVisibility({
       date: "2026-07-19",
       discountTime: "20",
-      trainingStep: "step1",
     }),
-    false,
+    true,
   );
 });
 
-test("注意4. 動作確認用に解決された祝前日でもStep1なら表示しない", () => {
+test("注意4. 動作確認用に解決された祝前日は注意を表示する", () => {
   const resolvedTestDate = "2026-11-02";
   assert.equal(isDayBeforeJapaneseHoliday(resolvedTestDate), true);
   assert.equal(
     getNoticeVisibility({
       date: resolvedTestDate,
       discountTime: "18",
-      trainingStep: "step1",
     }),
-    false,
+    true,
   );
 });
 
-test("注意5. 三連休中日のStep2は一般注意を出さず17時以降に専用注意を表示", () => {
-  assert.equal(getNoticeVisibility({ date: "2026-07-19", discountTime: "15", trainingStep: "step2" }), false);
-  assert.equal(getMiddleNoticeVisibility({ date: "2026-07-19", discountTime: "15", trainingStep: "step2" }), false);
+test("注意5. 三連休中日は一般注意を出さず17時以降に専用注意を表示", () => {
+  assert.equal(getNoticeVisibility({ date: "2026-07-19", discountTime: "15" }), false);
+  assert.equal(getMiddleNoticeVisibility({ date: "2026-07-19", discountTime: "15" }), false);
   for (const discountTime of ["17", "18", "19", "20"] as const) {
-    assert.equal(getNoticeVisibility({ date: "2026-07-19", discountTime, trainingStep: "step2" }), false);
-    assert.equal(getMiddleNoticeVisibility({ date: "2026-07-19", discountTime, trainingStep: "step2" }), true);
+    assert.equal(getNoticeVisibility({ date: "2026-07-19", discountTime }), false);
+    assert.equal(getMiddleNoticeVisibility({ date: "2026-07-19", discountTime }), true);
   }
 
   const markup = renderToStaticMarkup(createElement(DayBeforeHolidayNotice, { visible: true }));
@@ -307,44 +296,39 @@ test("注意5. 三連休中日のStep2は一般注意を出さず17時以降に�
   assert.ok(markup.includes("background:"));
 });
 
-test("注意6. 三連休中日のStep5では専用注意を表示する", () => {
+test("注意6. 三連休中日の19時では専用注意を表示する", () => {
   assert.equal(
     getMiddleNoticeVisibility({
       date: "2026-07-19",
       discountTime: "19",
-      trainingStep: "step5",
     }),
     true,
   );
 });
 
-test("注意7. 三連休中日のStep8では専用注意を表示する", () => {
+test("注意7. 三連休中日の20時30分では専用注意を表示する", () => {
   assert.equal(
     getMiddleNoticeVisibility({
       date: "2026-07-19",
       discountTime: "20",
-      trainingStep: "step8",
     }),
     true,
   );
 });
 
-test("注意8. 通常日は全Step・全値引時刻で表示しない", () => {
-  for (const trainingStep of TRAINING_STEPS) {
-    for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
+test("注意8. 通常日は全値引時刻で表示しない", () => {
+  for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
       assert.equal(
         getNoticeVisibility({
           date: "2026-07-12",
           discountTime,
-          trainingStep,
         }),
         false,
       );
-    }
   }
 });
 
-test("注意9. Step別表示条件は値引計算結果を変更しない", () => {
+test("注意9. 注意表示条件は値引計算結果を変更しない", () => {
   const calculationInput = {
     discountTime: "17" as const,
     weatherBonus: 0,
@@ -358,7 +342,6 @@ test("注意9. Step別表示条件は値引計算結果を変更しない", () =
     getNoticeVisibility({
       date: "2026-07-19",
       discountTime: "17",
-      trainingStep: "step1",
     }),
     false,
   );
@@ -366,7 +349,6 @@ test("注意9. Step別表示条件は値引計算結果を変更しない", () =
     getNoticeVisibility({
       date: "2026-07-19",
       discountTime: "17",
-      trainingStep: "step2",
     }),
     false,
   );
@@ -374,7 +356,6 @@ test("注意9. Step別表示条件は値引計算結果を変更しない", () =
     getMiddleNoticeVisibility({
       date: "2026-07-19",
       discountTime: "17",
-      trainingStep: "step2",
     }),
     true,
   );

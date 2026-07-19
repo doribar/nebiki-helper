@@ -5,7 +5,6 @@ import type {
   AreaJudge,
   SkipTargetOption,
 } from "../../domain/types";
-import type { TrainingStepConfig } from "../../domain/trainingMode";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { JudgeHintDialog } from "../common/JudgeHintDialog";
@@ -41,7 +40,6 @@ type AreaJudgeScreenProps = {
   areaCountAssistEnabled?: boolean;
   areaCountSameItemLimit?: number | null;
   finalCountMode?: boolean;
-  trainingStepConfig: TrainingStepConfig;
   getAreaCountRecommendation?: (count: number) => AreaCountRecommendation;
   onJudge: (
     judge: Exclude<AreaJudge, null>,
@@ -224,7 +222,6 @@ export function AreaJudgeScreen({
   areaCountAssistEnabled = false,
   areaCountSameItemLimit = null,
   finalCountMode = false,
-  trainingStepConfig,
   getAreaCountRecommendation,
   onJudge,
   onSkip,
@@ -287,7 +284,6 @@ export function AreaJudgeScreen({
       ? getAreaCountRecommendation(parsedAreaCount)
       : null;
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
-  const isStep1 = trainingStepConfig.step === "step1";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
 
   const clearAreaCountCalculatorDraft = () => {
@@ -365,11 +361,6 @@ export function AreaJudgeScreen({
     }
 
     if (completedRecommendation?.status === "ready") {
-      onJudge("normal", completedCount);
-      return;
-    }
-
-    if (isStep1 && areaCountAssistEnabled) {
       onJudge("normal", completedCount);
       return;
     }
@@ -697,8 +688,7 @@ export function AreaJudgeScreen({
         {finalCountMode ? null : areaCountAssistEnabled &&
           parsedAreaCount ===
             null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
-          isStep1 ? null : (
-            <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
                   type="button"
@@ -766,8 +756,7 @@ export function AreaJudgeScreen({
                   canUseManualJudge && handleManualAreaCountEvaluation("few")
                 }
               />
-            </div>
-          )
+          </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />

@@ -12,8 +12,8 @@ import {
   saveCalculatorDraft,
 } from '../src/domain/calculatorDraft.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
-import { getTrainingStepConfig, parseExplicitTrainingStepFromHash, parseTrainingStepFromHash } from '../src/domain/trainingMode.ts';
-import { isTrainingStep, isValidAdminPinFormat } from '../src/domain/adminSettings.ts';
+import { isValidAdminPinFormat } from '../src/domain/adminSettings.ts';
+import { FULL_MODE_NOTICE_TEXTS, getCanonicalUrlForLegacyHash } from '../src/domain/fullMode.ts';
 import {
   buildAutomaticDayExportPayload,
   getAutomaticDayExportFilename,
@@ -2832,40 +2832,29 @@ const totalChecks = 92;
 
 
 {
-  assert.equal(parseTrainingStepFromHash('#/step1'), 'step1');
-  assert.equal(parseTrainingStepFromHash('#/step6'), 'step6');
-  assert.equal(parseTrainingStepFromHash('#/step8'), 'step8');
-  assert.equal(parseTrainingStepFromHash(''), 'step8');
-
-  const step2 = getTrainingStepConfig('step2');
-  assert.equal(step2.showProductAmountReference, true);
-  assert.equal(step2.showManyThresholdRule, false);
-
-  const step4 = getTrainingStepConfig('step4');
-  assert.equal(step4.showManyThresholdRule, true);
-  assert.deepEqual(step4.noticeItemIds, [
-    'twoLeftNotMany',
-    'oneLeftFew',
-    'step4TenOrMoreNotAlwaysMany',
-  ]);
-
-  const step5 = getTrainingStepConfig('step5');
-  assert.ok(step5.noticeItemIds.includes('step4TenOrMoreNotAlwaysMany'));
-  assert.ok(step5.noticeItemIds.includes('steadyStandardMinus'));
-  assert.equal(step5.noticeItemIds.includes('badAppearancePlus'), false);
-
-  const step8 = getTrainingStepConfig('step8');
-  assert.equal(step8.showAdvancedReference, true);
-  assert.ok(step8.noticeItemIds.includes('advertisementTrendMinus'));
+  for (const legacyHash of ['#/step1', '#/step4', '#/step8']) {
+    assert.equal(
+      getCanonicalUrlForLegacyHash({
+        pathname: '/app/',
+        search: '?testTime=1700',
+        hash: legacyHash,
+      }),
+      '/app/?testTime=1700',
+    );
+  }
+  assert.equal(
+    getCanonicalUrlForLegacyHash({ pathname: '/app/', search: '', hash: '' }),
+    null,
+  );
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 9);
   passed += 1;
 }
 
 
 {
-  assert.equal(parseExplicitTrainingStepFromHash('#/step3'), 'step3');
-  assert.equal(parseExplicitTrainingStepFromHash(''), null);
-  assert.equal(isTrainingStep('step8'), true);
-  assert.equal(isTrainingStep('step9'), false);
+  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 9);
+  assert.equal(FULL_MODE_NOTICE_TEXTS[0], '残り2個の商品は「多い」にしない');
+  assert.equal(FULL_MODE_NOTICE_TEXTS[8], '広告商品は、当日の売れ方を見て、売れ方が順調なら表示値引率から-10%');
   assert.equal(isValidAdminPinFormat('1234'), true);
   assert.equal(isValidAdminPinFormat('12345678'), true);
   assert.equal(isValidAdminPinFormat('123'), false);
