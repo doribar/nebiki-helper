@@ -11,10 +11,15 @@ import {
 import {
   isDayBeforeJapaneseHoliday,
 } from "../src/domain/japaneseHoliday.ts";
+import { shouldShowDayBeforeHolidayNotice } from "../src/domain/dayBeforeHolidayNotice.ts";
 import {
   DayBeforeHolidayNotice,
   DAY_BEFORE_HOLIDAY_NOTICE_TEXT,
 } from "../src/components/common/DayBeforeHolidayNotice.ts";
+import {
+  TRAINING_STEPS,
+  type TrainingStep,
+} from "../src/domain/trainingMode.ts";
 import {
   createDefaultHourlyForecasts,
   resolveWeatherInputForDiscount,
@@ -209,8 +214,78 @@ test("18. 新旧形式混在履歴を欠落・増殖なく中央値計算に利�
   assert.equal(recommendation.medianCount, 7);
 });
 
-test("注意1. 2026年7月19日は翌日が祝日なので注意文を表示", () => {
-  assert.equal(isDayBeforeJapaneseHoliday("2026-07-19"), true);
+function getNoticeVisibility(params: {
+  date: string;
+  discountTime: DiscountTime;
+  trainingStep: TrainingStep;
+}) {
+  return shouldShowDayBeforeHolidayNotice({
+    sessionDate: params.date,
+    discountTime: params.discountTime,
+    trainingStep: params.trainingStep,
+  });
+}
+
+test("注意1. 翌日が祝日のStep1・15時では注意文を表示しない", () => {
+  const visible = getNoticeVisibility({
+    date: "2026-07-19",
+    discountTime: "15",
+    trainingStep: "step1",
+  });
+  assert.equal(visible, false);
+  assert.equal(
+    renderToStaticMarkup(createElement(DayBeforeHolidayNotice, { visible })),
+    "",
+  );
+});
+
+test("注意2. 翌日が祝日のStep1・17時では注意文を表示しない", () => {
+  assert.equal(
+    getNoticeVisibility({
+      date: "2026-07-19",
+      discountTime: "17",
+      trainingStep: "step1",
+    }),
+    false,
+  );
+});
+
+test("注意3. 翌日が祝日のStep1・20時30分では注意文を表示しない", () => {
+  assert.equal(
+    getNoticeVisibility({
+      date: "2026-07-19",
+      discountTime: "20",
+      trainingStep: "step1",
+    }),
+    false,
+  );
+});
+
+test("注意4. 動作確認用に解決された祝前日でもStep1なら表示しない", () => {
+  const resolvedTestDate = "2026-11-02";
+  assert.equal(isDayBeforeJapaneseHoliday(resolvedTestDate), true);
+  assert.equal(
+    getNoticeVisibility({
+      date: resolvedTestDate,
+      discountTime: "18",
+      trainingStep: "step1",
+    }),
+    false,
+  );
+});
+
+test("注意5. 翌日が祝日のStep2では全値引時刻で既存表示を維持", () => {
+  for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
+    assert.equal(
+      getNoticeVisibility({
+        date: "2026-07-19",
+        discountTime,
+        trainingStep: "step2",
+      }),
+      true,
+    );
+  }
+
   const markup = renderToStaticMarkup(createElement(DayBeforeHolidayNotice, { visible: true }));
   assert.ok(markup.includes(DAY_BEFORE_HOLIDAY_NOTICE_TEXT));
   assert.ok(markup.includes('role="note"'));
@@ -219,24 +294,91 @@ test("注意1. 2026年7月19日は翌日が祝日なので注意文を表示", (
   assert.ok(markup.includes("background:"));
 });
 
-test("注意2. 祝前日の15時・17時以降の全値引時刻で表示条件が有効", () => {
-  for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
-    assert.ok(discountTime);
-    assert.equal(isDayBeforeJapaneseHoliday("2026-07-19"), true);
+test("注意6. 翌日が祝日のStep5では表示する", () => {
+  assert.equal(
+    getNoticeVisibility({
+      date: "2026-07-19",
+      discountTime: "19",
+      trainingStep: "step5",
+    }),
+    true,
+  );
+});
+
+test("注意7. 翌日が祝日のStep8では表示する", () => {
+  assert.equal(
+    getNoticeVisibility({
+      date: "2026-07-19",
+      discountTime: "20",
+      trainingStep: "step8",
+    }),
+    true,
+  );
+});
+
+test("注意8. 通常日は全Step・全値引時刻で表示しない", () => {
+  for (const trainingStep of TRAINING_STEPS) {
+    for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
+      assert.equal(
+        getNoticeVisibility({
+          date: "2026-07-12",
+          discountTime,
+          trainingStep,
+        }),
+        false,
+      );
+    }
   }
 });
 
-test("注意3. 通常日には注意文を表示しない", () => {
-  assert.equal(isDayBeforeJapaneseHoliday("2026-07-12"), false);
-  assert.equal(renderToStaticMarkup(createElement(DayBeforeHolidayNotice, { visible: false })), "");
+test("注意9. Step別表示条件は値引計算結果を変更しない", () => {
+  const calculationInput = {
+    discountTime: "17" as const,
+    weatherBonus: 0,
+    areaJudge: "normal" as const,
+    isSunday: true,
+    ignoreTimeRateCap: false,
+    weekdayBase: "金土" as const,
+  };
+  const withoutNotice = getNormalTimeRateDisplay(calculationInput);
+  assert.equal(
+    getNoticeVisibility({
+      date: "2026-07-19",
+      discountTime: "17",
+      trainingStep: "step1",
+    }),
+    false,
+  );
+  assert.equal(
+    getNoticeVisibility({
+      date: "2026-07-19",
+      discountTime: "17",
+      trainingStep: "step2",
+    }),
+    true,
+  );
+  const withNotice = getNormalTimeRateDisplay(calculationInput);
+  assert.deepEqual(withNotice, withoutNotice);
 });
 
-test("注意4. 動作確認用に解決された日付でも翌日が祝日なら表示", () => {
-  const resolvedTestDate = "2026-11-02";
-  assert.equal(isDayBeforeJapaneseHoliday(resolvedTestDate), true);
+test("注意10. 祝前日の曜日グループは15時が金土日、17時以降が金土のまま", () => {
+  expectGroup({
+    date: "2026-07-19",
+    weekday: 0,
+    discountTime: "15",
+    expected: "金土日",
+  });
+  for (const discountTime of ["17", "18", "19", "20"] as const) {
+    expectGroup({
+      date: "2026-07-19",
+      weekday: 0,
+      discountTime,
+      expected: "金土",
+    });
+  }
 });
 
-test("注意5. 既存の基準曜日・基準時刻案内を維持し、その直下に注意表示を配置", () => {
+test("注意11. 既存文言・表示位置・注意デザインを維持", () => {
   const weather = resolveWeatherInputForDiscount(
     { hourlyForecasts: createDefaultHourlyForecasts(), afterRainSky: null },
     "17",
@@ -248,6 +390,10 @@ test("注意5. 既存の基準曜日・基準時刻案内を維持し、その�
     weather,
   });
   assert.equal(guide.referenceText, "日曜日の17時を基準に考えて");
+  assert.equal(
+    DAY_BEFORE_HOLIDAY_NOTICE_TEXT,
+    "ただし明日は祝日なので、夜の来客を考慮した上で判断してください。",
+  );
 
   const source = readFileSync(
     new URL("../src/components/screens/RateDisplayScreen.tsx", import.meta.url),
@@ -261,24 +407,8 @@ test("注意5. 既存の基準曜日・基準時刻案内を維持し、その�
   assert.ok(instructionIndex > noticeIndex);
 });
 
-test("注意6. 注意文の表示有無は値引計算結果を変更しない", () => {
-  const calculationInput = {
-    discountTime: "17" as const,
-    weatherBonus: 0,
-    areaJudge: "normal" as const,
-    isSunday: true,
-    ignoreTimeRateCap: false,
-    weekdayBase: "金土" as const,
-  };
-  const withoutNotice = getNormalTimeRateDisplay(calculationInput);
-  const showNotice = isDayBeforeJapaneseHoliday("2026-07-19");
-  assert.equal(showNotice, true);
-  const withNotice = getNormalTimeRateDisplay(calculationInput);
-  assert.deepEqual(withNotice, withoutNotice);
-});
-
 if (process.exitCode) {
-  console.error(`\n曜日グループ・祝前日注意テスト: ${passed}/24件成功`);
+  console.error(`\n曜日グループ・祝前日注意テスト: ${passed}/29件成功`);
 } else {
-  console.log(`\n曜日グループ・祝前日注意テスト: ${passed}/24件成功`);
+  console.log(`\n曜日グループ・祝前日注意テスト: ${passed}/29件成功`);
 }

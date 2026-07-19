@@ -537,3 +537,8 @@ Supabase側は `evaluation_source`、`decision_basis`（jsonb）、`data_schema_
 - Step5〜8の共通注意事項をStep4と同じ3項目へ統一した。Step固有の注意事項と値引ロジックは変更していない。
 - アプリ版: `2026.7.18-4`。`dataSchemaVersion` は2のまま。Supabase SQL変更なし、今回の変更に伴う再実行不要。
 - 確認コマンド: `npm run check:logic`、`npm run check:integration`、`npm run check:weekday-groups`、`npm run check:step4-notice`、`npm run check:step5-8-notices`、型チェック、本番ビルド。
+
+## 2026-07-19 Step1祝前日注意の非表示化
+- 祝前日の注意ボックスはStep1では全値引時刻・動作確認モードとも表示せず、Step2〜8では従来どおり表示する。
+- 祝前日の曜日グループ、値引計算、注意文・位置・デザインは変更していない。
+- アプリ版: `2026.7.19-1`。`dataSchemaVersion` は2のまま。Supabase SQL変更なし、今回の変更に伴う再実行不要。
