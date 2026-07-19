@@ -31,6 +31,7 @@ import type {
 } from "../domain/types";
 import {
   shouldShowDayBeforeHolidayNotice,
+  shouldShowHolidayBeforeNormalWeekdayNotice,
   shouldShowThreeDayHolidayMiddleNotice,
 } from "../domain/dayBeforeHolidayNotice.ts";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName } from "../domain/area";
@@ -1826,6 +1827,12 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
     discountTime: sessionSource.discountTime,
     trainingStep,
   });
+  const showHolidayBeforeNormalWeekdayNotice =
+    shouldShowHolidayBeforeNormalWeekdayNotice({
+      sessionDate: activeSessionDate,
+      discountTime: sessionSource.discountTime,
+      trainingStep,
+    });
 
   const showBentoJudgeGuide =
     state.screen === "area_judge" &&
@@ -4019,6 +4026,7 @@ const lateSkipNotice = useMemo(() => {
   showDailyNoticeBeforeRate,
   showDayBeforeHolidayNotice,
   showThreeDayHolidayMiddleNotice,
+  showHolidayBeforeNormalWeekdayNotice,
   areaJudgeSelection,
   isResuming: resumeTargetScreen !== null,
   startButtonLabel: timeSwitchTarget

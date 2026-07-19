@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import {
   addDaysToDateString,
+  isHolidayBeforeNormalWeekday,
   isJapaneseHolidayOrWeekend,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
@@ -786,6 +787,10 @@ export function getBasisGuideDisplay(params: {
     params.discountTime !== "15" &&
     typeof params.date === "string" &&
     isThreeDayHolidayMiddle(params.date);
+  const useHolidayBeforeNormalWeekdayReference =
+    typeof params.date === "string" &&
+    !useThreeDayHolidayMiddleReference &&
+    isHolidayBeforeNormalWeekday(params.date);
 
   return {
     noticeText: resolved.noticeText,
@@ -801,7 +806,9 @@ export function getBasisGuideDisplay(params: {
     bonusTotal: resolved.baseRateBonus,
     referenceText: useThreeDayHolidayMiddleReference
       ? "通常の日曜夜と金曜・土曜夜の中間を基準に考えて"
-      : `${getActualWeekdayText(params.weekday)}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
+      : useHolidayBeforeNormalWeekdayReference
+        ? `日曜日の${getBasisTimeText(params.discountTime)}を基準に考えて`
+        : `${getActualWeekdayText(params.weekday)}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
   };
 }
 

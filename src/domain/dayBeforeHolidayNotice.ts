@@ -1,5 +1,6 @@
 import {
   isDayBeforeJapaneseHoliday,
+  isHolidayBeforeNormalWeekday,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 import type { TrainingStep } from "./trainingMode.ts";
@@ -13,7 +14,20 @@ export function shouldShowDayBeforeHolidayNotice(params: {
   return (
     params.trainingStep !== "step1" &&
     isDayBeforeJapaneseHoliday(params.sessionDate) &&
-    !isThreeDayHolidayMiddle(params.sessionDate)
+    !isThreeDayHolidayMiddle(params.sessionDate) &&
+    !isHolidayBeforeNormalWeekday(params.sessionDate)
+  );
+}
+
+export function shouldShowHolidayBeforeNormalWeekdayNotice(params: {
+  sessionDate: string;
+  discountTime: DiscountTime;
+  trainingStep: TrainingStep;
+}): boolean {
+  return (
+    params.trainingStep !== "step1" &&
+    !isThreeDayHolidayMiddle(params.sessionDate) &&
+    isHolidayBeforeNormalWeekday(params.sessionDate)
   );
 }
 

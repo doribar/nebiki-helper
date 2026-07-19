@@ -16,6 +16,7 @@ import { PrimaryButton } from "../layout/PrimaryButton";
 import { JudgeHintDialog } from "../common/JudgeHintDialog";
 import {
   DayBeforeHolidayNotice,
+  HolidayBeforeNormalWeekdayNotice,
   ThreeDayHolidayMiddleNotice,
 } from "../common/DayBeforeHolidayNotice";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
@@ -45,6 +46,7 @@ type RateDisplayScreenProps = {
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
   showThreeDayHolidayMiddleNotice?: boolean;
+  showHolidayBeforeNormalWeekdayNotice?: boolean;
   onConfirmDailyNotice?: () => void;
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
@@ -374,6 +376,7 @@ export function RateDisplayScreen({
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
   showThreeDayHolidayMiddleNotice = false,
+  showHolidayBeforeNormalWeekdayNotice = false,
   onConfirmDailyNotice,
   finalGuide,
   onNextArea,
@@ -621,6 +624,9 @@ export function RateDisplayScreen({
             <ThreeDayHolidayMiddleNotice
               visible={showThreeDayHolidayMiddleNotice}
             />
+            <HolidayBeforeNormalWeekdayNotice
+              visible={showHolidayBeforeNormalWeekdayNotice}
+            />
 
             {currentRateInstructionStep ? (
               <RateInstructionCard
@@ -641,6 +647,9 @@ export function RateDisplayScreen({
             <DayBeforeHolidayNotice visible={showDayBeforeHolidayNotice} />
             <ThreeDayHolidayMiddleNotice
               visible={showThreeDayHolidayMiddleNotice}
+            />
+            <HolidayBeforeNormalWeekdayNotice
+              visible={showHolidayBeforeNormalWeekdayNotice}
             />
 
             <div style={{ display: "grid", gap: 14, marginTop: 14 }}>

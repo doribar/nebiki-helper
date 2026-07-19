@@ -163,7 +163,8 @@ export type ActualWeekdayGroup =
   | "金土日"
   | "火木日"
   | "金土"
-  | "三連休中日";
+  | "三連休中日"
+  | "翌日平日祝日";
 export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
 export type AreaCountEvaluationSource = "manual" | "history";
 export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
@@ -537,6 +538,7 @@ export type UseNebikiAppDerived = {
   showDailyNoticeBeforeRate: boolean;
   showDayBeforeHolidayNotice: boolean;
   showThreeDayHolidayMiddleNotice: boolean;
+  showHolidayBeforeNormalWeekdayNotice: boolean;
   areaJudgeSelection: AreaJudge;
   isResuming: boolean;
   startButtonLabel?: string;
