@@ -11,6 +11,7 @@ import type {
 import {
   addDaysToDateString,
   isJapaneseHolidayOrWeekend,
+  isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 import { getBaseRate } from "./discount.ts";
 
@@ -781,6 +782,10 @@ export function getBasisGuideDisplay(params: {
   weather: ResolvedWeatherInput;
 }): BasisGuideDisplay {
   const resolved = resolveWeatherEffect(params);
+  const useThreeDayHolidayMiddleReference =
+    params.discountTime !== "15" &&
+    typeof params.date === "string" &&
+    isThreeDayHolidayMiddle(params.date);
 
   return {
     noticeText: resolved.noticeText,
@@ -794,7 +799,9 @@ export function getBasisGuideDisplay(params: {
     bonusResultText: resolved.bonusResultText,
     bonusCalcParts: resolved.bonusCalcParts,
     bonusTotal: resolved.baseRateBonus,
-    referenceText: `${getActualWeekdayText(params.weekday)}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
+    referenceText: useThreeDayHolidayMiddleReference
+      ? "通常の日曜夜と金曜・土曜夜の中間を基準に考えて"
+      : `${getActualWeekdayText(params.weekday)}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
   };
 }
 

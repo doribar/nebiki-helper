@@ -11,10 +11,15 @@ import {
 import {
   isDayBeforeJapaneseHoliday,
 } from "../src/domain/japaneseHoliday.ts";
-import { shouldShowDayBeforeHolidayNotice } from "../src/domain/dayBeforeHolidayNotice.ts";
+import {
+  shouldShowDayBeforeHolidayNotice,
+  shouldShowThreeDayHolidayMiddleNotice,
+} from "../src/domain/dayBeforeHolidayNotice.ts";
 import {
   DayBeforeHolidayNotice,
   DAY_BEFORE_HOLIDAY_NOTICE_TEXT,
+  ThreeDayHolidayMiddleNotice,
+  THREE_DAY_HOLIDAY_MIDDLE_NOTICE_TEXT,
 } from "../src/components/common/DayBeforeHolidayNotice.ts";
 import {
   TRAINING_STEPS,
@@ -114,12 +119,12 @@ test("10. 2026年7月19日の15時は祝前日グループ金土日", () => {
   expectGroup({ date: "2026-07-19", weekday: 0, discountTime: "15", expected: "金土日" });
 });
 
-test("11. 2026年7月19日の17時は祝前日グループ金土", () => {
-  expectGroup({ date: "2026-07-19", weekday: 0, discountTime: "17", expected: "金土" });
+test("11. 2026年7月19日の17時は三連休中日", () => {
+  expectGroup({ date: "2026-07-19", weekday: 0, discountTime: "17", expected: "三連休中日" });
 });
 
-test("12. 2026年7月19日の20時30分は祝前日グループ金土", () => {
-  expectGroup({ date: "2026-07-19", weekday: 0, discountTime: "20", expected: "金土" });
+test("12. 2026年7月19日の20時30分は三連休中日", () => {
+  expectGroup({ date: "2026-07-19", weekday: 0, discountTime: "20", expected: "三連休中日" });
 });
 
 test("13. 平日の祝前日15時は金土日", () => {
@@ -176,7 +181,7 @@ test("16. 旧仕様の日曜17時履歴を火木日として比較に利用", ()
   assert.equal(recommendation.matchedRecords.length, 3);
 });
 
-test("17. 祝前日の旧履歴を日付と時刻から金土へ正規化", () => {
+test("17. 三連休中日の旧履歴を日付と時刻から専用グループへ正規化", () => {
   const [normalized] = normalizeAreaCountRecords([
     makeRecord({
       date: "2026-07-19",
@@ -185,7 +190,7 @@ test("17. 祝前日の旧履歴を日付と時刻から金土へ正規化", () =
       count: 11,
     }),
   ]);
-  assert.equal(normalized.actualWeekdayGroup, "金土");
+  assert.equal(normalized.actualWeekdayGroup, "三連休中日");
 });
 
 test("18. 新旧形式混在履歴を欠落・増殖なく中央値計算に利用", () => {
@@ -220,6 +225,18 @@ function getNoticeVisibility(params: {
   trainingStep: TrainingStep;
 }) {
   return shouldShowDayBeforeHolidayNotice({
+    sessionDate: params.date,
+    discountTime: params.discountTime,
+    trainingStep: params.trainingStep,
+  });
+}
+
+function getMiddleNoticeVisibility(params: {
+  date: string;
+  discountTime: DiscountTime;
+  trainingStep: TrainingStep;
+}) {
+  return shouldShowThreeDayHolidayMiddleNotice({
     sessionDate: params.date,
     discountTime: params.discountTime,
     trainingStep: params.trainingStep,
@@ -274,16 +291,12 @@ test("注意4. 動作確認用に解決された祝前日でもStep1なら表示
   );
 });
 
-test("注意5. 翌日が祝日のStep2では全値引時刻で既存表示を維持", () => {
-  for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
-    assert.equal(
-      getNoticeVisibility({
-        date: "2026-07-19",
-        discountTime,
-        trainingStep: "step2",
-      }),
-      true,
-    );
+test("注意5. 三連休中日のStep2は一般注意を出さず17時以降に専用注意を表示", () => {
+  assert.equal(getNoticeVisibility({ date: "2026-07-19", discountTime: "15", trainingStep: "step2" }), false);
+  assert.equal(getMiddleNoticeVisibility({ date: "2026-07-19", discountTime: "15", trainingStep: "step2" }), false);
+  for (const discountTime of ["17", "18", "19", "20"] as const) {
+    assert.equal(getNoticeVisibility({ date: "2026-07-19", discountTime, trainingStep: "step2" }), false);
+    assert.equal(getMiddleNoticeVisibility({ date: "2026-07-19", discountTime, trainingStep: "step2" }), true);
   }
 
   const markup = renderToStaticMarkup(createElement(DayBeforeHolidayNotice, { visible: true }));
@@ -294,9 +307,9 @@ test("注意5. 翌日が祝日のStep2では全値引時刻で既存表示を維
   assert.ok(markup.includes("background:"));
 });
 
-test("注意6. 翌日が祝日のStep5では表示する", () => {
+test("注意6. 三連休中日のStep5では専用注意を表示する", () => {
   assert.equal(
-    getNoticeVisibility({
+    getMiddleNoticeVisibility({
       date: "2026-07-19",
       discountTime: "19",
       trainingStep: "step5",
@@ -305,9 +318,9 @@ test("注意6. 翌日が祝日のStep5では表示する", () => {
   );
 });
 
-test("注意7. 翌日が祝日のStep8では表示する", () => {
+test("注意7. 三連休中日のStep8では専用注意を表示する", () => {
   assert.equal(
-    getNoticeVisibility({
+    getMiddleNoticeVisibility({
       date: "2026-07-19",
       discountTime: "20",
       trainingStep: "step8",
@@ -355,13 +368,21 @@ test("注意9. Step別表示条件は値引計算結果を変更しない", () =
       discountTime: "17",
       trainingStep: "step2",
     }),
+    false,
+  );
+  assert.equal(
+    getMiddleNoticeVisibility({
+      date: "2026-07-19",
+      discountTime: "17",
+      trainingStep: "step2",
+    }),
     true,
   );
   const withNotice = getNormalTimeRateDisplay(calculationInput);
   assert.deepEqual(withNotice, withoutNotice);
 });
 
-test("注意10. 祝前日の曜日グループは15時が金土日、17時以降が金土のまま", () => {
+test("注意10. 三連休中日は15時が金土日、17時以降が専用グループ", () => {
   expectGroup({
     date: "2026-07-19",
     weekday: 0,
@@ -373,7 +394,7 @@ test("注意10. 祝前日の曜日グループは15時が金土日、17時以降
       date: "2026-07-19",
       weekday: 0,
       discountTime,
-      expected: "金土",
+      expected: "三連休中日",
     });
   }
 });
@@ -389,11 +410,16 @@ test("注意11. 既存文言・表示位置・注意デザインを維持", () =
     discountTime: "17",
     weather,
   });
-  assert.equal(guide.referenceText, "日曜日の17時を基準に考えて");
+  assert.equal(guide.referenceText, "通常の日曜夜と金曜・土曜夜の中間を基準に考えて");
   assert.equal(
     DAY_BEFORE_HOLIDAY_NOTICE_TEXT,
     "ただし明日は祝日なので、夜の来客を考慮した上で判断してください。",
   );
+  const middleMarkup = renderToStaticMarkup(
+    createElement(ThreeDayHolidayMiddleNotice, { visible: true }),
+  );
+  assert.ok(middleMarkup.includes(THREE_DAY_HOLIDAY_MIDDLE_NOTICE_TEXT));
+  assert.ok(middleMarkup.includes('aria-label="三連休中日の注意"'));
 
   const source = readFileSync(
     new URL("../src/components/screens/RateDisplayScreen.tsx", import.meta.url),
@@ -401,10 +427,12 @@ test("注意11. 既存文言・表示位置・注意デザインを維持", () =
   );
   const existingGuideIndex = source.indexOf("」のどれかを確認してください。");
   const noticeIndex = source.indexOf("<DayBeforeHolidayNotice", existingGuideIndex);
+  const middleNoticeIndex = source.indexOf("<ThreeDayHolidayMiddleNotice", noticeIndex);
   const instructionIndex = source.indexOf("{currentRateInstructionStep", existingGuideIndex);
   assert.ok(existingGuideIndex >= 0);
   assert.ok(noticeIndex > existingGuideIndex);
-  assert.ok(instructionIndex > noticeIndex);
+  assert.ok(middleNoticeIndex > noticeIndex);
+  assert.ok(instructionIndex > middleNoticeIndex);
 });
 
 if (process.exitCode) {

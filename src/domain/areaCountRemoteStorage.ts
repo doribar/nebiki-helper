@@ -81,6 +81,15 @@ function rowToRecord(row: AreaCountRecordRow): Partial<AreaCountRecord> {
   } as Partial<AreaCountRecord>;
 }
 
+export function normalizeRemoteAreaCountRows(raw: unknown): AreaCountRecord[] {
+  if (!Array.isArray(raw)) return [];
+  return normalizeAreaCountRecords(
+    raw
+      .filter((row): row is AreaCountRecordRow => Boolean(row) && typeof row === "object")
+      .map(rowToRecord),
+  );
+}
+
 function recordToRow(record: AreaCountRecord): AreaCountRecordRow {
   return {
     data_schema_version: record.dataSchemaVersion ?? null,
@@ -120,8 +129,7 @@ export async function loadRemoteAreaCountRecords(): Promise<RemoteAreaCountLoadR
       return { status: "error", message: `HTTP ${response.status}` };
     }
 
-    const rows = (await response.json()) as AreaCountRecordRow[];
-    const records = normalizeAreaCountRecords(rows.map(rowToRecord));
+    const records = normalizeRemoteAreaCountRows(await response.json());
 
     return { status: "ready", records };
   } catch (error) {

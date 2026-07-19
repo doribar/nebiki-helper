@@ -14,7 +14,10 @@ import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { JudgeHintDialog } from "../common/JudgeHintDialog";
-import { DayBeforeHolidayNotice } from "../common/DayBeforeHolidayNotice";
+import {
+  DayBeforeHolidayNotice,
+  ThreeDayHolidayMiddleNotice,
+} from "../common/DayBeforeHolidayNotice";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
 
@@ -41,6 +44,7 @@ type RateDisplayScreenProps = {
   trainingStepConfig: TrainingStepConfig;
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
+  showThreeDayHolidayMiddleNotice?: boolean;
   onConfirmDailyNotice?: () => void;
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
@@ -369,6 +373,7 @@ export function RateDisplayScreen({
   trainingStepConfig,
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
+  showThreeDayHolidayMiddleNotice = false,
   onConfirmDailyNotice,
   finalGuide,
   onNextArea,
@@ -388,7 +393,10 @@ export function RateDisplayScreen({
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
   const normalColor = "#008000";
-  const productAmountReferenceText = `${weekdayText}の${timeText}`;
+  const productAmountReferenceText = basisGuide.referenceText.replace(
+    /を基準に考えて$/,
+    "",
+  );
   const showManyProductRate = trainingStepConfig.showManyProductRate;
   const showManyThresholdRule = trainingStepConfig.showManyThresholdRule;
   const showFewProductRule = trainingStepConfig.showFewProductRule;
@@ -610,6 +618,9 @@ export function RateDisplayScreen({
             </div>
 
             <DayBeforeHolidayNotice visible={showDayBeforeHolidayNotice} />
+            <ThreeDayHolidayMiddleNotice
+              visible={showThreeDayHolidayMiddleNotice}
+            />
 
             {currentRateInstructionStep ? (
               <RateInstructionCard
@@ -628,6 +639,9 @@ export function RateDisplayScreen({
             </div>
 
             <DayBeforeHolidayNotice visible={showDayBeforeHolidayNotice} />
+            <ThreeDayHolidayMiddleNotice
+              visible={showThreeDayHolidayMiddleNotice}
+            />
 
             <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
               {finalInstructionSteps.map((step) => (

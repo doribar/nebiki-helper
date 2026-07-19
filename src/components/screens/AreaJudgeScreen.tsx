@@ -199,6 +199,10 @@ function BasisTimeMiniPanel({
 function getComparisonNotice(
   recommendation: AreaCountRecommendation,
 ): string | null {
+  if (recommendation.comparisonMode === "three_day_holiday_middle") {
+    return "※三連休中日のため、火木日と金土を別々に集計した50対50の中間基準で判定しています。";
+  }
+
   if (recommendation.comparisonMode !== "fallback_group") return null;
 
   const group = recommendation.actualWeekdayGroup ?? "暫定グループ";

@@ -127,6 +127,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           trainingStepConfig={derived.trainingStepConfig}
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           showDayBeforeHolidayNotice={derived.showDayBeforeHolidayNotice}
+          showThreeDayHolidayMiddleNotice={derived.showThreeDayHolidayMiddleNotice}
           onConfirmDailyNotice={actions.confirmDailyNotice}
           finalGuide={derived.finalGuide ?? undefined}
           onNextArea={actions.goToNextArea}

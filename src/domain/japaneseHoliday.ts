@@ -167,3 +167,26 @@ export function isWeekendDate(dateString: string): boolean {
 export function isJapaneseHolidayOrWeekend(dateString: string): boolean {
   return isWeekendDate(dateString) || isJapaneseHolidayOrObserved(dateString);
 }
+
+/**
+ * 土日・祝日・振替休日がちょうど3日だけ連続する場合の中央日かを返す。
+ * 前後2日まで確認することで、4日以上の連続休日は対象外にする。
+ */
+export function isThreeDayHolidayMiddle(dateString: string): boolean {
+  if (!parseDateString(dateString)) return false;
+
+  const previousDate = addDaysToDateString(dateString, -1);
+  const nextDate = addDaysToDateString(dateString, 1);
+  if (
+    !isJapaneseHolidayOrWeekend(previousDate) ||
+    !isJapaneseHolidayOrWeekend(dateString) ||
+    !isJapaneseHolidayOrWeekend(nextDate)
+  ) {
+    return false;
+  }
+
+  return (
+    !isJapaneseHolidayOrWeekend(addDaysToDateString(dateString, -2)) &&
+    !isJapaneseHolidayOrWeekend(addDaysToDateString(dateString, 2))
+  );
+}

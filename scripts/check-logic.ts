@@ -504,7 +504,7 @@ let passed = 0;
   try {
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '15', date: '2026-07-05' }), '金土日');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-05' }), '火木日');
-    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-19' }), '金土');
+    assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: '17', date: '2026-07-19' }), '三連休中日');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '15', date: '2026-07-20' }), '月水');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-07-20' }), '月水');
     assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 1, discountTime: '17', date: '2026-11-02' }), '金土');

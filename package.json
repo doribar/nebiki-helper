@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.7.19-1",
+  "version": "2026.7.19-2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "check:logic": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-logic.ts",
     "check:integration": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-integration.ts",
     "check:weekday-groups": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-weekday-groups.ts",
+    "check:three-day-holiday-middle": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-three-day-holiday-middle.ts",
     "check:step4-notice": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-step4-notice.ts",
     "check:step5-8-notices": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/check-step5-8-notices.ts"
   },

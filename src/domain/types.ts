@@ -157,7 +157,13 @@ export type FlowMode = "normal" | "pending";
 
 export type WeekdayBaseLabel = "日" | "金土" | "火木" | "月水";
 export type ActualWeekdayLabel = "日" | "月" | "火" | "水" | "木" | "金" | "土";
-export type ActualWeekdayGroup = "月水" | "火木" | "金土日" | "火木日" | "金土";
+export type ActualWeekdayGroup =
+  | "月水"
+  | "火木"
+  | "金土日"
+  | "火木日"
+  | "金土"
+  | "三連休中日";
 export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
 export type AreaCountEvaluationSource = "manual" | "history";
 export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
@@ -530,6 +536,7 @@ export type UseNebikiAppDerived = {
   areaCountSameItemLimit: number | null;
   showDailyNoticeBeforeRate: boolean;
   showDayBeforeHolidayNotice: boolean;
+  showThreeDayHolidayMiddleNotice: boolean;
   areaJudgeSelection: AreaJudge;
   isResuming: boolean;
   startButtonLabel?: string;

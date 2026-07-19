@@ -29,7 +29,10 @@ import type {
   DailySessionSnapshot,
   Review19DayCheckSnapshot,
 } from "../domain/types";
-import { shouldShowDayBeforeHolidayNotice } from "../domain/dayBeforeHolidayNotice.ts";
+import {
+  shouldShowDayBeforeHolidayNotice,
+  shouldShowThreeDayHolidayMiddleNotice,
+} from "../domain/dayBeforeHolidayNotice.ts";
 import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName } from "../domain/area";
 import {
   getBasisGuideDisplay,
@@ -1814,6 +1817,11 @@ export function useNebikiApp(params?: { trainingStep?: TrainingStep; testNow?: D
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
   const activeSessionDate = state.session?.date ?? state.sessionDraft.date;
   const showDayBeforeHolidayNotice = shouldShowDayBeforeHolidayNotice({
+    sessionDate: activeSessionDate,
+    discountTime: sessionSource.discountTime,
+    trainingStep,
+  });
+  const showThreeDayHolidayMiddleNotice = shouldShowThreeDayHolidayMiddleNotice({
     sessionDate: activeSessionDate,
     discountTime: sessionSource.discountTime,
     trainingStep,
@@ -4010,6 +4018,7 @@ const lateSkipNotice = useMemo(() => {
   areaCountSameItemLimit,
   showDailyNoticeBeforeRate,
   showDayBeforeHolidayNotice,
+  showThreeDayHolidayMiddleNotice,
   areaJudgeSelection,
   isResuming: resumeTargetScreen !== null,
   startButtonLabel: timeSwitchTarget

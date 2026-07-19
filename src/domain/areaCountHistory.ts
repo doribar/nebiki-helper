@@ -13,9 +13,15 @@ import {
   addDaysToDateString,
   isDayBeforeJapaneseHoliday,
   isJapaneseHolidayOrObserved,
+  isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
+
+export type AreaCountComparisonMode =
+  | "weekday"
+  | "fallback_group"
+  | "three_day_holiday_middle";
 
 export const AREA_COUNT_DECISION_RULE_VERSION = "area_count_median_v1" as const;
 
@@ -25,7 +31,7 @@ export type AreaCountDecisionBasis = {
   recommendationStatus: AreaCountRecommendation["status"];
   actualWeekday?: ActualWeekdayLabel;
   actualWeekdayGroup?: ActualWeekdayGroup;
-  comparisonMode?: "weekday" | "fallback_group";
+  comparisonMode?: AreaCountComparisonMode;
   sampleSize: number;
   requiredSampleSize: number;
   medianCount?: number;
@@ -103,7 +109,14 @@ export type AreaCountRecommendation = {
   matchedRecords: AreaCountRecord[];
   actualWeekday?: ActualWeekdayLabel;
   actualWeekdayGroup?: ActualWeekdayGroup;
-  comparisonMode?: "weekday" | "fallback_group";
+  comparisonMode?: AreaCountComparisonMode;
+  threeDayHolidayMiddleReference?: {
+    fireThursdaySundaySampleSize: number;
+    fridaySaturdaySampleSize: number;
+    fireThursdaySundayMedianCount?: number;
+    fridaySaturdayMedianCount?: number;
+    adoptedSource: "both" | "火木日" | "金土" | "none";
+  };
   medianCount?: number;
   shortMedianCount?: number;
   longMedianCount?: number;
@@ -187,6 +200,14 @@ export function getAreaCountFallbackWeekdayGroup(params: {
   date?: string | null;
 }): ActualWeekdayGroup {
   const dateString = typeof params.date === "string" ? params.date : null;
+  if (
+    dateString !== null &&
+    params.discountTime !== "15" &&
+    isThreeDayHolidayMiddle(dateString)
+  ) {
+    return "三連休中日";
+  }
+
   if (dateString !== null && isDayBeforeJapaneseHoliday(dateString)) {
     return params.discountTime === "15" ? "金土日" : "金土";
   }
@@ -315,7 +336,8 @@ function isActualWeekdayGroup(value: unknown): value is ActualWeekdayGroup {
     value === "火木" ||
     value === "金土日" ||
     value === "火木日" ||
-    value === "金土"
+    value === "金土" ||
+    value === "三連休中日"
   );
 }
 
@@ -333,8 +355,12 @@ function isRecommendationStatus(
   return value === "disabled" || value === "insufficient" || value === "ready";
 }
 
-function isComparisonMode(value: unknown): value is "weekday" | "fallback_group" {
-  return value === "weekday" || value === "fallback_group";
+function isComparisonMode(value: unknown): value is AreaCountComparisonMode {
+  return (
+    value === "weekday" ||
+    value === "fallback_group" ||
+    value === "three_day_holiday_middle"
+  );
 }
 
 function isDecreaseAdjustmentDirection(value: unknown): value is DecreaseAdjustmentDirection {
@@ -348,6 +374,11 @@ function normalizeFiniteNumber(value: unknown): number | undefined {
 function normalizeNonNegativeInteger(value: unknown): number | undefined {
   const numberValue = normalizeFiniteNumber(value);
   return numberValue === undefined || numberValue < 0 ? undefined : Math.round(numberValue);
+}
+
+function normalizeNonNegativeNumber(value: unknown): number | undefined {
+  const numberValue = normalizeFiniteNumber(value);
+  return numberValue === undefined || numberValue < 0 ? undefined : numberValue;
 }
 
 export function normalizeAreaCountDecisionBasis(
@@ -401,21 +432,21 @@ export function normalizeAreaCountDecisionBasis(
     comparisonMode: isComparisonMode(basis.comparisonMode) ? basis.comparisonMode : undefined,
     sampleSize,
     requiredSampleSize,
-    medianCount: normalizeNonNegativeInteger(basis.medianCount),
-    shortMedianCount: normalizeNonNegativeInteger(basis.shortMedianCount),
-    longMedianCount: normalizeNonNegativeInteger(basis.longMedianCount),
+    medianCount: normalizeNonNegativeNumber(basis.medianCount),
+    shortMedianCount: normalizeNonNegativeNumber(basis.shortMedianCount),
+    longMedianCount: normalizeNonNegativeNumber(basis.longMedianCount),
     shortSampleSize: normalizeNonNegativeInteger(basis.shortSampleSize),
     longSampleSize: normalizeNonNegativeInteger(basis.longSampleSize),
     medianDownGuardApplied:
       typeof basis.medianDownGuardApplied === "boolean"
         ? basis.medianDownGuardApplied
         : undefined,
-    smallDifferenceThreshold: normalizeNonNegativeInteger(basis.smallDifferenceThreshold),
-    largeDifferenceThreshold: normalizeNonNegativeInteger(basis.largeDifferenceThreshold),
-    lowerLargeThreshold: normalizeNonNegativeInteger(basis.lowerLargeThreshold),
-    lowerSmallThreshold: normalizeNonNegativeInteger(basis.lowerSmallThreshold),
-    upperSmallThreshold: normalizeNonNegativeInteger(basis.upperSmallThreshold),
-    upperLargeThreshold: normalizeNonNegativeInteger(basis.upperLargeThreshold),
+    smallDifferenceThreshold: normalizeNonNegativeNumber(basis.smallDifferenceThreshold),
+    largeDifferenceThreshold: normalizeNonNegativeNumber(basis.largeDifferenceThreshold),
+    lowerLargeThreshold: normalizeNonNegativeNumber(basis.lowerLargeThreshold),
+    lowerSmallThreshold: normalizeNonNegativeNumber(basis.lowerSmallThreshold),
+    upperSmallThreshold: normalizeNonNegativeNumber(basis.upperSmallThreshold),
+    upperLargeThreshold: normalizeNonNegativeNumber(basis.upperLargeThreshold),
     baseEvaluation: isAreaCountEvaluation(basis.baseEvaluation)
       ? basis.baseEvaluation
       : undefined,
@@ -815,6 +846,19 @@ function getLatestRecord(records: AreaCountRecord[], params: {
   return matches.sort((a, b) => a.recordedAt.localeCompare(b.recordedAt)).at(-1) ?? null;
 }
 
+type ReferenceRecords = {
+  matchedRecords: AreaCountRecord[];
+  longMatchedRecords: AreaCountRecord[];
+  comparisonMode: AreaCountComparisonMode;
+  weekdaySampleSize: number;
+  fallbackSampleSize: number;
+  forceFallbackWeekdayGroup: boolean;
+  hasValidReference: boolean;
+  threeDayHolidayMiddleReference?: NonNullable<
+    AreaCountRecommendation["threeDayHolidayMiddleReference"]
+  >;
+};
+
 function getReferenceRecords(params: {
   records: AreaCountRecord[];
   areaId: AreaId;
@@ -822,14 +866,7 @@ function getReferenceRecords(params: {
   actualWeekday: ActualWeekdayLabel;
   fallbackWeekdayGroup: ActualWeekdayGroup;
   forceFallbackWeekdayGroup: boolean;
-}): {
-  matchedRecords: AreaCountRecord[];
-  longMatchedRecords: AreaCountRecord[];
-  comparisonMode: "weekday" | "fallback_group";
-  weekdaySampleSize: number;
-  fallbackSampleSize: number;
-  forceFallbackWeekdayGroup: boolean;
-} {
+}): ReferenceRecords {
   const sameWeekdayAllRecords = params.records
     .filter((record) => {
       return (
@@ -848,6 +885,7 @@ function getReferenceRecords(params: {
       weekdaySampleSize: sameWeekdayAllRecords.length,
       fallbackSampleSize: 0,
       forceFallbackWeekdayGroup: false,
+      hasValidReference: true,
     };
   }
 
@@ -868,13 +906,14 @@ function getReferenceRecords(params: {
     weekdaySampleSize: sameWeekdayAllRecords.length,
     fallbackSampleSize: fallbackAllRecords.length,
     forceFallbackWeekdayGroup: params.forceFallbackWeekdayGroup,
+    hasValidReference: fallbackAllRecords.length >= REQUIRED_SAMPLE_SIZE,
   };
 }
 
 function getGuardedReferenceMedian(params: {
   shortRecords: AreaCountRecord[];
   longRecords: AreaCountRecord[];
-  comparisonMode: "weekday" | "fallback_group";
+  comparisonMode: Exclude<AreaCountComparisonMode, "three_day_holiday_middle">;
 }): {
   shortMedianCount: number;
   longMedianCount: number;
@@ -913,6 +952,119 @@ function getGuardedReferenceMedian(params: {
     longMedianCount,
     adoptedMedianCount: guardedMedianCount,
     medianDownGuardApplied: guardedMedianCount !== shortMedianCount,
+  };
+}
+
+type ReferenceMedian = ReturnType<typeof getGuardedReferenceMedian>;
+
+function getThreeDayHolidayMiddleReference(params: {
+  records: AreaCountRecord[];
+  areaId: AreaId;
+  discountTime: AreaCountDiscountTime;
+  actualWeekday: ActualWeekdayLabel;
+}): { reference: ReferenceRecords; referenceMedian?: ReferenceMedian } {
+  const getGroupReference = (fallbackWeekdayGroup: ActualWeekdayGroup) =>
+    getReferenceRecords({
+      records: params.records,
+      areaId: params.areaId,
+      discountTime: params.discountTime,
+      actualWeekday: params.actualWeekday,
+      fallbackWeekdayGroup,
+      forceFallbackWeekdayGroup: true,
+    });
+
+  const fireThursdaySundayReference = getGroupReference("火木日");
+  const fridaySaturdayReference = getGroupReference("金土");
+  const fireThursdaySundayValid = fireThursdaySundayReference.hasValidReference;
+  const fridaySaturdayValid = fridaySaturdayReference.hasValidReference;
+
+  const fireThursdaySundayMedian = fireThursdaySundayValid
+    ? getGuardedReferenceMedian({
+        shortRecords: fireThursdaySundayReference.matchedRecords,
+        longRecords: fireThursdaySundayReference.longMatchedRecords,
+        comparisonMode: "fallback_group",
+      })
+    : undefined;
+  const fridaySaturdayMedian = fridaySaturdayValid
+    ? getGuardedReferenceMedian({
+        shortRecords: fridaySaturdayReference.matchedRecords,
+        longRecords: fridaySaturdayReference.longMatchedRecords,
+        comparisonMode: "fallback_group",
+      })
+    : undefined;
+
+  const adoptedSource =
+    fireThursdaySundayMedian && fridaySaturdayMedian
+      ? "both"
+      : fireThursdaySundayMedian
+        ? "火木日"
+        : fridaySaturdayMedian
+          ? "金土"
+          : "none";
+  const validReferences = [
+    fireThursdaySundayMedian
+      ? { reference: fireThursdaySundayReference, median: fireThursdaySundayMedian }
+      : null,
+    fridaySaturdayMedian
+      ? { reference: fridaySaturdayReference, median: fridaySaturdayMedian }
+      : null,
+  ].filter((item): item is { reference: ReferenceRecords; median: ReferenceMedian } => item !== null);
+
+  const insufficientReference =
+    fireThursdaySundayReference.fallbackSampleSize >= fridaySaturdayReference.fallbackSampleSize
+      ? fireThursdaySundayReference
+      : fridaySaturdayReference;
+  const matchedRecords = validReferences.length > 0
+    ? validReferences
+        .flatMap((item) => item.reference.matchedRecords)
+        .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    : insufficientReference.matchedRecords;
+  const longMatchedRecords = validReferences.length > 0
+    ? validReferences
+        .flatMap((item) => item.reference.longMatchedRecords)
+        .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    : insufficientReference.longMatchedRecords;
+
+  const combineValidMedians = (
+    selector: (median: ReferenceMedian) => number,
+  ): number | undefined => {
+    if (validReferences.length === 0) return undefined;
+    return validReferences.reduce((sum, item) => sum + selector(item.median), 0) /
+      validReferences.length;
+  };
+
+  const referenceMedian = validReferences.length > 0
+    ? {
+        shortMedianCount: combineValidMedians((median) => median.shortMedianCount) as number,
+        longMedianCount: combineValidMedians((median) => median.longMedianCount) as number,
+        adoptedMedianCount: combineValidMedians((median) => median.adoptedMedianCount) as number,
+        medianDownGuardApplied: validReferences.some(
+          (item) => item.median.medianDownGuardApplied,
+        ),
+      }
+    : undefined;
+
+  return {
+    reference: {
+      matchedRecords,
+      longMatchedRecords,
+      comparisonMode: "three_day_holiday_middle",
+      weekdaySampleSize: 0,
+      fallbackSampleSize: Math.max(
+        fireThursdaySundayReference.fallbackSampleSize,
+        fridaySaturdayReference.fallbackSampleSize,
+      ),
+      forceFallbackWeekdayGroup: true,
+      hasValidReference: validReferences.length > 0,
+      threeDayHolidayMiddleReference: {
+        fireThursdaySundaySampleSize: fireThursdaySundayReference.fallbackSampleSize,
+        fridaySaturdaySampleSize: fridaySaturdayReference.fallbackSampleSize,
+        fireThursdaySundayMedianCount: fireThursdaySundayMedian?.adoptedMedianCount,
+        fridaySaturdayMedianCount: fridaySaturdayMedian?.adoptedMedianCount,
+        adoptedSource,
+      },
+    },
+    referenceMedian,
   };
 }
 
@@ -1072,7 +1224,15 @@ export function getAreaCountRecommendation(params: {
     ...historicalRecords,
     ...getCurrentDateAreaCountRecords(normalizedRecords, date),
   ];
-  const reference = getReferenceRecords({
+  const middleReferenceResult = actualWeekdayGroup === "三連休中日"
+    ? getThreeDayHolidayMiddleReference({
+        records: historicalRecords,
+        areaId,
+        discountTime,
+        actualWeekday,
+      })
+    : null;
+  const reference = middleReferenceResult?.reference ?? getReferenceRecords({
     records: historicalRecords,
     areaId,
     discountTime,
@@ -1082,7 +1242,8 @@ export function getAreaCountRecommendation(params: {
   });
   const { matchedRecords, comparisonMode } = reference;
 
-  if (matchedRecords.length < requiredSampleSize) {
+  if (!reference.hasValidReference) {
+    const middleReference = reference.threeDayHolidayMiddleReference;
     return {
       status: "insufficient",
       count,
@@ -1092,29 +1253,73 @@ export function getAreaCountRecommendation(params: {
       actualWeekday,
       actualWeekdayGroup,
       comparisonMode,
+      threeDayHolidayMiddleReference: middleReference,
       summaryText: `過去データ ${matchedRecords.length}/${requiredSampleSize}件`,
-      detailLines: [
-        `今日の曜日：${actualWeekday}`,
-        `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
-        `暫定グループ（${actualWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
-        reference.forceFallbackWeekdayGroup
-          ? "祝日まわりのため、通常曜日データではなく暫定グループで判定します。"
-          : "同じエリア・同じ時刻・同じ曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
-        `今回の${count}個も、判定後に履歴へ保存されます。`,
-      ],
+      detailLines: comparisonMode === "three_day_holiday_middle" && middleReference
+        ? [
+            `今日の曜日：${actualWeekday}`,
+            `火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件`,
+            `金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件`,
+            "三連休中日は、火木日と金土を別々に集計し、有効な基準ができるまで従来の履歴不足扱いにします。",
+            `今回の${count}個も、判定後に履歴へ保存されます。`,
+          ]
+        : [
+            `今日の曜日：${actualWeekday}`,
+            `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+            `暫定グループ（${actualWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
+            reference.forceFallbackWeekdayGroup
+              ? "祝日まわりのため、通常曜日データではなく暫定グループで判定します。"
+              : "同じエリア・同じ時刻・同じ曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
+            `今回の${count}個も、判定後に履歴へ保存されます。`,
+          ],
     };
   }
 
-  const referenceMedian = getGuardedReferenceMedian({
+  const referenceMedian = middleReferenceResult?.referenceMedian ?? getGuardedReferenceMedian({
     shortRecords: matchedRecords,
     longRecords: reference.longMatchedRecords,
-    comparisonMode,
+    comparisonMode: comparisonMode as Exclude<
+      AreaCountComparisonMode,
+      "three_day_holiday_middle"
+    >,
   });
+  if (!referenceMedian) {
+    throw new Error("有効な残数比較基準がありません。");
+  }
   const medianCount = referenceMedian.adoptedMedianCount;
   const baseEvaluationInfo = getEvaluationFromCount({
     count,
     referenceCount: medianCount,
   });
+  const middleReference = reference.threeDayHolidayMiddleReference;
+  const comparisonConditionLine = comparisonMode === "weekday"
+    ? `比較条件：同じ曜日（${actualWeekday}）`
+    : comparisonMode === "three_day_holiday_middle"
+      ? "比較条件：通常の日曜夜（火木日）と金曜・土曜夜（金土）の中間"
+      : `比較条件：暫定グループ（${actualWeekdayGroup}）`;
+  const referenceSelectionLines = comparisonMode === "three_day_holiday_middle" && middleReference
+    ? [
+        `火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fireThursdaySundayMedianCount ?? "なし"}個）`,
+        `金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fridaySaturdayMedianCount ?? "なし"}個）`,
+        middleReference.adoptedSource === "both"
+          ? `両グループを50対50で合成し、採用基準を${medianCount}個とします。`
+          : `${middleReference.adoptedSource}だけに有効な基準があるため、${medianCount}個を採用します。`,
+      ]
+    : [
+        `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+        reference.forceFallbackWeekdayGroup
+          ? "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
+          : "通常日は同じ曜日の記録を優先し、足りない時だけ暫定グループを採用。",
+        comparisonMode === "weekday"
+          ? `短期中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
+          : `暫定中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
+        comparisonMode === "weekday"
+          ? `長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
+          : "暫定グループは短期中央値で判定",
+        referenceMedian.medianDownGuardApplied
+          ? `短期が長期より少ないため、基準を下げすぎないように${medianCount}個で判定。`
+          : `採用基準：${medianCount}個`,
+      ];
 
   if (discountTime === "20") {
     const suggestedEvaluation = baseEvaluationInfo.evaluation;
@@ -1135,6 +1340,7 @@ export function getAreaCountRecommendation(params: {
       actualWeekday,
       actualWeekdayGroup,
       comparisonMode,
+      threeDayHolidayMiddleReference: middleReference,
       medianCount,
       shortMedianCount: referenceMedian.shortMedianCount,
       longMedianCount: referenceMedian.longMedianCount,
@@ -1154,22 +1360,8 @@ export function getAreaCountRecommendation(params: {
       summaryText: finalTierDirection,
       detailLines: [
         `今日の曜日：${actualWeekday}`,
-        comparisonMode === "weekday"
-          ? `比較条件：同じ曜日（${actualWeekday}）`
-          : `比較条件：暫定グループ（${actualWeekdayGroup}）`,
-        `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
-        reference.forceFallbackWeekdayGroup
-          ? "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
-          : "通常日は同じ曜日の記録を優先し、足りない時だけ暫定グループを採用。",
-        comparisonMode === "weekday"
-          ? `短期中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
-          : `暫定中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
-        comparisonMode === "weekday"
-          ? `長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
-          : "暫定グループは短期中央値で判定",
-        referenceMedian.medianDownGuardApplied
-          ? `短期が長期より少ないため、基準を下げすぎないように${medianCount}個で判定。`
-          : `採用基準：${medianCount}個`,
+        comparisonConditionLine,
+        ...referenceSelectionLines,
         `中央値より下寄り：${baseEvaluationInfo.lowerSmallThreshold}個以下`,
         `中央値付近：${baseEvaluationInfo.lowerSmallThreshold + 1}〜${baseEvaluationInfo.upperSmallThreshold - 1}個`,
         `中央値より上寄り：${baseEvaluationInfo.upperSmallThreshold}個以上`,
@@ -1205,6 +1397,7 @@ export function getAreaCountRecommendation(params: {
     actualWeekday,
     actualWeekdayGroup,
     comparisonMode,
+    threeDayHolidayMiddleReference: middleReference,
     medianCount,
     shortMedianCount: referenceMedian.shortMedianCount,
     longMedianCount: referenceMedian.longMedianCount,
@@ -1225,22 +1418,8 @@ export function getAreaCountRecommendation(params: {
     summaryText: `おすすめ：${evaluationText(suggestedEvaluation)}（表示値引率 ${formatRateAdjustment(areaRateAdjustment)}）`,
     detailLines: [
       `今日の曜日：${actualWeekday}`,
-      comparisonMode === "weekday"
-        ? `比較条件：同じ曜日（${actualWeekday}）`
-        : `比較条件：暫定グループ（${actualWeekdayGroup}）`,
-      `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
-      reference.forceFallbackWeekdayGroup
-        ? "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
-        : "通常日は同じ曜日の記録を優先し、足りない時だけ暫定グループを採用。",
-      comparisonMode === "weekday"
-        ? `短期中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
-        : `暫定中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
-      comparisonMode === "weekday"
-        ? `長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
-        : `暫定グループは短期中央値で判定`,
-      referenceMedian.medianDownGuardApplied
-        ? `短期が長期より少ないため、基準を下げすぎないように${medianCount}個で判定。`
-        : `採用基準：${medianCount}個`,
+      comparisonConditionLine,
+      ...referenceSelectionLines,
       `少ない：${baseEvaluationInfo.lowerLargeThreshold}個以下 / やや少ない：${baseEvaluationInfo.lowerSmallThreshold}個以下`,
       `やや多い：${baseEvaluationInfo.upperSmallThreshold}個以上 / 多い：${baseEvaluationInfo.upperLargeThreshold}個以上`,
       `今回：${count}個`,
