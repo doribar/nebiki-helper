@@ -6,12 +6,15 @@ import {
   saveAdminPin,
   verifyAdminPin,
 } from "../../domain/adminSettings";
+import { getAppModeLabel, type AppMode } from "../../domain/appMode.ts";
 
 type AdminSettingsDialogProps = {
-  review19UnexportedCount: number;
-  review19TotalCount: number;
-  onExportReview19Unexported: () => void;
-  onExportAllReview19: () => void;
+  currentMode: AppMode;
+  onChangeMode: (mode: AppMode) => void;
+  review19UnexportedCount?: number;
+  review19TotalCount?: number;
+  onExportReview19Unexported?: () => void;
+  onExportAllReview19?: () => void;
   onClose: () => void;
 };
 
@@ -41,8 +44,10 @@ const inputStyle = {
 };
 
 export function AdminSettingsDialog({
-  review19UnexportedCount,
-  review19TotalCount,
+  currentMode,
+  onChangeMode,
+  review19UnexportedCount = 0,
+  review19TotalCount = 0,
   onExportReview19Unexported,
   onExportAllReview19,
   onClose,
@@ -54,6 +59,7 @@ export function AdminSettingsDialog({
   const [pinConfirm, setPinConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<AppMode>(currentMode);
 
   const normalizePinInput = (value: string) =>
     value.replace(/\D/g, "").slice(0, ADMIN_PIN_MAX_LENGTH);
@@ -282,6 +288,61 @@ export function AdminSettingsDialog({
         {phase === "settings" ? (
           <section>
               <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
+                使用モード
+              </div>
+              <p style={{ margin: "0 0 12px", color: "#475569", fontSize: 14, lineHeight: 1.6 }}>
+                現在：{getAppModeLabel(currentMode)}。変更すると進行中の画面を終了し、トップ画面から新しく開始します。
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                {(["detailed", "simple"] as AppMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={selectedMode === mode}
+                    onClick={() => setSelectedMode(mode)}
+                    style={{
+                      minHeight: 54,
+                      borderRadius: 12,
+                      border: selectedMode === mode ? "3px solid #b91c1c" : "1px solid #cbd5e1",
+                      background: selectedMode === mode ? "#fff1f2" : "#fff",
+                      color: "#111827",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {getAppModeLabel(mode)}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={selectedMode === currentMode}
+                onClick={() => {
+                  if (selectedMode === currentMode) return;
+                  const ok = window.confirm(
+                    `${getAppModeLabel(selectedMode)}へ変更します。進行中の画面は終了し、トップ画面へ戻ります。`,
+                  );
+                  if (ok) onChangeMode(selectedMode);
+                }}
+                style={{
+                  width: "100%",
+                  minHeight: 54,
+                  marginBottom: onExportReview19Unexported && onExportAllReview19 ? 22 : 0,
+                  border: 0,
+                  borderRadius: 12,
+                  background: selectedMode === currentMode ? "#e2e8f0" : "#b91c1c",
+                  color: selectedMode === currentMode ? "#94a3b8" : "#fff",
+                  fontSize: 17,
+                  fontWeight: 900,
+                  cursor: selectedMode === currentMode ? "not-allowed" : "pointer",
+                }}
+              >
+                モードを変更してトップへ戻る
+              </button>
+
+            {onExportReview19Unexported && onExportAllReview19 ? (
+              <>
+              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
                 19:00チェックデータ
               </div>
               <div
@@ -336,6 +397,8 @@ export function AdminSettingsDialog({
                   全データを出力
                 </button>
               </div>
+              </>
+            ) : null}
           </section>
         ) : null}
       </section>

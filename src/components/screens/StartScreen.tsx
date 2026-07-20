@@ -33,6 +33,9 @@ type StartScreenProps = {
   onReturnHome?: () => void;
   onOpenSettings?: () => void;
   now?: Date;
+  modeLabel?: string;
+  allowedDiscountTimes?: DiscountTime[];
+  resolveAutomaticDiscountTime?: (date: Date) => DiscountTime;
 };
 
 const WEEKDAY_OPTIONS = [
@@ -393,6 +396,9 @@ export function StartScreen({
   onReturnHome,
   onOpenSettings,
   now = new Date(),
+  modeLabel,
+  allowedDiscountTimes,
+  resolveAutomaticDiscountTime = resolveDiscountTime,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
   const startForecastHour = getInputStartForecastHour(
@@ -414,6 +420,12 @@ export function StartScreen({
     useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
+  const discountTimeOptions = useMemo(
+    () => allowedDiscountTimes
+      ? DISCOUNT_TIME_OPTIONS.filter((option) => allowedDiscountTimes.includes(option.value))
+      : DISCOUNT_TIME_OPTIONS,
+    [allowedDiscountTimes],
+  );
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
@@ -539,15 +551,15 @@ export function StartScreen({
 
   const handleDiscountTimeWheel = (deltaY: number) => {
     const step = getWheelStep(deltaY);
-    const currentIndex = DISCOUNT_TIME_OPTIONS.findIndex(
+    const currentIndex = discountTimeOptions.findIndex(
       (option) => option.value === sessionDraft.discountTime,
     );
     const nextIndex = cycleIndex(
-      DISCOUNT_TIME_OPTIONS.length,
+      discountTimeOptions.length,
       currentIndex,
       step,
     );
-    const nextDiscountTime = DISCOUNT_TIME_OPTIONS[nextIndex].value;
+    const nextDiscountTime = discountTimeOptions[nextIndex].value;
 
     onChangeSessionDraft({
       discountTime: nextDiscountTime,
@@ -568,6 +580,11 @@ export function StartScreen({
             <div style={{ fontSize: 13, fontWeight: 400 }}>
               （アプリ「ウェザーニュース」を見て入力）
             </div>
+            {modeLabel ? (
+              <div style={{ marginTop: 2, fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                {modeLabel}
+              </div>
+            ) : null}
           </>
         }
         rightAction={
@@ -717,7 +734,7 @@ export function StartScreen({
                   border: "1px solid #ccc",
                 }}
               >
-                {DISCOUNT_TIME_OPTIONS.map((option) => (
+                {discountTimeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -744,7 +761,7 @@ export function StartScreen({
             onClick={() => {
               if (sessionDraft.manualDiscountTimeOverride) {
                 onChangeSessionDraft({
-                  discountTime: resolveDiscountTime(now),
+                  discountTime: resolveAutomaticDiscountTime(now),
                   manualDiscountTimeOverride: false,
                 });
               } else {

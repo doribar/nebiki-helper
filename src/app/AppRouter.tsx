@@ -54,6 +54,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           onMarkReview19NotApplicable={actions.markReview19NotApplicable}
           now={testNow ?? undefined}
           onOpenSettings={onOpenSettings}
+          modeLabel="詳細モード"
         />
       );
 
