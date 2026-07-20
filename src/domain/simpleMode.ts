@@ -139,6 +139,57 @@ export function buildSimpleFinalRoute(
   return [...high, ...normal, ...low, ...normalRoute.filter((areaId) => !judged.has(areaId))];
 }
 
+export function applySimpleAreaJudgment(
+  state: SimpleModeState,
+  evaluation: AreaCountEvaluation,
+): SimpleModeState {
+  if (state.phase !== "judgment") return state;
+  const route = getNormalRoute(state.date);
+  const areaId = route[state.currentIndex];
+  if (!areaId) return state;
+
+  const judgments = { ...state.judgments, [areaId]: evaluation };
+  return {
+    ...state,
+    judgments,
+    judgments1930: state.discountTime === "19" ? judgments : state.judgments1930,
+    phase: "first_lap",
+    currentAreaId: areaId,
+  };
+}
+
+export function completeSimpleFirstLapArea(
+  state: SimpleModeState,
+  rate: SimpleRateSnapshot,
+): SimpleModeState {
+  if (state.phase !== "first_lap") return state;
+  const route = getNormalRoute(state.date);
+  const areaId = route[state.currentIndex];
+  if (!areaId) return state;
+
+  const firstLapRates = { ...state.firstLapRates, [areaId]: rate };
+  const isLast = state.currentIndex >= route.length - 1;
+  if (!isLast) {
+    const nextIndex = state.currentIndex + 1;
+    return {
+      ...state,
+      firstLapRates,
+      phase: "judgment",
+      currentIndex: nextIndex,
+      currentAreaId: route[nextIndex] ?? null,
+    };
+  }
+
+  const secondRoute = buildSimpleSecondRoute(route, state.judgments);
+  return {
+    ...state,
+    firstLapRates,
+    phase: "second_lap",
+    currentIndex: 0,
+    currentAreaId: secondRoute[0] ?? null,
+  };
+}
+
 export function createInitialSimpleModeState(now: Date): SimpleModeState {
   const discountTime = resolveSimpleDiscountTime(now);
   const date = formatLocalDate(now);

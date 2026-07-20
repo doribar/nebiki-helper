@@ -11,9 +11,11 @@ import {
 import { getNormalRoute } from "../src/domain/area.ts";
 import {
   SIMPLE_MODE_STORAGE_KEY,
+  applySimpleAreaJudgment,
   buildSimpleFinalRoute,
   buildSimpleSecondRoute,
   clearSimpleModeState,
+  completeSimpleFirstLapArea,
   createInitialSimpleModeState,
   getSimpleCalculation,
   loadSimpleModeState,
@@ -79,6 +81,100 @@ test("1周目にそれ以外を値引しない指示がある", () => assert.mat
 test("季節外は涼味商品を除外", () => assert.equal(winterRoute.includes("ryomi"), false));
 test("対象季節は涼味商品を含む", () => assert.equal(route.includes("ryomi"), true));
 
+const sampleRate = { mainRateText: "30%", tenOrMoreRateText: "35%" };
+const createAlternatingState = (text = "2026-07-20T17:00:00+09:00") => ({
+  ...createInitialSimpleModeState(dateAt(text)),
+  phase: "judgment" as const,
+  currentIndex: 0,
+  currentAreaId: route[0] ?? null,
+});
+
+test("天候入力後は全エリア一括判定ではなく最初のエリア判定から始まる", () => {
+  const state = createAlternatingState();
+  assert.equal(state.phase, "judgment");
+  assert.equal(state.currentAreaId, route[0]);
+  assert.equal(Object.keys(state.judgments).length, 0);
+});
+test("最初のエリアを判定すると同じエリアの1周目へ進む", () => {
+  const state = createAlternatingState();
+  const judged = applySimpleAreaJudgment(state, "many");
+  assert.equal(judged.phase, "first_lap");
+  assert.equal(judged.currentIndex, 0);
+  assert.equal(judged.currentAreaId, route[0]);
+  assert.equal(judged.judgments[route[0]], "many");
+});
+test("同じエリアの1周目完了後に次エリアの判定へ進む", () => {
+  const judged = applySimpleAreaJudgment(createAlternatingState(), "many");
+  const next = completeSimpleFirstLapArea(judged, sampleRate);
+  assert.equal(next.phase, "judgment");
+  assert.equal(next.currentIndex, 1);
+  assert.equal(next.currentAreaId, route[1]);
+  assert.deepEqual(next.firstLapRates[route[0]], sampleRate);
+});
+test("通常ルート最後まで判定と同一エリア1周目が交互に続く", () => {
+  let state = createAlternatingState();
+  for (let index = 0; index < route.length; index += 1) {
+    assert.equal(state.phase, "judgment");
+    assert.equal(state.currentAreaId, route[index]);
+    state = applySimpleAreaJudgment(state, judgments[route[index]] ?? "normal");
+    assert.equal(state.phase, "first_lap");
+    assert.equal(state.currentAreaId, route[index]);
+    state = completeSimpleFirstLapArea(state, sampleRate);
+  }
+  assert.equal(state.phase, "second_lap");
+});
+test("最後のエリアの1周目完了後だけ2周目へ進む", () => {
+  let state = createAlternatingState();
+  route.forEach((areaId, index) => {
+    state = applySimpleAreaJudgment(state, judgments[areaId] ?? "normal");
+    state = completeSimpleFirstLapArea(state, sampleRate);
+    if (index < route.length - 1) assert.equal(state.phase, "judgment");
+  });
+  assert.equal(state.phase, "second_lap");
+});
+test("2周目開始時には全エリアの判定と1周目値引率が揃う", () => {
+  let state = createAlternatingState();
+  for (const areaId of route) {
+    state = applySimpleAreaJudgment(state, judgments[areaId] ?? "normal");
+    state = completeSimpleFirstLapArea(state, sampleRate);
+  }
+  assert.equal(Object.keys(state.judgments).length, route.length);
+  assert.equal(Object.keys(state.firstLapRates).length, route.length);
+});
+test("19時30分の各エリア判定を都度保存して最終一覧に使用できる", () => {
+  let state = createAlternatingState("2026-07-20T19:30:00+09:00");
+  for (const areaId of route) {
+    state = applySimpleAreaJudgment(state, judgments[areaId] ?? "normal");
+    assert.equal(state.judgments1930[areaId], judgments[areaId] ?? "normal");
+    state = completeSimpleFirstLapArea(state, sampleRate);
+  }
+  assert.deepEqual(buildSimpleFinalRoute(route, state.judgments1930), buildSimpleFinalRoute(route, judgments));
+});
+test("判定画面で再読み込みしても同じエリアと工程を復元", () => {
+  const storage = new MemoryStorage();
+  const raw = { ...createAlternatingState(), currentIndex: 3, currentAreaId: route[3] };
+  saveSimpleModeState(raw, storage);
+  const loaded = loadSimpleModeState(dateAt("2026-07-20T17:01:00+09:00"), storage);
+  assert.equal(loaded.phase, "judgment");
+  assert.equal(loaded.currentAreaId, route[3]);
+});
+test("1周目値引画面で再読み込みしても同じエリアと工程を復元", () => {
+  const storage = new MemoryStorage();
+  const raw = applySimpleAreaJudgment(
+    { ...createAlternatingState(), currentIndex: 3, currentAreaId: route[3] },
+    "normal",
+  );
+  saveSimpleModeState(raw, storage);
+  const loaded = loadSimpleModeState(dateAt("2026-07-20T17:01:00+09:00"), storage);
+  assert.equal(loaded.phase, "first_lap");
+  assert.equal(loaded.currentAreaId, route[3]);
+  assert.equal(loaded.judgments[route[3]], "normal");
+});
+test("Hookは判定と1周目の純粋状態遷移を使用する", () => {
+  assert.match(simpleHookSource, /applySimpleAreaJudgment/);
+  assert.match(simpleHookSource, /completeSimpleFirstLapArea/);
+});
+
 const secondRoute = buildSimpleSecondRoute(route, judgments);
 const reverse = [...route].reverse();
 const expectedSecond = [
@@ -129,5 +225,5 @@ test("モード名表示が日本語で固定", () => { assert.equal(getAppModeL
 test("天候画面は簡易対象時刻だけに制限", () => assert.match(simpleUiSource, /allowedDiscountTimes=\{\["17", "18", "19"\]\}/));
 test("詳細StartScreenの既定時刻一覧は維持", () => ["15", "17", "18", "19", "20"].forEach((time) => assert.match(startSource, new RegExp(`value: "${time}"`))));
 
-assert.equal(passed, 55);
+assert.equal(passed, 65);
 console.log(`簡易モード確認: ${passed}件すべて成功`);

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getNormalRoute } from "../domain/area.ts";
 import {
+  applySimpleAreaJudgment,
   buildSimpleFinalRoute,
   buildSimpleSecondRoute,
   clearSimpleModeState,
+  completeSimpleFirstLapArea,
   createInitialSimpleModeState,
   loadSimpleModeState,
   resolveSimpleDiscountTime,
@@ -119,48 +121,11 @@ export function useSimpleMode(params: { testNow?: Date | null } = {}): UseSimple
   }, []);
 
   const judgeCurrentArea = useCallback((evaluation: AreaCountEvaluation) => {
-    setState((current) => {
-      const currentRoute = getNormalRoute(current.date);
-      const areaId = currentRoute[current.currentIndex];
-      if (!areaId) return current;
-      const judgments = { ...current.judgments, [areaId]: evaluation };
-      const judgments1930 = current.discountTime === "19" ? judgments : current.judgments1930;
-      const isLast = current.currentIndex >= currentRoute.length - 1;
-      return {
-        ...current,
-        judgments,
-        judgments1930,
-        phase: isLast ? "first_lap" : "judgment",
-        currentIndex: isLast ? 0 : current.currentIndex + 1,
-        currentAreaId: isLast ? currentRoute[0] ?? null : currentRoute[current.currentIndex + 1] ?? null,
-      };
-    });
+    setState((current) => applySimpleAreaJudgment(current, evaluation));
   }, []);
 
   const completeFirstLapArea = useCallback((rate: SimpleRateSnapshot) => {
-    setState((current) => {
-      const currentRoute = getNormalRoute(current.date);
-      const areaId = currentRoute[current.currentIndex];
-      if (!areaId) return current;
-      const firstLapRates = { ...current.firstLapRates, [areaId]: rate };
-      const isLast = current.currentIndex >= currentRoute.length - 1;
-      if (!isLast) {
-        return {
-          ...current,
-          firstLapRates,
-          currentIndex: current.currentIndex + 1,
-          currentAreaId: currentRoute[current.currentIndex + 1] ?? null,
-        };
-      }
-      const secondRoute = buildSimpleSecondRoute(currentRoute, current.judgments);
-      return {
-        ...current,
-        firstLapRates,
-        phase: "second_lap",
-        currentIndex: 0,
-        currentAreaId: secondRoute[0] ?? null,
-      };
-    });
+    setState((current) => completeSimpleFirstLapArea(current, rate));
   }, []);
 
   const completeSecondLapArea = useCallback(() => {
