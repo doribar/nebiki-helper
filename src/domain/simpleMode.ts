@@ -25,6 +25,23 @@ export type SimpleRateSnapshot = {
   tenOrMoreRateText: string | null;
 };
 
+function parseSimpleRatePercent(rateText: string | null): number | null {
+  if (!rateText) return null;
+  const percent = Number(rateText.match(/(\d+)%/)?.[1]);
+  return Number.isFinite(percent) ? percent : null;
+}
+
+/** 上限処理後も10個以上の率が実際に高い場合だけ、追加率の案内を表示する。 */
+export function shouldShowSimpleTenOrMoreRate(rate: SimpleRateSnapshot): boolean {
+  const mainRatePercent = parseSimpleRatePercent(rate.mainRateText);
+  const tenOrMoreRatePercent = parseSimpleRatePercent(rate.tenOrMoreRateText);
+  return (
+    mainRatePercent !== null &&
+    tenOrMoreRatePercent !== null &&
+    tenOrMoreRatePercent > mainRatePercent
+  );
+}
+
 export type SimpleModeState = {
   version: 1;
   date: string;

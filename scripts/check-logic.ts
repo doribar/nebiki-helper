@@ -2846,15 +2846,15 @@ const totalChecks = 92;
     getCanonicalUrlForLegacyHash({ pathname: '/app/', search: '', hash: '' }),
     null,
   );
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 9);
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 8);
   passed += 1;
 }
 
 
 {
-  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 9);
+  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 8);
   assert.equal(FULL_MODE_NOTICE_TEXTS[0], '残り2個の商品は「多い」にしない');
-  assert.equal(FULL_MODE_NOTICE_TEXTS[8], '広告商品は、当日の売れ方を見て、売れ方が順調なら表示値引率から-10%');
+  assert.equal(FULL_MODE_NOTICE_TEXTS[7], '広告商品は、当日の売れ方を見て、売れ方が順調なら表示値引率から-10%');
   assert.equal(isValidAdminPinFormat('1234'), true);
   assert.equal(isValidAdminPinFormat('12345678'), true);
   assert.equal(isValidAdminPinFormat('123'), false);

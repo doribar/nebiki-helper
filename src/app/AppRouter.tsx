@@ -104,6 +104,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           }
           discountTime={state.session?.discountTime}
           onConfirm={actions.acknowledgeAutoSkippedArea}
+          onProcessNormally={actions.processAutoSkippedAreaNormally}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />

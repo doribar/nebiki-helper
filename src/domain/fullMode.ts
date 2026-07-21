@@ -14,7 +14,6 @@ export const FULL_MODE_NOTICE_ITEMS: readonly (readonly FullModeNoticeSegment[])
     { text: "の商品は" },
     { text: "「少ない」にする", emphasis: true },
   ],
-  [{ text: "10個以上あっても、必ず「多い」になるわけではありません。", emphasis: true }],
   [
     { text: "定番商品", emphasis: true },
     { text: "は、表示値引率から" },

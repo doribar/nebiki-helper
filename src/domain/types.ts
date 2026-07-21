@@ -574,6 +574,7 @@ export type UseNebikiAppActions = {
 
   goToNextArea: () => void;
   acknowledgeAutoSkippedArea: () => void;
+  processAutoSkippedAreaNormally: () => void;
   advanceFinalTimeStep: () => void;
   updateReview19AreaCount: (areaId: AreaId, count: number) => void;
   skipReview19Area: (areaId: AreaId) => void;

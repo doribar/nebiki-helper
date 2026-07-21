@@ -426,6 +426,50 @@ function isAutoSkipNoticePending(progress: AreaProgress | undefined): boolean {
   return progress?.status === "auto_skipped_late_time" && !progress.visitedAt;
 }
 
+export function acknowledgeAutoSkippedProgress(
+  progress: AreaProgress,
+  acknowledgedAt: string,
+): AreaProgress {
+  if (progress.status !== "auto_skipped_late_time") return progress;
+
+  return {
+    ...progress,
+    visitedAt: progress.visitedAt ?? acknowledgedAt,
+    completedAt: progress.completedAt ?? acknowledgedAt,
+  };
+}
+
+export function processEarlyNextMinus5AreaNormally(state: AppState): AppState {
+  const currentAreaId = state.currentAreaId;
+  if (!currentAreaId || state.screen !== "auto_skip_notice") return state;
+
+  const currentProgress = state.areaProgressMap[currentAreaId];
+  if (
+    currentProgress?.status !== "auto_skipped_late_time" ||
+    currentProgress.autoSkipKind !== "early_next_minus5" ||
+    currentProgress.visitedAt
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    screen: "area_judge",
+    areaProgressMap: {
+      ...state.areaProgressMap,
+      [currentAreaId]: {
+        areaId: currentAreaId,
+        status: "unstarted",
+        areaJudge: null,
+      },
+    },
+    currentFlow: "normal",
+    pendingDeferredAreaIds: [],
+    timeSwitchNotice: null,
+    finalTimeStep: 0,
+  };
+}
+
 function isNormalFlowWorkArea(progress: AreaProgress | undefined): boolean {
   return progress?.status === "unstarted" || isAutoSkipNoticePending(progress);
 }
@@ -3342,11 +3386,7 @@ const lateSkipNotice = useMemo(() => {
       const acknowledgedAt = getRuntimeNow().toISOString();
       const updatedMap = {
         ...prev.areaProgressMap,
-        [currentAreaId]: {
-          ...currentProgress,
-          visitedAt: currentProgress.visitedAt ?? acknowledgedAt,
-          completedAt: currentProgress.completedAt ?? acknowledgedAt,
-        },
+        [currentAreaId]: acknowledgeAutoSkippedProgress(currentProgress, acknowledgedAt),
       };
 
       const nextAreaId = getNextNormalFlowAreaId(
@@ -3377,6 +3417,14 @@ const lateSkipNotice = useMemo(() => {
         timeSwitchNotice: null,
       });
     });
+  }
+
+  function processAutoSkippedAreaNormally() {
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
+    setAreaJudgeSelection(null);
+    setResumeTargetScreen(null);
+    setState((prev) => processEarlyNextMinus5AreaNormally(prev));
   }
 
   function advanceFinalTimeStep() {
@@ -4056,6 +4104,7 @@ const lateSkipNotice = useMemo(() => {
       chooseSkipTargetArea,
       goToNextArea,
       acknowledgeAutoSkippedArea,
+      processAutoSkippedAreaNormally,
       advanceFinalTimeStep,
       updateReview19AreaCount,
       skipReview19Area,

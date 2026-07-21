@@ -22,6 +22,7 @@ import {
   normalizeSimpleModeState,
   resolveSimpleDiscountTime,
   saveSimpleModeState,
+  shouldShowSimpleTenOrMoreRate,
 } from "../src/domain/simpleMode.ts";
 import type { AreaCountEvaluation, AreaId } from "../src/domain/types.ts";
 
@@ -36,6 +37,7 @@ class MemoryStorage {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
 const simpleUiSource = source("src/app/SimpleModeApp.tsx");
+const simpleDomainSource = source("src/domain/simpleMode.ts");
 const simpleHookSource = source("src/hooks/useSimpleMode.ts");
 const appSource = source("src/app/App.tsx");
 const appRouterSource = source("src/app/AppRouter.tsx");
@@ -76,13 +78,27 @@ test("曜日・時刻・天候の既存計算を共有する", () => { const sta
 
 test("1周目は通常ルート順", () => assert.deepEqual(route, getNormalRoute(julyDate)));
 test("1周目に多い商品と通常値引率の指示がある", () => { assert.match(simpleUiSource, /aria-label="1周目の値引指示"/); assert.match(simpleUiSource, /calculation\.rateSnapshot\.mainRateText/); });
-test("1周目に10個以上+5%の指示がある", () => assert.match(simpleUiSource, /10個以上は/));
+test("1周目に10個以上+5%の指示がある", () => assert.match(simpleUiSource, /10個以上ある商品は/));
 test("1周目に残り1個を値引しない指示がある", () => assert.match(simpleUiSource, /1個の商品は値引しない/));
 test("1周目にそれ以外を値引しない指示がある", () => assert.match(simpleUiSource, /それ以外の商品は、まだ値引しない/));
 test("季節外は涼味商品を除外", () => assert.equal(winterRoute.includes("ryomi"), false));
 test("対象季節は涼味商品を含む", () => assert.equal(route.includes("ryomi"), true));
 
 const sampleRate = { mainRateText: "30%", tenOrMoreRateText: "35%" };
+test("多い商品30%、10個以上35%なら両方を表示する", () => {
+  assert.equal(shouldShowSimpleTenOrMoreRate({ mainRateText: "30%", tenOrMoreRateText: "35%" }), true);
+});
+test("多い商品45%、10個以上50%なら両方を表示する", () => {
+  assert.equal(shouldShowSimpleTenOrMoreRate({ mainRateText: "45%", tenOrMoreRateText: "50%" }), true);
+});
+test("上限処理後に多い商品50%、10個以上50%なら10個以上を表示しない", () => {
+  assert.equal(shouldShowSimpleTenOrMoreRate({ mainRateText: "50%", tenOrMoreRateText: "50%" }), false);
+  assert.match(simpleUiSource, /showTenOrMoreRate \? \(/);
+});
+test("10個以上+5%計算と50%上限は変更しない", () => {
+  assert.match(simpleDomainSource, /Math\.min\(50, mainRate \+ 5\)/);
+  assert.equal(sampleRate.tenOrMoreRateText, "35%");
+});
 const createAlternatingState = (text = "2026-07-20T17:00:00+09:00") => ({
   ...createInitialSimpleModeState(dateAt(text)),
   phase: "judgment" as const,
@@ -284,5 +300,5 @@ test("判定・1周目・2周目・最終一覧へ画面計測用の識別子が
   });
 });
 
-assert.equal(passed, 76);
+assert.equal(passed, 80);
 console.log(`簡易モード確認: ${passed}件すべて成功`);

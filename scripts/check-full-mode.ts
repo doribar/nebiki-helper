@@ -50,6 +50,8 @@ const settingsSource = source("../src/components/common/AdminSettingsDialog.tsx"
 const areaJudgeSource = source("../src/components/screens/AreaJudgeScreen.tsx");
 const rateSource = source("../src/components/screens/RateDisplayScreen.tsx");
 const doneSource = source("../src/components/screens/DoneScreen.tsx");
+const autoSkipSource = source("../src/components/screens/AutoSkipNoticeScreen.tsx");
+const simpleSource = source("../src/app/SimpleModeApp.tsx");
 const hookSource = source("../src/hooks/useNebikiApp.ts");
 const typeSource = source("../src/domain/types.ts");
 const uiAndLogicSource = [
@@ -59,6 +61,7 @@ const uiAndLogicSource = [
   areaJudgeSource,
   rateSource,
   doneSource,
+  autoSkipSource,
   hookSource,
   typeSource,
 ].join("\n");
@@ -146,7 +149,7 @@ for (const [number, oldValue] of [[8, "step1"], [9, "step4"], [10, "step8"]] as 
 }
 test("11. 残数入力を常に表示する", () => assert.ok(areaJudgeSource.includes("このエリア全体で、消費期限が今日までの商品数は？")));
 test("12. 履歴不足時の手動5段階判定を常に表示する", () => {
-  for (const label of ["多い", "やや多い", "普通", "やや少ない", "少ない"]) assert.ok(areaJudgeSource.includes(`label=\"${label}\"`));
+  for (const label of ["多い", "やや多い", "普通", "やや少ない", "少ない"]) assert.ok(areaJudgeSource.includes(`label="${label}"`));
 });
 test("13. 10個以上商品の追加5%を維持する", () => assert.ok(formerFullModeRate.many.note?.includes("10個以上は 30%")));
 test("14. 定番商品の-10%指示を常時表示する", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("定番商品は、表示値引率から-10%")));
@@ -158,8 +161,8 @@ test("19. 広告商品の当日判断を常時表示する", () => assert.ok(FUL
 test("20. 旧完成版の計算スナップショットと一致する", () => {
   assert.deepEqual(formerFullModeRate, { many: { main: "25%", note: "多いのうち10個以上は 30%" }, few: { main: "引かない" }, normal: { main: "15%" } });
 });
-test("21. 注意事項は指定された9項目で固定する", () => {
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 9);
+test("21. 指定文言を除いた注意事項8項目を固定表示する", () => {
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 8);
   assert.ok(rateSource.includes("FULL_MODE_NOTICE_ITEMS.map"));
   assert.ok(rateSource.includes("<NoticeItems />"));
 });
@@ -218,4 +221,27 @@ test("41. 固定完成版の値引計算は保存済み旧段階値に依存し�
   assert.deepEqual(step1Result, step8Result);
 });
 
-console.log(`\n完成版固定テスト: ${passed}/41件成功`);
+test("42. 詳細モードから10個以上を多いと断定しない注意文だけを削除する", () => {
+  assert.equal(FULL_MODE_NOTICE_TEXTS.includes("10個以上あっても、必ず「多い」になるわけではありません。"), false);
+  assert.equal(rateSource.includes("10個以上あっても"), false);
+});
+test("43. 先取り値引済みエリアに説明と2つの未選択ボタンを表示する", () => {
+  assert.ok(autoSkipSource.includes("このエリアは先取り値引済みです"));
+  assert.ok(autoSkipSource.includes("現在の残数を確認して、追加で値引することもできます。"));
+  assert.ok(autoSkipSource.includes("スキップする"));
+  assert.ok(autoSkipSource.includes("今回は値引する"));
+});
+test("44. 先取り選択画面に内部向け表現を表示しない", () => {
+  assert.equal(autoSkipSource.includes("弁当側"), false);
+  assert.equal(autoSkipSource.includes("自動スキップ解除"), false);
+});
+test("45. 詳細モードだけが先取り済みエリアの通常処理アクションを接続する", () => {
+  assert.ok(routerSource.includes("onProcessNormally={actions.processAutoSkippedAreaNormally}"));
+  assert.equal(simpleSource.includes("processAutoSkippedAreaNormally"), false);
+});
+test("46. スキップと通常処理は既存のエリア進捗を使い分ける", () => {
+  assert.ok(hookSource.includes("acknowledgeAutoSkippedProgress"));
+  assert.ok(hookSource.includes("processEarlyNextMinus5AreaNormally"));
+});
+
+console.log(`\n完成版固定テスト: ${passed}/46件成功`);

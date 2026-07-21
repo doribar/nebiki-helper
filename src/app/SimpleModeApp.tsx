@@ -4,6 +4,7 @@ import {
   getSimpleCalculation,
   getSimpleHolidayNotices,
   resolveSimpleDiscountTime,
+  shouldShowSimpleTenOrMoreRate,
   type SimpleDiscountTime,
 } from "../domain/simpleMode.ts";
 import { getWeatherGuideText } from "../domain/weekdayBase.ts";
@@ -396,6 +397,7 @@ function FirstLapScreen(props: {
     evaluation,
     now: props.now,
   });
+  const showTenOrMoreRate = shouldShowSimpleTenOrMoreRate(calculation.rateSnapshot);
   return (
     <main data-simple-screen="first-lap" style={pageStyle}>
       <SimpleHeader
@@ -415,12 +417,14 @@ function FirstLapScreen(props: {
         >
           {calculation.rateSnapshot.mainRateText}
         </div>
-        <p style={{ margin: 0, color: "#475569", fontSize: 14, lineHeight: 1.3 }}>
-          10個以上は
-          <strong style={{ marginLeft: 4, color: "#9a3412", fontSize: 18 }}>
-            {calculation.rateSnapshot.tenOrMoreRateText ?? calculation.rateSnapshot.mainRateText}
-          </strong>
-        </p>
+        {showTenOrMoreRate ? (
+          <p style={{ margin: 0, color: "#475569", fontSize: 14, lineHeight: 1.3 }}>
+            10個以上ある商品は
+            <strong style={{ marginLeft: 4, color: "#9a3412", fontSize: 18 }}>
+              {calculation.rateSnapshot.tenOrMoreRateText}
+            </strong>
+          </p>
+        ) : null}
       </section>
       <SimpleRules>
         <RuleItem>1個の商品は値引しない</RuleItem>

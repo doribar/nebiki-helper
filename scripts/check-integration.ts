@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
-import { AREA_COUNT_DECISION_RULE_VERSION } from '../src/domain/areaCountHistory.ts';
+import {
+  AREA_COUNT_DECISION_RULE_VERSION,
+  upsertAreaCountRecord,
+} from '../src/domain/areaCountHistory.ts';
+import type { AreaCountRecord } from '../src/domain/areaCountHistory.ts';
 import { LEGACY_AREA_MASTERS, NORMAL_ROUTE } from '../src/domain/area.ts';
+import { getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import {
   createDefaultHourlyForecasts,
   resolveWeatherInputForDiscount,
@@ -29,7 +34,9 @@ import {
   createReview19Snapshot,
   createTimeSwitchPlan,
   getInitialTimeSwitchTarget,
+  acknowledgeAutoSkippedProgress,
   normalizeLoadedState,
+  processEarlyNextMinus5AreaNormally,
   selectReview19SourceState,
 } from '../src/hooks/useNebikiApp.ts';
 
@@ -458,4 +465,147 @@ test('8. 19時30分から20時30分は通常順・全エリア初期化を維持
   assert.ok(NORMAL_ROUTE.every((areaId) => plan.areaProgressMap[areaId].status === 'unstarted'));
 });
 
-console.log(`PASS: integration ${passCount}/8`);
+function createEarlyChoiceState(): AppState {
+  const state = createState('19', 'auto_skip_notice');
+  state.currentAreaId = 'inari';
+  state.areaProgressMap.inari = {
+    areaId: 'inari',
+    status: 'auto_skipped_late_time',
+    areaJudge: 'many',
+    areaCount: 18,
+    areaCountEvaluation: 'many',
+    areaCountEvaluationSource: 'history',
+    areaRateAdjustment: 5,
+    completedRateText: '40%',
+    completedManyRateText: '45%',
+    previousRateText: '35%',
+    previousManyRateText: '40%',
+    skipReason: 'late_time',
+    autoSkipKind: 'early_next_minus5',
+    earlyNextMinus5TargetDiscountTime: '19',
+  };
+  return state;
+}
+
+test('9. 選択前の再読み込みは同じ先取り値引済み選択画面へ戻る', () => {
+  saveCurrentSession(createEarlyChoiceState());
+  const restored = normalizeLoadedState(loadPersistedNebikiStateForDate(TEST_DATE).currentSession, createDraft('19'));
+  assert.equal(restored.screen, 'auto_skip_notice');
+  assert.equal(restored.currentAreaId, 'inari');
+  assert.equal(restored.areaProgressMap.inari.autoSkipKind, 'early_next_minus5');
+  assert.equal(restored.areaProgressMap.inari.visitedAt, undefined);
+});
+
+test('10. 今回は値引するを選ぶと同じエリアの新しい残数入力状態へ進む', () => {
+  const processed = processEarlyNextMinus5AreaNormally(createEarlyChoiceState());
+  const progress = processed.areaProgressMap.inari;
+  assert.equal(processed.screen, 'area_judge');
+  assert.equal(processed.currentAreaId, 'inari');
+  assert.deepEqual(progress, { areaId: 'inari', status: 'unstarted', areaJudge: null });
+  assert.equal(progress.areaCount, undefined);
+  assert.equal(progress.completedRateText, undefined);
+  assert.equal(progress.autoSkipKind, undefined);
+});
+
+test('11. 通常処理への移行は現在の正式時刻・天候・通常ルートを維持する', () => {
+  const choice = createEarlyChoiceState();
+  choice.session!.weather.hourlyForecasts['19'] = { weather: 'rain', tempC: 21, windMs: 4 };
+  const processed = processEarlyNextMinus5AreaNormally(choice);
+  assert.equal(processed.session?.discountTime, '19');
+  assert.deepEqual(processed.session?.weather.hourlyForecasts['19'], { weather: 'rain', tempC: 21, windMs: 4 });
+  assert.deepEqual(processed.normalFlowOrder, choice.normalFlowOrder);
+});
+
+test('12. 今回は値引する選択後の再読み込みで再びスキップ扱いへ戻らない', () => {
+  const processed = processEarlyNextMinus5AreaNormally(createEarlyChoiceState());
+  saveCurrentSession(processed);
+  const restored = normalizeLoadedState(loadPersistedNebikiStateForDate(TEST_DATE).currentSession, createDraft('19'));
+  assert.equal(restored.screen, 'area_judge');
+  assert.equal(restored.areaProgressMap.inari.status, 'unstarted');
+  assert.equal(restored.areaProgressMap.inari.autoSkipKind, undefined);
+});
+
+test('13. スキップする選択は従来のauto_skipped_late_time完了状態を維持する', () => {
+  const choice = createEarlyChoiceState();
+  const skippedProgress = acknowledgeAutoSkippedProgress(choice.areaProgressMap.inari, TEST_STARTED_AT);
+  assert.equal(skippedProgress.status, 'auto_skipped_late_time');
+  assert.equal(skippedProgress.autoSkipKind, 'early_next_minus5');
+  assert.equal(skippedProgress.visitedAt, TEST_STARTED_AT);
+  assert.equal(skippedProgress.completedAt, TEST_STARTED_AT);
+});
+
+test('14. スキップ選択後の保存復元はスキップ済み状態を保持する', () => {
+  const choice = createEarlyChoiceState();
+  choice.areaProgressMap.inari = acknowledgeAutoSkippedProgress(choice.areaProgressMap.inari, TEST_STARTED_AT);
+  choice.screen = 'done';
+  choice.currentAreaId = null;
+  saveCurrentSession(choice);
+  const restored = normalizeLoadedState(loadPersistedNebikiStateForDate(TEST_DATE).currentSession, createDraft('19'));
+  assert.equal(restored.areaProgressMap.inari.status, 'auto_skipped_late_time');
+  assert.equal(restored.areaProgressMap.inari.visitedAt, TEST_STARTED_AT);
+});
+
+test('15. 通常処理への移行は他のエリア進捗へ影響しない', () => {
+  const choice = createEarlyChoiceState();
+  const beforeTempura = { ...choice.areaProgressMap.tempura };
+  const processed = processEarlyNextMinus5AreaNormally(choice);
+  assert.deepEqual(processed.areaProgressMap.tempura, beforeTempura);
+});
+
+function createAreaRecord(params: {
+  discountTime: '17' | '19';
+  sessionStartedAt: string;
+  recordedAt: string;
+  count: number;
+}): AreaCountRecord {
+  return {
+    date: TEST_DATE,
+    sessionStartedAt: params.sessionStartedAt,
+    recordedAt: params.recordedAt,
+    areaId: 'inari',
+    discountTime: params.discountTime,
+    actualWeekdayGroup: '金土',
+    count: params.count,
+  };
+}
+
+test('16. 先取り記録を残して正式時刻の通常記録を追加できる', () => {
+  const earlyRecord = createAreaRecord({ discountTime: '17', sessionStartedAt: '2026-07-18T08:00:00.000Z', recordedAt: '2026-07-18T09:25:00.000Z', count: 18 });
+  const formalRecord = createAreaRecord({ discountTime: '19', sessionStartedAt: TEST_STARTED_AT, recordedAt: '2026-07-18T10:31:00.000Z', count: 12 });
+  const records = upsertAreaCountRecord(upsertAreaCountRecord([], earlyRecord), formalRecord);
+  assert.equal(records.length, 2);
+  assert.ok(records.some((record) => record.discountTime === '17' && record.count === 18));
+  assert.ok(records.some((record) => record.discountTime === '19' && record.count === 12));
+});
+
+test('17. 同じ正式時刻・セッション・エリアの通常記録は重複しない', () => {
+  const first = createAreaRecord({ discountTime: '19', sessionStartedAt: TEST_STARTED_AT, recordedAt: '2026-07-18T10:31:00.000Z', count: 12 });
+  const updated = createAreaRecord({ discountTime: '19', sessionStartedAt: TEST_STARTED_AT, recordedAt: '2026-07-18T10:32:00.000Z', count: 10 });
+  const records = upsertAreaCountRecord(upsertAreaCountRecord([], first), updated);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].count, 10);
+  assert.equal(records[0].recordedAt, updated.recordedAt);
+});
+
+test('18. 現在の正式時刻の通常計算を使い、先取り時の表示率を再利用しない', () => {
+  const currentRate = getNormalTimeRateDisplay({
+    discountTime: '19',
+    weatherBonus: 5,
+    areaJudge: 'many',
+    areaRateAdjustment: 5,
+    weekdayBase: '金土',
+  });
+  assert.notEqual(currentRate.many.main, createEarlyChoiceState().areaProgressMap.inari.previousRateText);
+  assert.match(currentRate.many.main, /%/);
+});
+
+test('19. 先取り対象外エリアと別種の自動スキップは通常処理へ開き直さない', () => {
+  const state = createEarlyChoiceState();
+  state.areaProgressMap.inari.autoSkipKind = 'late_plus5';
+  assert.equal(processEarlyNextMinus5AreaNormally(state), state);
+  state.screen = 'area_judge';
+  state.areaProgressMap.inari.autoSkipKind = 'early_next_minus5';
+  assert.equal(processEarlyNextMinus5AreaNormally(state), state);
+});
+
+console.log(`PASS: integration ${passCount}/19`);
