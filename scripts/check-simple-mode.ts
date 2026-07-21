@@ -38,6 +38,7 @@ const source = (path: string) => readFileSync(resolve(root, path), "utf8");
 const simpleUiSource = source("src/app/SimpleModeApp.tsx");
 const simpleHookSource = source("src/hooks/useSimpleMode.ts");
 const appSource = source("src/app/App.tsx");
+const appRouterSource = source("src/app/AppRouter.tsx");
 const adminSource = source("src/components/common/AdminSettingsDialog.tsx");
 const startSource = source("src/components/screens/StartScreen.tsx");
 let passed = 0;
@@ -67,16 +68,16 @@ test("詳細モードへ戻せる", () => { const s = new MemoryStorage(); saveA
 test("モード選択は専用キーを使う", () => assert.equal(APP_MODE_STORAGE_KEY, "nebiki-helper/app-mode-v1"));
 test("詳細と簡易を別コンポーネントでマウントする", () => { assert.match(appSource, /mode === "simple"/); assert.match(appSource, /DetailedModeRoot/); });
 
-test("簡易画面に残数の数値入力がない", () => { assert.doesNotMatch(simpleUiSource, /AreaJudgeScreen|onChangeAreaCount|残数を入力/); assert.match(simpleUiSource, /このエリア全体の残り方を選んでください/); });
+test("簡易画面に残数の数値入力がない", () => { assert.doesNotMatch(simpleUiSource, /AreaJudgeScreen|onChangeAreaCount|残数を入力/); assert.match(simpleUiSource, /このエリアの残り具合を選んでください/); });
 test("簡易Hookは履歴自動判定を参照しない", () => assert.doesNotMatch(simpleHookSource, /areaCountHistory|Recommendation|median/i));
 test("全エリアで5段階の選択肢を使う", () => ["many", "slightly_many", "normal", "slightly_few", "few"].forEach((value) => assert.match(simpleUiSource, new RegExp(`"${value}"`))));
 test("誘導文を表示しない", () => { assert.doesNotMatch(simpleUiSource, /迷ったら多い側/); assert.doesNotMatch(simpleUiSource, /迷ったら普通/); });
 test("曜日・時刻・天候の既存計算を共有する", () => { const state = createInitialSimpleModeState(dateAt("2026-07-20T17:00:00+09:00")); const result = getSimpleCalculation({ draft: state.sessionDraft, evaluation: "normal", now: dateAt("2026-07-20T17:00:00+09:00") }); assert.match(result.rateDisplay.many.main, /%/); assert.match(result.basisGuide.referenceText, /基準/); });
 
 test("1周目は通常ルート順", () => assert.deepEqual(route, getNormalRoute(julyDate)));
-test("1周目に多い商品だけの指示がある", () => assert.match(simpleUiSource, /多い商品を.*にしてください/));
+test("1周目に多い商品と通常値引率の指示がある", () => { assert.match(simpleUiSource, /aria-label="1周目の値引指示"/); assert.match(simpleUiSource, /calculation\.rateSnapshot\.mainRateText/); });
 test("1周目に10個以上+5%の指示がある", () => assert.match(simpleUiSource, /10個以上ある商品/));
-test("1周目に残り1個を値引しない指示がある", () => assert.match(simpleUiSource, /1個しかない商品は値引しない/));
+test("1周目に残り1個を値引しない指示がある", () => assert.match(simpleUiSource, /1個の商品は値引しない/));
 test("1周目にそれ以外を値引しない指示がある", () => assert.match(simpleUiSource, /それ以外の商品は、まだ値引しない/));
 test("季節外は涼味商品を除外", () => assert.equal(winterRoute.includes("ryomi"), false));
 test("対象季節は涼味商品を含む", () => assert.equal(route.includes("ryomi"), true));
@@ -190,8 +191,8 @@ test("普通は通常ルート順", () => assert.deepEqual(secondRoute.filter((i
 test("やや少ない・少ないは逆ルート順", () => assert.deepEqual(secondRoute.filter((id) => judgments[id] === "slightly_few" || judgments[id] === "few"), reverse.filter((id) => judgments[id] === "slightly_few" || judgments[id] === "few")));
 test("2周目は全エリアを重複なく含む", () => { assert.equal(secondRoute.length, route.length); assert.equal(new Set(secondRoute).size, route.length); });
 test("2周目は1周目保存率を使用する", () => assert.match(simpleUiSource, /firstLapRates\[areaId\].*mainRateText/));
-test("2周目に10個以上指示がない", () => { const secondSection = simpleUiSource.slice(simpleUiSource.indexOf("function SecondLapScreen")); assert.doesNotMatch(secondSection, /10個以上/); });
-test("2周目は残り1個を対象外にする", () => assert.match(simpleUiSource, /残り1個の商品は対象外/));
+test("2周目は10個以上でも+5%をしないと明示する", () => { const secondSection = simpleUiSource.slice(simpleUiSource.indexOf("function SecondLapScreen"), simpleUiSource.indexOf("function FinalScreen")); assert.match(secondSection, /10個以上でも\+5％はしない/); });
+test("2周目は残り1個を対象外にする", () => { const secondSection = simpleUiSource.slice(simpleUiSource.indexOf("function SecondLapScreen"), simpleUiSource.indexOf("function FinalScreen")); assert.match(secondSection, /1個の商品は値引しない/); });
 test("簡易UIに個別商品補正の入力がない", () => ["定番商品", "夜によく売れる", "見た目が悪い", "不人気", "広告商品"].forEach((text) => assert.doesNotMatch(simpleUiSource, new RegExp(text))));
 
 test("18時25分に18時30分へ切替", () => assert.equal(resolveSimpleDiscountTime(dateAt("2026-07-20T18:25:00+09:00")), "18"));
@@ -225,5 +226,45 @@ test("モード名表示が日本語で固定", () => { assert.equal(getAppModeL
 test("天候画面は簡易対象時刻だけに制限", () => assert.match(simpleUiSource, /allowedDiscountTimes=\{\["17", "18", "19"\]\}/));
 test("詳細StartScreenの既定時刻一覧は維持", () => ["15", "17", "18", "19", "20"].forEach((time) => assert.match(startSource, new RegExp(`value: "${time}"`))));
 
-assert.equal(passed, 65);
+test("簡易共通ヘッダーにモード・時刻・エリア進捗をまとめる", () => {
+  assert.match(simpleUiSource, /data-simple-ui="header"/);
+  assert.match(simpleUiSource, /role="progressbar"/);
+  assert.match(simpleUiSource, /aria-label="エリア進捗"/);
+});
+test("簡易共通ヘッダーは全対象時刻を値引時刻として表示する", () => {
+  ["17:00値引", "18:30値引", "19:30値引", "20:30値引"].forEach((text) => assert.match(simpleUiSource, new RegExp(text)));
+});
+test("5段階ボタンは60px以上で判定別のトーンを持つ", () => {
+  assert.match(simpleUiSource, /const EVALUATION_TONES/);
+  assert.match(simpleUiSource, /data-evaluation=\{evaluation\}/);
+  assert.match(simpleUiSource, /minHeight: 60/);
+});
+test("1周目・2周目・最終値引は大きな値引率カードを共有する", () => {
+  assert.match(simpleUiSource, /data-simple-ui="instruction-card"/);
+  assert.match(simpleUiSource, /data-simple-ui="discount-rate"/);
+  assert.match(simpleUiSource, /fontSize: "clamp\(52px/);
+});
+test("1周目と2周目の補足は短い箇条書きで整理する", () => {
+  assert.match(simpleUiSource, /data-simple-ui="rules"/);
+  assert.match(simpleUiSource, /function RuleItem/);
+  assert.match(simpleUiSource, /まだ値引していない商品が対象/);
+});
+test("主要な次へボタンは下部寄せで60px以上", () => {
+  assert.match(simpleUiSource, /data-simple-ui="action-area"/);
+  assert.match(simpleUiSource, /position: "sticky"/);
+  assert.match(simpleUiSource, /minHeight: 60/);
+});
+test("最終値引一覧は番号とエリア名をカード状に表示する", () => {
+  const finalPart = simpleUiSource.slice(simpleUiSource.indexOf("function FinalScreen"));
+  assert.match(finalPart, /\{index \+ 1\}/);
+  assert.match(finalPart, /getAreaName\(areaId\)/);
+  assert.match(finalPart, /値引する順番/);
+});
+test("開始画面の強調は簡易モードだけで詳細モードは既定表示", () => {
+  assert.match(simpleUiSource, /emphasizeModeLabel/);
+  assert.match(startSource, /emphasizeModeLabel = false/);
+  assert.doesNotMatch(appRouterSource, /emphasizeModeLabel/);
+});
+
+assert.equal(passed, 73);
 console.log(`簡易モード確認: ${passed}件すべて成功`);

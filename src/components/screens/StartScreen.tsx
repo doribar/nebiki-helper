@@ -34,6 +34,7 @@ type StartScreenProps = {
   onOpenSettings?: () => void;
   now?: Date;
   modeLabel?: string;
+  emphasizeModeLabel?: boolean;
   allowedDiscountTimes?: DiscountTime[];
   resolveAutomaticDiscountTime?: (date: Date) => DiscountTime;
 };
@@ -397,6 +398,7 @@ export function StartScreen({
   onOpenSettings,
   now = new Date(),
   modeLabel,
+  emphasizeModeLabel = false,
   allowedDiscountTimes,
   resolveAutomaticDiscountTime = resolveDiscountTime,
 }: StartScreenProps) {
@@ -581,7 +583,21 @@ export function StartScreen({
               （アプリ「ウェザーニュース」を見て入力）
             </div>
             {modeLabel ? (
-              <div style={{ marginTop: 2, fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+              <div
+                data-mode-label={emphasizeModeLabel ? "emphasized" : "default"}
+                style={emphasizeModeLabel
+                  ? {
+                      display: "inline-flex",
+                      marginTop: 7,
+                      padding: "4px 10px",
+                      borderRadius: 999,
+                      background: "#e8f3f5",
+                      color: "#155e75",
+                      fontSize: 12,
+                      fontWeight: 900,
+                    }
+                  : { marginTop: 2, fontSize: 12, color: "#64748b", fontWeight: 700 }}
+              >
                 {modeLabel}
               </div>
             ) : null}
