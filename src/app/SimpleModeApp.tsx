@@ -10,11 +10,10 @@ import { getWeatherGuideText } from "../domain/weekdayBase.ts";
 import type { AreaCountEvaluation } from "../domain/types.ts";
 import type { UseSimpleModeResult } from "../hooks/useSimpleMode.ts";
 import {
-  DayBeforeHolidayNotice,
-  HolidayBeforeNormalWeekdayNotice,
-  ThreeDayHolidayMiddleNotice,
+  DAY_BEFORE_HOLIDAY_NOTICE_TEXT,
+  HOLIDAY_BEFORE_NORMAL_WEEKDAY_NOTICE_TEXT,
+  THREE_DAY_HOLIDAY_MIDDLE_NOTICE_TEXT,
 } from "../components/common/DayBeforeHolidayNotice.ts";
-import { WeekdayBasePanel } from "../components/common/WeekdayBasePanel.tsx";
 import { StartScreen } from "../components/screens/StartScreen.tsx";
 
 const EVALUATIONS: AreaCountEvaluation[] = [
@@ -26,31 +25,27 @@ const EVALUATIONS: AreaCountEvaluation[] = [
 ];
 
 const pageStyle: CSSProperties = {
+  height: "100dvh",
   minHeight: "100dvh",
   width: "100%",
   maxWidth: 560,
   margin: "0 auto",
-  padding: "14px 16px 28px",
+  padding: "8px 12px calc(8px + env(safe-area-inset-bottom))",
   boxSizing: "border-box",
-  overflowX: "hidden",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
   background: "#f8fafc",
   color: "#172033",
 };
 
-const cardStyle: CSSProperties = {
-  border: "1px solid #e2e8f0",
-  borderRadius: 18,
-  padding: 18,
-  background: "#fff",
-  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.05)",
-};
-
 const instructionCardStyle: CSSProperties = {
-  ...cardStyle,
   border: "1px solid #f5c2ba",
-  background: "linear-gradient(145deg, #fff7ed 0%, #fff 78%)",
+  borderRadius: 14,
+  background: "linear-gradient(145deg, #fff7ed 0%, #fff 82%)",
   textAlign: "center",
-  padding: "22px 18px",
+  padding: "9px 14px 10px",
+  boxShadow: "0 3px 10px rgba(15, 23, 42, 0.035)",
 };
 
 const EVALUATION_TONES: Record<AreaCountEvaluation, CSSProperties> = {
@@ -108,16 +103,16 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
       aria-label="設定を開く"
       title="設定"
       style={{
-        width: 48,
-        height: 48,
+        width: 44,
+        height: 44,
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: 15,
+        borderRadius: 12,
         border: "1px solid #d5dde8",
         background: "#fff",
         color: "#334155",
-        fontSize: 22,
+        fontSize: 20,
         cursor: "pointer",
         boxShadow: "0 3px 10px rgba(15, 23, 42, 0.06)",
       }}
@@ -141,49 +136,35 @@ function SimpleHeader(props: {
     : 0;
 
   return (
-    <header data-simple-ui="header" style={{ ...cardStyle, marginBottom: 20, padding: "14px 16px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            minHeight: 28,
-            padding: "3px 10px",
-            borderRadius: 999,
-            background: "#e8f3f5",
-            color: "#155e75",
-            fontSize: 12,
-            fontWeight: 900,
-            letterSpacing: "0.02em",
-          }}
-        >
-          簡易モード
-        </span>
-        <SettingsButton onClick={props.onOpenSettings} />
-      </div>
-
-      {props.areaName ? (
-        <>
-          <p style={{ margin: "12px 0 4px", color: "#64748b", fontSize: 13, fontWeight: 800 }}>
-            {props.title}
-          </p>
-          <h1 style={{ margin: 0, fontSize: "clamp(26px, 8vw, 34px)", lineHeight: 1.25, letterSpacing: "-0.02em" }}>
-            {props.areaName}
+    <header
+      data-simple-ui="header"
+      aria-label={props.title}
+      style={{ marginBottom: 7, padding: "2px 0 7px", borderBottom: "1px solid #dbe4ec", flexShrink: 0 }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 44px", alignItems: "center", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#475569", fontSize: 12, fontWeight: 850, lineHeight: 1.2 }}>
+            <span style={{ color: "#155e75", fontWeight: 950 }}>簡易モード</span>
+            <span>{getSimpleDiscountTimeDisplay(props.discountTime)}</span>
+            {hasProgress ? <span style={{ marginLeft: "auto", fontWeight: 950 }}>{props.progressIndex}/{props.progressTotal}</span> : null}
+          </div>
+          <h1
+            style={{
+              margin: "3px 0 0",
+              overflow: "hidden",
+              color: "#172033",
+              fontSize: props.areaName ? "clamp(21px, 6vw, 25px)" : 24,
+              fontWeight: 900,
+              lineHeight: 1.2,
+              letterSpacing: "-0.02em",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {props.areaName ?? props.title}
           </h1>
-        </>
-      ) : (
-        <h1 style={{ margin: "12px 0 0", fontSize: 30, lineHeight: 1.25 }}>{props.title}</h1>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 12 }}>
-        <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
-          {getSimpleDiscountTimeDisplay(props.discountTime)}
-        </span>
-        {hasProgress ? (
-          <span style={{ color: "#475569", fontSize: 13, fontWeight: 900 }}>
-            {props.progressIndex} / {props.progressTotal}
-          </span>
-        ) : null}
+        </div>
+        <SettingsButton onClick={props.onOpenSettings} />
       </div>
 
       {hasProgress ? (
@@ -193,7 +174,7 @@ function SimpleHeader(props: {
           aria-valuemin={0}
           aria-valuemax={props.progressTotal}
           aria-valuenow={props.progressIndex}
-          style={{ height: 6, marginTop: 8, overflow: "hidden", borderRadius: 999, background: "#e2e8f0" }}
+          style={{ height: 3, marginTop: 5, overflow: "hidden", borderRadius: 999, background: "#e2e8f0" }}
         >
           <div
             style={{
@@ -209,6 +190,45 @@ function SimpleHeader(props: {
   );
 }
 
+function CompactHolidayNotice(props: { ariaLabel: string; text: string }) {
+  return (
+    <aside
+      role="note"
+      aria-label={props.ariaLabel}
+      style={{
+        padding: "6px 9px",
+        borderLeft: "3px solid #b45309",
+        borderRadius: 7,
+        background: "#fff7ed",
+        color: "#7c2d12",
+        fontSize: 13,
+        fontWeight: 800,
+        lineHeight: 1.35,
+      }}
+    >
+      {props.text}
+    </aside>
+  );
+}
+
+function CompactDetailRow(props: { summaryText?: string; detailLines?: string[] }) {
+  if (!props.summaryText) return null;
+  const hasDetails = Boolean(props.detailLines?.length);
+  if (!hasDetails) {
+    return <div style={{ fontWeight: 750 }}>{props.summaryText}</div>;
+  }
+  return (
+    <details style={{ minWidth: 0 }}>
+      <summary style={{ minHeight: 28, cursor: "pointer", fontWeight: 750, lineHeight: "28px" }}>
+        {props.summaryText}
+      </summary>
+      <div style={{ padding: "2px 0 3px 12px", display: "grid", gap: 2 }}>
+        {props.detailLines?.map((line) => <div key={line}>・{line}</div>)}
+      </div>
+    </details>
+  );
+}
+
 function BasisAndHoliday(props: {
   app: UseSimpleModeResult;
   evaluation?: AreaCountEvaluation;
@@ -221,39 +241,51 @@ function BasisAndHoliday(props: {
   });
   const notices = getSimpleHolidayNotices(props.app.state.sessionDraft);
   return (
-    <section data-simple-ui="basis" style={{ marginBottom: 18 }}>
+    <section data-simple-ui="basis" style={{ marginBottom: 7, display: "grid", gap: 5, flexShrink: 0 }}>
       <div
         style={{
-          marginBottom: 12,
-          padding: "12px 14px",
-          borderRadius: 14,
-          borderLeft: "4px solid #0f766e",
+          padding: "6px 9px",
+          borderRadius: 7,
+          borderLeft: "3px solid #0f766e",
           background: "#f0fdfa",
           color: "#134e4a",
+          fontSize: 13,
+          lineHeight: 1.35,
         }}
       >
-        <p style={{ margin: 0, fontWeight: 800, lineHeight: 1.6 }}>
+        <p style={{ margin: 0, fontWeight: 800 }}>
           {calculation.basisGuide.referenceText}、残り数を判断してください。
         </p>
       </div>
-      <DayBeforeHolidayNotice visible={notices.dayBefore} />
-      <ThreeDayHolidayMiddleNotice visible={notices.threeDayMiddle} />
-      <HolidayBeforeNormalWeekdayNotice visible={notices.holidayBeforeWeekday} />
-      <WeekdayBasePanel
-        noticeText={calculation.basisGuide.noticeText}
-        weekdaySummaryText={calculation.basisGuide.weekdaySummaryText}
-        weekdayDetailLines={calculation.basisGuide.weekdayDetailLines}
-        bonusSummaryText={calculation.basisGuide.bonusSummaryText}
-        bonusDetailLines={calculation.basisGuide.bonusDetailLines}
-      />
+      {notices.dayBefore ? <CompactHolidayNotice ariaLabel="祝前日の注意" text={DAY_BEFORE_HOLIDAY_NOTICE_TEXT} /> : null}
+      {notices.threeDayMiddle ? <CompactHolidayNotice ariaLabel="三連休中日の注意" text={THREE_DAY_HOLIDAY_MIDDLE_NOTICE_TEXT} /> : null}
+      {notices.holidayBeforeWeekday ? <CompactHolidayNotice ariaLabel="翌日平日祝日の注意" text={HOLIDAY_BEFORE_NORMAL_WEEKDAY_NOTICE_TEXT} /> : null}
+      <div
+        data-simple-ui="basis-details"
+        style={{
+          padding: "6px 9px",
+          border: "1px solid #dbe4ec",
+          borderRadius: 7,
+          background: "#f8fafc",
+          color: "#334155",
+          display: "grid",
+          gap: 3,
+          fontSize: 12.5,
+          lineHeight: 1.35,
+        }}
+      >
+        {calculation.basisGuide.noticeText ? <div>{calculation.basisGuide.noticeText}</div> : null}
+        <CompactDetailRow summaryText={calculation.basisGuide.weekdaySummaryText} detailLines={calculation.basisGuide.weekdayDetailLines} />
+        <CompactDetailRow summaryText={calculation.basisGuide.bonusSummaryText} detailLines={calculation.basisGuide.bonusDetailLines} />
+      </div>
     </section>
   );
 }
 
 function SimpleRules({ children }: { children: ReactNode }) {
   return (
-    <section data-simple-ui="rules" style={{ ...cardStyle, marginTop: 14, padding: "15px 16px" }}>
-      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 11 }}>
+    <section data-simple-ui="rules" style={{ marginTop: 7, padding: "5px 2px 2px", borderTop: "1px solid #e2e8f0" }}>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 3 }}>
         {children}
       </ul>
     </section>
@@ -262,7 +294,7 @@ function SimpleRules({ children }: { children: ReactNode }) {
 
 function RuleItem({ children }: { children: ReactNode }) {
   return (
-    <li style={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr)", gap: 8, alignItems: "start", lineHeight: 1.55 }}>
+    <li style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: 5, alignItems: "start", fontSize: 14, lineHeight: 1.35 }}>
       <span aria-hidden="true" style={{ color: "#0f766e", fontWeight: 900 }}>✓</span>
       <span>{children}</span>
     </li>
@@ -274,12 +306,9 @@ function SimpleActionButton(props: { children: ReactNode; onClick: () => void })
     <div
       data-simple-ui="action-area"
       style={{
-        position: "sticky",
-        bottom: 0,
-        zIndex: 2,
-        marginTop: 18,
-        padding: "14px 0 calc(10px + env(safe-area-inset-bottom))",
-        background: "linear-gradient(to bottom, rgba(248, 250, 252, 0), #f8fafc 24%)",
+        marginTop: "auto",
+        paddingTop: 6,
+        flexShrink: 0,
       }}
     >
       <button
@@ -287,13 +316,13 @@ function SimpleActionButton(props: { children: ReactNode; onClick: () => void })
         onClick={props.onClick}
         style={{
           width: "100%",
-          minHeight: 60,
-          padding: "14px 20px",
+          minHeight: 50,
+          padding: "8px 18px",
           border: 0,
           borderRadius: 16,
           background: "#b42318",
           color: "#fff",
-          fontSize: 19,
+          fontSize: 18,
           fontWeight: 900,
           letterSpacing: "0.03em",
           cursor: "pointer",
@@ -314,7 +343,7 @@ function JudgmentScreen(props: {
   const areaId = props.app.state.currentAreaId;
   if (!areaId) return null;
   return (
-    <main style={pageStyle}>
+    <main data-simple-screen="judgment" style={pageStyle}>
       <SimpleHeader
         title="エリアの残数判定"
         areaName={getAreaName(areaId)}
@@ -323,11 +352,11 @@ function JudgmentScreen(props: {
         progressTotal={props.app.route.length}
         onOpenSettings={props.onOpenSettings}
       />
-      <h2 style={{ margin: "0 0 14px", fontSize: 21, lineHeight: 1.45 }}>
+      <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: 850, lineHeight: 1.35, flexShrink: 0 }}>
         このエリアの残り具合を選んでください
       </h2>
       <BasisAndHoliday app={props.app} now={props.now} />
-      <section aria-label="5段階判定" style={{ display: "grid", gap: 10 }}>
+      <section aria-label="5段階判定" style={{ display: "grid", gap: 6, flex: "1 1 auto", alignContent: "center", minHeight: 0 }}>
         {EVALUATIONS.map((evaluation) => (
           <button
             key={evaluation}
@@ -335,11 +364,11 @@ function JudgmentScreen(props: {
             onClick={() => props.app.actions.judgeCurrentArea(evaluation)}
             data-evaluation={evaluation}
             style={{
-              minHeight: 60,
-              padding: "12px 16px",
-              borderRadius: 16,
+              minHeight: 50,
+              padding: "7px 14px",
+              borderRadius: 13,
               border: "2px solid",
-              fontSize: 19,
+              fontSize: 17,
               fontWeight: 900,
               cursor: "pointer",
               boxShadow: "0 3px 10px rgba(15, 23, 42, 0.04)",
@@ -368,7 +397,7 @@ function FirstLapScreen(props: {
     now: props.now,
   });
   return (
-    <main style={pageStyle}>
+    <main data-simple-screen="first-lap" style={pageStyle}>
       <SimpleHeader
         title="1周目"
         areaName={getAreaName(areaId)}
@@ -377,26 +406,26 @@ function FirstLapScreen(props: {
         progressTotal={props.app.route.length}
         onOpenSettings={props.onOpenSettings}
       />
+      <div style={{ marginBottom: 5, color: "#7c2d12", fontSize: 12, fontWeight: 950, letterSpacing: "0.04em" }}>1周目</div>
       <section aria-label="1周目の値引指示" data-simple-ui="instruction-card" style={instructionCardStyle}>
-        <p style={{ margin: 0, color: "#7c2d12", fontSize: 16, fontWeight: 900 }}>多い商品</p>
+        <p style={{ margin: 0, color: "#7c2d12", fontSize: 15, fontWeight: 900, lineHeight: 1.2 }}>多い商品</p>
         <div
           data-simple-ui="discount-rate"
-          style={{ margin: "4px 0 8px", color: "#b42318", fontSize: "clamp(52px, 17vw, 72px)", fontWeight: 950, lineHeight: 1 }}
+          style={{ margin: "1px 0 3px", color: "#b42318", fontSize: "clamp(46px, 14vw, 58px)", fontWeight: 950, lineHeight: 0.98 }}
         >
           {calculation.rateSnapshot.mainRateText}
         </div>
-        <p style={{ margin: 0, color: "#475569", lineHeight: 1.6 }}>
-          10個以上ある商品は
-          <strong style={{ marginLeft: 5, color: "#9a3412", fontSize: 20 }}>
+        <p style={{ margin: 0, color: "#475569", fontSize: 14, lineHeight: 1.3 }}>
+          10個以上は
+          <strong style={{ marginLeft: 4, color: "#9a3412", fontSize: 18 }}>
             {calculation.rateSnapshot.tenOrMoreRateText ?? calculation.rateSnapshot.mainRateText}
           </strong>
         </p>
       </section>
       <SimpleRules>
-        <RuleItem>多い商品だけを値引する</RuleItem>
         <RuleItem>1個の商品は値引しない</RuleItem>
         <RuleItem>それ以外の商品は、まだ値引しない</RuleItem>
-        <RuleItem>多いか迷った商品は値引してください</RuleItem>
+        <RuleItem>多いか迷った商品は値引する</RuleItem>
       </SimpleRules>
       <SimpleActionButton onClick={() => props.app.actions.completeFirstLapArea(calculation.rateSnapshot)}>
         次へ
@@ -414,7 +443,7 @@ function SecondLapScreen(props: {
   const rate = props.app.state.firstLapRates[areaId]?.mainRateText ?? "表示値引率";
   const isLast = props.app.state.currentIndex >= props.app.activeRoute.length - 1;
   return (
-    <main style={pageStyle}>
+    <main data-simple-screen="second-lap" style={pageStyle}>
       <SimpleHeader
         title="2周目"
         areaName={getAreaName(areaId)}
@@ -423,41 +452,40 @@ function SecondLapScreen(props: {
         progressTotal={props.app.activeRoute.length}
         onOpenSettings={props.onOpenSettings}
       />
+      <div style={{ marginBottom: 5, color: "#0c4a6e", fontSize: 12, fontWeight: 950, letterSpacing: "0.04em" }}>2周目</div>
       <aside
         role="note"
         style={{
-          marginBottom: 14,
-          padding: "12px 14px",
-          border: "1px solid #bae6fd",
-          borderRadius: 14,
+          marginBottom: 6,
+          padding: "7px 9px",
+          borderLeft: "3px solid #38bdf8",
+          borderRadius: 7,
           background: "#f0f9ff",
           color: "#0c4a6e",
-          fontSize: 14,
+          fontSize: 12.5,
           fontWeight: 750,
-          lineHeight: 1.6,
+          lineHeight: 1.35,
           textAlign: "left",
         }}
       >
-        <span aria-hidden="true" style={{ marginRight: 7 }}>⏱</span>
         ここからは時間に余裕がある場合のみ行ってください。他にやることができたら、途中で切り上げて構いません。
       </aside>
       <section aria-label="2周目の値引指示" data-simple-ui="instruction-card" style={instructionCardStyle}>
-        <p style={{ margin: 0, color: "#7c2d12", fontSize: 16, fontWeight: 900 }}>少ない商品以外</p>
+        <p style={{ margin: 0, color: "#7c2d12", fontSize: 15, fontWeight: 900, lineHeight: 1.2 }}>少ない商品以外</p>
         <div
           data-simple-ui="discount-rate"
-          style={{ marginTop: 4, color: "#b42318", fontSize: "clamp(52px, 17vw, 72px)", fontWeight: 950, lineHeight: 1 }}
+          style={{ marginTop: 1, color: "#b42318", fontSize: "clamp(46px, 14vw, 58px)", fontWeight: 950, lineHeight: 0.98 }}
         >
           {rate}
         </div>
       </section>
       <SimpleRules>
         <RuleItem>まだ値引していない商品が対象</RuleItem>
-        <RuleItem>1周目で値引した商品には、もう一度値引シールを貼らない</RuleItem>
         <RuleItem>1個の商品は値引しない</RuleItem>
-        <RuleItem>10個以上でも+5％はしない</RuleItem>
+        <RuleItem>10個以上の＋5％はしない</RuleItem>
       </SimpleRules>
       {isLast ? (
-        <p style={{ margin: "18px 0 0", padding: "14px 16px", borderRadius: 14, background: "#ecfdf5", color: "#166534", fontWeight: 900 }}>
+        <p style={{ margin: "8px 0 0", padding: "8px 10px", borderRadius: 8, background: "#ecfdf5", color: "#166534", fontSize: 14, fontWeight: 900 }}>
           このエリアまでで2周目は終了です。
         </p>
       ) : (
@@ -469,62 +497,56 @@ function SecondLapScreen(props: {
 
 function FinalScreen(props: { app: UseSimpleModeResult; onOpenSettings: () => void }) {
   return (
-    <main style={pageStyle}>
+    <main data-simple-screen="final" style={pageStyle}>
       <SimpleHeader
         title="最終値引"
         discountTime={props.app.state.discountTime}
         onOpenSettings={props.onOpenSettings}
       />
       <section aria-label="最終値引指示" data-simple-ui="instruction-card" style={instructionCardStyle}>
-        <p style={{ margin: 0, color: "#7c2d12", fontSize: 16, fontWeight: 900 }}>すべての商品</p>
-        <div
-          data-simple-ui="discount-rate"
-          style={{ margin: "4px 0 10px", color: "#b42318", fontSize: "clamp(58px, 19vw, 80px)", fontWeight: 950, lineHeight: 1 }}
-        >
-          50％
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 7 }}>
+          <span style={{ color: "#7c2d12", fontSize: 15, fontWeight: 900 }}>全品</span>
+          <strong
+            data-simple-ui="discount-rate"
+            style={{ color: "#b42318", fontSize: "clamp(44px, 13vw, 54px)", fontWeight: 950, lineHeight: 0.95 }}
+          >
+            50％
+          </strong>
         </div>
-        <p style={{ margin: 0, color: "#475569", lineHeight: 1.65 }}>
-          19:30の判定結果をもとに、以下の順番で並べています。
-          <br />
-          上から順に、すべての商品を50％にしてください。
+        <p style={{ margin: "3px 0 0", color: "#475569", fontSize: 13, lineHeight: 1.35 }}>
+          19:30の判定結果をもとに、以下の順番で、すべての商品を50％にしてください。
         </p>
       </section>
-      <section style={{ marginTop: 18 }}>
-        <h2 style={{ margin: "0 0 12px", fontSize: 19 }}>値引する順番</h2>
-        <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 9 }}>
+      <section style={{ marginTop: 7, minHeight: 0 }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 900 }}>値引する順番</h2>
+        <ol data-simple-ui="final-route" style={{ margin: 0, padding: 0, listStyle: "none", borderTop: "1px solid #dbe4ec" }}>
           {props.app.state.finalRoute.map((areaId, index) => (
             <li
               key={areaId}
               style={{
                 display: "grid",
-                gridTemplateColumns: "34px minmax(0, 1fr)",
+                gridTemplateColumns: "27px minmax(0, 1fr)",
                 alignItems: "center",
-                gap: 11,
-                minHeight: 54,
-                padding: "9px 14px 9px 10px",
-                border: "1px solid #e2e8f0",
-                borderRadius: 14,
-                background: "#fff",
-                fontWeight: 850,
-                boxShadow: "0 3px 10px rgba(15, 23, 42, 0.035)",
+                gap: 5,
+                minHeight: 31,
+                padding: "2px 8px",
+                borderBottom: "1px solid #e2e8f0",
+                background: index % 2 === 0 ? "#fff" : "#f8fafc",
+                fontSize: 14,
+                fontWeight: 800,
+                lineHeight: 1.2,
               }}
             >
               <span
                 aria-hidden="true"
                 style={{
-                  width: 32,
-                  height: 32,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 10,
-                  background: "#e8f3f5",
                   color: "#155e75",
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: 950,
+                  textAlign: "right",
                 }}
               >
-                {index + 1}
+                {index + 1}.
               </span>
               <span>{getAreaName(areaId)}</span>
             </li>
