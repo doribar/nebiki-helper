@@ -54,9 +54,17 @@ function cloneSkipRecord(record: NextSessionSkipRecord): NextSessionSkipRecord {
 
   if (typeof record.previousRateText === "string") cloned.previousRateText = record.previousRateText;
   if (typeof record.previousManyRateText === "string") cloned.previousManyRateText = record.previousManyRateText;
-  if (typeof record.previousManyNote === "string") cloned.previousManyNote = record.previousManyNote;
   if (typeof record.previousNormalRateText === "string") cloned.previousNormalRateText = record.previousNormalRateText;
   if (record.skipKind === "late_plus5" || record.skipKind === "early_next_minus5") cloned.skipKind = record.skipKind;
+  if (record.sourceDiscountTime === "17" || record.sourceDiscountTime === "18") {
+    cloned.sourceDiscountTime = record.sourceDiscountTime;
+  }
+  if (typeof record.sourceSessionStartedAt === "string") {
+    cloned.sourceSessionStartedAt = record.sourceSessionStartedAt;
+  }
+  if (typeof record.earlyDiscountCompletedAt === "string") {
+    cloned.earlyDiscountCompletedAt = record.earlyDiscountCompletedAt;
+  }
 
   return cloned;
 }
@@ -289,16 +297,38 @@ export function markFinalDayAutoExported(date: string): void {
   localStorage.setItem(STORAGE_KEYS.finalDayAutoExportDates, JSON.stringify(next));
 }
 
-export function loadReview19Records(): Review19Result[] {
+function loadRawReview19Records(): unknown[] {
   const raw = localStorage.getItem(STORAGE_KEYS.review19Records);
-  const parsed = safeParseJSON<Review19Result[]>(raw, []);
-  return cloneReview19Records(Array.isArray(parsed) ? parsed : []);
+  const parsed = safeParseJSON<unknown[]>(raw, []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+export function loadReview19Records(): Review19Result[] {
+  return cloneReview19Records(
+    loadRawReview19Records()
+      .filter((item): item is Review19Result =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        (item as { review19Status?: unknown }).review19Status !== "not_applicable"
+      )
+  );
 }
 
 export function saveReview19Records(records: Review19Result[]): void {
+  // 旧not_applicableレコードは業務処理から除外するが、履歴自体は書き換えない。
+  const legacyNotApplicable = loadRawReview19Records().filter((item) =>
+    Boolean(item) &&
+    typeof item === "object" &&
+    (item as { review19Status?: unknown }).review19Status === "not_applicable"
+  );
   localStorage.setItem(
     STORAGE_KEYS.review19Records,
-    JSON.stringify(cloneReview19Records(records))
+    JSON.stringify([
+      ...legacyNotApplicable,
+      ...cloneReview19Records(records).filter(
+        (record) => record.review19Status === "recorded"
+      ),
+    ])
   );
 }
 
@@ -344,6 +374,23 @@ function cloneDailySessionSnapshot(snapshot: DailySessionSnapshot): DailySession
   return JSON.parse(JSON.stringify(snapshot)) as DailySessionSnapshot;
 }
 
+function getDailySessionCompletionSignature(snapshot: DailySessionSnapshot): string {
+  return JSON.stringify(
+    Object.values(snapshot.areas)
+      .map((area) => ({
+        areaId: area.areaId,
+        status: area.status,
+        visitedAt: area.visitedAt ?? null,
+        completedAt: area.completedAt ?? null,
+        confirmedAt: area.rateDecisionSnapshot?.confirmedAt ?? null,
+        measurementStatus: area.measurementStatus ?? null,
+        missingReason: area.missingReason ?? null,
+        measurementRecordedAt: area.measurementRecordedAt ?? null,
+      }))
+      .sort((a, b) => a.areaId.localeCompare(b.areaId))
+  );
+}
+
 export function loadDailySessionSnapshots(): DailySessionSnapshot[] {
   const raw = localStorage.getItem(STORAGE_KEYS.dailySessionSnapshots);
   const parsed = safeParseJSON<DailySessionSnapshot[]>(raw, []);
@@ -376,6 +423,26 @@ export function upsertDailySessionSnapshot(snapshot: DailySessionSnapshot): void
   if (!isDailySessionSnapshotDateConsistent(snapshot)) return;
 
   const current = loadDailySessionSnapshots();
+  const previous = current.find((item) =>
+    item.session.date === snapshot.session.date &&
+    item.session.discountTime === snapshot.session.discountTime &&
+    item.session.startedAt === snapshot.session.startedAt
+  );
+  const preserveCapturedDecision = Boolean(
+    previous &&
+    getDailySessionCompletionSignature(previous) ===
+      getDailySessionCompletionSignature(snapshot)
+  );
+  const snapshotToStore = preserveCapturedDecision && previous
+    ? {
+        ...cloneDailySessionSnapshot(snapshot),
+        capturedAt: previous.capturedAt,
+        basisCapturedAt: previous.basisCapturedAt ?? previous.capturedAt,
+        basis: JSON.parse(JSON.stringify(previous.basis)),
+        areas: JSON.parse(JSON.stringify(previous.areas)),
+        doneSummaryItems: JSON.parse(JSON.stringify(previous.doneSummaryItems)),
+      }
+    : cloneDailySessionSnapshot(snapshot);
   const next = [
     ...current.filter((item) => {
       return !(
@@ -384,7 +451,7 @@ export function upsertDailySessionSnapshot(snapshot: DailySessionSnapshot): void
         item.session.startedAt === snapshot.session.startedAt
       );
     }),
-    cloneDailySessionSnapshot(snapshot),
+    snapshotToStore,
   ]
     .sort((a, b) => {
       const dateCompare = a.session.date.localeCompare(b.session.date);

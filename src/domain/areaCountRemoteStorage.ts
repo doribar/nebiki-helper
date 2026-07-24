@@ -1,4 +1,4 @@
-import type { AreaCountDecisionBasis, AreaCountRecord } from "./areaCountHistory.ts";
+import type { AreaCountRecord } from "./areaCountHistory.ts";
 import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
 
 type SupabaseConfig = {
@@ -6,24 +6,18 @@ type SupabaseConfig = {
   anonKey: string;
 };
 
-type AreaCountRecordRow = {
+export type RemoteAreaCountRow = {
   data_schema_version?: number | null;
   app_version?: string | null;
+  build_id?: string | null;
   date: string;
   session_started_at: string;
   recorded_at: string;
   area_id: string;
   discount_time: string;
-  weekday_base?: string | null;
   actual_weekday?: string | null;
   actual_weekday_group: string;
   count: number;
-  user_judge?: string | null;
-  suggested_evaluation?: string | null;
-  area_rate_adjustment?: number | null;
-  evaluation_source?: string | null;
-  decision_basis?: AreaCountDecisionBasis | null;
-  comfort_point?: number | null;
 };
 
 export type RemoteAreaCountLoadResult =
@@ -59,57 +53,67 @@ function buildHeaders(config: SupabaseConfig): HeadersInit {
   };
 }
 
-function rowToRecord(row: AreaCountRecordRow): Partial<AreaCountRecord> {
+function rowToRecord(row: RemoteAreaCountRow): Partial<AreaCountRecord> {
   return {
     dataSchemaVersion: row.data_schema_version ?? undefined,
     appVersion: row.app_version ?? undefined,
+    buildId: row.build_id ?? undefined,
     date: row.date,
     sessionStartedAt: row.session_started_at,
     recordedAt: row.recorded_at,
     areaId: row.area_id as AreaCountRecord["areaId"],
     discountTime: row.discount_time as AreaCountRecord["discountTime"],
-    weekdayBase: row.weekday_base ?? undefined,
     actualWeekday: row.actual_weekday ?? undefined,
     actualWeekdayGroup: row.actual_weekday_group as AreaCountRecord["actualWeekdayGroup"],
     count: row.count,
-    userJudge: row.user_judge ?? undefined,
-    suggestedEvaluation: row.suggested_evaluation ?? undefined,
-    areaRateAdjustment: row.area_rate_adjustment ?? undefined,
-    evaluationSource: row.evaluation_source ?? undefined,
-    decisionBasis: row.decision_basis ?? undefined,
-    comfortPoint: row.comfort_point ?? undefined,
   } as Partial<AreaCountRecord>;
 }
 
 export function normalizeRemoteAreaCountRows(raw: unknown): AreaCountRecord[] {
   if (!Array.isArray(raw)) return [];
-  return normalizeAreaCountRecords(
-    raw
-      .filter((row): row is AreaCountRecordRow => Boolean(row) && typeof row === "object")
-      .map(rowToRecord),
-  );
+  const sourceRecords = raw
+    .filter((row): row is RemoteAreaCountRow => Boolean(row) && typeof row === "object")
+    .map(rowToRecord);
+  const buildIdByRecordKey = new Map<string, string>();
+  for (const record of sourceRecords) {
+    if (typeof record.buildId !== "string" || !record.buildId.trim()) continue;
+    buildIdByRecordKey.set(
+      `${record.date}::${record.sessionStartedAt}::${record.areaId}::${record.discountTime}`,
+      record.buildId,
+    );
+  }
+
+  return normalizeAreaCountRecords(sourceRecords).map((record) => ({
+    ...record,
+    buildId: buildIdByRecordKey.get(
+      `${record.date}::${record.sessionStartedAt}::${record.areaId}::${record.discountTime}`,
+    ),
+  }));
 }
 
-function recordToRow(record: AreaCountRecord): AreaCountRecordRow {
+export function buildRemoteAreaCountRow(record: AreaCountRecord): RemoteAreaCountRow {
   return {
     data_schema_version: record.dataSchemaVersion ?? null,
     app_version: record.appVersion ?? null,
+    build_id: record.buildId ?? null,
     date: record.date,
     session_started_at: record.sessionStartedAt,
     recorded_at: record.recordedAt,
     area_id: record.areaId,
     discount_time: record.discountTime,
-    weekday_base: record.weekdayBase ?? null,
     actual_weekday: record.actualWeekday ?? null,
     actual_weekday_group: record.actualWeekdayGroup,
     count: record.count,
-    user_judge: record.userJudge ?? null,
-    suggested_evaluation: record.suggestedEvaluation ?? null,
-    area_rate_adjustment: record.areaRateAdjustment ?? null,
-    evaluation_source: record.evaluationSource ?? null,
-    decision_basis: record.decisionBasis ?? null,
-    comfort_point: record.comfortPoint ?? null,
   };
+}
+
+export function buildRemoteAreaCountWriteAttempts(
+  record: AreaCountRecord,
+): [RemoteAreaCountRow, Partial<RemoteAreaCountRow>] {
+  const row = buildRemoteAreaCountRow(record);
+  const withoutBuildIdRow: Partial<RemoteAreaCountRow> = { ...row };
+  delete withoutBuildIdRow.build_id;
+  return [row, withoutBuildIdRow];
 }
 
 export async function loadRemoteAreaCountRecords(): Promise<RemoteAreaCountLoadResult> {
@@ -157,26 +161,16 @@ export async function upsertRemoteAreaCountRecord(
       },
       body: JSON.stringify([body]),
     });
-    const row = recordToRow(record);
+    const [row, withoutBuildIdRow] = buildRemoteAreaCountWriteAttempts(record);
     const response = await fetch(url, requestInit(row));
 
     if (!response.ok) {
-      // バージョン列追加SQLが未実行でも、判定根拠など既存の新項目は保存する。
-      const withoutVersionRow: Partial<AreaCountRecordRow> = { ...row };
-      delete withoutVersionRow.data_schema_version;
-      delete withoutVersionRow.app_version;
-      const withoutVersionResponse = await fetch(
+      // build_id追加前のDBでも、従来の保持列は保存する。
+      const withoutBuildIdResponse = await fetch(
         url,
-        requestInit(withoutVersionRow),
+        requestInit(withoutBuildIdRow),
       );
-      if (withoutVersionResponse.ok) return { status: "saved" };
-
-      // さらに古い環境でも、従来項目の保存自体は止めない。
-      const legacyRow: Partial<AreaCountRecordRow> = { ...withoutVersionRow };
-      delete legacyRow.evaluation_source;
-      delete legacyRow.decision_basis;
-      const legacyResponse = await fetch(url, requestInit(legacyRow));
-      if (!legacyResponse.ok) {
+      if (!withoutBuildIdResponse.ok) {
         return { status: "error", message: `HTTP ${response.status}` };
       }
     }

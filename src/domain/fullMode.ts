@@ -42,7 +42,7 @@ export const FULL_MODE_NOTICE_ITEMS: readonly (readonly FullModeNoticeSegment[])
   ],
   [
     { text: "広告商品", emphasis: true },
-    { text: "は、当日の売れ方を見て、売れ方が順調なら表示値引率から" },
+    { text: "は、表示値引率から" },
     { text: "-10%", emphasis: true },
   ],
 ] as const;

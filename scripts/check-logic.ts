@@ -70,7 +70,6 @@ import type {
   LastSessionWeatherRecord,
   NextSessionSkipRecord,
   WeatherInput,
-  WeekdayBaseLabel,
 } from '../src/domain/types.ts';
 
 type LegacyWeatherSpec = Record<string, unknown> & { afterRainSky?: 'cloudy' | 'sunny' | null };
@@ -422,62 +421,6 @@ const scenarioCases: ScenarioCase[] = [
 ];
 
 
-type ManyThresholdPlus5NoteCase = {
-  name: string;
-  discountTime: Exclude<DiscountTime, '20'>;
-  weatherBonus: number;
-  isSunday?: boolean;
-  ignoreTimeRateCap?: boolean;
-  weekdayBase?: WeekdayBaseLabel;
-  expectedNoteIncludes?: string[];
-  expectedNoteExcludes?: string[];
-};
-
-const manyThresholdPlus5NoteCases: ManyThresholdPlus5NoteCase[] = [
-  {
-    name: '火木基準は10個以上を+15%目安として表示する',
-    discountTime: '15',
-    weatherBonus: -10,
-    expectedNoteIncludes: ['多いのうち10個以上は 5%'],
-  },
-  {
-    name: '火木基準で多いが5%なら10個以上は10%目安を表示する',
-    discountTime: '15',
-    weatherBonus: -5,
-    expectedNoteIncludes: ['多いのうち10個以上は 10%'],
-  },
-  {
-    name: '月水基準でも10個以上を+15%目安として表示する',
-    discountTime: '15',
-    weatherBonus: 0,
-    weekdayBase: '月水',
-    expectedNoteIncludes: ['多いのうち10個以上は 15%'],
-  },
-  {
-    name: '金土日基準でも10個以上を+15%目安として表示する',
-    discountTime: '15',
-    weatherBonus: 0,
-    isSunday: true,
-    weekdayBase: '金土',
-    expectedNoteIncludes: [
-      '多いのうち10個以上は 15%',
-    ],
-  },
-  {
-    name: '19時30分も時刻別上限なしで10個以上の追加目安を表示する',
-    discountTime: '19',
-    weatherBonus: 0,
-    expectedNoteIncludes: ['多いのうち10個以上は 45%'],
-  },
-  {
-    name: '雨雪補正中も絶対上限50%を超える多い個数目安は表示しない',
-    discountTime: '19',
-    weatherBonus: 20,
-    ignoreTimeRateCap: true,
-    expectedNoteExcludes: ['多いのうち10個以上は 55%', '多いのうち10個以上は 65%'],
-  },
-];
-
 let passed = 0;
 
 {
@@ -708,13 +651,13 @@ let passed = 0;
     assert.equal(hourlyForecasts['17'].weather, 'sunny');
 
     const longGapForecasts = createDefaultHourlyForecasts();
-    longGapForecasts['15'].weather = 'rain';
-    longGapForecasts['16'].weather = 'sunny';
+    longGapForecasts['16'].weather = 'rain';
     longGapForecasts['17'].weather = 'sunny';
-    longGapForecasts['18'].weather = 'rain';
+    longGapForecasts['18'].weather = 'sunny';
+    longGapForecasts['19'].weather = 'rain';
     const longGapResolved = resolveRainSandwichedHourlyForecasts(longGapForecasts);
-    assert.equal(longGapResolved['16'].weather, 'sunny');
     assert.equal(longGapResolved['17'].weather, 'sunny');
+    assert.equal(longGapResolved['18'].weather, 'sunny');
 
     console.log('PASS: 雨に直接1枠だけ挟まれた晴れ時刻だけ計算上雨扱い、雪は雪のまま');
     passed += 1;
@@ -1284,34 +1227,20 @@ for (const scenarioCase of scenarioCases) {
 }
 
 
-for (const manyThresholdPlus5Case of manyThresholdPlus5NoteCases) {
+try {
   const display = getNormalTimeRateDisplay({
-    discountTime: manyThresholdPlus5Case.discountTime,
-    weatherBonus: manyThresholdPlus5Case.weatherBonus,
+    discountTime: '19',
+    weatherBonus: 0,
     areaJudge: 'normal',
-    isSunday: manyThresholdPlus5Case.isSunday,
-    ignoreTimeRateCap: manyThresholdPlus5Case.ignoreTimeRateCap,
-    weekdayBase: manyThresholdPlus5Case.weekdayBase,
   });
-
-  try {
-    const note = display.many.note ?? '';
-
-    for (const expected of manyThresholdPlus5Case.expectedNoteIncludes ?? []) {
-      assert.ok(note.includes(expected), `missing expected note text: ${expected}`);
-    }
-
-    for (const unexpected of manyThresholdPlus5Case.expectedNoteExcludes ?? []) {
-      assert.ok(!note.includes(unexpected), `unexpected note text remained: ${unexpected}`);
-    }
-
-    console.log(`PASS: ${manyThresholdPlus5Case.name}`);
-    passed += 1;
-  } catch (error) {
-    console.error(`FAIL: ${manyThresholdPlus5Case.name}`);
-    console.error(error);
-    process.exitCode = 1;
-  }
+  assert.equal(display.many.main, '40%');
+  assert.equal(display.many.note, undefined);
+  console.log('PASS: 10個以上+5%の専用計算・表示を削除し、多い商品の率は維持する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 10個以上+5%の専用計算・表示を削除する');
+  console.error(error);
+  process.exitCode = 1;
 }
 
 
@@ -1558,17 +1487,9 @@ try {
   assert.equal(initial.ratings, null);
   assert.equal(initial.ratingScores, null);
   assert.equal(initial.review19Status, 'recorded');
-  assert.equal(initial.dataSchemaVersion, 2);
+  assert.equal(initial.dataSchemaVersion, 3);
   assert.ok(initial.appVersion);
 
-  const notApplicable = createInitialReview19Result({
-    date: '2026-07-15',
-    sessionStartedAt: '2026-07-15T08:00:00.000Z',
-    review19Status: 'not_applicable',
-  });
-  assert.equal(notApplicable.review19Status, 'not_applicable');
-  assert.equal(notApplicable.dataQuality.complete, true);
-  assert.equal(notApplicable.dataQuality.expectedAreaCount, 0);
   console.log('PASS: 残数入力方式の19時チェックは未収集評価をちょうどいいとして保存しない');
   passed += 1;
 } catch (error) {
@@ -1874,7 +1795,7 @@ const sundayRateDisplay = getNormalTimeRateDisplay({
 assert.equal(sundayRateDisplay.many.main, '10%');
 assert.equal(Object.hasOwn(sundayRateDisplay, 'slightlyMany'), false);
 assert.ok(!(sundayRateDisplay.many.note ?? '').includes('多いのうち5個以上'));
-assert.ok((sundayRateDisplay.many.note ?? '').includes('多いのうち10個以上は 15%'));
+assert.equal(sundayRateDisplay.many.note, undefined);
 
 const nonSundayRateDisplay = getNormalTimeRateDisplay({
   discountTime: '15',
@@ -1895,7 +1816,7 @@ assert.equal(sundayEveningRateDisplay.normal.main, '10%');
 assert.equal(Object.hasOwn(sundayEveningRateDisplay, 'slightlyMany'), false);
 assert.equal(sundayEveningRateDisplay.many.main, '20%');
 
-console.log('PASS: 日曜15時は旧専用行も5個以上補足も出さず10個以上補足だけを表示する');
+console.log('PASS: 日曜15時も個数しきい値の専用補足を表示しない');
 passed += 1;
 
 
@@ -2299,10 +2220,9 @@ try {
   });
   assert.equal(payload.count, 10);
   assert.equal(payload.format, 'nebiki-helper-review19-export');
-  assert.equal(payload.dataSchemaVersion, 2);
+  assert.equal(payload.dataSchemaVersion, 3);
   assert.ok(payload.appVersion);
   assert.equal(payload.dataQuality.recordedCount, 10);
-  assert.equal(payload.dataQuality.notApplicableCount, 0);
 
   const marked = markReview19RecordsExportedInMemory({
     currentRecords: records,
@@ -2319,7 +2239,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 92;
+const totalChecks = 87;
 
 
 {
@@ -2773,7 +2693,7 @@ const totalChecks = 92;
   });
 
   assert.equal(payload.format, 'nebiki-helper-day-export');
-  assert.equal(payload.dataSchemaVersion, 2);
+  assert.equal(payload.dataSchemaVersion, 3);
   assert.ok(payload.appVersion);
   assert.equal(payload.trigger, 'final-counts-complete');
   assert.equal(payload.daySnapshot.date, '2026-07-14');
@@ -2854,7 +2774,7 @@ const totalChecks = 92;
 {
   assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 8);
   assert.equal(FULL_MODE_NOTICE_TEXTS[0], '残り2個の商品は「多い」にしない');
-  assert.equal(FULL_MODE_NOTICE_TEXTS[7], '広告商品は、当日の売れ方を見て、売れ方が順調なら表示値引率から-10%');
+  assert.equal(FULL_MODE_NOTICE_TEXTS[7], '広告商品は、表示値引率から-10%');
   assert.equal(isValidAdminPinFormat('1234'), true);
   assert.equal(isValidAdminPinFormat('12345678'), true);
   assert.equal(isValidAdminPinFormat('123'), false);

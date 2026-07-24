@@ -107,7 +107,6 @@ export function createInitialReview19Result(params: {
   sessionStartedAt: string;
   reviewStartedAt?: string;
   excludedAreaIds?: AreaId[];
-  review19Status?: "recorded" | "not_applicable";
 }): Review19Result {
   const excludedAreaIds = normalizeExcludedAreaIds(
     params.excludedAreaIds ?? [],
@@ -115,7 +114,7 @@ export function createInitialReview19Result(params: {
 
   return {
     ...getCurrentDataVersionInfo(),
-    review19Status: params.review19Status ?? "recorded",
+    review19Status: "recorded",
     date: params.date,
     sessionStartedAt: params.sessionStartedAt,
     reviewStartedAt: params.reviewStartedAt,
@@ -131,7 +130,7 @@ export function createInitialReview19Result(params: {
       date: params.date,
       areaCounts: {},
       excludedAreaIds,
-      review19Status: params.review19Status,
+      review19Status: "recorded",
     }),
   };
 }
@@ -150,6 +149,10 @@ export function buildReview19DataQuality(params: {
       missingAreaIds: [],
       duplicateAreaIds: [],
       complete: true,
+      processComplete: true,
+      measurementComplete: true,
+      notMeasuredAreaIds: [],
+      missingReasons: {},
     };
   }
 
@@ -170,6 +173,13 @@ export function buildReview19DataQuality(params: {
     missingAreaIds,
     duplicateAreaIds: [],
     complete: missingAreaIds.length === 0,
+    processComplete: missingAreaIds.length === 0,
+    measurementComplete: missingAreaIds.length === 0,
+    notMeasuredAreaIds: [...missingAreaIds],
+    missingReasons: missingAreaIds.reduce((acc, areaId) => {
+      acc[areaId] = "legacy_unknown";
+      return acc;
+    }, {} as Partial<Record<AreaId, "legacy_unknown">>),
   };
 }
 
@@ -421,12 +431,12 @@ export function normalizeReview19Result(
   const rawExcludedAreaIds = normalizeExcludedAreaIds(
     (raw as Partial<Review19Result>).excludedAreaIds,
   );
+  const legacyReview19Status =
+    raw.review19Status === "not_applicable" ? "not_applicable" : "recorded";
   const base = createInitialReview19Result({
     date: raw.date,
     sessionStartedAt: raw.sessionStartedAt,
     excludedAreaIds: rawExcludedAreaIds,
-    review19Status:
-      raw.review19Status === "not_applicable" ? "not_applicable" : "recorded",
   });
 
   const ratingData = normalizeReview19RatingData({
@@ -463,6 +473,7 @@ export function normalizeReview19Result(
     ...base,
     ...normalizeDataVersionInfo(raw),
     ...ratingData,
+    review19Status: legacyReview19Status,
     reviewStartedAt:
       typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
     reviewCompletedAt:
@@ -475,7 +486,7 @@ export function normalizeReview19Result(
       date: raw.date,
       areaCounts,
       excludedAreaIds: base.excludedAreaIds,
-      review19Status: base.review19Status,
+      review19Status: legacyReview19Status,
     }),
     recordedAt,
     exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : undefined,
@@ -534,7 +545,11 @@ export function getUnexportedReview19Records(
   records: Review19Result[],
 ): Review19Result[] {
   return cloneReview19Records(records)
-    .filter((record) => Boolean(record.recordedAt) && !record.exportedAt)
+    .filter((record) =>
+      record.review19Status === "recorded" &&
+      Boolean(record.recordedAt) &&
+      !record.exportedAt
+    )
     .sort((a, b) => {
       const recordedCompare = (a.recordedAt ?? "").localeCompare(
         b.recordedAt ?? "",
@@ -555,7 +570,8 @@ export function buildReview19ExportPayload(params: {
   records: Review19Result[];
   exportedAt: string;
 }) {
-  const records = cloneReview19Records(params.records);
+  const records = cloneReview19Records(params.records)
+    .filter((record) => record.review19Status === "recorded");
   const incompleteRecords = records
     .filter((record) => !record.dataQuality.complete)
     .map((record) => ({
@@ -570,10 +586,7 @@ export function buildReview19ExportPayload(params: {
     exportedAt: params.exportedAt,
     count: records.length,
     dataQuality: {
-      recordedCount: records.filter((record) => record.review19Status === "recorded").length,
-      notApplicableCount: records.filter(
-        (record) => record.review19Status === "not_applicable",
-      ).length,
+      recordedCount: records.length,
       completeRecordCount: records.length - incompleteRecords.length,
       incompleteRecordCount: incompleteRecords.length,
       incompleteRecords,

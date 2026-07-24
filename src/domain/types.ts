@@ -5,6 +5,18 @@ import type {
 } from "./areaCountHistory.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 
+export type AutoSkipKind = "late_plus5" | "early_next_minus5";
+export type MeasurementStatus = "measured" | "not_measured";
+export type MeasurementMissingReason =
+  | "early_next_minus5_skipped"
+  | "auto_time_transition"
+  | "legacy_unknown";
+export type EarlyDiscountResolution =
+  | "count_only"
+  | "process_normally"
+  | "not_measured";
+export type RateOrigin = "confirmed_now" | "carried_from_early_discount";
+
 export type AreaId =
   | "hosomaki"
   | "inari"
@@ -20,15 +32,17 @@ export type AreaId =
   | "tempura"
   | "bento_men";
 
-  export type NextSessionSkipRecord = {
+export type NextSessionSkipRecord = {
   date: string;
   targetDiscountTime: "18" | "19";
   areaId: AreaId;
   previousRateText?: string;
   previousManyRateText?: string;
-  previousManyNote?: string;
   previousNormalRateText?: string;
-  skipKind?: "late_plus5" | "early_next_minus5";
+  skipKind?: AutoSkipKind;
+  sourceDiscountTime?: "17" | "18";
+  sourceSessionStartedAt?: string;
+  earlyDiscountCompletedAt?: string;
 };
 
 export type AreaMaster = {
@@ -50,7 +64,7 @@ export type TempLevel =
   | "31to35"
   | "36orMore";
 
-export type ForecastHourKey = "15" | "16" | "17" | "18" | "19" | "20" | "21";
+export type ForecastHourKey = "16" | "17" | "18" | "19" | "20" | "21";
 export type ForecastWeatherKind = "sunny" | "rain" | "snow";
 
 export type HourlyForecastEntry = {
@@ -101,6 +115,9 @@ export type SessionDraft = {
 
 export type SessionData = SessionDraft & {
   startedAt: string;
+  dataSchemaVersion?: number;
+  appVersion?: string;
+  buildId?: string;
 };
 
 export type AreaJudge = "many" | "normal" | "few" | null;
@@ -126,18 +143,27 @@ export type AreaProgress = {
   skipReason?: "manual" | "few" | "late_time";
   completedRateText?: string;
   completedManyRateText?: string;
-  completedManyNote?: string;
   completedNormalRateText?: string;
   previousRateText?: string;
   previousManyRateText?: string;
-  previousManyNote?: string;
   previousNormalRateText?: string;
-  autoSkipKind?: "late_plus5" | "early_next_minus5";
+  autoSkipKind?: AutoSkipKind;
   /**
    * このエリアの値引指示画面を、次回基準-5%の時間帯に表示した記録。
    * 19:25などの自動移行時には現在時刻だけでは判定できないため保持する。
    */
   earlyNextMinus5TargetDiscountTime?: "18" | "19";
+  rateDecisionSnapshot?: RateDecisionSnapshot;
+  rateDecisionSnapshotStatus?: "captured" | "legacy_not_captured";
+  measurementStatus?: MeasurementStatus;
+  missingReason?: MeasurementMissingReason;
+  earlyDiscountResolution?: EarlyDiscountResolution;
+  sourceDiscountTime?: DiscountTime;
+  sourceSessionStartedAt?: string;
+  earlyDiscountCompletedAt?: string;
+  skipAcknowledgedAt?: string;
+  measurementRecordedAt?: string;
+  rateOrigin?: RateOrigin;
 };
 
 
@@ -147,6 +173,7 @@ export type ScreenName =
   | "review19_done"
   | "area_judge"
   | "auto_skip_notice"
+  | "auto_skip_count"
   | "rate_display"
   | "final_time"
   | "review19"
@@ -204,6 +231,67 @@ export type RateDisplayData = {
   normal: RateLine;
 };
 
+export type RateDecisionCalculationMode =
+  | "normal"
+  | "late_plus5"
+  | "early_next_minus5"
+  | "final";
+
+export type ProductAdjustmentPolicySnapshot = {
+  staplePercent: -10;
+  nightSellerPercent: -10;
+  poorAppearancePercent: 10;
+  unpopularPercent: 10;
+  advertisementPercent: -10;
+  advertisementMode: "always";
+};
+
+/**
+ * エリアの値引率を確定した瞬間の不変スナップショット。
+ * 完了後の時計進行やエクスポート時に再計算しない。
+ */
+export type RateDecisionSnapshot = {
+  version: 1;
+  dataSchemaVersion: number;
+  appVersion: string;
+  buildId: string;
+  confirmedAt: string;
+  sessionDiscountTime: DiscountTime;
+  effectiveRateDiscountTime: DiscountTime;
+  calculationMode: RateDecisionCalculationMode;
+  rateLogicVersion: RateLogicVersion;
+  basicRatePercent: number;
+  weatherComfortAdjustmentPercent: number;
+  lateTimeAdjustmentPercent: number;
+  earlyNextAdjustmentPercent: number;
+  areaCountAdjustmentPercent: number;
+  legacyAreaJudgeAdjustmentPercent: number;
+  otherAdjustments: {
+    productPolicy: ProductAdjustmentPolicySnapshot;
+  };
+  normalRateBeforeLimitsPercent: number;
+  manyRateBeforeLimitsPercent: number;
+  normalRateAfterBaseLimitsPercent: number;
+  manyRateAfterBaseLimitsPercent: number;
+  normalRatePercent: number;
+  manyRatePercent: number;
+  limits: {
+    minimumPercent: 0;
+    maximumPercent: 50;
+    normalLowerLimitApplied: boolean;
+    normalUpperLimitApplied: boolean;
+    manyLowerLimitApplied: boolean;
+    manyUpperLimitApplied: boolean;
+  };
+  displayedRatePercent: number;
+  displayedRateText: string;
+  displayedNormalRatePercent: number;
+  displayedManyRatePercent: number;
+  display: RateDisplayData | null;
+  finalGuide?: FinalGuideData;
+  resolvedWeather: ResolvedWeatherInput;
+};
+
 export type FinalGuideData = {
   count1: RateLine;
   count2: RateLine;
@@ -243,7 +331,6 @@ export type DoneSummaryItem = {
   rateText: string;
   note?: string;
   manyRateText?: string;
-  manyNote?: string;
   normalRateText?: string;
   statusText?: string;
 };
@@ -298,9 +385,16 @@ export type AreaCountDataQuality = {
   missingAreaIds: AreaId[];
   duplicateAreaIds: AreaId[];
   complete: boolean;
+  processComplete: boolean;
+  measurementComplete: boolean;
+  notMeasuredAreaIds: AreaId[];
+  missingReasons: Partial<Record<AreaId, MeasurementMissingReason>>;
 };
 
 export type Review19AreaSnapshot = {
+  dataSchemaVersion?: number;
+  appVersion?: string;
+  buildId?: string;
   areaId: AreaId;
   areaName: string;
   reviewExcluded?: boolean;
@@ -318,12 +412,23 @@ export type Review19AreaSnapshot = {
   ratePercent?: number;
   manyRateText?: string;
   manyRatePercent?: number;
-  manyNote?: string;
   normalRateText?: string;
   normalRatePercent?: number;
   visitedAt?: string;
   completedAt?: string;
   skipReason?: "manual" | "few" | "late_time";
+  rateDecisionSnapshot?: RateDecisionSnapshot;
+  rateDecisionSnapshotStatus: "captured" | "legacy_not_captured";
+  measurementStatus?: MeasurementStatus;
+  missingReason?: MeasurementMissingReason;
+  earlyDiscountResolution?: EarlyDiscountResolution;
+  autoSkipKind?: AutoSkipKind;
+  sourceDiscountTime?: DiscountTime;
+  sourceSessionStartedAt?: string;
+  earlyDiscountCompletedAt?: string;
+  skipAcknowledgedAt?: string;
+  measurementRecordedAt?: string;
+  rateOrigin?: RateOrigin;
 };
 
 export type Review19Reference = {
@@ -356,8 +461,12 @@ export type Review19Snapshot = {
   version: 1;
   dataSchemaVersion?: number;
   appVersion?: string;
+  buildId?: string;
   capturedAt: string;
   session: {
+    dataSchemaVersion?: number;
+    appVersion?: string;
+    buildId?: string;
     date: string;
     weekday: number;
     discountTime: DiscountTime;
@@ -396,10 +505,16 @@ export type DailySessionSnapshot = {
   version: 1;
   dataSchemaVersion?: number;
   appVersion?: string;
+  buildId?: string;
   capturedAt: string;
+  basisCapturedAt?: string;
+  sessionEndReason?: "completed" | "auto_time_transition";
   rateLogicVersion?: RateLogicVersion;
   screen: ScreenName;
   session: {
+    dataSchemaVersion?: number;
+    appVersion?: string;
+    buildId?: string;
     date: string;
     weekday: number;
     discountTime: DiscountTime;
@@ -434,6 +549,7 @@ export type Review19DayCheckSnapshot = {
   version: 1;
   dataSchemaVersion?: number;
   appVersion?: string;
+  buildId?: string;
   review19Status: Exclude<Review19Status, "not_performed">;
   recordedAt: string;
   sessionStartedAt: string;
@@ -456,6 +572,7 @@ export type Review19DaySnapshot = {
   version: 1;
   dataSchemaVersion?: number;
   appVersion?: string;
+  buildId?: string;
   capturedAt: string;
   date: string;
   rateLogicVersion?: RateLogicVersion;
@@ -471,6 +588,7 @@ export type Review19DaySnapshot = {
 export type Review19Result = {
   dataSchemaVersion?: number;
   appVersion?: string;
+  buildId?: string;
   review19Status: Exclude<Review19Status, "not_performed">;
   date: string;
   sessionStartedAt: string;
@@ -547,10 +665,8 @@ export type UseNebikiAppDerived = {
   doneNextSessionInfo: DoneNextSessionInfo | null;
   review19Items: Review19AreaItem[];
   review19ReferenceLines: string[];
-  review19Export: {
-    unexportedCount: number;
+  allDataExport: {
     totalCount: number;
-    shouldRecommendExport: boolean;
   };
   canStartReview19Manually: boolean;
 };
@@ -573,7 +689,9 @@ export type UseNebikiAppActions = {
   chooseSkipTargetArea: (areaId: AreaId) => void;
 
   goToNextArea: () => void;
-  acknowledgeAutoSkippedArea: () => void;
+  startAutoSkippedAreaCountOnly: () => void;
+  saveAutoSkippedAreaCount: (count: number) => void;
+  skipAutoSkippedAreaWithoutMeasurement: () => void;
   processAutoSkippedAreaNormally: () => void;
   advanceFinalTimeStep: () => void;
   updateReview19AreaCount: (areaId: AreaId, count: number) => void;
@@ -582,10 +700,8 @@ export type UseNebikiAppActions = {
   saveReview19: (latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) => void;
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
-  exportReview19Records: () => void;
-  exportAllReview19Records: () => void;
+  exportAllData: () => void;
   startReview19Manually: () => void;
-  markReview19NotApplicable: () => void;
   resetApp: () => void;
 };
 

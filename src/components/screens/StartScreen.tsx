@@ -29,14 +29,9 @@ type StartScreenProps = {
   startButtonLabel?: string;
   canStartReview19?: boolean;
   onStartReview19?: () => void;
-  onMarkReview19NotApplicable?: () => void;
   onReturnHome?: () => void;
   onOpenSettings?: () => void;
   now?: Date;
-  modeLabel?: string;
-  emphasizeModeLabel?: boolean;
-  allowedDiscountTimes?: DiscountTime[];
-  resolveAutomaticDiscountTime?: (date: Date) => DiscountTime;
 };
 
 const WEEKDAY_OPTIONS = [
@@ -59,9 +54,6 @@ const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
 
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
 const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
-const DISPLAY_FORECAST_HOURS: ForecastHourKey[] = FORECAST_HOUR_KEYS.filter(
-  (hour) => hour !== "15",
-);
 const FORECAST_WEATHER_ORDER: ForecastWeatherKind[] = ["sunny", "rain", "snow"];
 
 function stepForecastWeather(
@@ -377,7 +369,7 @@ function getInputHoursForField(
 }
 
 function createFieldOrder(startHour: ForecastHourKey) {
-  const activeHours = DISPLAY_FORECAST_HOURS.filter((hour) =>
+  const activeHours = FORECAST_HOUR_KEYS.filter((hour) =>
     isHourAtOrAfter(hour, startHour),
   );
   return INPUT_FIELDS.flatMap((field) =>
@@ -393,14 +385,9 @@ export function StartScreen({
   startButtonLabel,
   canStartReview19 = false,
   onStartReview19,
-  onMarkReview19NotApplicable,
   onReturnHome,
   onOpenSettings,
   now = new Date(),
-  modeLabel,
-  emphasizeModeLabel = false,
-  allowedDiscountTimes,
-  resolveAutomaticDiscountTime = resolveDiscountTime,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
   const startForecastHour = getInputStartForecastHour(
@@ -408,12 +395,12 @@ export function StartScreen({
   );
   const activeHours = useMemo(
     () =>
-      DISPLAY_FORECAST_HOURS.filter((hour) =>
+      FORECAST_HOUR_KEYS.filter((hour) =>
         isHourAtOrAfter(hour, startForecastHour),
       ),
     [startForecastHour],
   );
-  const displayHours = DISPLAY_FORECAST_HOURS;
+  const displayHours = FORECAST_HOUR_KEYS;
   const fieldOrder = useMemo(
     () => createFieldOrder(startForecastHour),
     [startForecastHour],
@@ -422,12 +409,7 @@ export function StartScreen({
     useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
-  const discountTimeOptions = useMemo(
-    () => allowedDiscountTimes
-      ? DISCOUNT_TIME_OPTIONS.filter((option) => allowedDiscountTimes.includes(option.value))
-      : DISCOUNT_TIME_OPTIONS,
-    [allowedDiscountTimes],
-  );
+  const discountTimeOptions = DISCOUNT_TIME_OPTIONS;
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
@@ -582,25 +564,6 @@ export function StartScreen({
             <div style={{ fontSize: 13, fontWeight: 400 }}>
               （アプリ「ウェザーニュース」を見て入力）
             </div>
-            {modeLabel ? (
-              <div
-                data-mode-label={emphasizeModeLabel ? "emphasized" : "default"}
-                style={emphasizeModeLabel
-                  ? {
-                      display: "inline-flex",
-                      marginTop: 7,
-                      padding: "4px 10px",
-                      borderRadius: 999,
-                      background: "#e8f3f5",
-                      color: "#155e75",
-                      fontSize: 12,
-                      fontWeight: 900,
-                    }
-                  : { marginTop: 2, fontSize: 12, color: "#64748b", fontWeight: 700 }}
-              >
-                {modeLabel}
-              </div>
-            ) : null}
           </>
         }
         rightAction={
@@ -777,7 +740,7 @@ export function StartScreen({
             onClick={() => {
               if (sessionDraft.manualDiscountTimeOverride) {
                 onChangeSessionDraft({
-                  discountTime: resolveAutomaticDiscountTime(now),
+                  discountTime: resolveDiscountTime(now),
                   manualDiscountTimeOverride: false,
                 });
               } else {
@@ -1004,25 +967,6 @@ export function StartScreen({
           >
             19:00チェックを始める
           </button>
-          {onMarkReview19NotApplicable ? (
-            <button
-              type="button"
-              onClick={onMarkReview19NotApplicable}
-              style={{
-                width: "100%",
-                border: "1px solid #ccc",
-                borderRadius: 12,
-                padding: "10px 14px",
-                background: "#fff",
-                color: "#555",
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              今日は19:00チェック対象外
-            </button>
-          ) : null}
         </div>
       ) : null}
     </main>

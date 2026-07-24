@@ -3,6 +3,7 @@ import type { UseNebikiAppResult } from "../domain/types";
 import { StartScreen } from "../components/screens/StartScreen";
 import { AreaJudgeScreen } from "../components/screens/AreaJudgeScreen";
 import { AutoSkipNoticeScreen } from "../components/screens/AutoSkipNoticeScreen";
+import { AutoSkipCountScreen } from "../components/screens/AutoSkipCountScreen";
 import { RateDisplayScreen } from "../components/screens/RateDisplayScreen";
 import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
@@ -51,10 +52,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           startButtonLabel={derived.startButtonLabel}
           canStartReview19={derived.canStartReview19Manually && state.sessionDraft.discountTime === "18"}
           onStartReview19={actions.startReview19Manually}
-          onMarkReview19NotApplicable={actions.markReview19NotApplicable}
           now={testNow ?? undefined}
           onOpenSettings={onOpenSettings}
-          modeLabel="詳細モード"
         />
       );
 
@@ -103,8 +102,25 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
               : undefined
           }
           discountTime={state.session?.discountTime}
-          onConfirm={actions.acknowledgeAutoSkippedArea}
+          onRecordCountOnly={actions.startAutoSkippedAreaCountOnly}
           onProcessNormally={actions.processAutoSkippedAreaNormally}
+          onSkipWithoutMeasurement={actions.skipAutoSkippedAreaWithoutMeasurement}
+          onGoBack={actions.goBackOneScreen}
+          onReturnHome={handleReturnHome}
+        />
+      );
+
+    case "auto_skip_count":
+      if (!derived.currentAreaName || !state.currentAreaId) return null;
+
+      return (
+        <AutoSkipCountScreen
+          key={state.currentAreaId}
+          weekdayText={derived.weekdayText}
+          timeText={derived.timeText}
+          areaName={derived.currentAreaName}
+          initialCount={state.areaProgressMap[state.currentAreaId]?.areaCount}
+          onSave={actions.saveAutoSkippedAreaCount}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />
@@ -164,11 +180,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           summaryItems={derived.doneSummaryItems}
           referenceText={derived.basisGuide.referenceText}
           timeText={derived.timeText}
-          canStartReview19={
-            derived.canStartReview19Manually && state.session?.discountTime === "18"
-          }
-          onStartReview19={actions.startReview19Manually}
-          onMarkReview19NotApplicable={actions.markReview19NotApplicable}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />
@@ -190,12 +201,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
     case "review19_done":
       return (
         <Review19DoneScreen
-          review19Status={state.review19?.review19Status ?? "recorded"}
-          unexportedCount={derived.review19Export.unexportedCount}
-          totalCount={derived.review19Export.totalCount}
-          shouldRecommendExport={derived.review19Export.shouldRecommendExport}
-          onExportUnexported={actions.exportReview19Records}
-          onExportAll={actions.exportAllReview19Records}
+          allDataCount={derived.allDataExport.totalCount}
+          onExportAllData={actions.exportAllData}
           onReturnHome={handleReturnHome}
         />
       );

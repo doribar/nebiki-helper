@@ -2,11 +2,22 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+const appVersion = process.env.npm_package_version ?? "unknown";
+const sourceRevision = (
+  process.env.COMMIT_REF?.trim() ||
+  process.env.GITHUB_SHA?.trim() ||
+  process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+  ""
+).slice(0, 12);
+const buildTimestamp = new Date().toISOString().replace(/[-:.TZ]/g, "");
+const buildId =
+  process.env.NEBIKI_BUILD_ID?.trim() ||
+  `${sourceRevision ? `${sourceRevision}-` : ""}build-${buildTimestamp}`;
+
 export default defineConfig({
   define: {
-    __NEBIKI_APP_VERSION__: JSON.stringify(
-      process.env.npm_package_version ?? "unknown",
-    ),
+    __NEBIKI_APP_VERSION__: JSON.stringify(appVersion),
+    __NEBIKI_BUILD_ID__: JSON.stringify(buildId),
   },
   plugins: [
     react(),

@@ -6,9 +6,6 @@ type DoneScreenProps = {
   onReturnHome: () => void;
   referenceText?: string;
   timeText?: string;
-  canStartReview19?: boolean;
-  onStartReview19?: () => void;
-  onMarkReview19NotApplicable?: () => void;
   summaryItems: DoneSummaryItem[];
 };
 
@@ -84,9 +81,6 @@ export function DoneScreen({
   onReturnHome,
   referenceText,
   timeText,
-  canStartReview19 = false,
-  onStartReview19,
-  onMarkReview19NotApplicable,
   summaryItems,
 }: DoneScreenProps) {
   return (
@@ -116,36 +110,6 @@ export function DoneScreen({
           値引作業は完了です。
         </div>
 
-        {canStartReview19 && onStartReview19 ? (
-          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-            <button
-              type="button"
-              onClick={onStartReview19}
-              style={{
-                width: "100%",
-                border: "1px solid #111",
-                borderRadius: 14,
-                padding: "14px 16px",
-                background: "#fff",
-                color: "#111",
-                fontSize: 16,
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              19:00残数チェック
-            </button>
-            {onMarkReview19NotApplicable ? (
-              <button
-                type="button"
-                onClick={onMarkReview19NotApplicable}
-                style={subActionButtonStyle}
-              >
-                今日は19:00チェック対象外
-              </button>
-            ) : null}
-          </div>
-        ) : null}
       </section>
 
       {summaryItems.length > 0 ? (
@@ -196,11 +160,6 @@ export function DoneScreen({
                     <div style={{ fontWeight: 800 }}>
                       多い → {item.manyRateText ?? item.rateText}
                     </div>
-                    {item.manyNote ? (
-                      <div style={{ color: "#666", whiteSpace: "pre-line" }}>
-                        {item.manyNote}
-                      </div>
-                    ) : null}
                     <div style={{ fontWeight: 800 }}>
                       どちらでもない → {item.normalRateText ?? item.rateText}
                     </div>

@@ -22,13 +22,17 @@ import type {
   Review19Result,
   Review19Snapshot,
   Review19Reference,
-  WeekdayBaseLabel,
   AreaCountEvaluation,
   AreaRateAdjustment,
   RateDisplayData,
   DailySessionSnapshot,
   Review19DayCheckSnapshot,
 } from "../domain/types";
+import {
+  buildFinalRateDecisionSnapshot,
+  buildRateDecisionSnapshot,
+  normalizeRateDecisionSnapshot,
+} from "../domain/rateDecisionSnapshot.ts";
 import {
   shouldShowDayBeforeHolidayNotice,
   shouldShowHolidayBeforeNormalWeekdayNotice,
@@ -58,11 +62,11 @@ import {
   clearRuntimeState,
   appendReview19Record,
   loadReview19Records,
-  saveReview19Records,
   loadReview19SourceState,
   saveReview19SourceState,
   clearReview19SourceState,
   getDailySessionSnapshotsForDate,
+  loadDailySessionSnapshots,
   upsertDailySessionSnapshot,
   hasFinalDayAutoExported,
   markFinalDayAutoExported,
@@ -100,11 +104,12 @@ import {
   getReview19AreaItems,
   parseReview19RatePercent,
   normalizeReview19Result,
-  buildReview19ExportPayload,
-  getUnexportedReview19Records,
-  markReview19RecordsExportedInMemory,
   REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
+import {
+  buildAllDataExportPayload,
+  getAllDataExportFilename,
+} from "../domain/allDataExport.ts";
 import {
   buildAutomaticDayExportPayload,
   getAutomaticDayExportFilename,
@@ -135,7 +140,10 @@ import {
   getEarlyNextMinus5TargetDiscountTime,
   shouldReserveEarlyNextMinus5OnAutoTransition,
 } from "../domain/earlyNextMinus5.ts";
-import { getCurrentDataVersionInfo } from "../domain/dataVersion.ts";
+import {
+  getCurrentDataVersionInfo,
+  normalizeDataVersionInfo,
+} from "../domain/dataVersion.ts";
 
 let runtimeNowOverrideMs: number | null = null;
 
@@ -345,7 +353,7 @@ function getAreaStatusText(progress: AreaProgress): string | undefined {
 
 type CompletedRateSnapshot = Pick<
   AreaProgress,
-  "completedRateText" | "completedManyRateText" | "completedManyNote" | "completedNormalRateText"
+  "completedRateText" | "completedManyRateText" | "completedNormalRateText"
 >;
 
 function getProgressNormalRateText(progress: AreaProgress): string | undefined {
@@ -369,7 +377,6 @@ function buildCompletedRateSnapshot(params: {
   session: SessionData | null;
   progress: AreaProgress;
   weatherBonus: number;
-  weekdayBase: WeekdayBaseLabel;
   rateDisplayOverride?: RateDisplayData | null;
 }): CompletedRateSnapshot {
   const { session, progress, weatherBonus } = params;
@@ -389,7 +396,6 @@ function buildCompletedRateSnapshot(params: {
       areaJudge: progress.areaJudge,
       isSunday: session.weekday === 0 && session.discountTime === "15",
       ignoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
-      weekdayBase: params.weekdayBase,
       areaRateAdjustment: progress.areaRateAdjustment,
     });
   })();
@@ -397,7 +403,6 @@ function buildCompletedRateSnapshot(params: {
   return {
     completedRateText: display.normal.main,
     completedManyRateText: display.many.main,
-    completedManyNote: display.many.note,
     completedNormalRateText: display.normal.main,
   };
 }
@@ -408,6 +413,8 @@ function buildNextSessionSkipRecord(params: {
   areaId: AreaId;
   rateSnapshot: CompletedRateSnapshot;
   skipKind?: "late_plus5" | "early_next_minus5";
+  sourceSession: SessionData;
+  earlyDiscountCompletedAt: string;
 }): NextSessionSkipRecord {
   return {
     date: params.date,
@@ -415,9 +422,15 @@ function buildNextSessionSkipRecord(params: {
     areaId: params.areaId,
     previousRateText: params.rateSnapshot.completedRateText,
     previousManyRateText: params.rateSnapshot.completedManyRateText,
-    previousManyNote: params.rateSnapshot.completedManyNote,
     previousNormalRateText: params.rateSnapshot.completedNormalRateText,
     skipKind: params.skipKind,
+    sourceDiscountTime:
+      params.sourceSession.discountTime === "17" ||
+      params.sourceSession.discountTime === "18"
+        ? params.sourceSession.discountTime
+        : undefined,
+    sourceSessionStartedAt: params.sourceSession.startedAt,
+    earlyDiscountCompletedAt: params.earlyDiscountCompletedAt,
   };
 }
 
@@ -436,6 +449,54 @@ export function acknowledgeAutoSkippedProgress(
     ...progress,
     visitedAt: progress.visitedAt ?? acknowledgedAt,
     completedAt: progress.completedAt ?? acknowledgedAt,
+    measurementStatus: "not_measured",
+    missingReason: "early_next_minus5_skipped",
+    earlyDiscountResolution: "not_measured",
+    skipAcknowledgedAt: acknowledgedAt,
+    rateOrigin: "carried_from_early_discount",
+  };
+}
+
+export function startAutoSkippedCountOnlyProgress(
+  progress: AreaProgress,
+): AreaProgress {
+  if (
+    progress.status !== "auto_skipped_late_time" ||
+    progress.autoSkipKind !== "early_next_minus5" ||
+    progress.visitedAt
+  ) {
+    return progress;
+  }
+
+  return {
+    ...progress,
+    earlyDiscountResolution: "count_only",
+  };
+}
+
+export function recordAutoSkippedCountOnlyProgress(
+  progress: AreaProgress,
+  count: number,
+  recordedAt: string,
+): AreaProgress {
+  if (
+    progress.status !== "auto_skipped_late_time" ||
+    progress.earlyDiscountResolution !== "count_only"
+  ) {
+    return progress;
+  }
+
+  const roundedCount = Math.max(0, Math.round(count));
+  return {
+    ...progress,
+    areaCount: roundedCount,
+    measurementStatus: "measured",
+    missingReason: undefined,
+    measurementRecordedAt: recordedAt,
+    skipAcknowledgedAt: recordedAt,
+    visitedAt: progress.visitedAt ?? recordedAt,
+    completedAt: progress.completedAt ?? recordedAt,
+    rateOrigin: "carried_from_early_discount",
   };
 }
 
@@ -458,9 +519,33 @@ export function processEarlyNextMinus5AreaNormally(state: AppState): AppState {
     areaProgressMap: {
       ...state.areaProgressMap,
       [currentAreaId]: {
+        ...currentProgress,
         areaId: currentAreaId,
         status: "unstarted",
         areaJudge: null,
+        areaCount: undefined,
+        areaCountEvaluation: undefined,
+        areaCountEvaluationSource: undefined,
+        areaCountDecisionBasis: undefined,
+        areaRateAdjustment: undefined,
+        visitedAt: undefined,
+        completedAt: undefined,
+        skipReason: undefined,
+        completedRateText: undefined,
+        completedManyRateText: undefined,
+        completedNormalRateText: undefined,
+        previousRateText: undefined,
+        previousManyRateText: undefined,
+        previousNormalRateText: undefined,
+        earlyNextMinus5TargetDiscountTime: undefined,
+        rateDecisionSnapshot: undefined,
+        rateDecisionSnapshotStatus: undefined,
+        measurementStatus: undefined,
+        missingReason: undefined,
+        earlyDiscountResolution: "process_normally",
+        skipAcknowledgedAt: undefined,
+        measurementRecordedAt: undefined,
+        rateOrigin: "confirmed_now",
       },
     },
     currentFlow: "normal",
@@ -700,10 +785,6 @@ export function normalizeAreaProgressMap(
         typeof progress.completedManyRateText === "string"
           ? progress.completedManyRateText
           : undefined,
-      completedManyNote:
-        typeof progress.completedManyNote === "string"
-          ? progress.completedManyNote
-          : undefined,
       completedNormalRateText:
         typeof progress.completedNormalRateText === "string"
           ? progress.completedNormalRateText
@@ -715,10 +796,6 @@ export function normalizeAreaProgressMap(
       previousManyRateText:
         typeof progress.previousManyRateText === "string"
           ? progress.previousManyRateText
-          : undefined,
-      previousManyNote:
-        typeof progress.previousManyNote === "string"
-          ? progress.previousManyNote
           : undefined,
       previousNormalRateText:
         typeof progress.previousNormalRateText === "string"
@@ -734,6 +811,66 @@ export function normalizeAreaProgressMap(
         progress.earlyNextMinus5TargetDiscountTime === "19"
           ? progress.earlyNextMinus5TargetDiscountTime
           : undefined,
+      measurementStatus:
+        typeof progress.areaCount === "number"
+          ? "measured"
+          : progress.measurementStatus === "measured" ||
+            progress.measurementStatus === "not_measured"
+          ? progress.measurementStatus
+          : progress.status === "auto_skipped_late_time" &&
+            typeof progress.visitedAt === "string"
+          ? "not_measured"
+          : undefined,
+      missingReason:
+        progress.missingReason === "early_next_minus5_skipped" ||
+        progress.missingReason === "auto_time_transition" ||
+        progress.missingReason === "legacy_unknown"
+          ? progress.missingReason
+          : progress.status === "auto_skipped_late_time" &&
+            typeof progress.visitedAt === "string" &&
+            typeof progress.areaCount !== "number"
+          ? "legacy_unknown"
+          : undefined,
+      earlyDiscountResolution:
+        progress.earlyDiscountResolution === "count_only" ||
+        progress.earlyDiscountResolution === "process_normally" ||
+        progress.earlyDiscountResolution === "not_measured"
+          ? progress.earlyDiscountResolution
+          : undefined,
+      sourceDiscountTime: isValidDiscountTime(progress.sourceDiscountTime)
+        ? progress.sourceDiscountTime
+        : undefined,
+      sourceSessionStartedAt:
+        typeof progress.sourceSessionStartedAt === "string"
+          ? progress.sourceSessionStartedAt
+          : undefined,
+      earlyDiscountCompletedAt:
+        typeof progress.earlyDiscountCompletedAt === "string"
+          ? progress.earlyDiscountCompletedAt
+          : undefined,
+      skipAcknowledgedAt:
+        typeof progress.skipAcknowledgedAt === "string"
+          ? progress.skipAcknowledgedAt
+          : undefined,
+      measurementRecordedAt:
+        typeof progress.measurementRecordedAt === "string"
+          ? progress.measurementRecordedAt
+          : undefined,
+      rateOrigin:
+        progress.rateOrigin === "confirmed_now" ||
+        progress.rateOrigin === "carried_from_early_discount"
+          ? progress.rateOrigin
+          : undefined,
+      rateDecisionSnapshot: normalizeRateDecisionSnapshot(
+        progress.rateDecisionSnapshot,
+      ),
+      rateDecisionSnapshotStatus: normalizeRateDecisionSnapshot(
+        progress.rateDecisionSnapshot,
+      )
+        ? "captured"
+        : progress.status === "completed"
+        ? "legacy_not_captured"
+        : undefined,
     };
   }
 
@@ -918,6 +1055,7 @@ function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | 
 
   return {
     ...normalizedDraft,
+    ...normalizeDataVersionInfo(raw),
     startedAt:
       typeof raw.startedAt === "string" ? raw.startedAt : getRuntimeNow().toISOString(),
   };
@@ -1038,12 +1176,14 @@ function createAreaProgressMapWithAutoSkippedAreas(
       ...base[record.areaId],
       status: "auto_skipped_late_time",
       skipReason: "late_time",
-      completedAt: getRuntimeNow().toISOString(),
       previousRateText: record.previousRateText,
       previousManyRateText: record.previousManyRateText,
-      previousManyNote: record.previousManyNote,
       previousNormalRateText: record.previousNormalRateText,
       autoSkipKind: record.skipKind ?? "late_plus5",
+      sourceDiscountTime: record.sourceDiscountTime,
+      sourceSessionStartedAt: record.sourceSessionStartedAt,
+      earlyDiscountCompletedAt: record.earlyDiscountCompletedAt,
+      rateOrigin: "carried_from_early_discount",
     };
   }
 
@@ -1074,7 +1214,6 @@ export function createTimeSwitchPlan(params: {
   normalFlowOrder: AreaId[];
 } {
   const areaProgressMap = createInitialAreaProgressMap();
-  const completedAt = params.completedAt ?? getRuntimeNow().toISOString();
   const unfinishedAreaIds = params.targetDiscountTime === "20"
     ? []
     : NORMAL_ROUTE.filter((areaId) => isPreviousTimeUnfinished(params.previousMap[areaId]));
@@ -1096,12 +1235,14 @@ export function createTimeSwitchPlan(params: {
       ...areaProgressMap[record.areaId],
       status: "auto_skipped_late_time",
       skipReason: "late_time",
-      completedAt,
       previousRateText: record.previousRateText,
       previousManyRateText: record.previousManyRateText,
-      previousManyNote: record.previousManyNote,
       previousNormalRateText: record.previousNormalRateText,
       autoSkipKind: "early_next_minus5",
+      sourceDiscountTime: record.sourceDiscountTime,
+      sourceSessionStartedAt: record.sourceSessionStartedAt,
+      earlyDiscountCompletedAt: record.earlyDiscountCompletedAt,
+      rateOrigin: "carried_from_early_discount",
     };
   };
 
@@ -1130,7 +1271,46 @@ function buildAutoTimeSwitchDialogText(params: {
 }
 
 function shouldPrioritizeUnfinishedAreasOnAutoTransition(screen: ScreenName): boolean {
-  return screen === "area_judge" || screen === "rate_display" || screen === "auto_skip_notice";
+  return (
+    screen === "area_judge" ||
+    screen === "rate_display" ||
+    screen === "auto_skip_notice" ||
+    screen === "auto_skip_count"
+  );
+}
+
+export function finalizeUnmeasuredAreasForAutoTransition(
+  state: AppState,
+  finalizedAt: string,
+): AppState {
+  const areaProgressMap = (state.normalFlowOrder ?? NORMAL_ROUTE).reduce((acc, areaId) => {
+    const progress = acc[areaId];
+    if (!progress || typeof progress.areaCount === "number") {
+      if (progress && typeof progress.areaCount === "number") {
+        acc[areaId] = {
+          ...progress,
+          measurementStatus: "measured",
+          missingReason: undefined,
+          measurementRecordedAt: progress.measurementRecordedAt ?? progress.visitedAt,
+        };
+      }
+      return acc;
+    }
+    if (progress.measurementStatus === "not_measured") return acc;
+
+    acc[areaId] = {
+      ...progress,
+      measurementStatus: "not_measured",
+      missingReason: "auto_time_transition",
+      skipAcknowledgedAt: progress.skipAcknowledgedAt ?? finalizedAt,
+    };
+    return acc;
+  }, { ...state.areaProgressMap });
+
+  return {
+    ...state,
+    areaProgressMap,
+  };
 }
 
 function getFirstAvailableAreaId(
@@ -1170,8 +1350,18 @@ function buildAreaSnapshotsFromState(params: {
   return DONE_SUMMARY_ROUTE.reduce((acc, areaId) => {
     const progress = params.areaProgressMap[areaId];
     const summary = doneSummaryByArea[areaId];
+    const rateDecisionSnapshot = progress?.rateDecisionSnapshot
+      ? JSON.parse(JSON.stringify(progress.rateDecisionSnapshot))
+      : undefined;
+    const rateText =
+      rateDecisionSnapshot?.displayedRateText ?? summary?.rateText ?? "未完了";
+    const manyRateText = rateDecisionSnapshot
+      ? `${rateDecisionSnapshot.displayedManyRatePercent}%`
+      : summary?.manyRateText;
+    const normalRateText = rateDecisionSnapshot?.displayedRateText ?? summary?.normalRateText;
 
     acc[areaId] = {
+      ...getCurrentDataVersionInfo(),
       areaId,
       areaName: getAreaName(areaId),
       reviewExcluded: excludedAreaIdSet.has(areaId),
@@ -1187,16 +1377,38 @@ function buildAreaSnapshotsFromState(params: {
         : undefined,
       areaRateAdjustment: progress?.areaRateAdjustment,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
-      rateText: summary?.rateText ?? "未完了",
-      ratePercent: parseReview19RatePercent(summary?.rateText),
-      manyRateText: summary?.manyRateText,
-      manyRatePercent: parseReview19RatePercent(summary?.manyRateText),
-      manyNote: summary?.manyNote,
-      normalRateText: summary?.normalRateText,
-      normalRatePercent: parseReview19RatePercent(summary?.normalRateText),
+      rateText,
+      ratePercent:
+        rateDecisionSnapshot?.displayedRatePercent ??
+        parseReview19RatePercent(rateText),
+      manyRateText,
+      manyRatePercent:
+        rateDecisionSnapshot?.displayedManyRatePercent ??
+        parseReview19RatePercent(manyRateText),
+      normalRateText,
+      normalRatePercent:
+        rateDecisionSnapshot?.displayedNormalRatePercent ??
+        parseReview19RatePercent(normalRateText),
       visitedAt: progress?.visitedAt,
       completedAt: progress?.completedAt,
       skipReason: progress?.skipReason,
+      rateDecisionSnapshot,
+      rateDecisionSnapshotStatus: rateDecisionSnapshot
+        ? "captured"
+        : "legacy_not_captured",
+      measurementStatus:
+        typeof progress?.areaCount === "number"
+          ? "measured"
+          : progress?.measurementStatus,
+      missingReason: progress?.missingReason,
+      earlyDiscountResolution: progress?.earlyDiscountResolution,
+      autoSkipKind: progress?.autoSkipKind,
+      sourceDiscountTime: progress?.sourceDiscountTime,
+      sourceSessionStartedAt: progress?.sourceSessionStartedAt,
+      earlyDiscountCompletedAt: progress?.earlyDiscountCompletedAt,
+      skipAcknowledgedAt: progress?.skipAcknowledgedAt,
+      measurementRecordedAt: progress?.measurementRecordedAt,
+      rateOrigin: progress?.rateOrigin,
     };
 
     return acc;
@@ -1211,6 +1423,7 @@ function createDailySessionSnapshot(params: {
   basisGuide: ReturnType<typeof getBasisGuideDisplay>;
   lateTimeBonus: number;
   doneSummaryItems: DoneSummaryItem[];
+  sessionEndReason?: DailySessionSnapshot["sessionEndReason"];
 }): DailySessionSnapshot | null {
   const session = params.state.session;
   if (!session) return null;
@@ -1219,9 +1432,16 @@ function createDailySessionSnapshot(params: {
     version: 1,
     ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
+    basisCapturedAt: params.capturedAt,
+    sessionEndReason:
+      params.sessionEndReason ??
+      (params.state.screen === "done" ? "completed" : undefined),
     rateLogicVersion: "time_basic_rate_v1",
     screen: params.state.screen,
     session: {
+      dataSchemaVersion: session.dataSchemaVersion,
+      appVersion: session.appVersion,
+      buildId: session.buildId,
       date: session.date,
       weekday: session.weekday,
       discountTime: session.discountTime,
@@ -1306,6 +1526,7 @@ function getLatestReview19DayCheck(date: string): Review19DayCheckSnapshot | und
     version: 1,
     dataSchemaVersion: latest.dataSchemaVersion,
     appVersion: latest.appVersion,
+    buildId: latest.buildId,
     review19Status: latest.review19Status,
     recordedAt: latest.recordedAt,
     sessionStartedAt: latest.sessionStartedAt,
@@ -1344,7 +1565,10 @@ function createReview19DaySnapshot(params: {
     rateLogicVersion: "time_basic_rate_v1",
     review19Status: params.review19Check?.review19Status ?? "not_performed",
     sessions: params.sessions
-      .filter((session) => session.session.date === params.date && session.screen === "done")
+      .filter((session) =>
+        session.session.date === params.date &&
+        (session.screen === "done" || session.sessionEndReason === "auto_time_transition")
+      )
       .map((session) => JSON.parse(JSON.stringify(session)) as DailySessionSnapshot),
     review19Check: params.review19Check
       ? JSON.parse(JSON.stringify(params.review19Check)) as NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>
@@ -1367,52 +1591,20 @@ export function createReview19Snapshot(params: {
   areaProgressMap: Record<AreaId, AreaProgress>;
   doneSummaryItems: DoneSummaryItem[];
 }): Review19Snapshot {
-  const doneSummaryByArea = params.doneSummaryItems.reduce((acc, item) => {
-    acc[item.areaId] = item;
-    return acc;
-  }, {} as Record<AreaId, DoneSummaryItem>);
-  const excludedAreaIdSet = new Set(params.excludedAreaIds);
-
-  const areas = DONE_SUMMARY_ROUTE.reduce((acc, areaId) => {
-    const progress = params.areaProgressMap[areaId];
-    const summary = doneSummaryByArea[areaId];
-
-    acc[areaId] = {
-      areaId,
-      areaName: getAreaName(areaId),
-      reviewExcluded: excludedAreaIdSet.has(areaId),
-      reviewExcludeReason: excludedAreaIdSet.has(areaId) ? "few_at_15_and_17" : undefined,
-      status: progress?.status ?? "unstarted",
-      statusText: summary?.statusText,
-      areaJudge: progress?.areaJudge ?? null,
-      areaCount: progress?.areaCount,
-      areaCountEvaluation: progress?.areaCountEvaluation,
-      areaCountEvaluationSource: progress?.areaCountEvaluationSource,
-      areaCountDecisionBasis: progress?.areaCountDecisionBasis
-        ? JSON.parse(JSON.stringify(progress.areaCountDecisionBasis)) as AreaCountDecisionBasis
-        : undefined,
-      areaRateAdjustment: progress?.areaRateAdjustment,
-      judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
-      rateText: summary?.rateText ?? "未完了",
-      ratePercent: parseReview19RatePercent(summary?.rateText),
-      manyRateText: summary?.manyRateText,
-      manyRatePercent: parseReview19RatePercent(summary?.manyRateText),
-      manyNote: summary?.manyNote,
-      normalRateText: summary?.normalRateText,
-      normalRatePercent: parseReview19RatePercent(summary?.normalRateText),
-      visitedAt: progress?.visitedAt,
-      completedAt: progress?.completedAt,
-      skipReason: progress?.skipReason,
-    };
-
-    return acc;
-  }, {} as Review19Snapshot["areas"]);
+  const areas = buildAreaSnapshotsFromState({
+    areaProgressMap: params.areaProgressMap,
+    doneSummaryItems: params.doneSummaryItems,
+    excludedAreaIds: params.excludedAreaIds,
+  });
 
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
     session: {
+      dataSchemaVersion: params.session.dataSchemaVersion,
+      appVersion: params.session.appVersion,
+      buildId: params.session.buildId,
       date: params.session.date,
       weekday: params.session.weekday,
       discountTime: params.session.discountTime,
@@ -2102,7 +2294,6 @@ const lateSkipNotice = useMemo(() => {
 
   const ignoreNormalTimeRateCap = shouldIgnoreNormalTimeRateCap(sessionSourceResolvedWeather);
   const effectiveRateDiscountTime = earlyNextMinus5Info?.targetDiscountTime ?? state.session?.discountTime;
-  const effectiveRateWeekdayBase = earlyNextMinus5Info?.weekdayBaseInfo.adjusted ?? weekdayBaseInfo.adjusted;
   const effectiveRateIgnoreTimeRateCap = earlyNextMinus5Info?.ignoreNormalTimeRateCap ?? ignoreNormalTimeRateCap;
   const effectiveTimeText = useMemo(() => {
     return getBasisTimeText(effectiveRateDiscountTime ?? sessionSource.discountTime);
@@ -2136,7 +2327,6 @@ const lateSkipNotice = useMemo(() => {
       areaJudge: currentAreaProgress.areaJudge,
       isSunday: state.session.weekday === 0 && rateDiscountTime === "15",
       ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
-      weekdayBase: effectiveRateWeekdayBase,
       areaRateAdjustment: currentAreaProgress.areaRateAdjustment,
     });
 
@@ -2149,7 +2339,6 @@ const lateSkipNotice = useMemo(() => {
   ignoreNormalTimeRateCap,
   weekdayBaseInfo.adjusted,
   effectiveRateDiscountTime,
-  effectiveRateWeekdayBase,
   effectiveRateIgnoreTimeRateCap,
   earlyNextMinus5Info,
   currentAreaProgress?.areaRateAdjustment,
@@ -2177,25 +2366,7 @@ const lateSkipNotice = useMemo(() => {
       });
     }
 
-    const isEarlyNextMinus5Summary =
-      Boolean(earlyNextMinus5Info) &&
-      (session.discountTime === "17" || session.discountTime === "18") &&
-      !session.manualDiscountTimeOverride;
-    const discountTime = (isEarlyNextMinus5Summary
-      ? earlyNextMinus5Info!.targetDiscountTime
-      : session.discountTime) as Exclude<DiscountTime, "20">;
-    const baseWeatherBonus = isEarlyNextMinus5Summary
-      ? earlyNextMinus5Info!.weekdayBaseInfo.baseRateBonus
-      : weekdayBaseInfo.baseRateBonus + lateTimeBonus;
-    const summaryWeekdayBase = isEarlyNextMinus5Summary
-      ? earlyNextMinus5Info!.weekdayBaseInfo.adjusted
-      : weekdayBaseInfo.adjusted;
-    const summaryIgnoreTimeRateCap = isEarlyNextMinus5Summary
-      ? earlyNextMinus5Info!.ignoreNormalTimeRateCap
-      : ignoreNormalTimeRateCap;
-
     return DONE_SUMMARY_ROUTE.map((areaId) => {
-      const weatherBonus = baseWeatherBonus;
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
@@ -2211,7 +2382,6 @@ const lateSkipNotice = useMemo(() => {
           judgeText: progress.autoSkipKind === "early_next_minus5" ? "先取り値引済み" : "前回+5%済み",
           rateText: previousNormalRateText,
           manyRateText: previousManyRateText,
-          manyNote: progress.previousManyNote,
           normalRateText: previousNormalRateText,
           statusText,
         };
@@ -2229,27 +2399,15 @@ const lateSkipNotice = useMemo(() => {
         };
       }
 
-      const baseDisplay = getNormalTimeRateDisplay({
-        discountTime,
-        weekday: session.weekday,
-        date: session.date,
-        weatherBonus,
-        areaJudge: progress.areaJudge,
-        isSunday: session.weekday === 0 && discountTime === "15",
-        ignoreTimeRateCap: summaryIgnoreTimeRateCap,
-        weekdayBase: summaryWeekdayBase,
-        areaRateAdjustment: progress.areaRateAdjustment,
-      });
-      const display = isEarlyNextMinus5Summary
-        ? applyRateOffsetToDisplay(baseDisplay, -5)
-        : baseDisplay;
-
-      const completedNormalRateText = isEarlyNextMinus5Summary
-        ? display.normal.main
-        : getProgressNormalRateText(progress) ?? display.normal.main;
-      const completedManyRateText = isEarlyNextMinus5Summary
-        ? display.many.main
-        : getProgressManyRateText(progress) ?? display.many.main;
+      const completedNormalRateText =
+        progress.rateDecisionSnapshot?.displayedRateText ??
+        getProgressNormalRateText(progress) ??
+        "旧データ（確定率未記録）";
+      const completedManyRateText =
+        progress.rateDecisionSnapshot?.displayedManyRatePercent !== undefined
+          ? `${progress.rateDecisionSnapshot.displayedManyRatePercent}%`
+          : getProgressManyRateText(progress) ??
+            "旧データ（確定率未記録）";
 
       return {
         areaId,
@@ -2259,9 +2417,6 @@ const lateSkipNotice = useMemo(() => {
           : getAreaJudgeText(progress.areaJudge),
         rateText: completedNormalRateText,
         manyRateText: completedManyRateText,
-        manyNote: isEarlyNextMinus5Summary
-          ? display.many.note
-          : progress.completedManyNote ?? display.many.note,
         normalRateText: completedNormalRateText,
         statusText,
       };
@@ -2269,12 +2424,7 @@ const lateSkipNotice = useMemo(() => {
   }, [
     state.session,
     state.areaProgressMap,
-    weekdayBaseInfo.baseRateBonus,
     weekdayBaseInfo.weekdayShift,
-    lateTimeBonus,
-    ignoreNormalTimeRateCap,
-    weekdayBaseInfo.adjusted,
-    earlyNextMinus5Info,
   ]);
 
   useEffect(() => {
@@ -2352,13 +2502,17 @@ const lateSkipNotice = useMemo(() => {
     void review19RecordsVersion;
     return loadReview19Records();
   })();
-  const review19UnexportedCount = getUnexportedReview19Records(
-    savedReview19Records,
-  ).length;
-  const review19Export = {
-    unexportedCount: review19UnexportedCount,
-    totalCount: savedReview19Records.length,
-    shouldRecommendExport: review19UnexportedCount >= 10,
+  const completedDailyDates = loadDailySessionSnapshots()
+    .filter(
+      (snapshot) =>
+        snapshot.session.discountTime === "20" && snapshot.screen === "done",
+    )
+    .map((snapshot) => snapshot.session.date);
+  const allDataExport = {
+    totalCount: new Set([
+      ...completedDailyDates,
+      ...savedReview19Records.map((record) => record.date),
+    ]).size,
   };
 
   const canStartReview19Manually = canStartReview19FromCurrentState({
@@ -2573,6 +2727,32 @@ const lateSkipNotice = useMemo(() => {
 
     const progress = prev.areaProgressMap[fallbackAreaId];
 
+    if (
+      requestedScreen === "auto_skip_count" &&
+      progress.status === "auto_skipped_late_time" &&
+      progress.earlyDiscountResolution === "count_only" &&
+      !progress.visitedAt
+    ) {
+      return {
+        screen: "auto_skip_count" as const,
+        currentAreaId: fallbackAreaId,
+        lastReferenceAreaId: fallbackAreaId,
+        finalTimeStep: 0 as const,
+      };
+    }
+
+    if (
+      requestedScreen === "auto_skip_notice" &&
+      isAutoSkipNoticePending(progress)
+    ) {
+      return {
+        screen: "auto_skip_notice" as const,
+        currentAreaId: fallbackAreaId,
+        lastReferenceAreaId: fallbackAreaId,
+        finalTimeStep: 0 as const,
+      };
+    }
+
     if (requestedScreen === "done") {
       return {
         screen: "done" as const,
@@ -2642,6 +2822,18 @@ const lateSkipNotice = useMemo(() => {
             areaCountDecisionBasis,
             areaRateAdjustment: areaCountResult?.rateAdjustment,
             visitedAt: getRuntimeNow().toISOString(),
+            measurementStatus:
+              typeof areaCount === "number"
+                ? "measured"
+                : prev.areaProgressMap[currentAreaId].measurementStatus,
+            missingReason:
+              typeof areaCount === "number"
+                ? undefined
+                : prev.areaProgressMap[currentAreaId].missingReason,
+            measurementRecordedAt:
+              typeof areaCount === "number"
+                ? getRuntimeNow().toISOString()
+                : prev.areaProgressMap[currentAreaId].measurementRecordedAt,
           },
         },
       };
@@ -2664,6 +2856,18 @@ const lateSkipNotice = useMemo(() => {
         areaCountDecisionBasis,
         areaRateAdjustment: areaCountResult?.rateAdjustment,
         visitedAt: currentVisitedAt,
+        measurementStatus:
+          typeof areaCount === "number"
+            ? "measured"
+            : prev.areaProgressMap[currentAreaId].measurementStatus,
+        missingReason:
+          typeof areaCount === "number"
+            ? undefined
+            : prev.areaProgressMap[currentAreaId].missingReason,
+        measurementRecordedAt:
+          typeof areaCount === "number"
+            ? currentVisitedAt
+            : prev.areaProgressMap[currentAreaId].measurementRecordedAt,
       },
     };
 
@@ -2680,6 +2884,18 @@ const lateSkipNotice = useMemo(() => {
         status: "postponed_few" as const,
         skipReason: "few" as const,
         visitedAt: currentVisitedAt,
+        measurementStatus:
+          typeof areaCount === "number"
+            ? "measured"
+            : prev.areaProgressMap[currentAreaId].measurementStatus,
+        missingReason:
+          typeof areaCount === "number"
+            ? undefined
+            : prev.areaProgressMap[currentAreaId].missingReason,
+        measurementRecordedAt:
+          typeof areaCount === "number"
+            ? currentVisitedAt
+            : prev.areaProgressMap[currentAreaId].measurementRecordedAt,
       },
     };
 
@@ -2759,6 +2975,7 @@ const lateSkipNotice = useMemo(() => {
     const canResumeCurrentSession = prev.session?.date === currentDate;
     const nextSession: SessionData = {
       ...prev.sessionDraft,
+      ...getCurrentDataVersionInfo(),
       date: currentDate,
       weekday: prev.sessionDraft.manualWeekdayOverride
         ? prev.sessionDraft.weekday
@@ -2947,6 +3164,13 @@ const lateSkipNotice = useMemo(() => {
 
     const completedAreaProgressMap = NORMAL_ROUTE.reduce((acc, areaId) => {
       const progress = params.nextState.areaProgressMap[areaId];
+      const guide = getFinalTimeGuide({
+        weekday: session.weekday,
+        weather21: session.weather.hourlyForecasts["21"].weather,
+        temp21C: session.weather.hourlyForecasts["21"].tempC,
+        comfortScore: weekdayBaseInfo.weekdayShift,
+        areaCountEvaluation: progress?.areaCountEvaluation,
+      });
       acc[areaId] = {
         ...progress,
         areaJudge: progress.areaJudge ?? "normal",
@@ -2954,6 +3178,18 @@ const lateSkipNotice = useMemo(() => {
         skipReason: undefined,
         visitedAt: progress.visitedAt ?? params.exportedAt,
         completedAt: progress.completedAt ?? params.exportedAt,
+        measurementStatus: "measured",
+        missingReason: undefined,
+        measurementRecordedAt:
+          progress.measurementRecordedAt ?? progress.visitedAt ?? params.exportedAt,
+        rateDecisionSnapshot: buildFinalRateDecisionSnapshot({
+          confirmedAt: params.exportedAt,
+          finalGuide: guide,
+          resolvedWeather: sessionSourceResolvedWeather,
+          weatherComfortAdjustmentPercent: weekdayBaseInfo.baseRateBonus,
+        }),
+        rateDecisionSnapshotStatus: "captured",
+        rateOrigin: "confirmed_now",
       };
       return acc;
     }, {} as Record<AreaId, AreaProgress>);
@@ -3276,15 +3512,53 @@ const lateSkipNotice = useMemo(() => {
           session: state.session,
           progress: clickedProgress,
           weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
-          weekdayBase: weekdayBaseInfo.adjusted,
           rateDisplayOverride: rateDisplay,
         })
       : null;
+    const clickedRateDecisionSnapshot =
+      clickedAreaId &&
+      clickedProgress?.areaJudge &&
+      state.session &&
+      state.session.discountTime !== "20" &&
+      effectiveRateDiscountTime &&
+      effectiveRateDiscountTime !== "20"
+        ? buildRateDecisionSnapshot({
+            confirmedAt: completedAt,
+            sessionDiscountTime: state.session.discountTime,
+            effectiveRateDiscountTime,
+            calculationMode: earlyNextMinus5Info
+              ? "early_next_minus5"
+              : lateTimeBonus > 0
+              ? "late_plus5"
+              : "normal",
+            weatherComfortAdjustmentPercent: earlyNextMinus5Info
+              ? earlyNextMinus5Info.weekdayBaseInfo.baseRateBonus
+              : weekdayBaseInfo.baseRateBonus,
+            areaJudge: clickedProgress.areaJudge,
+            areaRateAdjustment: clickedProgress.areaRateAdjustment,
+            resolvedWeather: earlyNextMinus5Info
+              ? earlyNextMinus5Info.resolvedWeather
+              : sessionSourceResolvedWeather,
+            weekday: state.session.weekday,
+            date: state.session.date,
+            ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
+          })
+        : null;
+    const confirmedRateSnapshot: CompletedRateSnapshot | null =
+      clickedRateDecisionSnapshot?.display
+        ? {
+            completedRateText: clickedRateDecisionSnapshot.display.normal.main,
+            completedNormalRateText:
+              clickedRateDecisionSnapshot.display.normal.main,
+            completedManyRateText:
+              clickedRateDecisionSnapshot.display.many.main,
+          }
+        : clickedRateSnapshot;
 
     let skipRecordToAdd: NextSessionSkipRecord | null = null;
     if (
       clickedAreaId &&
-      clickedRateSnapshot &&
+      confirmedRateSnapshot &&
       state.session &&
       !state.session.manualDiscountTimeOverride
     ) {
@@ -3305,16 +3579,18 @@ const lateSkipNotice = useMemo(() => {
           date: state.session.date,
           targetDiscountTime,
           areaId: clickedAreaId,
-          rateSnapshot: clickedRateSnapshot,
+          rateSnapshot: confirmedRateSnapshot,
           skipKind: earlyNextTargetDiscountTime
             ? "early_next_minus5"
             : "late_plus5",
+          sourceSession: state.session,
+          earlyDiscountCompletedAt: completedAt,
         });
       }
     }
 
     setState((prev) => {
-      if (!clickedAreaId || prev.currentAreaId !== clickedAreaId || !clickedRateSnapshot) return prev;
+      if (!clickedAreaId || prev.currentAreaId !== clickedAreaId || !confirmedRateSnapshot) return prev;
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       const updatedMap = {
@@ -3324,7 +3600,12 @@ const lateSkipNotice = useMemo(() => {
           status: "completed" as const,
           completedAt,
           skipReason: undefined,
-          ...clickedRateSnapshot,
+          ...confirmedRateSnapshot,
+          rateDecisionSnapshot: clickedRateDecisionSnapshot ?? undefined,
+          rateDecisionSnapshotStatus: clickedRateDecisionSnapshot
+            ? "captured" as const
+            : undefined,
+          rateOrigin: "confirmed_now" as const,
         },
       };
 
@@ -3372,7 +3653,116 @@ const lateSkipNotice = useMemo(() => {
     }
   }
 
-  function acknowledgeAutoSkippedArea() {
+  function advanceAfterAutoSkippedArea(
+    prev: AppState,
+    updatedMap: Record<AreaId, AreaProgress>,
+    currentAreaId: AreaId,
+  ): AppState {
+    const nextAreaId = getNextNormalFlowAreaId(
+      updatedMap,
+      currentAreaId,
+      prev.normalFlowOrder
+    );
+
+    if (nextAreaId) {
+      return {
+        ...prev,
+        areaProgressMap: updatedMap,
+        currentAreaId: nextAreaId,
+        lastReferenceAreaId: currentAreaId,
+        currentFlow: "normal",
+        pendingDeferredAreaIds: [],
+        timeSwitchNotice: null,
+        finalTimeStep: 0,
+        screen: getNormalFlowScreenForArea(updatedMap, nextAreaId),
+      };
+    }
+
+    return moveToNextPendingOrDone({
+      prev,
+      updatedMap,
+      referenceAreaId: currentAreaId,
+      nextSession: prev.session,
+      timeSwitchNotice: null,
+    });
+  }
+
+  function startAutoSkippedAreaCountOnly() {
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
+    setState((prev) => {
+      if (!prev.currentAreaId || prev.screen !== "auto_skip_notice") return prev;
+      const currentProgress = prev.areaProgressMap[prev.currentAreaId];
+      const nextProgress = startAutoSkippedCountOnlyProgress(currentProgress);
+      if (nextProgress === currentProgress) return prev;
+
+      return {
+        ...prev,
+        screen: "auto_skip_count",
+        areaProgressMap: {
+          ...prev.areaProgressMap,
+          [prev.currentAreaId]: nextProgress,
+        },
+      };
+    });
+  }
+
+  function saveAutoSkippedAreaCount(count: number) {
+    if (!state.currentAreaId || !state.session) return;
+    const roundedCount = Math.max(0, Math.round(count));
+    const currentAreaId = state.currentAreaId;
+    const recordedAt = getRuntimeNow().toISOString();
+    const currentProgress = state.areaProgressMap[currentAreaId];
+    if (
+      state.screen !== "auto_skip_count" ||
+      currentProgress?.status !== "auto_skipped_late_time" ||
+      currentProgress.earlyDiscountResolution !== "count_only"
+    ) {
+      return;
+    }
+
+    if (!isTestMode) {
+      const nextRecord: AreaCountRecord = {
+        ...getCurrentDataVersionInfo(),
+        date: state.session.date,
+        sessionStartedAt: state.session.startedAt,
+        recordedAt,
+        areaId: currentAreaId,
+        discountTime: state.session.discountTime,
+        actualWeekday: getActualWeekdayLabel(state.session.weekday),
+        actualWeekdayGroup: getAreaCountFallbackWeekdayGroup({
+          weekday: state.session.weekday,
+          discountTime: state.session.discountTime,
+          date: state.session.date,
+        }),
+        count: roundedCount,
+      };
+      const nextAreaCountRecords = upsertAreaCountRecord(areaCountRecords, nextRecord);
+      setAreaCountRecords(nextAreaCountRecords);
+      void upsertRemoteAreaCountRecord(nextRecord);
+    }
+
+    setState((prev) => {
+      if (prev.currentAreaId !== currentAreaId || prev.screen !== "auto_skip_count") {
+        return prev;
+      }
+      const progress = prev.areaProgressMap[currentAreaId];
+      if (progress?.status !== "auto_skipped_late_time") return prev;
+      const updatedProgress = recordAutoSkippedCountOnlyProgress(
+        progress,
+        roundedCount,
+        recordedAt,
+      );
+      if (updatedProgress === progress) return prev;
+      const updatedMap = {
+        ...prev.areaProgressMap,
+        [currentAreaId]: updatedProgress,
+      };
+      return advanceAfterAutoSkippedArea(prev, updatedMap, currentAreaId);
+    });
+  }
+
+  function skipAutoSkippedAreaWithoutMeasurement() {
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
@@ -3389,33 +3779,7 @@ const lateSkipNotice = useMemo(() => {
         [currentAreaId]: acknowledgeAutoSkippedProgress(currentProgress, acknowledgedAt),
       };
 
-      const nextAreaId = getNextNormalFlowAreaId(
-        updatedMap,
-        currentAreaId,
-        prev.normalFlowOrder
-      );
-
-      if (nextAreaId) {
-        return {
-          ...prev,
-          areaProgressMap: updatedMap,
-          currentAreaId: nextAreaId,
-          lastReferenceAreaId: currentAreaId,
-          currentFlow: "normal",
-          pendingDeferredAreaIds: [],
-          timeSwitchNotice: null,
-          finalTimeStep: 0,
-          screen: getNormalFlowScreenForArea(updatedMap, nextAreaId),
-        };
-      }
-
-      return moveToNextPendingOrDone({
-        prev,
-        updatedMap,
-        referenceAreaId: currentAreaId,
-        nextSession: prev.session,
-        timeSwitchNotice: null,
-      });
+      return advanceAfterAutoSkippedArea(prev, updatedMap, currentAreaId);
     });
   }
 
@@ -3444,7 +3808,7 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
 
     setState((prev) => {
-      if (prev.screen !== "done" && prev.screen !== "start") return prev;
+      if (prev.screen !== "start") return prev;
       const now = new Date(nowMs);
       if (
         !canStartReview19FromCurrentState({
@@ -3490,84 +3854,6 @@ const lateSkipNotice = useMemo(() => {
         },
       };
     });
-  }
-
-  function markReview19NotApplicable() {
-    if (state.screen !== "done" && state.screen !== "start") return;
-
-    const ok = window.confirm(
-      "今日の19:00チェックを「対象外」として記録しますか？",
-    );
-    if (!ok) return;
-
-    const now = getRuntimeNow();
-    const savedRecords = loadReview19Records();
-    if (
-      !canStartReview19FromCurrentState({
-        state,
-        now,
-        records: savedRecords,
-      })
-    ) {
-      return;
-    }
-
-    const currentDate = formatLocalDate(now);
-    const recordedAt = now.toISOString();
-    const sourceState =
-      state.session?.date === currentDate
-        ? state
-        : normalizeLoadedState(loadReview19SourceState(), state.sessionDraft);
-    const sourceSession =
-      sourceState.session?.date === currentDate ? sourceState.session : null;
-    const initialReview19 = createInitialReview19Result({
-      date: currentDate,
-      sessionStartedAt: sourceSession?.startedAt ?? recordedAt,
-      review19Status: "not_applicable",
-    });
-    const review19Check: Review19DayCheckSnapshot = {
-      version: 1,
-      ...getCurrentDataVersionInfo(),
-      review19Status: "not_applicable",
-      recordedAt,
-      sessionStartedAt: initialReview19.sessionStartedAt,
-      reviewCompletedAt: recordedAt,
-      areaCountRecordedAt: {},
-      ratingStatus: "not_collected",
-      ratings: null,
-      ratingScores: null,
-      areaCounts: {},
-      excludedAreaIds: [],
-      excludeReasons: {},
-      dataQuality: initialReview19.dataQuality,
-    };
-    const recordedReview: Review19Result = {
-      ...initialReview19,
-      reviewCompletedAt: recordedAt,
-      recordedAt,
-      daySnapshot: createReview19DaySnapshot({
-        capturedAt: recordedAt,
-        date: currentDate,
-        areaCountRecords,
-        sessions: getDailySessionSnapshotsForDate(currentDate),
-        review19Check,
-      }),
-    };
-
-    if (!isTestMode) {
-      appendReview19Record(recordedReview);
-      clearReview19SourceState();
-      setReview19RecordsVersion((version) => version + 1);
-    }
-
-    setUndoSnapshot(null);
-    setUndoNotice(null);
-    setState((prev) => ({
-      ...prev,
-      session: sourceSession ?? prev.session,
-      screen: "review19_done",
-      review19: recordedReview,
-    }));
   }
 
   function startReview19AfterWeather() {
@@ -3796,6 +4082,7 @@ const lateSkipNotice = useMemo(() => {
     });
     const nextSession: SessionData = {
       ...draft,
+      ...getCurrentDataVersionInfo(),
       discountTime: "19",
       weather: {
         ...draft.weather,
@@ -3837,14 +4124,22 @@ const lateSkipNotice = useMemo(() => {
 
   function openNextSessionInput(
     targetDiscountTime: DiscountTime,
-    options?: { preserveCurrentSession?: boolean }
+    options?: {
+      preserveCurrentSession?: boolean;
+      sourceState?: AppState;
+    }
   ) {
     const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
 
-    if (state.session?.date === currentDate && state.session.discountTime === "17") {
-      saveReview19SourceState(cloneAppState(state));
+    const sourceState = options?.sourceState ?? state;
+
+    if (
+      sourceState.session?.date === currentDate &&
+      sourceState.session.discountTime === "17"
+    ) {
+      saveReview19SourceState(cloneAppState(sourceState));
     }
 
     const baseDraft = buildStartDefaultDraft(lastUsedSessionDraft);
@@ -3861,13 +4156,13 @@ const lateSkipNotice = useMemo(() => {
       },
     };
 
-    if (options?.preserveCurrentSession && state.session) {
-      setState((prev) => ({
-        ...prev,
+    if (options?.preserveCurrentSession && sourceState.session) {
+      setState({
+        ...sourceState,
         screen: "start",
         sessionDraft: nextDraft,
         timeSwitchNotice: null,
-      }));
+      });
       setAreaJudgeSelection(null);
       setResumeTargetScreen(null);
       setTimeSwitchTarget(targetDiscountTime);
@@ -3895,13 +4190,31 @@ const lateSkipNotice = useMemo(() => {
     const previousDiscountTime = state.session.discountTime;
     const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, new Date(nowMs));
     if (!nextInfo?.canStart) return;
+    const transitionedAt = getRuntimeNow().toISOString();
+    const sourceState = options?.autoTransition
+      ? finalizeUnmeasuredAreasForAutoTransition(state, transitionedAt)
+      : state;
+
+    if (options?.autoTransition) {
+      const interruptedSnapshot = createDailySessionSnapshot({
+        capturedAt: transitionedAt,
+        state: sourceState,
+        resolvedWeather: sessionSourceResolvedWeather,
+        weekdayBaseInfo,
+        basisGuide,
+        lateTimeBonus,
+        doneSummaryItems,
+        sessionEndReason: "auto_time_transition",
+      });
+      if (interruptedSnapshot) upsertDailySessionSnapshot(interruptedSnapshot);
+    }
 
     const prioritizeUnfinishedAreas =
       (options?.autoTransition ?? false) &&
       shouldPrioritizeUnfinishedAreasOnAutoTransition(state.screen);
 
     const currentAreaEarlyNextTarget = state.currentAreaId
-      ? state.areaProgressMap[state.currentAreaId]?.earlyNextMinus5TargetDiscountTime ??
+      ? sourceState.areaProgressMap[state.currentAreaId]?.earlyNextMinus5TargetDiscountTime ??
         earlyNextMinus5Info?.targetDiscountTime ??
         null
       : null;
@@ -3919,12 +4232,11 @@ const lateSkipNotice = useMemo(() => {
       state.session &&
       !state.session.manualDiscountTimeOverride
     ) {
-      const progress = state.areaProgressMap[state.currentAreaId];
+      const progress = sourceState.areaProgressMap[state.currentAreaId];
       const rateSnapshot = buildCompletedRateSnapshot({
         session: state.session,
         progress,
         weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
-        weekdayBase: weekdayBaseInfo.adjusted,
         rateDisplayOverride: rateDisplay,
       });
 
@@ -3935,6 +4247,8 @@ const lateSkipNotice = useMemo(() => {
           areaId: state.currentAreaId,
           rateSnapshot,
           skipKind: "early_next_minus5",
+          sourceSession: state.session,
+          earlyDiscountCompletedAt: transitionedAt,
         }),
       ]);
     }
@@ -3951,84 +4265,61 @@ const lateSkipNotice = useMemo(() => {
     // 21時の天気・気温・風速を確認してから最終値引へ進む。
     openNextSessionInput(nextInfo.targetDiscountTime, {
       preserveCurrentSession: prioritizeUnfinishedAreas,
+      sourceState,
     });
   }
 
-  function getReview19ExportFilename(params: {
-    records: Review19Result[];
-    kind: "unexported" | "all";
-  }): string {
-    const firstDate = params.records[0]?.date ?? "unknown";
-    const lastDate = params.records[params.records.length - 1]?.date ?? firstDate;
-    return `nebiki-review19-${params.kind}-${firstDate}_${lastDate}.json`;
-  }
+  async function exportAllData() {
+    const exportedAt = getRuntimeNow().toISOString();
+    const sessionSnapshots = loadDailySessionSnapshots();
+    const dailyDates = [...new Set(
+      sessionSnapshots
+        .filter((snapshot) =>
+          snapshot.session.discountTime === "20" &&
+          snapshot.screen === "done"
+        )
+        .map((snapshot) => snapshot.session.date)
+    )].sort();
 
-  function downloadReview19Records(params: {
-    records: Review19Result[];
-    exportedAt: string;
-    kind: "unexported" | "all";
-  }) {
-    if (params.records.length === 0) return;
+    const remoteResult = await loadRemoteAreaCountRecords();
+    const remoteRecords = remoteResult.status === "ready" ? remoteResult.records : [];
+    const mergedAreaCountRecords = remoteRecords.reduce(
+      (records, record) => upsertAreaCountRecord(records, record),
+      cloneAreaCountRecords(areaCountRecords),
+    );
+    const dailyData = dailyDates.map((date) =>
+      createReview19DaySnapshot({
+        capturedAt:
+          sessionSnapshots
+            .filter((snapshot) => snapshot.session.date === date)
+            .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
+            .at(-1)?.capturedAt ?? exportedAt,
+        date,
+        areaCountRecords: mergedAreaCountRecords,
+        sessions: sessionSnapshots.filter(
+          (snapshot) => snapshot.session.date === date,
+        ),
+        review19Check: getLatestReview19DayCheck(date),
+      })
+    );
+    const payload = buildAllDataExportPayload({
+      dailyData,
+      review19Data: loadReview19Records(),
+      exportedAt,
+    });
+    if (payload.dailyData.length === 0 && payload.review19Data.length === 0) return;
 
-    const payload = buildReview19ExportPayload({
-      records: params.records,
-      exportedAt: params.exportedAt,
-    });
-    const filename = getReview19ExportFilename({
-      records: params.records,
-      kind: params.kind,
-    });
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-
     link.href = url;
-    link.download = filename;
+    link.download = getAllDataExportFilename(exportedAt);
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
-
-  function exportReview19Records() {
-    const currentRecords = loadReview19Records();
-    const unexportedRecords = getUnexportedReview19Records(currentRecords);
-
-    if (unexportedRecords.length === 0) return;
-
-    const exportedAt = getRuntimeNow().toISOString();
-    downloadReview19Records({
-      records: unexportedRecords,
-      exportedAt,
-      kind: "unexported",
-    });
-
-    saveReview19Records(
-      markReview19RecordsExportedInMemory({
-        currentRecords,
-        recordsToMark: unexportedRecords,
-        exportedAt,
-      })
-    );
-    setReview19RecordsVersion((version) => version + 1);
-  }
-
-  function exportAllReview19Records() {
-    const records = loadReview19Records().sort((a, b) => {
-      const recordedCompare = (a.recordedAt ?? "").localeCompare(b.recordedAt ?? "");
-      if (recordedCompare !== 0) return recordedCompare;
-      return `${a.date}::${a.sessionStartedAt}`.localeCompare(`${b.date}::${b.sessionStartedAt}`);
-    });
-
-    if (records.length === 0) return;
-
-    downloadReview19Records({
-      records,
-      exportedAt: getRuntimeNow().toISOString(),
-      kind: "all",
-    });
   }
 
   function resetApp() {
@@ -4087,7 +4378,7 @@ const lateSkipNotice = useMemo(() => {
   doneNextSessionInfo,
   review19Items,
   review19ReferenceLines,
-  review19Export,
+  allDataExport,
   canStartReview19Manually,
 },
     actions: {
@@ -4103,7 +4394,9 @@ const lateSkipNotice = useMemo(() => {
       skipCurrentArea,
       chooseSkipTargetArea,
       goToNextArea,
-      acknowledgeAutoSkippedArea,
+      startAutoSkippedAreaCountOnly,
+      saveAutoSkippedAreaCount,
+      skipAutoSkippedAreaWithoutMeasurement,
       processAutoSkippedAreaNormally,
       advanceFinalTimeStep,
       updateReview19AreaCount,
@@ -4112,10 +4405,8 @@ const lateSkipNotice = useMemo(() => {
       saveReview19,
       start19DiscountAfterReview,
       startNextDoneSession,
-      exportReview19Records,
-      exportAllReview19Records,
+      exportAllData,
       startReview19Manually,
-      markReview19NotApplicable,
       resetApp,
     },
   };

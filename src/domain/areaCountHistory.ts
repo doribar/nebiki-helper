@@ -66,6 +66,7 @@ export type AreaCountDecisionBasis = {
 export type AreaCountRecord = {
   dataSchemaVersion?: number;
   appVersion?: string;
+  buildId?: string;
   date: string;
   sessionStartedAt: string;
   recordedAt: string;
@@ -308,6 +309,7 @@ function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
   return {
     dataSchemaVersion: record.dataSchemaVersion,
     appVersion: record.appVersion,
+    buildId: record.buildId,
     date: record.date,
     sessionStartedAt: record.sessionStartedAt,
     recordedAt: record.recordedAt,
@@ -602,6 +604,10 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
         appVersion:
           typeof record.appVersion === "string" && record.appVersion.trim()
             ? record.appVersion
+            : undefined,
+        buildId:
+          typeof record.buildId === "string" && record.buildId.trim()
+            ? record.buildId
             : undefined,
         date: record.date,
         sessionStartedAt: record.sessionStartedAt,

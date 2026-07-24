@@ -6,7 +6,6 @@ import type {
   AreaJudge,
   AreaCountEvaluation,
   AreaRateAdjustment,
-  WeekdayBaseLabel,
   ForecastWeatherKind,
 } from "./types";
 const MAX_DISCOUNT_RATE = 50;
@@ -47,50 +46,6 @@ function toRateLine(main: string, note?: string): RateLine {
   return note ? { main, note } : { main };
 }
 
-
-export function getManyPlus15Threshold(_weekdayBase: WeekdayBaseLabel | undefined): number {
-  // 曜日基準に関係なく、「多い」のうち10個以上の+15%目安は10個以上で固定する。
-  return 10;
-}
-
-function getManyThresholdPlus15Note(params: {
-  manyRate: number;
-  discountTime: Exclude<DiscountTime, "20">;
-  ignoreTimeRateCap: boolean;
-  weekdayBase?: WeekdayBaseLabel;
-}): string | undefined {
-  const tenOrMoreRate = capNormalDiscountRate(
-    params.manyRate + 5,
-    params.discountTime,
-    params.ignoreTimeRateCap
-  );
-
-  if (tenOrMoreRate === params.manyRate) {
-    return undefined;
-  }
-
-  const threshold = getManyPlus15Threshold(params.weekdayBase);
-
-  return `多いのうち${threshold}個以上は ${tenOrMoreRate}%`;
-}
-
-function buildManyNote(params: {
-  manyRate: number;
-  discountTime: Exclude<DiscountTime, "20">;
-  ignoreTimeRateCap: boolean;
-  weekdayBase?: WeekdayBaseLabel;
-}): string {
-  const notes: string[] = [];
-
-  const tenOrMoreNote = getManyThresholdPlus15Note(params);
-
-  if (tenOrMoreNote) {
-    notes.push(tenOrMoreNote);
-  }
-
-  return notes.join("\n\n");
-}
-
 export function getNormalTimeRateDisplay(params: {
   discountTime: Exclude<DiscountTime, "20">;
   weekday?: number;
@@ -99,7 +54,6 @@ export function getNormalTimeRateDisplay(params: {
   areaJudge: Exclude<AreaJudge, null>;
   isSunday?: boolean;
   ignoreTimeRateCap?: boolean;
-  weekdayBase?: WeekdayBaseLabel;
   areaRateAdjustment?: AreaRateAdjustment;
 }): RateDisplayData {
   const ignoreTimeRateCap = params.ignoreTimeRateCap ?? false;
@@ -132,15 +86,7 @@ export function getNormalTimeRateDisplay(params: {
   );
 
   return {
-    many: toRateLine(
-      `${manyRate}%`,
-      buildManyNote({
-        manyRate,
-        discountTime: params.discountTime,
-        ignoreTimeRateCap,
-        weekdayBase: params.weekdayBase,
-      })
-    ),
+    many: toRateLine(`${manyRate}%`),
     few: toRateLine("引かない"),
     normal: toRateLine(`${normalRate}%`),
   };

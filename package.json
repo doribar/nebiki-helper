@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.7.21-2",
+  "version": "2026.7.24-1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,10 @@
     "check:three-day-holiday-middle": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-three-day-holiday-middle.ts",
     "check:holiday-before-normal-weekday": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-holiday-before-normal-weekday.ts",
     "check:full-mode": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-full-mode.ts",
-    "check:simple-mode": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-simple-mode.ts"
+    "check:rate-decision-snapshot": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-rate-decision-snapshot.ts",
+    "check:auto-skip-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-auto-skip-ui.ts",
+    "check:data-export-and-supabase": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-data-export-and-supabase.ts",
+    "check:schema-v3": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-schema-v3.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

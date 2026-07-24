@@ -20,6 +20,7 @@ export type AutomaticDayExportPayload = {
   version: 1;
   dataSchemaVersion: number;
   appVersion: string;
+  buildId: string;
   exportedAt: string;
   date: string;
   trigger: "final-counts-complete";
@@ -49,6 +50,31 @@ export function buildAutomaticDayExportDataQuality(params: {
     const duplicateAreaIds = expectedAreaIds.filter((areaId) => {
       return (countsByArea.get(areaId) ?? 0) > 1;
     });
+    const sessionSnapshot = params.daySnapshot.sessions
+      .filter((session) => session.session.discountTime === discountTime)
+      .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
+      .at(-1);
+    const processComplete = Boolean(
+      sessionSnapshot &&
+      expectedAreaIds.every((areaId) => {
+        const status = sessionSnapshot.areas[areaId]?.status;
+        return status === "completed" || status === "auto_skipped_late_time";
+      })
+    );
+    const notMeasuredAreaIds = expectedAreaIds.filter((areaId) => {
+      const area = sessionSnapshot?.areas[areaId];
+      return (
+        area?.measurementStatus === "not_measured" ||
+        !countsByArea.has(areaId)
+      );
+    });
+    const missingReasons = notMeasuredAreaIds.reduce((acc, areaId) => {
+      acc[areaId] =
+        sessionSnapshot?.areas[areaId]?.missingReason ?? "legacy_unknown";
+      return acc;
+    }, {} as AreaCountDataQuality["missingReasons"]);
+    const measurementComplete =
+      missingAreaIds.length === 0 && duplicateAreaIds.length === 0;
 
     return {
       discountTime,
@@ -57,7 +83,11 @@ export function buildAutomaticDayExportDataQuality(params: {
       excludedAreaCount: 0,
       missingAreaIds,
       duplicateAreaIds,
-      complete: missingAreaIds.length === 0 && duplicateAreaIds.length === 0,
+      complete: measurementComplete,
+      processComplete,
+      measurementComplete,
+      notMeasuredAreaIds,
+      missingReasons,
     };
   });
   const completeDiscountTimeCount = coverageByDiscountTime.filter((item) => item.complete).length;

@@ -501,10 +501,14 @@ test('10. 今回は値引するを選ぶと同じエリアの新しい残数入�
   const progress = processed.areaProgressMap.inari;
   assert.equal(processed.screen, 'area_judge');
   assert.equal(processed.currentAreaId, 'inari');
-  assert.deepEqual(progress, { areaId: 'inari', status: 'unstarted', areaJudge: null });
+  assert.equal(progress.areaId, 'inari');
+  assert.equal(progress.status, 'unstarted');
+  assert.equal(progress.areaJudge, null);
+  assert.equal(progress.earlyDiscountResolution, 'process_normally');
+  assert.equal(progress.rateOrigin, 'confirmed_now');
   assert.equal(progress.areaCount, undefined);
   assert.equal(progress.completedRateText, undefined);
-  assert.equal(progress.autoSkipKind, undefined);
+  assert.equal(progress.autoSkipKind, 'early_next_minus5');
 });
 
 test('11. 通常処理への移行は現在の正式時刻・天候・通常ルートを維持する', () => {
@@ -522,7 +526,8 @@ test('12. 今回は値引する選択後の再読み込みで再びスキップ�
   const restored = normalizeLoadedState(loadPersistedNebikiStateForDate(TEST_DATE).currentSession, createDraft('19'));
   assert.equal(restored.screen, 'area_judge');
   assert.equal(restored.areaProgressMap.inari.status, 'unstarted');
-  assert.equal(restored.areaProgressMap.inari.autoSkipKind, undefined);
+  assert.equal(restored.areaProgressMap.inari.autoSkipKind, 'early_next_minus5');
+  assert.equal(restored.areaProgressMap.inari.earlyDiscountResolution, 'process_normally');
 });
 
 test('13. スキップする選択は従来のauto_skipped_late_time完了状態を維持する', () => {
@@ -532,6 +537,9 @@ test('13. スキップする選択は従来のauto_skipped_late_time完了状態
   assert.equal(skippedProgress.autoSkipKind, 'early_next_minus5');
   assert.equal(skippedProgress.visitedAt, TEST_STARTED_AT);
   assert.equal(skippedProgress.completedAt, TEST_STARTED_AT);
+  assert.equal(skippedProgress.measurementStatus, 'not_measured');
+  assert.equal(skippedProgress.missingReason, 'early_next_minus5_skipped');
+  assert.equal(skippedProgress.rateOrigin, 'carried_from_early_discount');
 });
 
 test('14. スキップ選択後の保存復元はスキップ済み状態を保持する', () => {

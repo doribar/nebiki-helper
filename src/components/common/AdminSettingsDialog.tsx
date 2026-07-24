@@ -6,15 +6,11 @@ import {
   saveAdminPin,
   verifyAdminPin,
 } from "../../domain/adminSettings";
-import { getAppModeLabel, type AppMode } from "../../domain/appMode.ts";
+import { APP_VERSION, BUILD_ID, DATA_SCHEMA_VERSION } from "../../domain/dataVersion.ts";
 
 type AdminSettingsDialogProps = {
-  currentMode: AppMode;
-  onChangeMode: (mode: AppMode) => void;
-  review19UnexportedCount?: number;
-  review19TotalCount?: number;
-  onExportReview19Unexported?: () => void;
-  onExportAllReview19?: () => void;
+  allDataCount?: number;
+  onExportAllData?: () => void;
   onClose: () => void;
 };
 
@@ -44,12 +40,8 @@ const inputStyle = {
 };
 
 export function AdminSettingsDialog({
-  currentMode,
-  onChangeMode,
-  review19UnexportedCount = 0,
-  review19TotalCount = 0,
-  onExportReview19Unexported,
-  onExportAllReview19,
+  allDataCount = 0,
+  onExportAllData,
   onClose,
 }: AdminSettingsDialogProps) {
   const [phase, setPhase] = useState<DialogPhase>(() =>
@@ -59,7 +51,6 @@ export function AdminSettingsDialog({
   const [pinConfirm, setPinConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<AppMode>(currentMode);
 
   const normalizePinInput = (value: string) =>
     value.replace(/\D/g, "").slice(0, ADMIN_PIN_MAX_LENGTH);
@@ -287,63 +278,17 @@ export function AdminSettingsDialog({
 
         {phase === "settings" ? (
           <section>
-              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-                使用モード
-              </div>
-              <p style={{ margin: "0 0 12px", color: "#475569", fontSize: 14, lineHeight: 1.6 }}>
-                現在：{getAppModeLabel(currentMode)}。変更すると進行中の画面を終了し、トップ画面から新しく開始します。
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-                {(["detailed", "simple"] as AppMode[]).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={selectedMode === mode}
-                    onClick={() => setSelectedMode(mode)}
-                    style={{
-                      minHeight: 54,
-                      borderRadius: 12,
-                      border: selectedMode === mode ? "3px solid #b91c1c" : "1px solid #cbd5e1",
-                      background: selectedMode === mode ? "#fff1f2" : "#fff",
-                      color: "#111827",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {getAppModeLabel(mode)}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                disabled={selectedMode === currentMode}
-                onClick={() => {
-                  if (selectedMode === currentMode) return;
-                  const ok = window.confirm(
-                    `${getAppModeLabel(selectedMode)}へ変更します。進行中の画面は終了し、トップ画面へ戻ります。`,
-                  );
-                  if (ok) onChangeMode(selectedMode);
-                }}
-                style={{
-                  width: "100%",
-                  minHeight: 54,
-                  marginBottom: onExportReview19Unexported && onExportAllReview19 ? 22 : 0,
-                  border: 0,
-                  borderRadius: 12,
-                  background: selectedMode === currentMode ? "#e2e8f0" : "#b91c1c",
-                  color: selectedMode === currentMode ? "#94a3b8" : "#fff",
-                  fontSize: 17,
-                  fontWeight: 900,
-                  cursor: selectedMode === currentMode ? "not-allowed" : "pointer",
-                }}
-              >
-                モードを変更してトップへ戻る
-              </button>
-
-            {onExportReview19Unexported && onExportAllReview19 ? (
+            <div style={{ marginBottom: 20, color: "#475569", fontSize: 13, lineHeight: 1.6 }}>
+              アプリ版: {APP_VERSION}
+              <br />
+              ビルドID: {BUILD_ID}
+              <br />
+              データ形式: {DATA_SCHEMA_VERSION}
+            </div>
+            {onExportAllData ? (
               <>
               <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-                19:00チェックデータ
+                保存データ
               </div>
               <div
                 style={{
@@ -353,50 +298,26 @@ export function AdminSettingsDialog({
                   marginBottom: 12,
                 }}
               >
-                未出力：{review19UnexportedCount}回分
-                <br />
-                保存済み：{review19TotalCount}回分
+                1日通しデータと19:00チェックデータを、重複を除いて1つのJSONへ出力します。
               </div>
-              <div style={{ display: "grid", gap: 10 }}>
                 <button
                   type="button"
-                  onClick={onExportReview19Unexported}
-                  disabled={review19UnexportedCount === 0}
+                  onClick={onExportAllData}
+                  disabled={allDataCount === 0}
                   style={{
                     width: "100%",
                     minHeight: 58,
-                    border: 0,
                     borderRadius: 14,
-                    background:
-                      review19UnexportedCount === 0 ? "#e2e8f0" : "#b91c1c",
-                    color: review19UnexportedCount === 0 ? "#94a3b8" : "#fff",
+                    border: 0,
+                    background: allDataCount === 0 ? "#e2e8f0" : "#b91c1c",
+                    color: allDataCount === 0 ? "#94a3b8" : "#fff",
                     fontSize: 18,
                     fontWeight: 900,
-                    cursor:
-                      review19UnexportedCount === 0 ? "not-allowed" : "pointer",
-                  }}
-                >
-                  未出力データを出力
-                </button>
-                <button
-                  type="button"
-                  onClick={onExportAllReview19}
-                  disabled={review19TotalCount === 0}
-                  style={{
-                    width: "100%",
-                    minHeight: 52,
-                    borderRadius: 14,
-                    border: "1px solid #cbd5e1",
-                    background: review19TotalCount === 0 ? "#f1f5f9" : "#fff",
-                    color: review19TotalCount === 0 ? "#94a3b8" : "#0f172a",
-                    fontSize: 16,
-                    fontWeight: 800,
-                    cursor: review19TotalCount === 0 ? "not-allowed" : "pointer",
+                    cursor: allDataCount === 0 ? "not-allowed" : "pointer",
                   }}
                 >
                   全データを出力
                 </button>
-              </div>
               </>
             ) : null}
           </section>

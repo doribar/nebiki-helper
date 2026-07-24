@@ -71,30 +71,6 @@ type RateInstructionStep = {
   color?: string;
 };
 
-type ManyThresholdInstruction = {
-  thresholdText: string;
-  rateText: string;
-};
-
-function parseManyThresholdInstruction(
-  note: string | undefined,
-): ManyThresholdInstruction | null {
-  if (!note) return null;
-
-  const line = note
-    .split("\n")
-    .map((item) => item.trim())
-    .find(Boolean);
-
-  if (!line) return null;
-
-  const match = line.match(/^多いのうち(.+?)は\s*(.+)$/);
-  if (!match) return null;
-
-  const [, thresholdText, rateText] = match;
-  return { thresholdText, rateText };
-}
-
 function buildRateInstructionSteps(params: {
   rateDisplay: RateDisplayData | null;
   manyColor: string;
@@ -107,23 +83,12 @@ function buildRateInstructionSteps(params: {
   } = params;
   if (!rateDisplay) return [];
 
-  const manyThresholdInstruction = parseManyThresholdInstruction(
-    rateDisplay.many.note,
-  );
-
   return [
     {
       key: "many",
       title: (
         <>
           多い商品を{rateDisplay.many.main}値引きしてください。
-          {manyThresholdInstruction ? (
-            <>
-              <br />
-              そのうち{manyThresholdInstruction.thresholdText}ある商品は
-              {manyThresholdInstruction.rateText}で値引きしてください。
-            </>
-          ) : null}
         </>
       ),
       rateLine: { main: rateDisplay.many.main },

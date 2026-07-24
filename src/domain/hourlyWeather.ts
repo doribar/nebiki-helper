@@ -13,7 +13,7 @@ import type {
 } from './types';
 
 export const FORECAST_HOUR_KEYS: ForecastHourKey[] = [
-  '15', '16', '17', '18', '19', '20', '21',
+  '16', '17', '18', '19', '20', '21',
 ];
 
 export function createDefaultHourlyForecasts(): HourlyForecastMap {
@@ -131,21 +131,6 @@ export function toNearTermWeather(weather: ForecastWeatherKind): NearTermWeather
       return 'snow';
     default:
       return 'other';
-  }
-}
-
-function getCurrentForecastHour(discountTime: DiscountTime): ForecastHourKey {
-  switch (discountTime) {
-    case '15':
-      return '15';
-    case '17':
-      return '17';
-    case '18':
-      return '18';
-    case '19':
-      return '19';
-    case '20':
-      return '20';
   }
 }
 
@@ -419,14 +404,7 @@ export function buildHourlyForecastsFromLegacy(params: {
     };
     return acc;
   }, {} as HourlyForecastMap);
-  const currentHour = getCurrentForecastHour(params.discountTime);
   const nearHour = getNearForecastHour(params.discountTime);
-
-  hourlyForecasts[currentHour] = {
-    weather: 'sunny',
-    tempC: baseTempC,
-    windMs: baseWindMs,
-  };
 
   const nearTermWeather = params.legacyWeather.nearTermWeather;
   hourlyForecasts[nearHour].tempC = fromTempLevel(nearTemp);

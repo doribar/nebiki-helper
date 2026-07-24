@@ -7,8 +7,9 @@ type AutoSkipNoticeScreenProps = {
   weekdayText: string;
   timeText: string;
   areaName: string;
-  onConfirm: () => void;
+  onRecordCountOnly: () => void;
   onProcessNormally: () => void;
+  onSkipWithoutMeasurement: () => void;
   autoSkipKind?: "late_plus5" | "early_next_minus5";
   discountTime?: DiscountTime;
   onGoBack: () => void;
@@ -30,15 +31,25 @@ export function AutoSkipNoticeScreen({
   weekdayText,
   timeText,
   areaName,
-  onConfirm,
+  onRecordCountOnly,
   onProcessNormally,
+  onSkipWithoutMeasurement,
   autoSkipKind = "late_plus5",
   discountTime,
   onGoBack,
   onReturnHome,
 }: AutoSkipNoticeScreenProps) {
   return (
-    <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
+    <main
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        padding: 16,
+        maxWidth: 560,
+        margin: "0 auto",
+        overflowX: "hidden",
+      }}
+    >
       <ScreenHeader
         weekdayText={weekdayText}
         timeText={timeText}
@@ -65,7 +76,7 @@ export function AutoSkipNoticeScreen({
               このエリアは先取り値引済みです
             </h2>
             <p style={{ margin: "0 0 10px", color: "#444", fontSize: 15, lineHeight: 1.6, textAlign: "left" }}>
-              先取り値引を行っているため、通常は今回の値引をスキップします。現在の残数を確認して、追加で値引することもできます。
+              先取り値引を行っています。現在の残数だけを記録するか、追加で値引するか、測定せずにスキップするかを選んでください。
             </p>
             <div style={{ marginBottom: 18, fontSize: 14, fontWeight: 700, color: "#555" }}>
               {getEarlyNextMinus5CompletedText(discountTime === "19" ? "19" : "18")}
@@ -73,21 +84,22 @@ export function AutoSkipNoticeScreen({
             <div style={{ display: "grid", gap: 10 }}>
               <button
                 type="button"
-                onClick={onConfirm}
+                onClick={onRecordCountOnly}
                 style={{
                   width: "100%",
                   minHeight: 52,
-                  border: "1px solid #aaa",
+                  border: "2px solid #2f5ef5",
                   borderRadius: 14,
                   padding: "12px 16px",
-                  background: "#fff",
-                  color: "#222",
+                  background: "#e8f0ff",
+                  color: "#163b9e",
                   fontSize: 16,
                   fontWeight: 800,
                   cursor: "pointer",
+                  overflowWrap: "anywhere",
                 }}
               >
-                スキップする
+                残数だけ記録する
               </button>
               <button
                 type="button"
@@ -103,9 +115,29 @@ export function AutoSkipNoticeScreen({
                   fontSize: 16,
                   fontWeight: 800,
                   cursor: "pointer",
+                  overflowWrap: "anywhere",
                 }}
               >
                 今回は値引する
+              </button>
+              <button
+                type="button"
+                onClick={onSkipWithoutMeasurement}
+                style={{
+                  width: "100%",
+                  minHeight: 52,
+                  border: "1px solid #aaa",
+                  borderRadius: 14,
+                  padding: "12px 16px",
+                  background: "#fff",
+                  color: "#333",
+                  fontSize: 16,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                測定せずスキップする
               </button>
             </div>
           </div>
@@ -122,7 +154,7 @@ export function AutoSkipNoticeScreen({
         {autoSkipKind !== "early_next_minus5" ? (
           <button
             type="button"
-            onClick={onConfirm}
+            onClick={onSkipWithoutMeasurement}
             style={{
               width: "100%",
               border: 0,

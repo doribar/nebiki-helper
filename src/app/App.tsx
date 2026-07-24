@@ -3,16 +3,6 @@ import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
 import { getCanonicalUrlForLegacyHash } from "../domain/fullMode";
 import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
-import { loadAppMode, saveAppMode, type AppMode } from "../domain/appMode.ts";
-import { clearSimpleModeState } from "../domain/simpleMode.ts";
-import {
-  clearCurrentSession,
-  clearReview19SourceState,
-  clearRuntimeState,
-  clearWorkSessionCheckpoint,
-} from "../domain/storage.ts";
-import { useSimpleMode } from "../hooks/useSimpleMode.ts";
-import { SimpleModeApp } from "./SimpleModeApp.tsx";
 
 type TestModeConfig = {
   now: Date;
@@ -215,10 +205,7 @@ function TestModeBanner({ testMode }: { testMode: TestModeConfig }) {
   );
 }
 
-function DetailedModeRoot(props: {
-  testMode: TestModeConfig | null;
-  onChangeMode: (mode: AppMode) => void;
-}) {
+function AppRoot(props: { testMode: TestModeConfig | null }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const app = useNebikiApp({ testNow: props.testMode?.now ?? null });
 
@@ -248,50 +235,8 @@ function DetailedModeRoot(props: {
       />
       {settingsOpen ? (
         <AdminSettingsDialog
-          currentMode="detailed"
-          onChangeMode={(mode) => {
-            app.actions.resetApp();
-            clearSimpleModeState();
-            setSettingsOpen(false);
-            props.onChangeMode(mode);
-          }}
-          review19UnexportedCount={app.derived.review19Export.unexportedCount}
-          review19TotalCount={app.derived.review19Export.totalCount}
-          onExportReview19Unexported={app.actions.exportReview19Records}
-          onExportAllReview19={app.actions.exportAllReview19Records}
-          onClose={() => setSettingsOpen(false)}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function SimpleModeRoot(props: {
-  testMode: TestModeConfig | null;
-  onChangeMode: (mode: AppMode) => void;
-}) {
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const app = useSimpleMode({ testNow: props.testMode?.now ?? null });
-
-  return (
-    <>
-      <SimpleModeApp
-        app={app}
-        testNow={props.testMode?.now ?? null}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-      {settingsOpen ? (
-        <AdminSettingsDialog
-          currentMode="simple"
-          onChangeMode={(mode) => {
-            app.actions.reset();
-            clearCurrentSession();
-            clearWorkSessionCheckpoint();
-            clearRuntimeState();
-            clearReview19SourceState();
-            setSettingsOpen(false);
-            props.onChangeMode(mode);
-          }}
+          allDataCount={app.derived.allDataExport.totalCount}
+          onExportAllData={app.actions.exportAllData}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
@@ -301,10 +246,15 @@ function SimpleModeRoot(props: {
 
 export default function App() {
   const testMode = getCurrentTestMode();
-  const [mode, setMode] = useState<AppMode>(() => loadAppMode());
   const [loadedDate] = useState(() => formatLocalDate(testMode?.now));
   const [todayDate, setTodayDate] = useState(() => formatLocalDate(testMode?.now));
   const hasDateChanged = !testMode && todayDate !== loadedDate;
+
+  useEffect(() => {
+    // 旧簡易モード設定は移行後の処理分岐に使用せず、安全に破棄する。
+    window.localStorage.removeItem("nebiki-helper/app-mode-v1");
+    window.localStorage.removeItem("nebiki-helper/simple-mode-state-v1");
+  }, []);
 
   useEffect(() => {
     const updateTodayDate = () => setTodayDate(formatLocalDate(testMode?.now));
@@ -318,21 +268,12 @@ export default function App() {
     };
   }, [testMode?.now.getTime()]);
 
-  const handleChangeMode = (nextMode: AppMode) => {
-    saveAppMode(nextMode);
-    setMode(nextMode);
-  };
-
   if (hasDateChanged) return <DateChangedBlocker loadedDate={loadedDate} />;
 
   return (
     <>
       {testMode ? <TestModeBanner testMode={testMode} /> : null}
-      {mode === "simple" ? (
-        <SimpleModeRoot testMode={testMode} onChangeMode={handleChangeMode} />
-      ) : (
-        <DetailedModeRoot testMode={testMode} onChangeMode={handleChangeMode} />
-      )}
+      <AppRoot testMode={testMode} />
     </>
   );
 }
