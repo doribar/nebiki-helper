@@ -200,7 +200,7 @@ test("30. schema v3・appVersion・buildIdをアプリ情報に持つ", () => {
   const version = getCurrentDataVersionInfo();
   const packageVersion = (JSON.parse(source("../package.json")) as { version: string }).version;
   assert.equal(version.dataSchemaVersion, 3);
-  assert.ok(/^2026\.7\.24-/.test(packageVersion));
+  assert.ok(/^2026\.7\.26-/.test(packageVersion));
   assert.ok(version.buildId.length > 0);
 });
 test("31. 通常日の曜日グループを維持", () => assert.equal(getAreaCountComparisonWeekdayGroup({ weekday: 2, discountTime: "17", date: "2026-07-21" }), "火木日"));
