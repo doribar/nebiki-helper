@@ -18,9 +18,6 @@ type AppRouterProps = {
 
 export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
   const { state, derived, actions } = app;
-  const shouldSkipFinalDoneScreen =
-    state.screen === "done" && state.session?.discountTime === "20";
-
   const handleReturnHome = () => {
     const ok = window.confirm(
       "トップ画面に戻りますか？\n現在の画面を離れます。必要ならキャンセルしてください。"
@@ -34,11 +31,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [state.screen, state.currentAreaId, state.finalTimeStep]);
-
-  useEffect(() => {
-    if (!shouldSkipFinalDoneScreen) return;
-    actions.resetApp();
-  }, [actions, shouldSkipFinalDoneScreen]);
 
   switch (state.screen) {
     case "start":
@@ -54,6 +46,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           onStartReview19={actions.startReview19Manually}
           now={testNow ?? undefined}
           onOpenSettings={onOpenSettings}
+          previousDayDiscardTarget={derived.previousDayDiscardTarget}
+          onSavePreviousDayDiscardCount={actions.savePreviousDayDiscardCount}
         />
       );
 
@@ -76,6 +70,10 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           areaCountAssistEnabled={derived.areaCountAssistEnabled}
           areaCountSameItemLimit={derived.areaCountSameItemLimit}
           finalCountMode={state.session?.discountTime === "20"}
+          initialAreaCount={state.areaProgressMap[state.currentAreaId!]?.areaCount}
+          initialStapleItemCount={state.areaProgressMap[state.currentAreaId!]?.stapleItemCount}
+          editableAreaCounts={derived.editableAreaCounts}
+          onStartAreaCountCorrection={actions.startAreaCountCorrection}
           getAreaCountRecommendation={actions.getCurrentAreaCountRecommendation}
           onJudge={actions.judgeCurrentArea}
           onSkip={actions.skipCurrentArea}
@@ -120,6 +118,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           timeText={derived.timeText}
           areaName={derived.currentAreaName}
           initialCount={state.areaProgressMap[state.currentAreaId]?.areaCount}
+          editableAreaCounts={derived.editableAreaCounts}
+          onStartAreaCountCorrection={actions.startAreaCountCorrection}
           onSave={actions.saveAutoSkippedAreaCount}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
@@ -153,6 +153,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           canChooseSkipTarget={derived.canChooseSkipTarget}
           skipTargetOptions={derived.skipTargetOptions}
           onChooseSkipTarget={actions.chooseSkipTargetArea}
+          editableAreaCounts={derived.editableAreaCounts}
+          onStartAreaCountCorrection={actions.startAreaCountCorrection}
         />
       );
 
@@ -173,13 +175,24 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       );
 
     case "done":
-      if (shouldSkipFinalDoneScreen) return null;
-
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
           referenceText={derived.basisGuide.referenceText}
           timeText={derived.timeText}
+          showDailyDataActions={
+            state.session?.discountTime === "20" &&
+            Boolean(state.finalizedDayRecordId)
+          }
+          memo={derived.finalizedDayMemo}
+          onSaveMemo={actions.saveFinalizedDayMemo}
+          onExportDailyData={
+            state.finalizedDayRecordId
+              ? () => {
+                  actions.exportCompletedDailyData();
+                }
+              : undefined
+          }
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />
@@ -194,6 +207,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           }
           onChangeAreaCount={actions.updateReview19AreaCount}
           onSave={actions.saveReview19}
+          onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />
       );
@@ -201,8 +215,10 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
     case "review19_done":
       return (
         <Review19DoneScreen
-          allDataCount={derived.allDataExport.totalCount}
-          onExportAllData={actions.exportAllData}
+          onExportReview19Data={() => {
+            actions.exportCompletedReview19Data();
+          }}
+          onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />
       );

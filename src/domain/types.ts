@@ -134,6 +134,7 @@ export type AreaProgress = {
   status: AreaStatus;
   areaJudge: AreaJudge;
   areaCount?: number;
+  stapleItemCount?: number | null;
   areaCountEvaluation?: AreaCountEvaluation;
   areaCountEvaluationSource?: AreaCountEvaluationSource;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
@@ -403,6 +404,7 @@ export type Review19AreaSnapshot = {
   statusText?: string;
   areaJudge: AreaJudge;
   areaCount?: number;
+  stapleItemCount?: number | null;
   areaCountEvaluation?: AreaCountEvaluation;
   areaCountEvaluationSource?: AreaCountEvaluationSource;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
@@ -618,6 +620,25 @@ export type Review19AreaItem = {
   excludeReasonText?: string;
 };
 
+export type EditableAreaCountItem = {
+  areaId: AreaId;
+  areaName: string;
+  count: number;
+};
+
+export type AreaCountCorrectionContext = {
+  mode?: "normal" | "auto_skip_count_only";
+  targetAreaId: AreaId;
+  returnScreen: ScreenName;
+  returnAreaId: AreaId | null;
+  returnLastReferenceAreaId: AreaId | null;
+  returnCurrentFlow: FlowMode;
+  returnPendingDeferredAreaIds: AreaId[];
+  returnFinalTimeStep: FinalTimeStep;
+  returnTimeSwitchNotice: string | null;
+  returnHistoryLength: number;
+};
+
 export type AppState = {
   screen: ScreenName;
   session: SessionData | null;
@@ -633,6 +654,10 @@ export type AppState = {
   finalTimeStep: FinalTimeStep;
   review19: Review19Result | null;
   review19ExcludedAreaIds: AreaId[];
+  /** 入力済み残数を既存の判定フローで修正し、元画面へ戻るための一時情報。 */
+  areaCountCorrection?: AreaCountCorrectionContext | null;
+  /** 20:30入力完了時に確定した日次記録を直接参照するための安定ID。 */
+  finalizedDayRecordId?: string | null;
 };
 
 export type UseNebikiAppDerived = {
@@ -665,6 +690,16 @@ export type UseNebikiAppDerived = {
   doneNextSessionInfo: DoneNextSessionInfo | null;
   review19Items: Review19AreaItem[];
   review19ReferenceLines: string[];
+  editableAreaCounts: EditableAreaCountItem[];
+  finalizedDayMemo: string;
+  previousDayDiscardTarget: {
+    date: string;
+    count: number | null;
+  } | null;
+  dataExport: {
+    review19Count: number;
+    dailyCount: number;
+  };
   allDataExport: {
     totalCount: number;
   };
@@ -682,7 +717,8 @@ export type UseNebikiAppActions = {
   judgeCurrentArea: (
     judge: Exclude<AreaJudge, null>,
     areaCount?: number | null,
-    manualAreaCountEvaluation?: AreaCountEvaluation
+    manualAreaCountEvaluation?: AreaCountEvaluation,
+    stapleItemCount?: number | null,
   ) => void;
   getCurrentAreaCountRecommendation: (count: number) => AreaCountRecommendation;
   skipCurrentArea: () => void;
@@ -698,6 +734,15 @@ export type UseNebikiAppActions = {
   skipReview19Area: (areaId: AreaId) => void;
   startReview19AfterWeather: () => void;
   saveReview19: (latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) => void;
+  startAreaCountCorrection: (areaId: AreaId) => void;
+  saveFinalizedDayMemo: (memo: string | null) => void;
+  savePreviousDayDiscardCount: (count: number | null) => void;
+  exportAllReview19Data: () => boolean;
+  exportLatestReview19Data: () => boolean;
+  exportAllDailyData: () => Promise<boolean>;
+  exportLatestDailyData: () => Promise<boolean>;
+  exportCompletedReview19Data: () => boolean;
+  exportCompletedDailyData: () => boolean;
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
   exportAllData: () => void;

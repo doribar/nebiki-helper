@@ -15,22 +15,12 @@ export const FULL_MODE_NOTICE_ITEMS: readonly (readonly FullModeNoticeSegment[])
     { text: "「少ない」にする", emphasis: true },
   ],
   [
-    { text: "定番商品", emphasis: true },
+    { text: "定番商品・夜によく売れる商品・広告商品", emphasis: true },
     { text: "は、表示値引率から" },
     { text: "-10%", emphasis: true },
   ],
   [
-    { text: "夜によく売れる商品", emphasis: true },
-    { text: "は、表示値引率から" },
-    { text: "-10%", emphasis: true },
-  ],
-  [
-    { text: "見た目が悪い個別商品", emphasis: true },
-    { text: "は、表示値引率に" },
-    { text: "+10%", emphasis: true },
-  ],
-  [
-    { text: "不人気な商品", emphasis: true },
+    { text: "見た目が悪い個別商品・不人気な商品", emphasis: true },
     { text: "は、表示値引率に" },
     { text: "+10%", emphasis: true },
   ],
@@ -39,11 +29,6 @@ export const FULL_MODE_NOTICE_ITEMS: readonly (readonly FullModeNoticeSegment[])
     { text: "は、残り数だけでなく" },
     { text: "商品の減り方", emphasis: true },
     { text: "も含める" },
-  ],
-  [
-    { text: "広告商品", emphasis: true },
-    { text: "は、表示値引率から" },
-    { text: "-10%", emphasis: true },
   ],
 ] as const;
 

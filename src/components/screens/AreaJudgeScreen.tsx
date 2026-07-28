@@ -3,6 +3,7 @@ import type {
   AreaCountEvaluation,
   AreaId,
   AreaJudge,
+  EditableAreaCountItem,
   SkipTargetOption,
 } from "../../domain/types";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
@@ -10,6 +11,7 @@ import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { JudgeHintDialog } from "../common/JudgeHintDialog";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
+import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
 import {
   buildCalculatorDraftKey,
   clearCalculatorDraft,
@@ -40,11 +42,16 @@ type AreaJudgeScreenProps = {
   areaCountAssistEnabled?: boolean;
   areaCountSameItemLimit?: number | null;
   finalCountMode?: boolean;
+  initialAreaCount?: number | null;
+  initialStapleItemCount?: number | null;
+  editableAreaCounts?: EditableAreaCountItem[];
+  onStartAreaCountCorrection?: (areaId: AreaId) => void;
   getAreaCountRecommendation?: (count: number) => AreaCountRecommendation;
   onJudge: (
     judge: Exclude<AreaJudge, null>,
     areaCount?: number | null,
     manualAreaCountEvaluation?: AreaCountEvaluation,
+    stapleItemCount?: number | null,
   ) => void;
   onSkip: () => void;
   onGoBack: () => void;
@@ -222,6 +229,10 @@ export function AreaJudgeScreen({
   areaCountAssistEnabled = false,
   areaCountSameItemLimit = null,
   finalCountMode = false,
+  initialAreaCount = null,
+  initialStapleItemCount = null,
+  editableAreaCounts = [],
+  onStartAreaCountCorrection,
   getAreaCountRecommendation,
   onJudge,
   onSkip,
@@ -236,6 +247,8 @@ export function AreaJudgeScreen({
   const [areaCountText, setAreaCountText] = useState("");
   const [areaCountSubmitted, setAreaCountSubmitted] = useState(false);
   const [areaCountCalculatorText, setAreaCountCalculatorText] = useState("");
+  const [stapleItemCountText, setStapleItemCountText] = useState("");
+  const [stapleItemCountError, setStapleItemCountError] = useState<string | null>(null);
   const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
   const areaCountCalculatorDraftKey = buildCalculatorDraftKey({
     kind: "area-count",
@@ -270,8 +283,17 @@ export function AreaJudgeScreen({
     setShowJudgeHint(false);
     setAreaCountText("");
     setAreaCountSubmitted(false);
-    setAreaCountCalculatorText(calculatorDraft?.text ?? "");
-  }, [areaCountCalculatorDraftKey]);
+    setAreaCountCalculatorText(
+      calculatorDraft?.text ??
+        (typeof initialAreaCount === "number" ? String(initialAreaCount) : ""),
+    );
+    setStapleItemCountText(
+      typeof initialStapleItemCount === "number"
+        ? String(initialStapleItemCount)
+        : "",
+    );
+    setStapleItemCountError(null);
+  }, [areaCountCalculatorDraftKey, initialAreaCount, initialStapleItemCount]);
 
   const parsedAreaCount = parseAreaCount(areaCountText);
   const areaCountCalculatorResult = calculateAdditionResult(
@@ -285,6 +307,19 @@ export function AreaJudgeScreen({
       : null;
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
+  const correctionAreaCounts =
+    areaCountSubmitted && parsedAreaCount !== null
+      ? editableAreaCounts.some((item) => item.areaId === areaId)
+        ? editableAreaCounts.map((item) =>
+            item.areaId === areaId
+              ? { ...item, count: parsedAreaCount }
+              : item,
+          )
+        : [
+            ...editableAreaCounts,
+            { areaId, areaName, count: parsedAreaCount },
+          ]
+      : editableAreaCounts;
 
   const clearAreaCountCalculatorDraft = () => {
     clearCalculatorDraft(areaCountCalculatorDraftKey);
@@ -347,6 +382,24 @@ export function AreaJudgeScreen({
     if (areaCountCalculatorResult === null) return;
 
     const completedCount = areaCountCalculatorResult;
+    const parsedStapleItemCount = stapleItemCountText === ""
+      ? null
+      : /^\d+$/.test(stapleItemCountText)
+      ? Number(stapleItemCountText)
+      : Number.NaN;
+    if (
+      finalCountMode &&
+      parsedStapleItemCount !== null &&
+      (!Number.isSafeInteger(parsedStapleItemCount) ||
+        (parsedStapleItemCount as number) < 0 ||
+        (parsedStapleItemCount as number) > completedCount)
+    ) {
+      setStapleItemCountError(
+        `定番商品の個数は0〜${completedCount}の整数で入力してください。`,
+      );
+      return;
+    }
+    setStapleItemCountError(null);
     const completedRecommendation =
       areaCountAssistEnabled && getAreaCountRecommendation
         ? getAreaCountRecommendation(completedCount)
@@ -356,7 +409,7 @@ export function AreaJudgeScreen({
     clearAreaCountCalculatorDraft();
 
     if (finalCountMode) {
-      onJudge("normal", completedCount);
+      onJudge("normal", completedCount, undefined, parsedStapleItemCount);
       return;
     }
 
@@ -585,6 +638,52 @@ export function AreaJudgeScreen({
                     ⌫
                   </button>
                 </div>
+                {finalCountMode ? (
+                  <div style={{ marginTop: 12 }}>
+                    <label
+                      htmlFor={`staple-item-count-${areaId}`}
+                      style={{ display: "block", marginBottom: 6, fontSize: 14, fontWeight: 800 }}
+                    >
+                      うち定番（任意）
+                    </label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        id={`staple-item-count-${areaId}`}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={stapleItemCountText}
+                        onChange={(event) => {
+                          setStapleItemCountText(
+                            event.currentTarget.value.replace(/[^0-9]/g, ""),
+                          );
+                          setStapleItemCountError(null);
+                        }}
+                        placeholder="空欄"
+                        style={{
+                          width: "100%",
+                          minWidth: 0,
+                          minHeight: 44,
+                          boxSizing: "border-box",
+                          border: "1px solid #bbb",
+                          borderRadius: 10,
+                          padding: "8px 10px",
+                          fontSize: 18,
+                          fontWeight: 800,
+                        }}
+                      />
+                      <span style={{ flexShrink: 0, fontWeight: 800 }}>個</span>
+                    </div>
+                    {stapleItemCountError ? (
+                      <div
+                        role="alert"
+                        style={{ marginTop: 6, color: "#b91c1c", fontSize: 13, fontWeight: 800 }}
+                      >
+                        {stapleItemCountError}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={completeAreaCountEntry}
@@ -847,6 +946,33 @@ export function AreaJudgeScreen({
           </section>
         ) : null}
       </div>
+
+      {onStartAreaCountCorrection ? (
+        <AreaCountCorrectionPanel
+          items={correctionAreaCounts}
+          onSelect={(targetAreaId) => {
+            if (targetAreaId === areaId) {
+              setAreaCountText("");
+              setAreaCountSubmitted(false);
+              setAreaCountCalculatorText(
+                parsedAreaCount !== null
+                  ? String(parsedAreaCount)
+                  : typeof initialAreaCount === "number"
+                  ? String(initialAreaCount)
+                  : "",
+              );
+              setStapleItemCountText(
+                typeof initialStapleItemCount === "number"
+                  ? String(initialStapleItemCount)
+                  : "",
+              );
+              setStapleItemCountError(null);
+              return;
+            }
+            onStartAreaCountCorrection(targetAreaId);
+          }}
+        />
+      ) : null}
 
       <div style={{ marginTop: 16 }}>
         <button

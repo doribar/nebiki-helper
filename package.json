@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.7.26-1",
+  "version": "2026.7.29-1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +17,12 @@
     "check:rate-decision-snapshot": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-rate-decision-snapshot.ts",
     "check:auto-skip-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-auto-skip-ui.ts",
     "check:data-export-and-supabase": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-data-export-and-supabase.ts",
-    "check:schema-v3": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-schema-v3.ts"
+    "check:schema-v3": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-schema-v3.ts",
+    "check:feature-20260728": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-feature-20260728.ts",
+    "check:workflow-20260728": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-workflow-20260728.ts",
+    "check:finalized-day-data": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-finalized-day-data.ts",
+    "check:staple-item-count": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-staple-item-count.ts",
+    "check:refactor-characterization": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-refactor-characterization.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

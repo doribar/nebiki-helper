@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
+import { PrimaryButton } from "../layout/PrimaryButton.tsx";
 import type { DoneSummaryItem } from "../../domain/types";
 
 type DoneScreenProps = {
@@ -7,6 +8,10 @@ type DoneScreenProps = {
   referenceText?: string;
   timeText?: string;
   summaryItems: DoneSummaryItem[];
+  showDailyDataActions?: boolean;
+  memo?: string;
+  onSaveMemo?: (memo: string | null) => void;
+  onExportDailyData?: () => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -82,7 +87,14 @@ export function DoneScreen({
   referenceText,
   timeText,
   summaryItems,
+  showDailyDataActions = false,
+  memo = "",
+  onSaveMemo,
+  onExportDailyData,
 }: DoneScreenProps) {
+  const [memoText, setMemoText] = useState(memo);
+  const [memoSaved, setMemoSaved] = useState(false);
+
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 16, marginBottom: 12 }}>
@@ -173,6 +185,62 @@ export function DoneScreen({
               </div>
             </div>
           ))}
+        </section>
+      ) : null}
+
+      {showDailyDataActions ? (
+        <section
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 16,
+            background: "#fff",
+          }}
+        >
+          <label htmlFor="final-day-memo" style={{ display: "block", marginBottom: 8, fontWeight: 900 }}>
+            任意メモ
+          </label>
+          <textarea
+            id="final-day-memo"
+            value={memoText}
+            onChange={(event) => {
+              setMemoText(event.currentTarget.value);
+              setMemoSaved(false);
+            }}
+            rows={4}
+            style={{
+              width: "100%",
+              minWidth: 0,
+              boxSizing: "border-box",
+              resize: "vertical",
+              border: "1px solid #bbb",
+              borderRadius: 10,
+              padding: 10,
+              fontSize: 16,
+              lineHeight: 1.5,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              onSaveMemo?.(memoText === "" ? null : memoText);
+              setMemoSaved(true);
+            }}
+            style={{ ...subActionButtonStyle, width: "100%", marginTop: 10 }}
+          >
+            メモを保存
+          </button>
+          {memoSaved ? (
+            <div role="status" style={{ marginTop: 8, fontSize: 13, fontWeight: 800 }}>
+              メモを保存しました。
+            </div>
+          ) : null}
+          <div style={{ marginTop: 12 }}>
+            <PrimaryButton onClick={() => onExportDailyData?.()} disabled={!onExportDailyData}>
+              1日データを出力
+            </PrimaryButton>
+          </div>
         </section>
       ) : null}
 

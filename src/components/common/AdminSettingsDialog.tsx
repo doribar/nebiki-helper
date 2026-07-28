@@ -1,110 +1,64 @@
-import { useState } from "react";
-import {
-  ADMIN_PIN_MAX_LENGTH,
-  hasAdminPin,
-  isValidAdminPinFormat,
-  saveAdminPin,
-  verifyAdminPin,
-} from "../../domain/adminSettings";
+import { useState, type CSSProperties } from "react";
 import { APP_VERSION, BUILD_ID, DATA_SCHEMA_VERSION } from "../../domain/dataVersion.ts";
 
+type ExportAction = () => boolean | Promise<boolean>;
+
 type AdminSettingsDialogProps = {
-  allDataCount?: number;
-  onExportAllData?: () => void;
+  review19Count?: number;
+  dailyCount?: number;
+  onExportAllReview19Data?: ExportAction;
+  onExportLatestReview19Data?: ExportAction;
+  onExportAllDailyData?: ExportAction;
+  onExportLatestDailyData?: ExportAction;
   onClose: () => void;
 };
 
-type DialogPhase = "create-pin" | "unlock" | "settings";
-
-const panelStyle = {
+const panelStyle: CSSProperties = {
   width: "min(92vw, 520px)",
   maxHeight: "88svh",
-  overflowY: "auto" as const,
+  overflowY: "auto",
   borderRadius: 22,
   background: "#fff",
   padding: 20,
   boxShadow: "0 20px 60px rgba(0, 0, 0, 0.28)",
 };
 
-const inputStyle = {
+const exportButtonStyle: CSSProperties = {
   width: "100%",
-  boxSizing: "border-box" as const,
-  minHeight: 58,
+  minHeight: 52,
   borderRadius: 12,
-  border: "2px solid #cbd5e1",
-  padding: "10px 14px",
-  fontSize: 24,
-  fontWeight: 800,
-  letterSpacing: "0.25em",
-  textAlign: "center" as const,
+  border: "1px solid #b91c1c",
+  background: "#fff",
+  color: "#991b1b",
+  fontSize: 16,
+  fontWeight: 900,
+  cursor: "pointer",
 };
 
 export function AdminSettingsDialog({
-  allDataCount = 0,
-  onExportAllData,
+  review19Count = 0,
+  dailyCount = 0,
+  onExportAllReview19Data,
+  onExportLatestReview19Data,
+  onExportAllDailyData,
+  onExportLatestDailyData,
   onClose,
 }: AdminSettingsDialogProps) {
-  const [phase, setPhase] = useState<DialogPhase>(() =>
-    hasAdminPin() ? "unlock" : "create-pin",
-  );
-  const [pin, setPin] = useState("");
-  const [pinConfirm, setPinConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const normalizePinInput = (value: string) =>
-    value.replace(/\D/g, "").slice(0, ADMIN_PIN_MAX_LENGTH);
-
-  const handleCreatePin = async () => {
-    setError(null);
-
-    if (!isValidAdminPinFormat(pin)) {
-      setError("PINは4〜8桁の数字で設定してください。");
-      return;
-    }
-
-    if (pin !== pinConfirm) {
-      setError("確認用PINが一致していません。");
-      return;
-    }
-
-    setSubmitting(true);
+  const runExport = async (
+    action: ExportAction | undefined,
+    emptyMessage: string,
+  ) => {
+    if (!action || busy) return;
+    setBusy(true);
+    setStatus(null);
     try {
-      await saveAdminPin(pin);
-      setPin("");
-      setPinConfirm("");
-      setPhase("settings");
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "PINを保存できませんでした。",
-      );
+      const exported = await action();
+      setStatus(exported ? "JSONを出力しました。" : emptyMessage);
     } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUnlock = async () => {
-    setError(null);
-
-    if (!isValidAdminPinFormat(pin)) {
-      setError("4〜8桁のPINを入力してください。");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const verified = await verifyAdminPin(pin);
-      if (!verified) {
-        setError("PINが違います。");
-        return;
-      }
-
-      setPin("");
-      setPhase("settings");
-    } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   };
 
@@ -137,13 +91,7 @@ export function AdminSettingsDialog({
             marginBottom: 18,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 26, lineHeight: 1.2 }}>
-            {phase === "create-pin"
-              ? "設定用PINを作成"
-              : phase === "unlock"
-                ? "PINを入力"
-                : "設定"}
-          </h2>
+          <h2 style={{ margin: 0, fontSize: 26, lineHeight: 1.2 }}>設定</h2>
           <button
             type="button"
             onClick={onClose}
@@ -163,164 +111,74 @@ export function AdminSettingsDialog({
           </button>
         </div>
 
-        {phase === "create-pin" ? (
-          <>
-            <p style={{ margin: "0 0 16px", lineHeight: 1.6 }}>
-              設定を開くための4〜8桁の数字を設定してください。
-            </p>
-            <label style={{ display: "block", fontWeight: 800, marginBottom: 8 }}>
-              PIN
-            </label>
-            <input
-              autoFocus
-              type="password"
-              inputMode="numeric"
-              autoComplete="new-password"
-              value={pin}
-              onChange={(event) => setPin(normalizePinInput(event.target.value))}
-              maxLength={ADMIN_PIN_MAX_LENGTH}
-              style={inputStyle}
-            />
-            <label
-              style={{
-                display: "block",
-                fontWeight: 800,
-                margin: "16px 0 8px",
-              }}
-            >
-              PINをもう一度入力
-            </label>
-            <input
-              type="password"
-              inputMode="numeric"
-              autoComplete="new-password"
-              value={pinConfirm}
-              onChange={(event) =>
-                setPinConfirm(normalizePinInput(event.target.value))
-              }
-              maxLength={ADMIN_PIN_MAX_LENGTH}
-              style={inputStyle}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void handleCreatePin();
-              }}
-            />
-            {error ? (
-              <p role="alert" style={{ color: "#b91c1c", fontWeight: 800 }}>
-                {error}
-              </p>
-            ) : null}
+        <div style={{ marginBottom: 20, color: "#475569", fontSize: 13, lineHeight: 1.6 }}>
+          アプリ版: {APP_VERSION}
+          <br />
+          ビルドID: {BUILD_ID}
+          <br />
+          データ形式: {DATA_SCHEMA_VERSION}
+        </div>
+
+        <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>保存データ</div>
+        <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
+          19:00チェックと1日データは、別々のJSONとして出力します。
+        </div>
+
+        <section style={{ marginBottom: 18 }}>
+          <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 900 }}>
+            19:00チェックデータ（{review19Count}件）
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
             <button
               type="button"
-              onClick={() => void handleCreatePin()}
-              disabled={submitting}
-              style={{
-                width: "100%",
-                minHeight: 60,
-                marginTop: 18,
-                border: 0,
-                borderRadius: 14,
-                background: "#b91c1c",
-                color: "#fff",
-                fontSize: 20,
-                fontWeight: 900,
-                cursor: submitting ? "wait" : "pointer",
-              }}
+              disabled={busy}
+              onClick={() => void runExport(onExportAllReview19Data, "19:00チェックデータがありません。")}
+              style={exportButtonStyle}
             >
-              PINを設定する
+              19:00チェックデータを全件出力
             </button>
-          </>
-        ) : null}
-
-        {phase === "unlock" ? (
-          <>
-            <p style={{ margin: "0 0 16px", lineHeight: 1.6 }}>
-              管理者用PINを入力してください。
-            </p>
-            <input
-              autoFocus
-              type="password"
-              inputMode="numeric"
-              autoComplete="current-password"
-              value={pin}
-              onChange={(event) => setPin(normalizePinInput(event.target.value))}
-              maxLength={ADMIN_PIN_MAX_LENGTH}
-              style={inputStyle}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void handleUnlock();
-              }}
-            />
-            {error ? (
-              <p role="alert" style={{ color: "#b91c1c", fontWeight: 800 }}>
-                {error}
-              </p>
-            ) : null}
             <button
               type="button"
-              onClick={() => void handleUnlock()}
-              disabled={submitting}
-              style={{
-                width: "100%",
-                minHeight: 60,
-                marginTop: 18,
-                border: 0,
-                borderRadius: 14,
-                background: "#b91c1c",
-                color: "#fff",
-                fontSize: 20,
-                fontWeight: 900,
-                cursor: submitting ? "wait" : "pointer",
-              }}
+              disabled={busy}
+              onClick={() => void runExport(onExportLatestReview19Data, "19:00チェックデータがありません。")}
+              style={exportButtonStyle}
             >
-              設定を開く
+              最新の19:00チェックデータを出力
             </button>
-          </>
-        ) : null}
+          </div>
+        </section>
 
-        {phase === "settings" ? (
-          <section>
-            <div style={{ marginBottom: 20, color: "#475569", fontSize: 13, lineHeight: 1.6 }}>
-              アプリ版: {APP_VERSION}
-              <br />
-              ビルドID: {BUILD_ID}
-              <br />
-              データ形式: {DATA_SCHEMA_VERSION}
-            </div>
-            {onExportAllData ? (
-              <>
-              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-                保存データ
-              </div>
-              <div
-                style={{
-                  color: "#475569",
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  marginBottom: 12,
-                }}
-              >
-                1日通しデータと19:00チェックデータを、重複を除いて1つのJSONへ出力します。
-              </div>
-                <button
-                  type="button"
-                  onClick={onExportAllData}
-                  disabled={allDataCount === 0}
-                  style={{
-                    width: "100%",
-                    minHeight: 58,
-                    borderRadius: 14,
-                    border: 0,
-                    background: allDataCount === 0 ? "#e2e8f0" : "#b91c1c",
-                    color: allDataCount === 0 ? "#94a3b8" : "#fff",
-                    fontSize: 18,
-                    fontWeight: 900,
-                    cursor: allDataCount === 0 ? "not-allowed" : "pointer",
-                  }}
-                >
-                  全データを出力
-                </button>
-              </>
-            ) : null}
-          </section>
+        <section>
+          <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 900 }}>
+            1日データ（{dailyCount}件）
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runExport(onExportAllDailyData, "1日データがありません。")}
+              style={exportButtonStyle}
+            >
+              1日データを全件出力
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runExport(onExportLatestDailyData, "1日データがありません。")}
+              style={exportButtonStyle}
+            >
+              最新の1日データを出力
+            </button>
+          </div>
+        </section>
+
+        {status ? (
+          <div
+            role="status"
+            style={{ marginTop: 14, padding: 10, borderRadius: 10, background: "#f1f5f9", fontSize: 14, fontWeight: 800 }}
+          >
+            {status}
+          </div>
         ) : null}
       </section>
     </div>

@@ -149,16 +149,25 @@ test("14. 10個以上専用計算コードを削除", () => {
   assert.equal(discountSource.includes("manyThreshold"), false);
 });
 
-test("15. 注意事項は10個以上項目を除いた8項目", () => {
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 8);
+test("15. 注意事項は補正商品を統合した5項目", () => {
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 5);
   assert.equal(FULL_MODE_NOTICE_TEXTS.some((text) => text.includes("10個以上")), false);
 });
-test("16. 定番商品-10%を維持", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("定番商品は、表示値引率から-10%")));
-test("17. 夜によく売れる商品-10%を維持", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("夜によく売れる商品は、表示値引率から-10%")));
-test("18. 見た目が悪い商品+10%を維持", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("見た目が悪い個別商品は、表示値引率に+10%")));
-test("19. 不人気商品+10%を維持", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("不人気な商品は、表示値引率に+10%")));
+test("16. -10%商品を1項目へ統合", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("定番商品・夜によく売れる商品・広告商品は、表示値引率から-10%")));
+test("17. -10%商品の分類を維持", () => {
+  const notice = FULL_MODE_NOTICE_TEXTS.find((text) => text.includes("-10%")) ?? "";
+  assert.ok(notice.includes("定番商品"));
+  assert.ok(notice.includes("夜によく売れる商品"));
+  assert.ok(notice.includes("広告商品"));
+});
+test("18. +10%商品を1項目へ統合", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("見た目が悪い個別商品・不人気な商品は、表示値引率に+10%")));
+test("19. +10%商品の分類を維持", () => {
+  const notice = FULL_MODE_NOTICE_TEXTS.find((text) => text.includes("+10%")) ?? "";
+  assert.ok(notice.includes("見た目が悪い個別商品"));
+  assert.ok(notice.includes("不人気な商品"));
+});
 test("20. 広告商品は常時-10%の文言", () => {
-  assert.ok(FULL_MODE_NOTICE_TEXTS.includes("広告商品は、表示値引率から-10%"));
+  assert.ok(FULL_MODE_NOTICE_TEXTS.some((text) => text.includes("広告商品") && text.includes("-10%")));
   assert.equal(FULL_MODE_NOTICE_TEXTS.some((text) => text.includes("売れ方が順調なら")), false);
 });
 test("21. 保存スナップショットでも広告補正は常時-10%", () => {
@@ -187,11 +196,18 @@ test("27. UIに19:00チェック対象外操作がない", () => {
   assert.equal(routerSource.includes("markReview19NotApplicable"), false);
   assert.equal(hookSource.includes("markReview19NotApplicable"), false);
 });
-test("28. 全データ出力へ主要導線を統一", () => {
-  assert.ok(settingsSource.includes("全データを出力"));
-  assert.ok(settingsSource.includes("onExportAllData"));
-  assert.ok(routerSource.includes("onExportAllData={actions.exportAllData}"));
-  assert.equal(settingsSource.includes("1日通しデータ出力"), false);
+test("28. 19時チェックと1日データを全件・最新の4導線へ分離", () => {
+  for (const label of [
+    "19:00チェックデータを全件出力",
+    "最新の19:00チェックデータを出力",
+    "1日データを全件出力",
+    "最新の1日データを出力",
+  ]) {
+    assert.ok(settingsSource.includes(label));
+  }
+  assert.equal(settingsSource.includes("全データを出力"), false);
+  assert.ok(routerSource.includes("actions.exportCompletedReview19Data()"));
+  assert.ok(routerSource.includes("actions.exportCompletedDailyData()"));
 });
 test("29. 天候入力の予報キーは16〜21時だけ", () => {
   assert.deepEqual(Object.keys(createDefaultHourlyForecasts()), ["16", "17", "18", "19", "20", "21"]);
@@ -200,7 +216,7 @@ test("30. schema v3・appVersion・buildIdをアプリ情報に持つ", () => {
   const version = getCurrentDataVersionInfo();
   const packageVersion = (JSON.parse(source("../package.json")) as { version: string }).version;
   assert.equal(version.dataSchemaVersion, 3);
-  assert.ok(/^2026\.7\.26-/.test(packageVersion));
+  assert.ok(/^2026\.7\.29-/.test(packageVersion));
   assert.ok(version.buildId.length > 0);
 });
 test("31. 通常日の曜日グループを維持", () => assert.equal(getAreaCountComparisonWeekdayGroup({ weekday: 2, discountTime: "17", date: "2026-07-21" }), "火木日"));

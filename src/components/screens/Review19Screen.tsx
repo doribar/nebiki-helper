@@ -60,6 +60,7 @@ type Review19ScreenProps = {
     latestAreaCount?: { areaId: AreaId; count: number },
     latestExcludedAreaId?: AreaId,
   ) => void;
+  onGoBack: () => void;
   onReturnHome: () => void;
 };
 
@@ -68,9 +69,14 @@ export function Review19Screen({
   calculatorDraftScope,
   onChangeAreaCount,
   onSave,
+  onGoBack,
   onReturnHome,
 }: Review19ScreenProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showCountCorrectionPicker, setShowCountCorrectionPicker] =
+    useState(false);
+  const [countCorrectionReturnAreaId, setCountCorrectionReturnAreaId] =
+    useState<AreaId | null>(null);
   const [orderedAreaIds, setOrderedAreaIds] = useState<AreaId[]>(() =>
     items.map((item) => item.areaId),
   );
@@ -119,6 +125,14 @@ export function Review19Screen({
   );
   const targetCount = useMemo(
     () => items.filter((item) => !item.excluded).length,
+    [items],
+  );
+  const recordedItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          typeof item.count === "number" && Number.isFinite(item.count),
+      ),
     [items],
   );
 
@@ -180,6 +194,36 @@ export function Review19Screen({
     clearCountCalculatorDraft(areaId);
   };
 
+  const handleGoBack = () => {
+    if (activeItem) {
+      saveCountCalculatorDraft(activeItem.areaId);
+    }
+    setShowCountCorrectionPicker(false);
+
+    if (activeIndex > 0) {
+      setCountCorrectionReturnAreaId(null);
+      setActiveIndex((index) => Math.max(0, index - 1));
+      return;
+    }
+
+    onGoBack();
+  };
+
+  const startCountCorrection = (areaId: AreaId) => {
+    if (activeItem) {
+      saveCountCalculatorDraft(activeItem.areaId);
+    }
+
+    const targetIndex = orderedAreaIds.indexOf(areaId);
+    if (targetIndex < 0) return;
+
+    setCountCorrectionReturnAreaId(
+      areaId === activeAreaId ? null : activeAreaId,
+    );
+    setShowCountCorrectionPicker(false);
+    setActiveIndex(targetIndex);
+  };
+
   const goSkip = () => {
     if (!activeItem || activeItem.excluded) return;
     if (orderedAreaIds.length <= 1) return;
@@ -210,8 +254,18 @@ export function Review19Screen({
     onChangeAreaCount(activeItem.areaId, countCalculatorResult);
 
     if (hasAllCountsAfter(latestAreaCount)) {
+      setCountCorrectionReturnAreaId(null);
       window.setTimeout(() => onSave(latestAreaCount), 0);
       return;
+    }
+
+    if (countCorrectionReturnAreaId) {
+      const returnIndex = orderedAreaIds.indexOf(countCorrectionReturnAreaId);
+      setCountCorrectionReturnAreaId(null);
+      if (returnIndex >= 0) {
+        setActiveIndex(returnIndex);
+        return;
+      }
     }
 
     moveToNextArea();
@@ -230,7 +284,31 @@ export function Review19Screen({
 
   if (!activeItem) {
     return (
-      <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
+      <main
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          padding: 16,
+          maxWidth: 560,
+          margin: "0 auto",
+          overflowX: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginBottom: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleGoBack}
+            style={{ ...subActionButtonStyle, width: "auto" }}
+          >
+            戻る
+          </button>
+        </div>
         <section style={cardStyle}>
           <div style={{ fontSize: 22, fontWeight: 900 }}>19時残数チェック</div>
           <div style={{ marginTop: 8, fontSize: 14, color: "#555" }}>
@@ -255,8 +333,31 @@ export function Review19Screen({
   return (
     <main
       {...swipeToSkipHandlers}
-      style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        padding: 16,
+        maxWidth: 560,
+        margin: "0 auto",
+        overflowX: "hidden",
+      }}
     >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginBottom: 12,
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleGoBack}
+          style={{ ...subActionButtonStyle, width: "auto" }}
+        >
+          戻る
+        </button>
+      </div>
+
       <section style={cardStyle}>
         <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 8 }}>
           19時残数チェック
@@ -498,6 +599,58 @@ export function Review19Screen({
         >
           トップに戻る
         </button>
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <button
+          type="button"
+          onClick={() =>
+            setShowCountCorrectionPicker((current) => !current)
+          }
+          aria-expanded={showCountCorrectionPicker}
+          style={subActionButtonStyle}
+        >
+          入力した残数を修正
+        </button>
+
+        {showCountCorrectionPicker ? (
+          <section
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              marginTop: 10,
+              padding: 12,
+              border: "1px solid #ddd",
+              borderRadius: 12,
+              background: "#fafafa",
+              overflowX: "hidden",
+            }}
+          >
+            {recordedItems.length > 0 ? (
+              <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+                {recordedItems.map((item) => (
+                  <button
+                    key={item.areaId}
+                    type="button"
+                    onClick={() => startCountCorrection(item.areaId)}
+                    style={{
+                      ...subActionButtonStyle,
+                      minWidth: 0,
+                      textAlign: "left",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {item.areaName}（{item.count}個）
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#666", fontSize: 14, lineHeight: 1.6 }}>
+                入力済みのエリアはありません。
+              </div>
+            )}
+          </section>
+        ) : null}
       </div>
     </main>
   );

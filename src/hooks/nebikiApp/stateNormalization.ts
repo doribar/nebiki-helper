@@ -1,6 +1,7 @@
 import type {
   AppState,
   AreaCountEvaluation,
+  AreaCountCorrectionContext,
   AreaId,
   AreaJudge,
   AreaProgress,
@@ -80,6 +81,64 @@ function isValidAreaStatus(value: unknown): value is AreaProgress["status"] {
 
 function isValidAreaJudge(value: unknown): value is AreaJudge {
   return value === "many" || value === "normal" || value === "few" || value === null;
+}
+
+function isValidScreenName(value: unknown): value is ScreenName {
+  return (
+    value === "start" ||
+    value === "review19_weather" ||
+    value === "review19_done" ||
+    value === "area_judge" ||
+    value === "auto_skip_notice" ||
+    value === "auto_skip_count" ||
+    value === "rate_display" ||
+    value === "final_time" ||
+    value === "review19" ||
+    value === "done"
+  );
+}
+
+function normalizeAreaCountCorrectionContext(
+  raw: unknown,
+): AreaCountCorrectionContext | null {
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as Partial<AreaCountCorrectionContext>;
+  if (!isValidAreaId(source.targetAreaId) || !isValidScreenName(source.returnScreen)) {
+    return null;
+  }
+
+  return {
+    mode:
+      source.mode === "auto_skip_count_only"
+        ? "auto_skip_count_only"
+        : "normal",
+    targetAreaId: source.targetAreaId,
+    returnScreen: source.returnScreen,
+    returnAreaId: isValidAreaId(source.returnAreaId) ? source.returnAreaId : null,
+    returnLastReferenceAreaId: isValidAreaId(source.returnLastReferenceAreaId)
+      ? source.returnLastReferenceAreaId
+      : null,
+    returnCurrentFlow: source.returnCurrentFlow === "pending" ? "pending" : "normal",
+    returnPendingDeferredAreaIds: Array.isArray(source.returnPendingDeferredAreaIds)
+      ? source.returnPendingDeferredAreaIds.filter(isValidAreaId)
+      : [],
+    returnFinalTimeStep:
+      source.returnFinalTimeStep === 1 ||
+      source.returnFinalTimeStep === 2 ||
+      source.returnFinalTimeStep === 3
+        ? source.returnFinalTimeStep
+        : 0,
+    returnTimeSwitchNotice:
+      typeof source.returnTimeSwitchNotice === "string"
+        ? source.returnTimeSwitchNotice
+        : null,
+    returnHistoryLength:
+      typeof source.returnHistoryLength === "number" &&
+      Number.isInteger(source.returnHistoryLength) &&
+      source.returnHistoryLength >= 0
+        ? source.returnHistoryLength
+        : 0,
+  };
 }
 
 function isValidAreaCountEvaluation(value: unknown): value is AreaCountEvaluation {
@@ -189,6 +248,20 @@ export function normalizeAreaProgressMap(
       areaCount:
         typeof progress.areaCount === "number" && Number.isFinite(progress.areaCount) && progress.areaCount >= 0
           ? Math.round(progress.areaCount)
+          : undefined,
+      stapleItemCount:
+        progress.stapleItemCount === null
+          ? null
+          : typeof progress.stapleItemCount === "number" &&
+            Number.isInteger(progress.stapleItemCount) &&
+            progress.stapleItemCount >= 0 &&
+            (!(
+              typeof progress.areaCount === "number" &&
+              Number.isFinite(progress.areaCount) &&
+              progress.areaCount >= 0
+            ) ||
+              progress.stapleItemCount <= Math.round(progress.areaCount))
+          ? progress.stapleItemCount
           : undefined,
       areaCountEvaluation: isValidAreaCountEvaluation(progress.areaCountEvaluation)
         ? progress.areaCountEvaluation
@@ -328,6 +401,8 @@ export function createInitialState(
     finalTimeStep: 0,
     review19: null,
     review19ExcludedAreaIds: [],
+    areaCountCorrection: null,
+    finalizedDayRecordId: null,
   };
 }
 
@@ -563,5 +638,12 @@ export function normalizeLoadedState(
         : 0,
     review19,
     review19ExcludedAreaIds: normalizeReview19ExcludedAreaIds((loaded as Partial<AppState>).review19ExcludedAreaIds),
+    areaCountCorrection: normalizeAreaCountCorrectionContext(
+      (loaded as Partial<AppState>).areaCountCorrection,
+    ),
+    finalizedDayRecordId:
+      typeof (loaded as Partial<AppState>).finalizedDayRecordId === "string"
+        ? (loaded as Partial<AppState>).finalizedDayRecordId
+        : null,
   };
 }

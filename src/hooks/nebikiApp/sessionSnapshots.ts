@@ -63,6 +63,7 @@ function buildAreaSnapshotsFromState(params: {
       statusText: summary?.statusText,
       areaJudge: progress?.areaJudge ?? null,
       areaCount: progress?.areaCount,
+      stapleItemCount: progress?.stapleItemCount,
       areaCountEvaluation: progress?.areaCountEvaluation,
       areaCountEvaluationSource: progress?.areaCountEvaluationSource,
       areaCountDecisionBasis: progress?.areaCountDecisionBasis

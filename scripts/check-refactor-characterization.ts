@@ -74,6 +74,8 @@ function assertPublicHookContract(): void {
       "finalTimeStep",
       "review19",
       "review19ExcludedAreaIds",
+      "areaCountCorrection",
+      "finalizedDayRecordId",
     ]);
     assert.deepEqual(Object.keys(captured.derived), [
       "currentAreaName",
@@ -105,6 +107,10 @@ function assertPublicHookContract(): void {
       "doneNextSessionInfo",
       "review19Items",
       "review19ReferenceLines",
+      "editableAreaCounts",
+      "finalizedDayMemo",
+      "previousDayDiscardTarget",
+      "dataExport",
       "allDataExport",
       "canStartReview19Manually",
     ]);
@@ -130,6 +136,15 @@ function assertPublicHookContract(): void {
       "skipReview19Area",
       "startReview19AfterWeather",
       "saveReview19",
+      "startAreaCountCorrection",
+      "saveFinalizedDayMemo",
+      "savePreviousDayDiscardCount",
+      "exportAllReview19Data",
+      "exportLatestReview19Data",
+      "exportAllDailyData",
+      "exportLatestDailyData",
+      "exportCompletedReview19Data",
+      "exportCompletedDailyData",
       "start19DiscountAfterReview",
       "startNextDoneSession",
       "exportAllData",
@@ -150,10 +165,10 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  assert.equal(body.length, 86675);
+  assert.equal(body.length, 101709);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "f14bb09ae21dbfc9a1fcc3f276d41784f5709078493098b6e852367809d9b765",
+    "d1ef6b8335449d07c1d16c5e9196e84f1eec7f8d253ca24a918b9b79fb36439b",
   );
   assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 15);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);

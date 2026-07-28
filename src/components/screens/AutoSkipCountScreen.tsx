@@ -1,5 +1,7 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { ScreenHeader } from "../layout/ScreenHeader";
+import type { AreaId, EditableAreaCountItem } from "../../domain/types.ts";
+import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
 
 type AutoSkipCountScreenProps = {
   weekdayText: string;
@@ -9,6 +11,8 @@ type AutoSkipCountScreenProps = {
   onSave: (count: number) => void;
   onGoBack: () => void;
   onReturnHome: () => void;
+  editableAreaCounts?: EditableAreaCountItem[];
+  onStartAreaCountCorrection?: (areaId: AreaId) => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -44,6 +48,8 @@ export function AutoSkipCountScreen({
   onSave,
   onGoBack,
   onReturnHome,
+  editableAreaCounts = [],
+  onStartAreaCountCorrection,
 }: AutoSkipCountScreenProps) {
   const [countText, setCountText] = useState(() =>
     toInitialCountText(initialCount),
@@ -193,6 +199,13 @@ export function AutoSkipCountScreen({
           </button>
         </section>
       </form>
+
+      {onStartAreaCountCorrection ? (
+        <AreaCountCorrectionPanel
+          items={editableAreaCounts}
+          onSelect={onStartAreaCountCorrection}
+        />
+      ) : null}
 
       <div style={{ marginTop: 16 }}>
         <button

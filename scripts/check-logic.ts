@@ -12,7 +12,6 @@ import {
   saveCalculatorDraft,
 } from '../src/domain/calculatorDraft.ts';
 import { shouldOfferAfterRainRecovery } from '../src/domain/afterRain.ts';
-import { isValidAdminPinFormat } from '../src/domain/adminSettings.ts';
 import { FULL_MODE_NOTICE_TEXTS, getCanonicalUrlForLegacyHash } from '../src/domain/fullMode.ts';
 import {
   buildAutomaticDayExportPayload,
@@ -2766,19 +2765,22 @@ const totalChecks = 87;
     getCanonicalUrlForLegacyHash({ pathname: '/app/', search: '', hash: '' }),
     null,
   );
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 8);
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 5);
   passed += 1;
 }
 
 
 {
-  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 8);
+  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 5);
   assert.equal(FULL_MODE_NOTICE_TEXTS[0], '残り2個の商品は「多い」にしない');
-  assert.equal(FULL_MODE_NOTICE_TEXTS[7], '広告商品は、表示値引率から-10%');
-  assert.equal(isValidAdminPinFormat('1234'), true);
-  assert.equal(isValidAdminPinFormat('12345678'), true);
-  assert.equal(isValidAdminPinFormat('123'), false);
-  assert.equal(isValidAdminPinFormat('12a4'), false);
+  assert.equal(
+    FULL_MODE_NOTICE_TEXTS[2],
+    '定番商品・夜によく売れる商品・広告商品は、表示値引率から-10%',
+  );
+  assert.equal(
+    FULL_MODE_NOTICE_TEXTS[3],
+    '見た目が悪い個別商品・不人気な商品は、表示値引率に+10%',
+  );
   passed += 1;
 }
 

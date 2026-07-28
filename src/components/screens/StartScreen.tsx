@@ -31,6 +31,8 @@ type StartScreenProps = {
   onStartReview19?: () => void;
   onReturnHome?: () => void;
   onOpenSettings?: () => void;
+  previousDayDiscardTarget?: { date: string; count: number | null } | null;
+  onSavePreviousDayDiscardCount?: (count: number | null) => void;
   now?: Date;
 };
 
@@ -387,6 +389,8 @@ export function StartScreen({
   onStartReview19,
   onReturnHome,
   onOpenSettings,
+  previousDayDiscardTarget = null,
+  onSavePreviousDayDiscardCount,
   now = new Date(),
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
@@ -409,11 +413,23 @@ export function StartScreen({
     useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [discardPanelOpen, setDiscardPanelOpen] = useState(false);
+  const [discardCountText, setDiscardCountText] = useState("");
+  const [discardMessage, setDiscardMessage] = useState<string | null>(null);
   const discountTimeOptions = DISCOUNT_TIME_OPTIONS;
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
   }, [sessionDraft.discountTime, sessionDraft.date]);
+
+  useEffect(() => {
+    setDiscardCountText(
+      typeof previousDayDiscardTarget?.count === "number"
+        ? String(previousDayDiscardTarget.count)
+        : "",
+    );
+    setDiscardMessage(null);
+  }, [previousDayDiscardTarget?.date, previousDayDiscardTarget?.count]);
 
   const currentUnlockIndex = fieldOrder.findIndex(
     ({ hour, field }: { hour: ForecastHourKey; field: InputField }) =>
@@ -968,6 +984,101 @@ export function StartScreen({
             19:00チェックを始める
           </button>
         </div>
+      ) : null}
+
+      {previousDayDiscardTarget && onSavePreviousDayDiscardCount ? (
+        <section style={{ marginTop: 16, width: "100%", minWidth: 0 }}>
+          <button
+            type="button"
+            onClick={() => setDiscardPanelOpen((current) => !current)}
+            aria-expanded={discardPanelOpen}
+            style={{
+              width: "100%",
+              minHeight: 44,
+              border: "1px solid #999",
+              borderRadius: 12,
+              padding: "10px 14px",
+              background: "#fff",
+              fontSize: 15,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            廃棄個数を入力
+          </button>
+          {discardPanelOpen ? (
+            <div
+              style={{
+                marginTop: 8,
+                padding: 12,
+                border: "1px solid #ddd",
+                borderRadius: 12,
+                background: "#fafafa",
+              }}
+            >
+              <div style={{ marginBottom: 8, fontWeight: 900 }}>
+                対象日：{previousDayDiscardTarget.date}
+              </div>
+              <label htmlFor="previous-day-discard-count" style={{ display: "block", marginBottom: 6, fontSize: 14, fontWeight: 800 }}>
+                廃棄個数（空欄可）
+              </label>
+              <input
+                id="previous-day-discard-count"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={discardCountText}
+                onChange={(event) => {
+                  setDiscardCountText(event.currentTarget.value.replace(/[^0-9]/g, ""));
+                  setDiscardMessage(null);
+                }}
+                placeholder="空欄"
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  minHeight: 44,
+                  boxSizing: "border-box",
+                  border: "1px solid #bbb",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  fontSize: 18,
+                  fontWeight: 800,
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const count = discardCountText === "" ? null : Number(discardCountText);
+                  if (count !== null && (!Number.isSafeInteger(count) || count < 0)) {
+                    setDiscardMessage("0以上の整数で入力してください。");
+                    return;
+                  }
+                  onSavePreviousDayDiscardCount(count);
+                  setDiscardMessage("保存しました。");
+                }}
+                style={{
+                  width: "100%",
+                  minHeight: 44,
+                  marginTop: 10,
+                  border: 0,
+                  borderRadius: 10,
+                  background: "#111",
+                  color: "#fff",
+                  fontSize: 15,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                保存
+              </button>
+              {discardMessage ? (
+                <div role="status" style={{ marginTop: 8, fontSize: 13, fontWeight: 800 }}>
+                  {discardMessage}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
       ) : null}
     </main>
   );

@@ -2,8 +2,8 @@ import type { CSSProperties } from "react";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
 type Review19DoneScreenProps = {
-  allDataCount: number;
-  onExportAllData: () => void;
+  onExportReview19Data: () => void;
+  onGoBack: () => void;
   onReturnHome: () => void;
 };
 
@@ -16,12 +16,31 @@ const cardStyle: CSSProperties = {
 };
 
 export function Review19DoneScreen({
-  allDataCount,
-  onExportAllData,
+  onExportReview19Data,
+  onGoBack,
   onReturnHome,
 }: Review19DoneScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          onClick={onGoBack}
+          style={{
+            minWidth: 88,
+            minHeight: 44,
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid #ccc",
+            background: "#fff",
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          戻る
+        </button>
+      </div>
       <section
         style={{
           ...cardStyle,
@@ -43,12 +62,12 @@ export function Review19DoneScreen({
           保存データ
         </div>
         <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7, marginBottom: 14 }}>
-          1日通しデータと19:00チェックデータを、重複を除いて1つのJSONへ出力します。
+          今回保存した19:00チェックデータを1件だけ出力します。
         </div>
 
         <div>
-          <PrimaryButton onClick={onExportAllData} disabled={allDataCount === 0}>
-            全データを出力
+          <PrimaryButton onClick={onExportReview19Data}>
+            19:00チェックデータを出力
           </PrimaryButton>
         </div>
       </section>

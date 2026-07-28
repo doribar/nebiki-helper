@@ -1,6 +1,8 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type {
+  AreaId,
   DiscountTime,
+  EditableAreaCountItem,
   FinalGuideData,
   RateDisplayData,
   SkipTargetOption,
@@ -17,6 +19,7 @@ import {
 } from "../common/DayBeforeHolidayNotice";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
+import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
 
 type RateDisplayScreenProps = {
   weekdayText: string;
@@ -51,6 +54,8 @@ type RateDisplayScreenProps = {
   canChooseSkipTarget?: boolean;
   skipTargetOptions?: SkipTargetOption[];
   onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
+  editableAreaCounts?: EditableAreaCountItem[];
+  onStartAreaCountCorrection?: (areaId: AreaId) => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -259,6 +264,8 @@ export function RateDisplayScreen({
   canChooseSkipTarget = false,
   skipTargetOptions = [],
   onChooseSkipTarget,
+  editableAreaCounts = [],
+  onStartAreaCountCorrection,
 }: RateDisplayScreenProps) {
   const isFinalTime = discountTime === "20";
   const swipeToSkipHandlers = useSwipeToSkip({
@@ -360,6 +367,13 @@ export function RateDisplayScreen({
         <PrimaryButton onClick={onConfirmDailyNotice ?? (() => {})}>
           OK
         </PrimaryButton>
+
+        {onStartAreaCountCorrection ? (
+          <AreaCountCorrectionPanel
+            items={editableAreaCounts}
+            onSelect={onStartAreaCountCorrection}
+          />
+        ) : null}
 
         <div style={{ marginTop: 16 }}>
           <button
@@ -591,6 +605,13 @@ export function RateDisplayScreen({
 
       {!isFinalTime ? (
         <NoticeSection />
+      ) : null}
+
+      {onStartAreaCountCorrection ? (
+        <AreaCountCorrectionPanel
+          items={editableAreaCounts}
+          onSelect={onStartAreaCountCorrection}
+        />
       ) : null}
 
       <div style={{ marginTop: 16 }}>
