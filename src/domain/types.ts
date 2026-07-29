@@ -679,6 +679,8 @@ export type UseNebikiAppDerived = {
   showDayBeforeHolidayNotice: boolean;
   showThreeDayHolidayMiddleNotice: boolean;
   showHolidayBeforeNormalWeekdayNotice: boolean;
+  weatherConfirmationPending: boolean;
+  weatherCorrectionRequestId: number;
   areaJudgeSelection: AreaJudge;
   isResuming: boolean;
   startButtonLabel?: string;
@@ -709,6 +711,9 @@ export type UseNebikiAppDerived = {
 export type UseNebikiAppActions = {
   updateSessionDraft: (patch: Partial<SessionDraft>) => void;
   startSession: () => void;
+  requestWeatherConfirmation: () => void;
+  editWeatherInput: () => void;
+  confirmWeatherInput: () => void;
   goBackOneScreen: () => void;
   startEditingConditions: () => void;
   undoLastAction: () => void;

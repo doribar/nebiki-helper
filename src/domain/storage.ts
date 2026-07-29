@@ -12,6 +12,10 @@ import type {
 } from "./types";
 import type { NavigationSnapshot } from "./navigationHistory";
 import { appendReview19RecordInMemory, cloneReview19Records } from "./review19.ts";
+import {
+  normalizeWeatherConfirmationPending,
+  type WeatherConfirmationPending,
+} from "./weatherConfirmation.ts";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
@@ -33,6 +37,7 @@ export type PersistedRuntimeState = {
   timeSwitchTarget: import("./types").DiscountTime | null;
   undoSnapshot: NavigationSnapshot | null;
   screenHistory: NavigationSnapshot[];
+  weatherConfirmationPending?: WeatherConfirmationPending | null;
 };
 
 export type PersistedNebikiState = {
@@ -129,6 +134,9 @@ function cloneRuntimeState(raw: PersistedRuntimeState | null): PersistedRuntimeS
     screenHistory: Array.isArray(raw.screenHistory)
       ? JSON.parse(JSON.stringify(raw.screenHistory))
       : [],
+    weatherConfirmationPending: normalizeWeatherConfirmationPending(
+      raw.weatherConfirmationPending,
+    ),
   };
 }
 

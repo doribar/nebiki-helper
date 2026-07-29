@@ -149,6 +149,15 @@ function getNearForecastHour(discountTime: DiscountTime): ForecastHourKey {
   }
 }
 
+export function getWeatherInputForecastHours(
+  discountTime: DiscountTime,
+): ForecastHourKey[] {
+  const startHour = getNearForecastHour(discountTime);
+  return FORECAST_HOUR_KEYS.filter(
+    (hour) => Number(hour) >= Number(startHour),
+  );
+}
+
 type DirectPrecipForecastEntry = {
   hourText: string;
   weather: ForecastWeatherKind;

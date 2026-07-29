@@ -136,6 +136,11 @@ import {
   getEarlyNextMinus5TargetDiscountTime,
   shouldReserveEarlyNextMinus5OnAutoTransition,
 } from "../domain/earlyNextMinus5.ts";
+import {
+  matchesWeatherConfirmationDraft,
+  restoreWeatherConfirmationPending,
+  type WeatherConfirmationPending,
+} from "../domain/weatherConfirmation.ts";
 import { getCurrentDataVersionInfo } from "../domain/dataVersion.ts";
 import {
   applyRateOffsetToDisplay,
@@ -281,9 +286,38 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     ? initialPersistenceRef.current?.workSessionCheckpoint ?? null
     : initialPersistenceRef.current?.currentSession ?? null;
 
-  const [state, setState] = useState<AppState>(() =>
-    normalizeLoadedState(initialLoadedState, initialLastUsedSessionDraft)
-  );
+  const initialWeatherConfirmationPending = isTestMode
+    ? null
+    : restoreWeatherConfirmationPending({
+        raw: initialPersistenceRef.current?.runtimeState
+          ?.weatherConfirmationPending,
+        screen: initialLoadedState?.screen,
+        sessionDraft: initialLoadedState?.sessionDraft,
+        currentDate: initialToday,
+      });
+
+  const [state, setState] = useState<AppState>(() => {
+    const normalized = normalizeLoadedState(
+      initialLoadedState,
+      initialLastUsedSessionDraft,
+    );
+
+    if (!initialWeatherConfirmationPending || !initialLoadedState) {
+      return normalized;
+    }
+
+    return {
+      ...normalized,
+      sessionDraft: normalizeSessionDraft(initialLoadedState.sessionDraft),
+    };
+  });
+  const [weatherConfirmationPending, setWeatherConfirmationPending] =
+    useState<WeatherConfirmationPending | null>(
+      initialWeatherConfirmationPending,
+    );
+  const [weatherCorrectionRequestId, setWeatherCorrectionRequestId] =
+    useState(0);
+  const weatherConfirmationSubmittingRef = useRef(false);
   const [nowMs, setNowMs] = useState(() => getRuntimeNowMs());
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
@@ -360,6 +394,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }
 
   function restoreNavigationSnapshot(snapshot: NavigationSnapshot): void {
+    weatherConfirmationSubmittingRef.current = false;
+    setWeatherConfirmationPending(null);
     replaceNextSessionSkipRecords(snapshot.nextSessionSkipRecords);
     setLastSessionWeather(cloneLastSessionWeatherRecord(snapshot.lastSessionWeather));
     const restoredState = cloneAppState(snapshot.state);
@@ -459,6 +495,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       timeSwitchTarget,
       undoSnapshot,
       screenHistory: screenHistoryRef.current,
+      weatherConfirmationPending,
     });
   }, [
     isTestMode,
@@ -469,6 +506,27 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     undoSnapshot,
     nextSessionSkipRecords,
     lastSessionWeather,
+    weatherConfirmationPending,
+  ]);
+
+  useEffect(() => {
+    if (!weatherConfirmationPending) return;
+    if (
+      matchesWeatherConfirmationDraft({
+        pending: weatherConfirmationPending,
+        screen: state.screen,
+        sessionDraft: state.sessionDraft,
+      })
+    ) {
+      return;
+    }
+
+    weatherConfirmationSubmittingRef.current = false;
+    setWeatherConfirmationPending(null);
+  }, [
+    state.screen,
+    state.sessionDraft,
+    weatherConfirmationPending,
   ]);
 
   useEffect(() => {
@@ -1737,6 +1795,39 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
   }
 
+  function requestWeatherConfirmation() {
+    if (state.screen !== "start") return;
+
+    weatherConfirmationSubmittingRef.current = false;
+    setWeatherConfirmationPending({
+      date: state.sessionDraft.date,
+      discountTime: state.sessionDraft.discountTime,
+    });
+  }
+
+  function editWeatherInput() {
+    weatherConfirmationSubmittingRef.current = false;
+    setWeatherConfirmationPending(null);
+    setWeatherCorrectionRequestId((current) => current + 1);
+  }
+
+  function confirmWeatherInput() {
+    if (weatherConfirmationSubmittingRef.current) return;
+    if (
+      !matchesWeatherConfirmationDraft({
+        pending: weatherConfirmationPending,
+        screen: state.screen,
+        sessionDraft: state.sessionDraft,
+      })
+    ) {
+      return;
+    }
+
+    weatherConfirmationSubmittingRef.current = true;
+    setWeatherConfirmationPending(null);
+    startSession();
+  }
+
   const areaCountAssistEnabled = Boolean(
     state.session &&
     isAreaCountAssistTarget({
@@ -2128,6 +2219,8 @@ const lateSkipNotice = useMemo(() => {
   function startEditingConditions() {
     if (state.screen === "start") return;
 
+    weatherConfirmationSubmittingRef.current = false;
+    setWeatherConfirmationPending(null);
     setResumeTargetScreen(state.screen);
     setState((prev) => ({
       ...prev,
@@ -2931,6 +3024,8 @@ const lateSkipNotice = useMemo(() => {
       sourceState?: AppState;
     }
   ) {
+    weatherConfirmationSubmittingRef.current = false;
+    setWeatherConfirmationPending(null);
     const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
@@ -3304,6 +3399,8 @@ const lateSkipNotice = useMemo(() => {
     previousRenderRef.current = null;
     suppressHistoryPushRef.current = false;
     lastFinalizedDayDataRef.current = null;
+    weatherConfirmationSubmittingRef.current = false;
+    setWeatherConfirmationPending(null);
     setState(createInitialState(buildStartDefaultDraft(lastUsedSessionDraft)));
     setAreaJudgeSelection(null);
     setResumeTargetScreen(null);
@@ -3333,6 +3430,8 @@ const lateSkipNotice = useMemo(() => {
   showDayBeforeHolidayNotice,
   showThreeDayHolidayMiddleNotice,
   showHolidayBeforeNormalWeekdayNotice,
+  weatherConfirmationPending: weatherConfirmationPending !== null,
+  weatherCorrectionRequestId,
   areaJudgeSelection,
   isResuming: resumeTargetScreen !== null,
   startButtonLabel: timeSwitchTarget
@@ -3358,6 +3457,9 @@ const lateSkipNotice = useMemo(() => {
     actions: {
       updateSessionDraft,
       startSession,
+      requestWeatherConfirmation,
+      editWeatherInput,
+      confirmWeatherInput,
       goBackOneScreen,
       startEditingConditions,
       undoLastAction,

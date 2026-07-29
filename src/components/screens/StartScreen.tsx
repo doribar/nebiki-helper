@@ -10,9 +10,11 @@ import {
   FORECAST_HOUR_KEYS,
   getForecastWeatherLabel,
   getForecastWeatherSymbol,
+  getWeatherInputForecastHours,
 } from "../../domain/hourlyWeather";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
+import { WeatherConfirmationPanel } from "./WeatherConfirmationPanel";
 
 type StartScreenProps = {
   sessionDraft: SessionDraft;
@@ -25,6 +27,10 @@ type StartScreenProps = {
   };
   showAfterRainRecoverySelector: boolean;
   onChangeSessionDraft: (patch: Partial<SessionDraft>) => void;
+  weatherConfirmationPending: boolean;
+  weatherCorrectionRequestId: number;
+  onRequestWeatherConfirmation: () => void;
+  onEditWeatherInput: () => void;
   onStart: () => void;
   startButtonLabel?: string;
   canStartReview19?: boolean;
@@ -346,23 +352,6 @@ function isHourAtOrAfter(hour: ForecastHourKey, startHour: ForecastHourKey) {
   return Number(hour) >= Number(startHour);
 }
 
-function getInputStartForecastHour(
-  discountTime: DiscountTime,
-): ForecastHourKey {
-  switch (discountTime) {
-    case "15":
-      return "16";
-    case "17":
-      return "18";
-    case "18":
-      return "19";
-    case "19":
-      return "20";
-    case "20":
-      return "21";
-  }
-}
-
 function getInputHoursForField(
   activeHours: ForecastHourKey[],
   field: InputField,
@@ -379,10 +368,31 @@ function createFieldOrder(startHour: ForecastHourKey) {
   );
 }
 
+function createCorrectionConfirmationMap(
+  fieldOrder: ReturnType<typeof createFieldOrder>,
+): ForecastConfirmationMap {
+  const confirmations = createEmptyConfirmationMap();
+
+  for (const { hour, field } of fieldOrder) {
+    confirmations[hour][field] = true;
+  }
+
+  const finalTarget = fieldOrder.at(-1);
+  if (finalTarget) {
+    confirmations[finalTarget.hour][finalTarget.field] = false;
+  }
+
+  return confirmations;
+}
+
 export function StartScreen({
   sessionDraft,
   weatherGuideText: _weatherGuideText,
   onChangeSessionDraft,
+  weatherConfirmationPending,
+  weatherCorrectionRequestId,
+  onRequestWeatherConfirmation,
+  onEditWeatherInput,
   onStart,
   startButtonLabel,
   canStartReview19 = false,
@@ -394,16 +404,11 @@ export function StartScreen({
   now = new Date(),
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
-  const startForecastHour = getInputStartForecastHour(
-    sessionDraft.discountTime,
-  );
   const activeHours = useMemo(
-    () =>
-      FORECAST_HOUR_KEYS.filter((hour) =>
-        isHourAtOrAfter(hour, startForecastHour),
-      ),
-    [startForecastHour],
+    () => getWeatherInputForecastHours(sessionDraft.discountTime),
+    [sessionDraft.discountTime],
   );
+  const startForecastHour = activeHours[0];
   const displayHours = FORECAST_HOUR_KEYS;
   const fieldOrder = useMemo(
     () => createFieldOrder(startForecastHour),
@@ -439,6 +444,17 @@ export function StartScreen({
     currentUnlockIndex >= 0 ? fieldOrder[currentUnlockIndex] : null;
   const allRequiredInputsConfirmed = currentUnlockIndex === -1;
   const wasAllRequiredInputsConfirmedRef = useRef(allRequiredInputsConfirmed);
+  const previousWeatherCorrectionRequestIdRef = useRef(
+    weatherCorrectionRequestId,
+  );
+
+  useEffect(() => {
+    const previousRequestId = previousWeatherCorrectionRequestIdRef.current;
+    previousWeatherCorrectionRequestIdRef.current = weatherCorrectionRequestId;
+
+    if (previousRequestId === weatherCorrectionRequestId) return;
+    setConfirmedInputs(createCorrectionConfirmationMap(fieldOrder));
+  }, [fieldOrder, weatherCorrectionRequestId]);
 
   useEffect(() => {
     if (!currentUnlockTarget) return;
@@ -466,11 +482,11 @@ export function StartScreen({
     if (wasAllRequiredInputsConfirmed || !allRequiredInputsConfirmed) return;
 
     const timer = window.setTimeout(() => {
-      startButtonRef.current?.focus();
-    }, 80);
+      onRequestWeatherConfirmation();
+    }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [allRequiredInputsConfirmed]);
+  }, [allRequiredInputsConfirmed, onRequestWeatherConfirmation]);
 
   const isFieldEnabled = (hour: ForecastHourKey, field: InputField) => {
     if (!isHourAtOrAfter(hour, startForecastHour)) return false;
@@ -566,6 +582,17 @@ export function StartScreen({
       manualDiscountTimeOverride: true,
     });
   };
+
+  if (weatherConfirmationPending) {
+    return (
+      <WeatherConfirmationPanel
+        sessionDraft={sessionDraft}
+        hours={activeHours}
+        onEdit={onEditWeatherInput}
+        onConfirm={onStart}
+      />
+    );
+  }
 
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
@@ -935,11 +962,10 @@ export function StartScreen({
 
       <PrimaryButton
         buttonRef={startButtonRef}
-        onClick={onStart}
+        onClick={onRequestWeatherConfirmation}
         disabled={!allRequiredInputsConfirmed}
       >
-        {startButtonLabel ??
-          (isFinalTime ? "最終値引へ進む" : "弁当・麺類から開始")}
+        入力内容を確認
       </PrimaryButton>
 
 

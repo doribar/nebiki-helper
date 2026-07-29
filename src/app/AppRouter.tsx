@@ -30,7 +30,12 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
-  }, [state.screen, state.currentAreaId, state.finalTimeStep]);
+  }, [
+    state.screen,
+    state.currentAreaId,
+    state.finalTimeStep,
+    derived.weatherConfirmationPending,
+  ]);
 
   switch (state.screen) {
     case "start":
@@ -40,7 +45,11 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           weatherGuideText={derived.weatherGuideText}
           showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
           onChangeSessionDraft={actions.updateSessionDraft}
-          onStart={actions.startSession}
+          weatherConfirmationPending={derived.weatherConfirmationPending}
+          weatherCorrectionRequestId={derived.weatherCorrectionRequestId}
+          onRequestWeatherConfirmation={actions.requestWeatherConfirmation}
+          onEditWeatherInput={actions.editWeatherInput}
+          onStart={actions.confirmWeatherInput}
           startButtonLabel={derived.startButtonLabel}
           canStartReview19={derived.canStartReview19Manually && state.sessionDraft.discountTime === "18"}
           onStartReview19={actions.startReview19Manually}

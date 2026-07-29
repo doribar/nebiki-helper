@@ -96,6 +96,8 @@ function assertPublicHookContract(): void {
       "showDayBeforeHolidayNotice",
       "showThreeDayHolidayMiddleNotice",
       "showHolidayBeforeNormalWeekdayNotice",
+      "weatherConfirmationPending",
+      "weatherCorrectionRequestId",
       "areaJudgeSelection",
       "isResuming",
       "startButtonLabel",
@@ -117,6 +119,9 @@ function assertPublicHookContract(): void {
     assert.deepEqual(Object.keys(captured.actions), [
       "updateSessionDraft",
       "startSession",
+      "requestWeatherConfirmation",
+      "editWeatherInput",
+      "confirmWeatherInput",
       "goBackOneScreen",
       "startEditingConditions",
       "undoLastAction",
@@ -165,12 +170,12 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  assert.equal(body.length, 102142);
+  assert.equal(body.length, 105034);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "60e5eaed63e7edc86be6b93fdd85f280ccd589698585a78259f5bde73cdca92b",
+    "ae496ebaa2a3540571d4bf82d8db205d8a095eff7f1ae287778383e119e83e29",
   );
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 15);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 16);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
 }
 
