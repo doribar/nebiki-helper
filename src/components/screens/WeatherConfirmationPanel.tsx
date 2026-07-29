@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import type { ForecastHourKey, SessionDraft } from "../../domain/types";
+import type { WeatherConfirmationDisplayRow } from "../../domain/weatherConfirmationDisplay";
 import {
   getForecastWeatherLabel,
   getForecastWeatherSymbol,
@@ -8,8 +8,7 @@ import { PrimaryButton } from "../layout/PrimaryButton";
 import { ScreenHeader } from "../layout/ScreenHeader";
 
 type WeatherConfirmationPanelProps = {
-  sessionDraft: SessionDraft;
-  hours: ForecastHourKey[];
+  rows: WeatherConfirmationDisplayRow[];
   onEdit: () => void;
   onConfirm: () => void;
 };
@@ -26,20 +25,23 @@ const rowHeaderStyle = {
   textAlign: "center" as const,
 };
 
-const valueCellStyle = {
-  minWidth: 0,
-  padding: "7px 1px",
-  borderTop: "1px solid #dfe3e8",
-  borderLeft: "1px solid #e5e8ec",
-  textAlign: "center" as const,
-  fontSize: 15,
-  lineHeight: 1.25,
-  fontVariantNumeric: "tabular-nums",
-};
+function getValueCellStyle(isPast: boolean) {
+  return {
+    minWidth: 0,
+    padding: "7px 1px",
+    borderTop: "1px solid #dfe3e8",
+    borderLeft: "1px solid #e5e8ec",
+    background: isPast ? "#eef0f2" : "#fafafa",
+    color: isPast ? "#747b84" : "#111",
+    textAlign: "center" as const,
+    fontSize: 15,
+    lineHeight: 1.25,
+    fontVariantNumeric: "tabular-nums",
+  };
+}
 
 export function WeatherConfirmationPanel({
-  sessionDraft,
-  hours,
+  rows,
   onEdit,
   onConfirm,
 }: WeatherConfirmationPanelProps) {
@@ -103,8 +105,8 @@ export function WeatherConfirmationPanel({
           >
             <colgroup>
               <col style={{ width: 52 }} />
-              {hours.map((hour) => (
-                <col key={hour} />
+              {rows.map((row) => (
+                <col key={row.hour} />
               ))}
             </colgroup>
             <thead>
@@ -116,24 +118,37 @@ export function WeatherConfirmationPanel({
                     background: "#e9edf1",
                   }}
                 />
-                {hours.map((hour) => (
+                {rows.map((row) => (
                   <th
-                    key={hour}
+                    key={row.hour}
                     scope="col"
-                    aria-label={`${hour}時`}
+                    aria-label={`${row.hour}時${row.isPast ? "（過去）" : ""}`}
                     style={{
                       minWidth: 0,
-                      padding: "7px 1px",
+                      padding: row.isPast ? "4px 1px" : "7px 1px",
                       borderLeft: "1px solid #dfe3e8",
-                      background: "#e9edf1",
+                      background: row.isPast ? "#dfe3e7" : "#e9edf1",
+                      color: row.isPast ? "#666d76" : "#111",
                       fontSize: 14,
                       fontWeight: 800,
-                      lineHeight: 1.2,
+                      lineHeight: 1.1,
                       textAlign: "center",
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {hour}
+                    <span style={{ display: "block" }}>{row.hour}</span>
+                    {row.isPast ? (
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: 2,
+                          fontSize: 9,
+                          fontWeight: 700,
+                        }}
+                      >
+                        過去
+                      </span>
+                    ) : null}
                   </th>
                 ))}
               </tr>
@@ -143,20 +158,21 @@ export function WeatherConfirmationPanel({
                 <th scope="row" style={rowHeaderStyle}>
                   天候
                 </th>
-                {hours.map((hour) => {
-                  const forecast = sessionDraft.weather.hourlyForecasts[hour];
-                  return (
-                    <td key={hour} style={valueCellStyle}>
+                {rows.map((row) => (
+                  <td key={row.hour} style={getValueCellStyle(row.isPast)}>
+                    {row.weather ? (
                       <span
                         role="img"
-                        aria-label={getForecastWeatherLabel(forecast.weather)}
+                        aria-label={getForecastWeatherLabel(row.weather)}
                         style={{ fontSize: 21, lineHeight: 1 }}
                       >
-                        {getForecastWeatherSymbol(forecast.weather)}
+                        {getForecastWeatherSymbol(row.weather)}
                       </span>
-                    </td>
-                  );
-                })}
+                    ) : (
+                      "－"
+                    )}
+                  </td>
+                ))}
               </tr>
               <tr>
                 <th scope="row" style={rowHeaderStyle}>
@@ -165,9 +181,9 @@ export function WeatherConfirmationPanel({
                     ℃
                   </span>
                 </th>
-                {hours.map((hour) => (
-                  <td key={hour} style={valueCellStyle}>
-                    {sessionDraft.weather.hourlyForecasts[hour].tempC}
+                {rows.map((row) => (
+                  <td key={row.hour} style={getValueCellStyle(row.isPast)}>
+                    {row.tempC ?? "－"}
                   </td>
                 ))}
               </tr>
@@ -178,9 +194,9 @@ export function WeatherConfirmationPanel({
                     m/s
                   </span>
                 </th>
-                {hours.map((hour) => (
-                  <td key={hour} style={valueCellStyle}>
-                    {sessionDraft.weather.hourlyForecasts[hour].windMs}
+                {rows.map((row) => (
+                  <td key={row.hour} style={getValueCellStyle(row.isPast)}>
+                    {row.windMs ?? "－"}
                   </td>
                 ))}
               </tr>

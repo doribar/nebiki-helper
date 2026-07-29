@@ -42,6 +42,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       return (
         <StartScreen
           sessionDraft={state.sessionDraft}
+          previousSession={state.session}
+          isFixedTimeMode={testNow instanceof Date}
           weatherGuideText={derived.weatherGuideText}
           showAfterRainRecoverySelector={derived.showAfterRainRecoverySelector}
           onChangeSessionDraft={actions.updateSessionDraft}

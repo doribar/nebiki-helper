@@ -3,6 +3,7 @@ import type {
   DiscountTime,
   ForecastHourKey,
   ForecastWeatherKind,
+  SessionData,
   SessionDraft,
 } from "../../domain/types";
 import {
@@ -12,12 +13,24 @@ import {
   getForecastWeatherSymbol,
   getWeatherInputForecastHours,
 } from "../../domain/hourlyWeather";
+import {
+  loadFixedTimeTemperatures,
+  saveFixedTimeTemperature,
+  saveFixedTimeTemperatures,
+} from "../../domain/fixedTimeTemperatureMemory";
+import {
+  buildSameDayConfirmedHourlyWeather,
+  buildWeatherConfirmationDisplayRows,
+} from "../../domain/weatherConfirmationDisplay";
+import { getDailySessionSnapshotsForDate } from "../../domain/storage";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { WeatherConfirmationPanel } from "./WeatherConfirmationPanel";
 
 type StartScreenProps = {
   sessionDraft: SessionDraft;
+  previousSession: SessionData | null;
+  isFixedTimeMode: boolean;
   weatherGuideText: {
     nearTermWeatherGuide: string;
     laterPrecipGuide: string;
@@ -387,6 +400,8 @@ function createCorrectionConfirmationMap(
 
 export function StartScreen({
   sessionDraft,
+  previousSession,
+  isFixedTimeMode,
   weatherGuideText: _weatherGuideText,
   onChangeSessionDraft,
   weatherConfirmationPending,
@@ -416,6 +431,26 @@ export function StartScreen({
   );
   const [confirmedInputs, setConfirmedInputs] =
     useState<ForecastConfirmationMap>(createEmptyConfirmationMap());
+  const [fixedTimeTemperatures, setFixedTimeTemperatures] = useState<
+    Partial<Record<ForecastHourKey, number>>
+  >(() =>
+    loadFixedTimeTemperatures({
+      enabled: isFixedTimeMode,
+      date: sessionDraft.date,
+    }),
+  );
+  const [temperatureInputTouched, setTemperatureInputTouched] = useState<
+    Partial<Record<ForecastHourKey, boolean>>
+  >({});
+  const [preferRestoredDraftTemperatures, setPreferRestoredDraftTemperatures] =
+    useState(
+      () =>
+        isFixedTimeMode &&
+        Boolean(sessionDraft.weatherInputLockedDiscountTime),
+    );
+  const fixedTemperatureScopeRef = useRef(
+    `${isFixedTimeMode ? "fixed" : "normal"}:${sessionDraft.date}:${sessionDraft.discountTime}`,
+  );
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
   const [discardPanelOpen, setDiscardPanelOpen] = useState(false);
@@ -426,6 +461,60 @@ export function StartScreen({
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
   }, [sessionDraft.discountTime, sessionDraft.date]);
+
+  useEffect(() => {
+    const nextScope = `${isFixedTimeMode ? "fixed" : "normal"}:${sessionDraft.date}:${sessionDraft.discountTime}`;
+    if (fixedTemperatureScopeRef.current === nextScope) return;
+
+    fixedTemperatureScopeRef.current = nextScope;
+    setFixedTimeTemperatures(
+      loadFixedTimeTemperatures({
+        enabled: isFixedTimeMode,
+        date: sessionDraft.date,
+      }),
+    );
+    setTemperatureInputTouched({});
+    setPreferRestoredDraftTemperatures(false);
+  }, [isFixedTimeMode, sessionDraft.date, sessionDraft.discountTime]);
+
+  const confirmedHourlyWeather = useMemo(() => {
+    const snapshots =
+      !weatherConfirmationPending ||
+      isFixedTimeMode ||
+      typeof localStorage === "undefined"
+        ? []
+        : getDailySessionSnapshotsForDate(sessionDraft.date);
+
+    return buildSameDayConfirmedHourlyWeather({
+      date: sessionDraft.date,
+      snapshots,
+      currentSession: previousSession,
+    });
+  }, [
+    isFixedTimeMode,
+    previousSession,
+    sessionDraft.date,
+    weatherConfirmationPending,
+  ]);
+
+  const weatherConfirmationRows = useMemo(
+    () =>
+      buildWeatherConfirmationDisplayRows({
+        sessionDraft,
+        activeHours,
+        confirmedHourlyWeather,
+        fixedTimeTemperatures: isFixedTimeMode
+          ? fixedTimeTemperatures
+          : {},
+      }),
+    [
+      activeHours,
+      confirmedHourlyWeather,
+      fixedTimeTemperatures,
+      isFixedTimeMode,
+      sessionDraft,
+    ],
+  );
 
   useEffect(() => {
     setDiscardCountText(
@@ -498,6 +587,19 @@ export function StartScreen({
     return currentUnlockIndex === -1 || index <= currentUnlockIndex;
   };
 
+  const getDisplayedTemperature = (hour: ForecastHourKey): number => {
+    const current = sessionDraft.weather.hourlyForecasts[hour].tempC;
+    if (
+      !isFixedTimeMode ||
+      preferRestoredDraftTemperatures ||
+      temperatureInputTouched[hour]
+    ) {
+      return current;
+    }
+
+    return fixedTimeTemperatures[hour] ?? current;
+  };
+
   const applyHourlyChange = (
     hour: ForecastHourKey,
     field: InputField,
@@ -551,6 +653,53 @@ export function StartScreen({
     applyHourlyChange(hour, field, {}, true);
   };
 
+  const changeTemperature = (hour: ForecastHourKey, tempC: number) => {
+    setTemperatureInputTouched((current) => ({
+      ...current,
+      [hour]: true,
+    }));
+    applyHourlyChange(hour, "temp", { tempC }, false);
+  };
+
+  const confirmTemperature = (hour: ForecastHourKey) => {
+    const tempC = getDisplayedTemperature(hour);
+    setTemperatureInputTouched((current) => ({
+      ...current,
+      [hour]: true,
+    }));
+    applyHourlyChange(hour, "temp", { tempC }, true);
+
+    if (isFixedTimeMode) {
+      saveFixedTimeTemperature({
+        enabled: true,
+        date: sessionDraft.date,
+        hour,
+        tempC,
+      });
+      setFixedTimeTemperatures((current) => ({
+        ...current,
+        [hour]: tempC,
+      }));
+    }
+  };
+
+  const confirmWeatherInput = () => {
+    if (isFixedTimeMode) {
+      const values = activeHours.reduce((result, hour) => {
+        result[hour] = sessionDraft.weather.hourlyForecasts[hour].tempC;
+        return result;
+      }, {} as Partial<Record<ForecastHourKey, number>>);
+
+      saveFixedTimeTemperatures({
+        enabled: true,
+        date: sessionDraft.date,
+        values,
+      });
+    }
+
+    onStart();
+  };
+
   const handleWeekdayWheel = (deltaY: number) => {
     const step = getWheelStep(deltaY);
     const currentIndex = WEEKDAY_OPTIONS.findIndex(
@@ -586,10 +735,9 @@ export function StartScreen({
   if (weatherConfirmationPending) {
     return (
       <WeatherConfirmationPanel
-        sessionDraft={sessionDraft}
-        hours={activeHours}
+        rows={weatherConfirmationRows}
         onEdit={onEditWeatherInput}
-        onConfirm={onStart}
+        onConfirm={confirmWeatherInput}
       />
     );
   }
@@ -870,7 +1018,6 @@ export function StartScreen({
                 })}
 
                 {displayHours.map((hour) => {
-                  const forecast = sessionDraft.weather.hourlyForecasts[hour];
                   const enabled = isFieldEnabled(hour, "temp");
                   const isConfirmed = confirmedInputs[hour].temp;
                   return (
@@ -882,21 +1029,16 @@ export function StartScreen({
                     >
                       <ForecastNumberStepper
                         key={`temp-${hour}`}
-                        value={forecast.tempC}
+                        value={getDisplayedTemperature(hour)}
                         options={TEMP_NUMBER_OPTIONS}
                         unit="℃"
                         disabled={!enabled}
                         isUnconfirmed={!isConfirmed}
                         onConfirmCurrent={() =>
-                          confirmCurrentDefault(hour, "temp")
+                          confirmTemperature(hour)
                         }
                         onChange={(next) =>
-                          applyHourlyChange(
-                            hour,
-                            "temp",
-                            { tempC: next },
-                            false,
-                          )
+                          changeTemperature(hour, next)
                         }
                       />
                     </div>
