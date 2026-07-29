@@ -95,6 +95,7 @@ import {
   initializeFinalizedDayData,
   loadFinalizedDayData,
   patchFinalizedDayDataMetadata,
+  patchFinalizedDayDataMetadataByRecordId,
   replaceFinalizedDayDataCore,
   selectFinalizedDayDataByRecordId,
   selectFinalizedDayDataByDate,
@@ -3071,24 +3072,33 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function saveFinalizedDayMemo(memo: string | null) {
+  function persistFinalizedDayMemo(
+    recordId: string,
+    memo: string | null,
+  ): StoredFinalizedDayData | null {
     const current =
-      lastFinalizedDayDataRef.current ??
-      (state.finalizedDayRecordId
-        ? selectFinalizedDayDataByRecordId(
+      lastFinalizedDayDataRef.current?.recordId === recordId
+        ? lastFinalizedDayDataRef.current
+        : selectFinalizedDayDataByRecordId(
             loadFinalizedDayData(),
-            state.finalizedDayRecordId,
-          )
-        : null);
-    if (!current) return;
+            recordId,
+          );
+    if (!current || current.recordId !== recordId) return null;
 
-    const updated = patchFinalizedDayDataMetadata({
-      date: current.date,
+    const updated = patchFinalizedDayDataMetadataByRecordId({
+      recordId,
       patch: { memo },
     });
-    if (!updated) return;
+    if (!updated || updated.recordId !== recordId) return null;
     lastFinalizedDayDataRef.current = updated;
     setFinalizedDayDataVersion((version) => version + 1);
+    return updated;
+  }
+
+  function saveFinalizedDayMemo(memo: string | null): void {
+    const recordId = state.finalizedDayRecordId;
+    if (!recordId) return;
+    persistFinalizedDayMemo(recordId, memo);
   }
 
   function savePreviousDayDiscardCount(count: number | null) {
@@ -3215,9 +3225,11 @@ const lateSkipNotice = useMemo(() => {
     return true;
   }
 
-  function exportCompletedDailyData(): boolean {
-    const record = lastFinalizedDayDataRef.current;
-    if (!record || record.recordId !== state.finalizedDayRecordId) return false;
+  function exportCompletedDailyData(memo: string | null): boolean {
+    const recordId = state.finalizedDayRecordId;
+    if (!recordId) return false;
+    const record = persistFinalizedDayMemo(recordId, memo);
+    if (!record || record.recordId !== recordId) return false;
     const exportedAt = getRuntimeNow().toISOString();
     downloadJsonFile(
       buildDirectFinalizedDayDataExportPayload({ record, exportedAt }),

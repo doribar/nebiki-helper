@@ -11,7 +11,7 @@ type DoneScreenProps = {
   showDailyDataActions?: boolean;
   memo?: string;
   onSaveMemo?: (memo: string | null) => void;
-  onExportDailyData?: () => void;
+  onExportDailyData?: (memo: string | null) => boolean | Promise<boolean>;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -94,6 +94,29 @@ export function DoneScreen({
 }: DoneScreenProps) {
   const [memoText, setMemoText] = useState(memo);
   const [memoSaved, setMemoSaved] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const handleExportDailyData = async () => {
+    setExportError(null);
+    try {
+      const exported = await onExportDailyData?.(
+        memoText === "" ? null : memoText,
+      );
+      if (!exported) {
+        setMemoSaved(false);
+        setExportError(
+          "メモの保存に失敗したため、1日データは出力しませんでした。",
+        );
+        return;
+      }
+      setMemoSaved(true);
+    } catch {
+      setMemoSaved(false);
+      setExportError(
+        "メモの保存に失敗したため、1日データは出力しませんでした。",
+      );
+    }
+  };
 
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
@@ -207,6 +230,7 @@ export function DoneScreen({
             onChange={(event) => {
               setMemoText(event.currentTarget.value);
               setMemoSaved(false);
+              setExportError(null);
             }}
             rows={4}
             style={{
@@ -224,6 +248,7 @@ export function DoneScreen({
           <button
             type="button"
             onClick={() => {
+              setExportError(null);
               onSaveMemo?.(memoText === "" ? null : memoText);
               setMemoSaved(true);
             }}
@@ -237,10 +262,21 @@ export function DoneScreen({
             </div>
           ) : null}
           <div style={{ marginTop: 12 }}>
-            <PrimaryButton onClick={() => onExportDailyData?.()} disabled={!onExportDailyData}>
+            <PrimaryButton
+              onClick={() => void handleExportDailyData()}
+              disabled={!onExportDailyData}
+            >
               1日データを出力
             </PrimaryButton>
           </div>
+          {exportError ? (
+            <div
+              role="alert"
+              style={{ marginTop: 8, color: "#b91c1c", fontSize: 13, fontWeight: 800 }}
+            >
+              {exportError}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

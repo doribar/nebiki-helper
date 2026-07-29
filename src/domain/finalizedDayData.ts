@@ -270,6 +270,39 @@ export function patchFinalizedDayDataMetadataInMemory(params: {
   return { records, record: clone(record) };
 }
 
+/** 完了画面が保持する安定IDの記録だけを更新し、別日の日次データには触れない。 */
+export function patchFinalizedDayDataMetadataByRecordIdInMemory(params: {
+  currentRecords: readonly FinalizedDayData[];
+  recordId: string;
+  patch: FinalizedDayMetadataPatch;
+}): {
+  records: StoredFinalizedDayData[];
+  record: StoredFinalizedDayData | null;
+} {
+  const current = selectAllFinalizedDayData(params.currentRecords);
+  const existing = current.find(
+    (record) => record.recordId === params.recordId,
+  );
+  if (!existing) return { records: current.map(clone), record: null };
+
+  const record: StoredFinalizedDayData = {
+    ...existing,
+    memo: Object.prototype.hasOwnProperty.call(params.patch, "memo")
+      ? normalizeMemo(params.patch.memo)
+      : existing.memo,
+    discardCount: Object.prototype.hasOwnProperty.call(
+      params.patch,
+      "discardCount",
+    )
+      ? normalizeDiscardCount(params.patch.discardCount)
+      : existing.discardCount,
+  };
+  const records = current.map((item) =>
+    item.recordId === params.recordId ? clone(record) : clone(item),
+  );
+  return { records, record: clone(record) };
+}
+
 function getLocalStorage(): Storage | null {
   return typeof localStorage === "undefined" ? null : localStorage;
 }
@@ -328,6 +361,19 @@ export function patchFinalizedDayDataMetadata(params: {
   patch: FinalizedDayMetadataPatch;
 }): StoredFinalizedDayData | null {
   const result = patchFinalizedDayDataMetadataInMemory({
+    currentRecords: loadFinalizedDayData(),
+    ...params,
+  });
+  if (!result.record) return null;
+  saveFinalizedDayData(result.records);
+  return clone(result.record);
+}
+
+export function patchFinalizedDayDataMetadataByRecordId(params: {
+  recordId: string;
+  patch: FinalizedDayMetadataPatch;
+}): StoredFinalizedDayData | null {
+  const result = patchFinalizedDayDataMetadataByRecordIdInMemory({
     currentRecords: loadFinalizedDayData(),
     ...params,
   });

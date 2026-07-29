@@ -261,7 +261,10 @@ test("19時・日次の全件／最新／direct exportを分離する", () => {
 
   assert.match(hookSource, /if \(records\.length === 0\) return false/);
   assert.match(hookSource, /if \(!payload \|\| payload\.records\.length === 0\) return false/);
-  assert.match(hookSource, /const record = lastFinalizedDayDataRef\.current/);
+  assert.match(
+    hookSource,
+    /const record = persistFinalizedDayMemo\(recordId, memo\)/,
+  );
   assert.match(hookSource, /state\.screen !== "review19_done"/);
 });
 
@@ -295,7 +298,7 @@ test("設定PIN UIを廃止し4つの分離出力ボタンを表示", () => {
   assert.match(appSource, /onExportAllDailyData=\{app\.actions\.exportAllDailyData\}/);
   assert.match(appSource, /onExportLatestDailyData=\{app\.actions\.exportLatestDailyData\}/);
   assert.match(routerSource, /actions\.exportCompletedReview19Data\(\)/);
-  assert.match(routerSource, /actions\.exportCompletedDailyData\(\)/);
+  assert.match(routerSource, /actions\.exportCompletedDailyData\(memo\)/);
 });
 
 test("20:30定番個数はnull・0を区別し不正値を拒否", () => {

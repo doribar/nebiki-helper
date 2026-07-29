@@ -167,7 +167,7 @@ test("前日廃棄・最終メモ・各完了画面の1件出力UIを接続", ()
   assert.ok(doneSource.includes("1日データを出力"));
   assert.match(hookSource, /patch: \{ memo \}/);
   assert.match(hookSource, /patch: \{ discardCount: count \}/);
-  assert.match(routerSource, /actions\.exportCompletedDailyData\(\)/);
+  assert.match(routerSource, /actions\.exportCompletedDailyData\(memo\)/);
 });
 
 console.log(`\n画面遷移・修正・日次確定回帰テスト: ${passed}/8件成功`);

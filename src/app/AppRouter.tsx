@@ -188,8 +188,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           onSaveMemo={actions.saveFinalizedDayMemo}
           onExportDailyData={
             state.finalizedDayRecordId
-              ? () => {
-                  actions.exportCompletedDailyData();
+              ? (memo) => {
+                  return actions.exportCompletedDailyData(memo);
                 }
               : undefined
           }

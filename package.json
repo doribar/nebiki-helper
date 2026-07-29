@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.7.29-1",
+  "version": "2026.7.29-2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,7 +22,8 @@
     "check:workflow-20260728": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-workflow-20260728.ts",
     "check:finalized-day-data": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-finalized-day-data.ts",
     "check:staple-item-count": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-staple-item-count.ts",
-    "check:refactor-characterization": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-refactor-characterization.ts"
+    "check:refactor-characterization": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-refactor-characterization.ts",
+    "check:memo-export-20260729": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-memo-export-20260729.ts"
   },
   "dependencies": {
     "react": "^19.2.4",
