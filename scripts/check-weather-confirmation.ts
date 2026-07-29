@@ -281,17 +281,54 @@ test("修正操作は入力値を消去せず、最後の入力だけ再確定�
   assert.ok(!editBlock.includes("sessionDraft"));
 });
 
-test("確認画面は既存記号と単位を使い、横幅固定を持たない", () => {
+test("確認画面は時刻列と天候・気温・風速行を固定表で揃える", () => {
   const panelSource = source("src/components/screens/WeatherConfirmationPanel.tsx");
   assert.ok(panelSource.includes("入力した天候を確認してください"));
+  assert.ok(panelSource.includes("<table"));
+  assert.ok(panelSource.includes("<thead>"));
+  assert.ok(panelSource.includes("<tbody>"));
+  assert.ok(panelSource.includes('scope="col"'));
+  assert.ok(panelSource.includes('scope="row"'));
   assert.ok(panelSource.includes("getForecastWeatherSymbol"));
   assert.ok(panelSource.includes("getForecastWeatherLabel"));
   assert.ok(panelSource.includes("℃"));
   assert.ok(panelSource.includes("m/s"));
-  assert.ok(panelSource.includes("minmax(0, 1fr)"));
+  assert.ok(panelSource.includes('tableLayout: "fixed"'));
+  assert.ok(panelSource.includes('width: "100%"'));
   assert.ok(panelSource.includes('overflowX: "hidden"'));
+  assert.ok(!panelSource.includes('role="list"'));
+  assert.ok(!panelSource.includes("<article"));
+  assert.ok(!panelSource.includes("gridTemplateColumns"));
   assert.ok(!panelSource.includes("minWidth: 560"));
   assert.ok(!panelSource.includes('overflowX: "auto"'));
+});
+
+test("対象時刻と天候・気温・風速は同じhours順で列を作る", () => {
+  const panelSource = source("src/components/screens/WeatherConfirmationPanel.tsx");
+  const tableBlock = panelSource.slice(
+    panelSource.indexOf("<table"),
+    panelSource.indexOf("</table>") + "</table>".length,
+  );
+  const weatherRow = tableBlock.slice(
+    tableBlock.indexOf("天候"),
+    tableBlock.indexOf("気温"),
+  );
+  const temperatureRow = tableBlock.slice(
+    tableBlock.indexOf("気温"),
+    tableBlock.indexOf("風速"),
+  );
+  const windRow = tableBlock.slice(tableBlock.indexOf("風速"));
+
+  assert.ok(tableBlock.includes("<colgroup>"));
+  assert.equal(tableBlock.match(/hours\.map\(/g)?.length, 5);
+  assert.ok(weatherRow.includes("getForecastWeatherSymbol(forecast.weather)"));
+  assert.ok(weatherRow.includes('aria-label={getForecastWeatherLabel(forecast.weather)}'));
+  assert.ok(temperatureRow.includes("hourlyForecasts[hour].tempC"));
+  assert.ok(windRow.includes("hourlyForecasts[hour].windMs"));
+  assert.ok(temperatureRow.indexOf("℃") < temperatureRow.indexOf("hours.map"));
+  assert.ok(windRow.indexOf("m/s") < windRow.indexOf("hours.map"));
+  assert.ok(panelSource.includes("入力を修正"));
+  assert.ok(panelSource.includes("この内容で確定"));
 });
 
 test("修正リクエストと自動失効・履歴復元を区別する", () => {
@@ -317,4 +354,4 @@ test("修正リクエストと自動失効・履歴復元を区別する", () =>
   assert.ok(startSource.includes("createCorrectionConfirmationMap(fieldOrder)"));
 });
 
-console.log(`Weather confirmation checks passed: ${passed}/12`);
+console.log(`Weather confirmation checks passed: ${passed}/13`);

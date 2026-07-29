@@ -14,6 +14,29 @@ type WeatherConfirmationPanelProps = {
   onConfirm: () => void;
 };
 
+const rowHeaderStyle = {
+  width: 52,
+  padding: "7px 2px",
+  background: "#f0f2f5",
+  borderTop: "1px solid #dfe3e8",
+  color: "#343a40",
+  fontSize: 13,
+  fontWeight: 800,
+  lineHeight: 1.2,
+  textAlign: "center" as const,
+};
+
+const valueCellStyle = {
+  minWidth: 0,
+  padding: "7px 1px",
+  borderTop: "1px solid #dfe3e8",
+  borderLeft: "1px solid #e5e8ec",
+  textAlign: "center" as const,
+  fontSize: 15,
+  lineHeight: 1.25,
+  fontVariantNumeric: "tabular-nums",
+};
+
 export function WeatherConfirmationPanel({
   sessionDraft,
   hours,
@@ -61,59 +84,108 @@ export function WeatherConfirmationPanel({
         </h1>
 
         <div
-          role="list"
           style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${Math.min(3, hours.length)}, minmax(0, 1fr))`,
-            gap: 8,
             width: "100%",
             minWidth: 0,
+            overflowX: "hidden",
+            border: "1px solid #d7dce2",
+            borderRadius: 12,
+            background: "#fafafa",
           }}
         >
-          {hours.map((hour) => {
-            const forecast = sessionDraft.weather.hourlyForecasts[hour];
-            return (
-              <article
-                key={hour}
-                role="listitem"
-                style={{
-                  minWidth: 0,
-                  border: "1px solid #d7dce2",
-                  borderRadius: 12,
-                  padding: "10px 8px",
-                  background: "#fafafa",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>
-                  {hour}時
-                </div>
-                <div
+          <table
+            aria-label="入力した天候の確認"
+            style={{
+              width: "100%",
+              tableLayout: "fixed",
+              borderCollapse: "collapse",
+            }}
+          >
+            <colgroup>
+              <col style={{ width: 52 }} />
+              {hours.map((hour) => (
+                <col key={hour} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                <th
+                  aria-label="項目"
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 5,
-                    minWidth: 0,
-                    marginBottom: 6,
+                    padding: "7px 2px",
+                    background: "#e9edf1",
                   }}
-                >
-                  <span aria-hidden="true" style={{ fontSize: 21, lineHeight: 1 }}>
-                    {getForecastWeatherSymbol(forecast.weather)}
+                />
+                {hours.map((hour) => (
+                  <th
+                    key={hour}
+                    scope="col"
+                    aria-label={`${hour}時`}
+                    style={{
+                      minWidth: 0,
+                      padding: "7px 1px",
+                      borderLeft: "1px solid #dfe3e8",
+                      background: "#e9edf1",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      lineHeight: 1.2,
+                      textAlign: "center",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {hour}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row" style={rowHeaderStyle}>
+                  天候
+                </th>
+                {hours.map((hour) => {
+                  const forecast = sessionDraft.weather.hourlyForecasts[hour];
+                  return (
+                    <td key={hour} style={valueCellStyle}>
+                      <span
+                        role="img"
+                        aria-label={getForecastWeatherLabel(forecast.weather)}
+                        style={{ fontSize: 21, lineHeight: 1 }}
+                      >
+                        {getForecastWeatherSymbol(forecast.weather)}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr>
+                <th scope="row" style={rowHeaderStyle}>
+                  <span style={{ display: "block" }}>気温</span>
+                  <span style={{ display: "block", marginTop: 2, fontSize: 10 }}>
+                    ℃
                   </span>
-                  <span style={{ fontSize: 14, fontWeight: 700 }}>
-                    {getForecastWeatherLabel(forecast.weather)}
+                </th>
+                {hours.map((hour) => (
+                  <td key={hour} style={valueCellStyle}>
+                    {sessionDraft.weather.hourlyForecasts[hour].tempC}
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <th scope="row" style={rowHeaderStyle}>
+                  <span style={{ display: "block" }}>風速</span>
+                  <span style={{ display: "block", marginTop: 2, fontSize: 10 }}>
+                    m/s
                   </span>
-                </div>
-                <div style={{ fontSize: 15, lineHeight: 1.6 }}>
-                  {forecast.tempC}℃
-                </div>
-                <div style={{ fontSize: 15, lineHeight: 1.6 }}>
-                  {forecast.windMs}m/s
-                </div>
-              </article>
-            );
-          })}
+                </th>
+                {hours.map((hour) => (
+                  <td key={hour} style={valueCellStyle}>
+                    {sessionDraft.weather.hourlyForecasts[hour].windMs}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
