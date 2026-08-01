@@ -27,7 +27,18 @@ export function cloneSkipRecords(
 export function cloneLastSessionWeatherRecord(
   record: LastSessionWeatherRecord | null
 ): LastSessionWeatherRecord | null {
-  return record ? { ...record } : null;
+  return record
+    ? {
+        ...record,
+        ...(record.temperatureComfortAnalysis
+          ? {
+              temperatureComfortAnalysis: {
+                ...record.temperatureComfortAnalysis,
+              },
+            }
+          : {}),
+      }
+    : null;
 }
 
 export function cloneNavigationSnapshot(

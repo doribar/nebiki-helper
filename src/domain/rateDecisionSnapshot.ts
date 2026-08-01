@@ -13,6 +13,7 @@ import type {
   RateLogicVersion,
   ResolvedWeatherInput,
 } from "./types.ts";
+import { normalizeTemperatureComfortAnalysis } from "./temperatureComfort.ts";
 
 const MINIMUM_RATE_PERCENT = 0 as const;
 const MAXIMUM_RATE_PERCENT = 50 as const;
@@ -215,6 +216,8 @@ function cloneResolvedWeather(raw: unknown): ResolvedWeatherInput | undefined {
       "26to27",
       "28to30",
       "26to30",
+      "31to33",
+      "34to35",
       "31to35",
       "36orMore",
     ].includes(String(raw.tempLevel)) ||
@@ -231,6 +234,9 @@ function cloneResolvedWeather(raw: unknown): ResolvedWeatherInput | undefined {
   ) {
     return undefined;
   }
+
+  const temperatureComfortAnalysis =
+    normalizeTemperatureComfortAnalysis(raw.temperatureComfortAnalysis);
 
   return {
     nearTermWeather: raw.nearTermWeather as ResolvedWeatherInput["nearTermWeather"],
@@ -252,6 +258,9 @@ function cloneResolvedWeather(raw: unknown): ResolvedWeatherInput | undefined {
     next18WindWorsenKind:
       raw.next18WindWorsenKind as ResolvedWeatherInput["next18WindWorsenKind"],
     afterRainSky: raw.afterRainSky as ResolvedWeatherInput["afterRainSky"],
+    ...(temperatureComfortAnalysis
+      ? { temperatureComfortAnalysis }
+      : {}),
   };
 }
 

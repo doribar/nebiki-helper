@@ -113,7 +113,8 @@ export function toTempLevel(tempC: number): TempLevel {
   if (tempC <= 25) return '21to25';
   if (tempC <= 27) return '26to27';
   if (tempC <= 30) return '28to30';
-  if (tempC <= 35) return '31to35';
+  if (tempC <= 33) return '31to33';
+  if (tempC <= 35) return '34to35';
   return '36orMore';
 }
 
@@ -472,8 +473,11 @@ function fromTempLevel(level: unknown): number {
     case '26orMore':
       return 28;
     case '30to34':
+    case '31to33':
     case '31to35':
       return 33;
+    case '34to35':
+      return 35;
     case '35orMore':
     case '36orMore':
       return 36;

@@ -3,16 +3,33 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 const appVersion = process.env.npm_package_version ?? "unknown";
-const sourceRevision = (
-  process.env.COMMIT_REF?.trim() ||
-  process.env.GITHUB_SHA?.trim() ||
-  process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
-  ""
-).slice(0, 12);
-const buildTimestamp = new Date().toISOString().replace(/[-:.TZ]/g, "");
+const BUILD_ID_PATTERN = /^build-\d{8}-\d{6}-jst$/;
+
+function createJstBuildId(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  })
+    .formatToParts(date)
+    .reduce<Record<string, string>>((result, part) => {
+      if (part.type !== "literal") result[part.type] = part.value;
+      return result;
+    }, {});
+
+  return `build-${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}-jst`;
+}
+
+const requestedBuildId = process.env.NEBIKI_BUILD_ID?.trim();
 const buildId =
-  process.env.NEBIKI_BUILD_ID?.trim() ||
-  `${sourceRevision ? `${sourceRevision}-` : ""}build-${buildTimestamp}`;
+  requestedBuildId && BUILD_ID_PATTERN.test(requestedBuildId)
+    ? requestedBuildId
+    : createJstBuildId(new Date());
 
 export default defineConfig({
   define: {

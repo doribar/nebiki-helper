@@ -61,8 +61,22 @@ export type TempLevel =
   | "26to27"
   | "28to30"
   | "26to30" // legacy: old saved/legacy 26〜30 bucket
+  | "31to33"
+  | "34to35"
   | "31to35"
   | "36orMore";
+
+export type TemperatureComfortAnalysis = {
+  version: 1;
+  originalTemperaturePoint: number;
+  appliedTemperaturePoint: number;
+  temperatureFalling: boolean;
+  previousTemperatureFalling: boolean;
+  previousTempLevel: TempLevel | null;
+  previousDiscountTime: DiscountTime | null;
+  currentTempLevel: TempLevel;
+  temperaturePointSuppressed: boolean;
+};
 
 export type ForecastHourKey = "16" | "17" | "18" | "19" | "20" | "21";
 export type ForecastWeatherKind = "sunny" | "rain" | "snow";
@@ -96,6 +110,7 @@ export type ResolvedWeatherInput = {
   next18WindWorsenShift: 0 | 1 | 2;
   next18WindWorsenKind: 'cold' | null;
   afterRainSky: AfterRainSky;
+  temperatureComfortAnalysis?: TemperatureComfortAnalysis;
 };
 
 export type SessionDraft = {
@@ -118,6 +133,9 @@ export type SessionData = SessionDraft & {
   dataSchemaVersion?: number;
   appVersion?: string;
   buildId?: string;
+  temperatureComfortAnalysis?: TemperatureComfortAnalysis;
+  /** 実気温を持たない旧進行中データの集約区分を、推測せず保持するためだけの互換マーカー。 */
+  legacyUnresolvedTempLevel?: "31to35";
 };
 
 export type AreaJudge = "many" | "normal" | "few" | null;
@@ -355,6 +373,10 @@ export type LastSessionWeatherRecord = {
   date: string;
   discountTime: DiscountTime;
   nearTermWeather: NearTermWeather;
+  /** 同日内の次セッションで気温推移を比較するための、確定済み近接気温。 */
+  nearTempC?: number;
+  sessionStartedAt?: string;
+  temperatureComfortAnalysis?: TemperatureComfortAnalysis;
 };
 
 export type FinalTimeStep = 0 | 1 | 2 | 3;

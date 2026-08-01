@@ -95,6 +95,6 @@ npm run build
 
 ## バージョン
 
-- `appVersion`: `2026.7.29-2`
+- `appVersion`: `2026.8.1-1`
 - `dataSchemaVersion`: `3`
-- `buildId`: Viteビルドごとに生成。CIでは `NEBIKI_BUILD_ID` で明示指定できます。
+- `buildId`: `build-20260801-234913-jst`（Viteビルドごとに日本時間形式で生成。CIでは同形式の`NEBIKI_BUILD_ID`を指定できます）

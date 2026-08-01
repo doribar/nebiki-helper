@@ -10,6 +10,7 @@ import type {
   Review19Snapshot,
   SessionData,
   SessionDraft,
+  TemperatureComfortAnalysis,
   WeatherInput,
 } from "../../domain/types";
 import type {
@@ -330,7 +331,10 @@ export function createReview19Snapshot(params: {
 }
 
 
-export function createReview19Reference(draft: SessionDraft): Review19Reference {
+export function createReview19Reference(
+  draft: SessionDraft,
+  temperatureComfortAnalysis?: TemperatureComfortAnalysis,
+): Review19Reference {
   const reviewDraft: SessionDraft = {
     ...draft,
     discountTime: "19",
@@ -340,7 +344,10 @@ export function createReview19Reference(draft: SessionDraft): Review19Reference 
       hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
     },
   };
-  const resolvedWeather = resolveWeatherInputForDiscount(reviewDraft.weather, "19");
+  const resolvedWeather = {
+    ...resolveWeatherInputForDiscount(reviewDraft.weather, "19"),
+    ...(temperatureComfortAnalysis ? { temperatureComfortAnalysis } : {}),
+  };
   const weekdayBaseInfo = getWeekdayBaseInfo(
     reviewDraft.weekday,
     "19",

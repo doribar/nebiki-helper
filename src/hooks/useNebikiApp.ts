@@ -214,6 +214,10 @@ import {
   createReview19WeatherDraft,
   getLatestReview19DayCheck,
 } from "./nebikiApp/sessionSnapshots.ts";
+import {
+  getNearTemperatureC,
+  resolveSessionTemperatureComfort,
+} from "./nebikiApp/temperatureComfortState.ts";
 
 export { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
 
@@ -549,17 +553,30 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   useEffect(() => {
     if (!state.session) return;
 
+    const nearTempC = state.session.legacyUnresolvedTempLevel
+      ? undefined
+      : getNearTemperatureC(
+          state.session.weather,
+          state.session.discountTime,
+        );
     const nextRecord = {
       date: state.session.date,
       discountTime: state.session.discountTime,
       nearTermWeather: getNearTermWeatherForDiscount(state.session.weather, state.session.discountTime),
+      nearTempC,
+      sessionStartedAt: state.session.startedAt,
+      temperatureComfortAnalysis: state.session.temperatureComfortAnalysis,
     } as const;
 
     setLastSessionWeather((current) => {
       if (
         current?.date === nextRecord.date &&
         current?.discountTime === nextRecord.discountTime &&
-        current?.nearTermWeather === nextRecord.nearTermWeather
+        current?.nearTermWeather === nextRecord.nearTermWeather &&
+        current?.nearTempC === nextRecord.nearTempC &&
+        current?.sessionStartedAt === nextRecord.sessionStartedAt &&
+        JSON.stringify(current?.temperatureComfortAnalysis) ===
+          JSON.stringify(nextRecord.temperatureComfortAnalysis)
       ) {
         return current;
       }
@@ -567,6 +584,42 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       return nextRecord;
     });
   }, [state.session?.startedAt]);
+
+  useEffect(() => {
+    const session = state.session;
+    const temperatureComfortAnalysis = session?.temperatureComfortAnalysis;
+    if (!session || !temperatureComfortAnalysis) return;
+    const nearTempC = session.legacyUnresolvedTempLevel
+      ? undefined
+      : getNearTemperatureC(session.weather, session.discountTime);
+
+    setLastSessionWeather((current) => {
+      if (
+        !current ||
+        current.date !== session.date ||
+        current.discountTime !== session.discountTime ||
+        (current.sessionStartedAt !== undefined &&
+          current.sessionStartedAt !== session.startedAt)
+      ) {
+        return current;
+      }
+      if (
+        current.nearTempC === nearTempC &&
+        JSON.stringify(current.temperatureComfortAnalysis) ===
+          JSON.stringify(temperatureComfortAnalysis)
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        nearTempC,
+        sessionStartedAt: session.startedAt,
+        temperatureComfortAnalysis: {
+          ...temperatureComfortAnalysis,
+        },
+      };
+    });
+  }, [state.session]);
 
   useEffect(() => {
     const updateNow = () => setNowMs(getRuntimeNowMs());
@@ -679,8 +732,23 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
 
   const sessionSource = state.session ?? state.sessionDraft;
   const sessionSourceResolvedWeather = useMemo(() => {
-    return resolveWeatherInputForDiscount(sessionSource.weather, sessionSource.discountTime);
-  }, [sessionSource.weather, sessionSource.discountTime]);
+    if (!state.session) {
+      return resolveWeatherInputForDiscount(
+        sessionSource.weather,
+        sessionSource.discountTime,
+      );
+    }
+
+    return resolveSessionTemperatureComfort({
+      date: state.session.date,
+      discountTime: state.session.discountTime,
+      weather: state.session.weather,
+      snapshots: getDailySessionSnapshotsForDate(state.session.date),
+      lastSessionWeather,
+      existingAnalysis: state.session.temperatureComfortAnalysis,
+      legacyUnresolvedTempLevel: state.session.legacyUnresolvedTempLevel,
+    }).resolvedWeather;
+  }, [state.session, sessionSource.weather, sessionSource.discountTime, lastSessionWeather]);
   const startDraftNearTermWeather = useMemo(() => {
     return getNearTermWeatherForDiscount(state.sessionDraft.weather, state.sessionDraft.discountTime);
   }, [state.sessionDraft.weather, state.sessionDraft.discountTime]);
@@ -752,10 +820,14 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       nowMs,
     });
     if (!targetDiscountTime) return null;
-    const resolvedWeather = resolveWeatherInputForDiscount(
-      state.session.weather,
-      targetDiscountTime
-    );
+    const resolvedWeather = resolveSessionTemperatureComfort({
+      date: state.session.date,
+      discountTime: targetDiscountTime,
+      weather: state.session.weather,
+      snapshots: getDailySessionSnapshotsForDate(state.session.date),
+      lastSessionWeather,
+      previousSession: state.session,
+    }).resolvedWeather;
     const targetWeekdayBaseInfo = getWeekdayBaseInfo(
       state.session.weekday,
       targetDiscountTime,
@@ -779,6 +851,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }, [
     state.session,
     nowMs,
+    lastSessionWeather,
   ]);
 
   useEffect(() => {
@@ -1668,7 +1741,7 @@ const lateSkipNotice = useMemo(() => {
         : prev.sessionDraft.discountTime;
 
     const canResumeCurrentSession = prev.session?.date === currentDate;
-    const nextSession: SessionData = {
+    const nextSessionBase: SessionData = {
       ...prev.sessionDraft,
       ...getCurrentDataVersionInfo(),
       date: currentDate,
@@ -1681,6 +1754,27 @@ const lateSkipNotice = useMemo(() => {
         hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
       },
       startedAt: canResumeCurrentSession ? prev.session!.startedAt : startedAt,
+    };
+    const isResumingSameDiscountSession = Boolean(
+      prev.session &&
+      prev.session.date === nextSessionBase.date &&
+      prev.session.discountTime === nextSessionBase.discountTime &&
+      !timeSwitchTarget,
+    );
+    const temperatureComfort = resolveSessionTemperatureComfort({
+      date: nextSessionBase.date,
+      discountTime: nextSessionBase.discountTime,
+      weather: nextSessionBase.weather,
+      snapshots: getDailySessionSnapshotsForDate(nextSessionBase.date),
+      lastSessionWeather,
+      previousSession: isResumingSameDiscountSession ? null : prev.session,
+      existingAnalysis: isResumingSameDiscountSession
+        ? prev.session?.temperatureComfortAnalysis
+        : null,
+    });
+    const nextSession: SessionData = {
+      ...nextSessionBase,
+      temperatureComfortAnalysis: temperatureComfort.analysis,
     };
 
     let nextSkipRecords = cloneSkipRecords(nextSessionSkipRecordsRef.current);
@@ -2730,6 +2824,14 @@ const lateSkipNotice = useMemo(() => {
         reviewStartedAt: now.toISOString(),
         excludedAreaIds: sourceStateForReview.review19ExcludedAreaIds,
       });
+      const reviewTemperatureComfort = resolveSessionTemperatureComfort({
+        date: reviewDraft.date,
+        discountTime: "19",
+        weather: reviewDraft.weather,
+        snapshots: getDailySessionSnapshotsForDate(reviewDraft.date),
+        lastSessionWeather,
+        previousSession: session,
+      }).analysis;
 
       return {
         ...prev,
@@ -2744,7 +2846,10 @@ const lateSkipNotice = useMemo(() => {
         timeSwitchNotice: null,
         review19: {
           ...initialReview19,
-          reference: createReview19Reference(reviewDraft),
+          reference: createReview19Reference(
+            reviewDraft,
+            reviewTemperatureComfort,
+          ),
         },
       };
     });
@@ -2754,13 +2859,25 @@ const lateSkipNotice = useMemo(() => {
     setState((prev) => {
       if (prev.screen !== "review19_weather" || !prev.session || !prev.review19) return prev;
 
+      const reviewTemperatureComfort = resolveSessionTemperatureComfort({
+        date: prev.sessionDraft.date,
+        discountTime: "19",
+        weather: prev.sessionDraft.weather,
+        snapshots: getDailySessionSnapshotsForDate(prev.sessionDraft.date),
+        lastSessionWeather,
+        previousSession: prev.session,
+      }).analysis;
+
       return {
         ...prev,
         screen: "review19",
         review19: {
           ...prev.review19,
           reviewStartedAt: prev.review19.reviewStartedAt ?? getRuntimeNow().toISOString(),
-          reference: createReview19Reference(prev.sessionDraft),
+          reference: createReview19Reference(
+            prev.sessionDraft,
+            reviewTemperatureComfort,
+          ),
         },
       };
     });
@@ -2974,7 +3091,7 @@ const lateSkipNotice = useMemo(() => {
       ...state.sessionDraft,
       discountTime: "19",
     });
-    const nextSession: SessionData = {
+    const nextSessionBase: SessionData = {
       ...draft,
       ...getCurrentDataVersionInfo(),
       discountTime: "19",
@@ -2983,6 +3100,18 @@ const lateSkipNotice = useMemo(() => {
         hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
       },
       startedAt,
+    };
+    const nextSessionTemperatureComfort = resolveSessionTemperatureComfort({
+      date: nextSessionBase.date,
+      discountTime: "19",
+      weather: nextSessionBase.weather,
+      snapshots: getDailySessionSnapshotsForDate(nextSessionBase.date),
+      lastSessionWeather,
+      previousSession: state.session,
+    }).analysis;
+    const nextSession: SessionData = {
+      ...nextSessionBase,
+      temperatureComfortAnalysis: nextSessionTemperatureComfort,
     };
 
     const consumed = consumeSkipRecordsInMemory({

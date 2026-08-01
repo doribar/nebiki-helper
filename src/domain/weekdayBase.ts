@@ -15,6 +15,10 @@ import {
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 import { getBaseRate } from "./discount.ts";
+import {
+  getTemperaturePoint,
+  normalizeTemperatureComfortAnalysis,
+} from "./temperatureComfort.ts";
 
 type ShiftTerm = {
   label: string;
@@ -130,27 +134,28 @@ function buildBonusSummaryText(totalBonus: number): string {
 }
 
 function getBaseTempShift(tempLevel: TempLevel): number {
-  switch (tempLevel) {
-    case "5orLess":
-      return 2;
-    case "6to10":
-      return 1;
-    case "11to15":
-      return 0;
-    case "16to20":
-      return -1;
-    case "21to25":
-      return -2;
-    case "26to27":
-    case "26to30":
-      return -1;
-    case "28to30":
-      return 0;
-    case "31to35":
-      return 1;
-    case "36orMore":
-      return 2;
-  }
+  return getTemperaturePoint(tempLevel);
+}
+
+function getAppliedTempShift(weather: ResolvedWeatherInput): number {
+  const analysis = normalizeTemperatureComfortAnalysis(
+    weather.temperatureComfortAnalysis,
+  );
+  return analysis?.currentTempLevel === weather.tempLevel
+    ? analysis.appliedTemperaturePoint
+    : getBaseTempShift(weather.tempLevel);
+}
+
+function isTemperaturePointSuppressed(
+  weather: ResolvedWeatherInput,
+): boolean {
+  const analysis = normalizeTemperatureComfortAnalysis(
+    weather.temperatureComfortAnalysis,
+  );
+  return (
+    analysis?.currentTempLevel === weather.tempLevel &&
+    analysis.temperaturePointSuppressed
+  );
 }
 
 function getTempLevelText(tempLevel: TempLevel): string {
@@ -171,6 +176,10 @@ function getTempLevelText(tempLevel: TempLevel): string {
       return "26〜30度";
     case "28to30":
       return "28〜30度";
+    case "31to33":
+      return "31〜33度";
+    case "34to35":
+      return "34〜35度";
     case "31to35":
       return "31〜35度";
     case "36orMore":
@@ -182,7 +191,7 @@ function getBaseTempShiftTerm(
   weather: ResolvedWeatherInput,
   discountTime: DiscountTime,
 ): ShiftTerm | undefined {
-  const value = getBaseTempShift(weather.tempLevel);
+  const value = getAppliedTempShift(weather);
   if (value === 0) {
     return undefined;
   }
@@ -663,7 +672,7 @@ function resolveWeatherEffect(params: {
   ].filter((value): value is ShiftTerm => Boolean(value));
 
   const rawComfortShift =
-    getBaseTempShift(params.weather.tempLevel) +
+    getAppliedTempShift(params.weather) +
     getWindShift(params.weather.tempLevel, params.weather.windLevel) +
     getWeatherPointShift(params.weather) +
     getAfterRainRecoveryShift(params.weather) +
@@ -720,6 +729,9 @@ function resolveWeatherEffect(params: {
   const bonusCalcParts = percentTerms.map(toPercentCalcPart);
   const bonusSummaryText = buildBonusSummaryText(baseRateBonus);
   const bonusDetailLines = [
+    ...(isTemperaturePointSuppressed(params.weather)
+      ? ["気温低下中のため、暑さによる加点なし"]
+      : []),
     ...(comfortCalcParts.length > 0
       ? [`快適度計算：${comfortCalcParts.join(" ＋ ")}`]
       : []),

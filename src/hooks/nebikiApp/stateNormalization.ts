@@ -18,6 +18,10 @@ import type {
 import { AREA_MASTERS, NORMAL_ROUTE } from "../../domain/area";
 import { normalizeRateDecisionSnapshot } from "../../domain/rateDecisionSnapshot.ts";
 import {
+  evaluateTemperatureComfort,
+  normalizeTemperatureComfortAnalysis,
+} from "../../domain/temperatureComfort.ts";
+import {
   buildHourlyForecastsFromLegacy,
   cloneHourlyForecasts,
   createDefaultHourlyForecasts,
@@ -566,12 +570,56 @@ function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | 
   if (!raw) return null;
 
   const normalizedDraft = normalizeSessionDraft(raw);
+  const normalizedTemperatureComfortAnalysis = normalizeTemperatureComfortAnalysis(
+    raw.temperatureComfortAnalysis,
+  );
+  const rawSession = raw as unknown as Record<string, unknown>;
+  const rawWeather =
+    rawSession.weather && typeof rawSession.weather === "object"
+      ? (rawSession.weather as Record<string, unknown>)
+      : null;
+  const rawHourlyForecasts =
+    rawWeather?.hourlyForecasts && typeof rawWeather.hourlyForecasts === "object"
+      ? (rawWeather.hourlyForecasts as Record<string, unknown>)
+      : null;
+  const nearHourByDiscountTime: Record<DiscountTime, string> = {
+    "15": "16",
+    "17": "18",
+    "18": "19",
+    "19": "20",
+    "20": "21",
+  };
+  const rawNearEntry = rawHourlyForecasts?.[nearHourByDiscountTime[normalizedDraft.discountTime]];
+  const hasActualNearTemperature = Boolean(
+    rawNearEntry &&
+      typeof rawNearEntry === "object" &&
+      typeof (rawNearEntry as Record<string, unknown>).tempC === "number" &&
+      Number.isFinite((rawNearEntry as Record<string, unknown>).tempC),
+  );
+  const legacyTempLevel = rawWeather?.nearTempLevel ?? rawWeather?.tempLevel;
+  const legacyUnresolvedTempLevel =
+    raw.legacyUnresolvedTempLevel === "31to35" ||
+    (!hasActualNearTemperature && legacyTempLevel === "31to35")
+      ? "31to35"
+      : undefined;
+  const temperatureComfortAnalysis = legacyUnresolvedTempLevel
+    ? normalizedTemperatureComfortAnalysis?.currentTempLevel ===
+      legacyUnresolvedTempLevel
+      ? normalizedTemperatureComfortAnalysis
+      : evaluateTemperatureComfort({
+          date: normalizedDraft.date,
+          discountTime: normalizedDraft.discountTime,
+          tempLevel: legacyUnresolvedTempLevel,
+        })
+    : normalizedTemperatureComfortAnalysis;
 
   return {
     ...normalizedDraft,
     ...normalizeDataVersionInfo(raw),
     startedAt:
       typeof raw.startedAt === "string" ? raw.startedAt : getRuntimeNow().toISOString(),
+    ...(temperatureComfortAnalysis ? { temperatureComfortAnalysis } : {}),
+    ...(legacyUnresolvedTempLevel ? { legacyUnresolvedTempLevel } : {}),
   };
 }
 
