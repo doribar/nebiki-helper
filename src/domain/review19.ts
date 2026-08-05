@@ -6,6 +6,8 @@ import {
 } from "./dataVersion.ts";
 import type {
   AreaId,
+  DailySessionSnapshot,
+  DemandCycle,
   Review19AreaSnapshot,
   Review19Rating,
   Review19RatingScore,
@@ -15,6 +17,7 @@ import type {
   Review19DayCheckSnapshot,
   Review19DaySnapshot,
 } from "./types.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
 
 export const REVIEW19_RATINGS: Array<{
   value: Review19Rating;
@@ -105,6 +108,7 @@ export function createDefaultReview19Ratings(): Record<AreaId, Review19Rating> {
 export function createInitialReview19Result(params: {
   date: string;
   sessionStartedAt: string;
+  demandCycle?: DemandCycle;
   reviewStartedAt?: string;
   excludedAreaIds?: AreaId[];
 }): Review19Result {
@@ -116,6 +120,7 @@ export function createInitialReview19Result(params: {
     ...getCurrentDataVersionInfo(),
     review19Status: "recorded",
     date: params.date,
+    demandCycle: normalizeDemandCycle(params.demandCycle),
     sessionStartedAt: params.sessionStartedAt,
     reviewStartedAt: params.reviewStartedAt,
     reviewCompletedAt: undefined,
@@ -210,7 +215,25 @@ export function parseReview19RatePercent(text?: string): number | undefined {
 
 function normalizeReview19AreaSnapshot(
   area: Review19AreaSnapshot,
+  fallbackDemandCycle?: DemandCycle,
 ): Review19AreaSnapshot {
+  const demandCycle = normalizeDemandCycle(
+    fallbackDemandCycle ??
+      area.rateDecisionSnapshot?.demandCycle ??
+      area.areaCountDecisionBasis?.demandCycle,
+  );
+  const rateDecisionSnapshot = area.rateDecisionSnapshot
+    ? {
+        ...area.rateDecisionSnapshot,
+        demandCycle,
+      }
+    : undefined;
+  const areaCountDecisionBasis = area.areaCountDecisionBasis
+    ? {
+        ...area.areaCountDecisionBasis,
+        demandCycle,
+      }
+    : undefined;
   return {
     ...area,
     reviewExcluded: area.reviewExcluded === true,
@@ -220,19 +243,36 @@ function normalizeReview19AreaSnapshot(
       area.manyRatePercent ?? parseReview19RatePercent(area.manyRateText),
     normalRatePercent:
       area.normalRatePercent ?? parseReview19RatePercent(area.normalRateText),
+    areaCountDecisionBasis,
+    rateDecisionSnapshot,
   };
 }
 
 function normalizeReview19Snapshot(
   raw?: Partial<Review19Snapshot> | null,
+  fallbackDemandCycle?: DemandCycle,
 ): Review19Snapshot | undefined {
   if (!raw || typeof raw !== "object") return undefined;
 
   const cloned = JSON.parse(JSON.stringify(raw)) as Review19Snapshot;
+  const demandCycle = normalizeDemandCycle(
+    raw.demandCycle ?? raw.session?.demandCycle ?? fallbackDemandCycle,
+  );
+  cloned.demandCycle = demandCycle;
+  if (cloned.session && typeof cloned.session === "object") {
+    cloned.session.demandCycle = demandCycle;
+  }
+  cloned.reviewReference = cloneReview19Reference(
+    cloned.reviewReference,
+    demandCycle,
+  );
   if (!cloned.areas || typeof cloned.areas !== "object") return cloned;
 
   for (const areaId of Object.keys(cloned.areas) as AreaId[]) {
-    cloned.areas[areaId] = normalizeReview19AreaSnapshot(cloned.areas[areaId]);
+    cloned.areas[areaId] = normalizeReview19AreaSnapshot(
+      cloned.areas[areaId],
+      demandCycle,
+    );
   }
 
   return cloned;
@@ -289,6 +329,7 @@ function normalizeReview19RatingData(params: {
 function normalizeReview19DayCheckSnapshot(
   raw: Partial<Review19DayCheckSnapshot> | null | undefined,
   date: string,
+  fallbackDemandCycle?: DemandCycle,
 ): Review19DayCheckSnapshot | undefined {
   if (!raw || typeof raw !== "object" || raw.version !== 1) return undefined;
   if (typeof raw.recordedAt !== "string" || typeof raw.sessionStartedAt !== "string") {
@@ -315,10 +356,17 @@ function normalizeReview19DayCheckSnapshot(
   const review19Status =
     raw.review19Status === "not_applicable" ? "not_applicable" : "recorded";
   const dataVersion = normalizeDataVersionInfo(raw);
+  const demandCycle = normalizeDemandCycle(
+    raw.demandCycle ??
+      raw.snapshot?.demandCycle ??
+      raw.reference?.demandCycle ??
+      fallbackDemandCycle,
+  );
 
   return JSON.parse(JSON.stringify({
     ...raw,
     ...dataVersion,
+    demandCycle,
     review19Status,
     ...ratingData,
     reviewStartedAt:
@@ -338,24 +386,68 @@ function normalizeReview19DayCheckSnapshot(
       excludedAreaIds,
       review19Status,
     }),
+    reference: cloneReview19Reference(raw.reference, demandCycle),
+    snapshot: normalizeReview19Snapshot(raw.snapshot, demandCycle),
   })) as Review19DayCheckSnapshot;
+}
+
+function normalizeDailySessionSnapshotDemandCycle(
+  raw: DailySessionSnapshot,
+  fallbackDemandCycle?: DemandCycle,
+): DailySessionSnapshot {
+  const cloned = JSON.parse(JSON.stringify(raw)) as DailySessionSnapshot;
+  const demandCycle = normalizeDemandCycle(
+    cloned.demandCycle ?? cloned.session?.demandCycle ?? fallbackDemandCycle,
+  );
+  cloned.demandCycle = demandCycle;
+  if (cloned.session && typeof cloned.session === "object") {
+    cloned.session.demandCycle = demandCycle;
+  }
+  if (cloned.areas && typeof cloned.areas === "object") {
+    for (const areaId of Object.keys(cloned.areas) as AreaId[]) {
+      cloned.areas[areaId] = normalizeReview19AreaSnapshot(
+        cloned.areas[areaId],
+        demandCycle,
+      );
+    }
+  }
+  return cloned;
 }
 
 
 function normalizeReview19DaySnapshot(
   raw?: Partial<Review19DaySnapshot> | null,
+  fallbackDemandCycle?: DemandCycle,
 ): Review19DaySnapshot | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   if (raw.version !== 1) return undefined;
   if (typeof raw.capturedAt !== "string" || typeof raw.date !== "string") return undefined;
 
-  const sessions = Array.isArray(raw.sessions)
-    ? raw.sessions.filter((session) => {
+  const rawSessions = Array.isArray(raw.sessions) ? raw.sessions : [];
+  const firstSession = rawSessions[0] as DailySessionSnapshot | undefined;
+  const demandCycle = normalizeDemandCycle(
+    raw.demandCycle ??
+      raw.review19Check?.demandCycle ??
+      firstSession?.demandCycle ??
+      firstSession?.session?.demandCycle ??
+      fallbackDemandCycle,
+  );
+  const sessions = rawSessions
+    .filter((session) => {
         const screen = (session as { screen?: unknown })?.screen;
         return screen !== "review19_weather" && screen !== "review19" && screen !== "review19_done";
       })
-    : [];
-  const review19Check = normalizeReview19DayCheckSnapshot(raw.review19Check, raw.date);
+    .map((session) =>
+      normalizeDailySessionSnapshotDemandCycle(
+        session as DailySessionSnapshot,
+        demandCycle,
+      ),
+    );
+  const review19Check = normalizeReview19DayCheckSnapshot(
+    raw.review19Check,
+    raw.date,
+    demandCycle,
+  );
   const review19Status =
     raw.review19Status === "recorded" ||
     raw.review19Status === "not_performed" ||
@@ -366,15 +458,20 @@ function normalizeReview19DaySnapshot(
   return JSON.parse(JSON.stringify({
     ...raw,
     ...normalizeDataVersionInfo(raw),
+    demandCycle,
     sessions,
     review19Status,
     review19Check,
-    areaCountRecords: normalizeAreaCountRecords(raw.areaCountRecords),
+    areaCountRecords: normalizeAreaCountRecords(
+      raw.areaCountRecords,
+      demandCycle,
+    ),
   })) as Review19DaySnapshot;
 }
 
 function cloneReview19Reference(
   raw?: Partial<Review19Reference> | null,
+  fallbackDemandCycle?: DemandCycle,
 ): Review19Reference | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   if (raw.discountTime !== "19") return undefined;
@@ -385,7 +482,10 @@ function cloneReview19Reference(
     return undefined;
   if (!raw.basis || typeof raw.basis !== "object") return undefined;
 
-  return JSON.parse(JSON.stringify(raw)) as Review19Reference;
+  return {
+    ...JSON.parse(JSON.stringify(raw)),
+    demandCycle: normalizeDemandCycle(raw.demandCycle ?? fallbackDemandCycle),
+  } as Review19Reference;
 }
 
 
@@ -433,9 +533,16 @@ export function normalizeReview19Result(
   );
   const legacyReview19Status =
     raw.review19Status === "not_applicable" ? "not_applicable" : "recorded";
+  const demandCycle = normalizeDemandCycle(
+    raw.demandCycle ??
+      raw.daySnapshot?.demandCycle ??
+      raw.snapshot?.demandCycle ??
+      raw.reference?.demandCycle,
+  );
   const base = createInitialReview19Result({
     date: raw.date,
     sessionStartedAt: raw.sessionStartedAt,
+    demandCycle,
     excludedAreaIds: rawExcludedAreaIds,
   });
 
@@ -474,6 +581,7 @@ export function normalizeReview19Result(
     ...normalizeDataVersionInfo(raw),
     ...ratingData,
     review19Status: legacyReview19Status,
+    demandCycle,
     reviewStartedAt:
       typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
     reviewCompletedAt:
@@ -490,9 +598,9 @@ export function normalizeReview19Result(
     }),
     recordedAt,
     exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : undefined,
-    reference: cloneReview19Reference(raw.reference),
-    snapshot: normalizeReview19Snapshot(raw.snapshot),
-    daySnapshot: normalizeReview19DaySnapshot(raw.daySnapshot),
+    reference: cloneReview19Reference(raw.reference, demandCycle),
+    snapshot: normalizeReview19Snapshot(raw.snapshot, demandCycle),
+    daySnapshot: normalizeReview19DaySnapshot(raw.daySnapshot, demandCycle),
   };
 }
 

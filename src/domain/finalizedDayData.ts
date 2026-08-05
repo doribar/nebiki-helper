@@ -1,4 +1,10 @@
-import type { Review19DaySnapshot } from "./types.ts";
+import type {
+  DailySessionSnapshot,
+  DemandCycle,
+  Review19DaySnapshot,
+  Review19Snapshot,
+} from "./types.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
 
 export const FINALIZED_DAY_DATA_STORAGE_KEY =
   "nebiki-helper/finalized-day-data" as const;
@@ -35,6 +41,95 @@ export type FinalizedDayWriteResult = {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function applyAreaSnapshotDemandCycle(
+  areas: DailySessionSnapshot["areas"] | Review19Snapshot["areas"],
+  demandCycle: DemandCycle,
+): void {
+  if (!areas || typeof areas !== "object") return;
+  for (const area of Object.values(areas)) {
+    if (!area || typeof area !== "object") continue;
+    if (area.rateDecisionSnapshot) {
+      area.rateDecisionSnapshot.demandCycle = demandCycle;
+    }
+    if (area.areaCountDecisionBasis) {
+      area.areaCountDecisionBasis.demandCycle = demandCycle;
+    }
+  }
+}
+
+/** 旧日次の欠損値を通常扱いにし、1営業日内の保存データへ同じサイクルを伝播する。 */
+export function normalizeReview19DaySnapshotDemandCycle(
+  snapshot: Review19DaySnapshot,
+): Review19DaySnapshot {
+  const cloned = clone(snapshot);
+  const firstSession = cloned.sessions.find(
+    (session) => session && typeof session === "object",
+  );
+  const firstAreaCountRecord = cloned.areaCountRecords.find(
+    (record) => record && typeof record === "object",
+  );
+  const demandCycle = normalizeDemandCycle(
+    cloned.demandCycle ??
+      cloned.review19Check?.demandCycle ??
+      firstSession?.demandCycle ??
+      firstSession?.session?.demandCycle ??
+      firstAreaCountRecord?.demandCycle,
+  );
+  cloned.demandCycle = demandCycle;
+
+  for (const session of cloned.sessions) {
+    if (!session || typeof session !== "object") continue;
+    session.demandCycle = demandCycle;
+    if (session.session && typeof session.session === "object") {
+      session.session.demandCycle = demandCycle;
+    }
+    applyAreaSnapshotDemandCycle(session.areas, demandCycle);
+  }
+
+  for (const record of cloned.areaCountRecords) {
+    if (!record || typeof record !== "object") continue;
+    record.demandCycle = demandCycle;
+    if (record.decisionBasis) {
+      record.decisionBasis.demandCycle = demandCycle;
+    }
+  }
+
+  const review19Check = cloned.review19Check;
+  if (review19Check && typeof review19Check === "object") {
+    review19Check.demandCycle = demandCycle;
+    if (
+      review19Check.reference &&
+      typeof review19Check.reference === "object"
+    ) {
+      review19Check.reference.demandCycle = demandCycle;
+    }
+    if (
+      review19Check.snapshot &&
+      typeof review19Check.snapshot === "object"
+    ) {
+      review19Check.snapshot.demandCycle = demandCycle;
+      if (
+        review19Check.snapshot.session &&
+        typeof review19Check.snapshot.session === "object"
+      ) {
+        review19Check.snapshot.session.demandCycle = demandCycle;
+      }
+      if (
+        review19Check.snapshot.reviewReference &&
+        typeof review19Check.snapshot.reviewReference === "object"
+      ) {
+        review19Check.snapshot.reviewReference.demandCycle = demandCycle;
+      }
+      applyAreaSnapshotDemandCycle(
+        review19Check.snapshot.areas,
+        demandCycle,
+      );
+    }
+  }
+
+  return cloned;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -74,7 +169,9 @@ export function normalizeFinalizedDayData(
     return null;
   }
 
-  const cloned = clone(raw) as unknown as FinalizedDayData;
+  const cloned = normalizeReview19DaySnapshotDemandCycle(
+    raw as unknown as Review19DaySnapshot,
+  ) as FinalizedDayData;
   return {
     ...cloned,
     recordId:

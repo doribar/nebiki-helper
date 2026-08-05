@@ -6,9 +6,14 @@ import type {
   AreaId,
   AreaJudge,
   AreaRateAdjustment,
+  DemandCycle,
   DiscountTime,
   WeekdayBaseLabel,
 } from "./types";
+import {
+  getCalendarYear,
+  normalizeDemandCycle,
+} from "./demandCycle.ts";
 import {
   addDaysToDateString,
   isDayBeforeJapaneseHoliday,
@@ -29,6 +34,7 @@ export const AREA_COUNT_DECISION_RULE_VERSION = "area_count_median_v1" as const;
 
 export type AreaCountDecisionBasis = {
   ruleVersion: typeof AREA_COUNT_DECISION_RULE_VERSION;
+  demandCycle?: DemandCycle;
   evaluationSource?: AreaCountEvaluationSource;
   recommendationStatus: AreaCountRecommendation["status"];
   actualWeekday?: ActualWeekdayLabel;
@@ -67,6 +73,7 @@ export type AreaCountRecord = {
   dataSchemaVersion?: number;
   appVersion?: string;
   buildId?: string;
+  demandCycle?: DemandCycle;
   date: string;
   sessionStartedAt: string;
   recordedAt: string;
@@ -106,6 +113,7 @@ type DecreaseRecommendation = {
 
 export type AreaCountRecommendation = {
   status: "disabled" | "insufficient" | "ready";
+  demandCycle: DemandCycle;
   count: number;
   sampleSize: number;
   requiredSampleSize: number;
@@ -310,6 +318,7 @@ function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
     dataSchemaVersion: record.dataSchemaVersion,
     appVersion: record.appVersion,
     buildId: record.buildId,
+    demandCycle: normalizeDemandCycle(record.demandCycle),
     date: record.date,
     sessionStartedAt: record.sessionStartedAt,
     recordedAt: record.recordedAt,
@@ -403,6 +412,7 @@ function normalizeNonNegativeNumber(value: unknown): number | undefined {
 
 export function normalizeAreaCountDecisionBasis(
   raw: unknown,
+  fallbackDemandCycle?: DemandCycle,
 ): AreaCountDecisionBasis | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const basis = raw as Partial<AreaCountDecisionBasis>;
@@ -441,6 +451,7 @@ export function normalizeAreaCountDecisionBasis(
 
   return {
     ruleVersion: AREA_COUNT_DECISION_RULE_VERSION,
+    demandCycle: normalizeDemandCycle(basis.demandCycle ?? fallbackDemandCycle),
     evaluationSource: isAreaCountEvaluationSource(basis.evaluationSource)
       ? basis.evaluationSource
       : undefined,
@@ -489,6 +500,7 @@ export function buildAreaCountDecisionBasis(params: {
   const decrease = params.recommendation.decreaseRecommendation;
   return {
     ruleVersion: AREA_COUNT_DECISION_RULE_VERSION,
+    demandCycle: params.recommendation.demandCycle,
     evaluationSource: params.evaluationSource,
     recommendationStatus: params.recommendation.status,
     actualWeekday: params.recommendation.actualWeekday,
@@ -551,7 +563,10 @@ function actualWeekdayLabelToNumber(actualWeekday: ActualWeekdayLabel): number {
   }
 }
 
-export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
+export function normalizeAreaCountRecords(
+  raw: unknown,
+  fallbackDemandCycle?: DemandCycle,
+): AreaCountRecord[] {
   if (!Array.isArray(raw)) return [];
 
   return raw.flatMap((item): AreaCountRecord[] => {
@@ -593,6 +608,10 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
       ? record.userJudge
       : undefined;
 
+    const demandCycle = normalizeDemandCycle(
+      record.demandCycle ?? fallbackDemandCycle,
+    );
+
     return [
       {
         dataSchemaVersion:
@@ -609,6 +628,7 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
           typeof record.buildId === "string" && record.buildId.trim()
             ? record.buildId
             : undefined,
+        demandCycle,
         date: record.date,
         sessionStartedAt: record.sessionStartedAt,
         recordedAt: record.recordedAt,
@@ -628,7 +648,10 @@ export function normalizeAreaCountRecords(raw: unknown): AreaCountRecord[] {
         evaluationSource: isAreaCountEvaluationSource(record.evaluationSource)
           ? record.evaluationSource
           : undefined,
-        decisionBasis: normalizeAreaCountDecisionBasis(record.decisionBasis),
+        decisionBasis: normalizeAreaCountDecisionBasis(
+          record.decisionBasis,
+          demandCycle,
+        ),
         comfortPoint:
           typeof record.comfortPoint === "number" && Number.isFinite(record.comfortPoint)
             ? Math.max(-1, Math.min(3, Math.round(record.comfortPoint)))
@@ -647,7 +670,9 @@ export function upsertAreaCountRecord(
       record.date === nextRecord.date &&
       record.sessionStartedAt === nextRecord.sessionStartedAt &&
       record.areaId === nextRecord.areaId &&
-      record.discountTime === nextRecord.discountTime
+      record.discountTime === nextRecord.discountTime &&
+      normalizeDemandCycle(record.demandCycle) ===
+        normalizeDemandCycle(nextRecord.demandCycle)
     );
   });
 
@@ -668,7 +693,7 @@ export function dedupeLatestAreaCountRecordsByDateAreaTime(
   const latestByKey = new Map<string, AreaCountRecord>();
 
   for (const record of records) {
-    const key = `${record.date}__${record.areaId}__${record.discountTime}`;
+    const key = `${record.date}__${record.areaId}__${record.discountTime}__${normalizeDemandCycle(record.demandCycle)}`;
     const current = latestByKey.get(key);
 
     if (!current || compareRecordFreshness(current, record) <= 0) {
@@ -686,18 +711,26 @@ export function dedupeLatestAreaCountRecordsByDateAreaTime(
 function getHistoricalAreaCountRecords(
   records: AreaCountRecord[],
   currentDate: string,
+  demandCycle: DemandCycle,
 ): AreaCountRecord[] {
   return dedupeLatestAreaCountRecordsByDateAreaTime(records).filter((record) => {
-    return record.date < currentDate;
+    return (
+      record.date < currentDate &&
+      normalizeDemandCycle(record.demandCycle) === demandCycle
+    );
   });
 }
 
 function getCurrentDateAreaCountRecords(
   records: AreaCountRecord[],
   currentDate: string,
+  demandCycle: DemandCycle,
 ): AreaCountRecord[] {
   return dedupeLatestAreaCountRecordsByDateAreaTime(records).filter((record) => {
-    return record.date === currentDate;
+    return (
+      record.date === currentDate &&
+      normalizeDemandCycle(record.demandCycle) === demandCycle
+    );
   });
 }
 
@@ -858,12 +891,14 @@ function getLatestRecord(records: AreaCountRecord[], params: {
   date: string;
   areaId: AreaId;
   discountTime: AreaCountDiscountTime;
+  demandCycle: DemandCycle;
 }): AreaCountRecord | null {
   const matches = records.filter((record) => {
     return (
       record.date === params.date &&
       record.areaId === params.areaId &&
-      record.discountTime === params.discountTime
+      record.discountTime === params.discountTime &&
+      normalizeDemandCycle(record.demandCycle) === params.demandCycle
     );
   });
 
@@ -884,14 +919,24 @@ type ReferenceRecords = {
 };
 
 function getReferenceRecords(params: {
-  records: AreaCountRecord[];
+  shortRecords: AreaCountRecord[];
+  longRecords: AreaCountRecord[];
   areaId: AreaId;
   discountTime: AreaCountDiscountTime;
   actualWeekday: ActualWeekdayLabel;
   fallbackWeekdayGroup: ActualWeekdayGroup;
   forceFallbackWeekdayGroup: boolean;
 }): ReferenceRecords {
-  const sameWeekdayAllRecords = params.records
+  const sameWeekdayAllRecords = params.shortRecords
+    .filter((record) => {
+      return (
+        record.areaId === params.areaId &&
+        record.discountTime === params.discountTime &&
+        record.actualWeekday === params.actualWeekday
+      );
+    })
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+  const sameWeekdayLongRecords = params.longRecords
     .filter((record) => {
       return (
         record.areaId === params.areaId &&
@@ -904,7 +949,7 @@ function getReferenceRecords(params: {
   if (!params.forceFallbackWeekdayGroup && sameWeekdayAllRecords.length >= REQUIRED_SAMPLE_SIZE) {
     return {
       matchedRecords: sameWeekdayAllRecords.slice(-SHORT_REFERENCE_RECORDS),
-      longMatchedRecords: sameWeekdayAllRecords.slice(-LONG_REFERENCE_RECORDS),
+      longMatchedRecords: sameWeekdayLongRecords.slice(-LONG_REFERENCE_RECORDS),
       comparisonMode: "weekday",
       weekdaySampleSize: sameWeekdayAllRecords.length,
       fallbackSampleSize: 0,
@@ -913,7 +958,16 @@ function getReferenceRecords(params: {
     };
   }
 
-  const fallbackAllRecords = params.records
+  const fallbackAllRecords = params.shortRecords
+    .filter((record) => {
+      return (
+        record.areaId === params.areaId &&
+        record.discountTime === params.discountTime &&
+        record.actualWeekdayGroup === params.fallbackWeekdayGroup
+      );
+    })
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+  const fallbackLongRecords = params.longRecords
     .filter((record) => {
       return (
         record.areaId === params.areaId &&
@@ -925,7 +979,7 @@ function getReferenceRecords(params: {
 
   return {
     matchedRecords: fallbackAllRecords.slice(-SHORT_REFERENCE_RECORDS),
-    longMatchedRecords: fallbackAllRecords.slice(-LONG_REFERENCE_RECORDS),
+    longMatchedRecords: fallbackLongRecords.slice(-LONG_REFERENCE_RECORDS),
     comparisonMode: "fallback_group",
     weekdaySampleSize: sameWeekdayAllRecords.length,
     fallbackSampleSize: fallbackAllRecords.length,
@@ -934,18 +988,22 @@ function getReferenceRecords(params: {
   };
 }
 
+type ReferenceMedian = {
+  shortMedianCount: number;
+  longMedianCount?: number;
+  adoptedMedianCount: number;
+  medianDownGuardApplied: boolean;
+};
+
 function getGuardedReferenceMedian(params: {
   shortRecords: AreaCountRecord[];
   longRecords: AreaCountRecord[];
   comparisonMode: Exclude<AreaCountComparisonMode, "three_day_holiday_middle">;
-}): {
-  shortMedianCount: number;
-  longMedianCount: number;
-  adoptedMedianCount: number;
-  medianDownGuardApplied: boolean;
-} {
+}): ReferenceMedian {
   const shortMedianCount = getMedian(params.shortRecords.map((record) => record.count));
-  const longMedianCount = getMedian(params.longRecords.map((record) => record.count));
+  const longMedianCount = params.longRecords.length > 0
+    ? getMedian(params.longRecords.map((record) => record.count))
+    : undefined;
 
   // 暫定グループはデータが少ない時の代替なので、まずは従来どおり直近中央値で判定する。
   if (params.comparisonMode !== "weekday") {
@@ -957,7 +1015,7 @@ function getGuardedReferenceMedian(params: {
     };
   }
 
-  if (shortMedianCount >= longMedianCount) {
+  if (longMedianCount === undefined || shortMedianCount >= longMedianCount) {
     return {
       shortMedianCount,
       longMedianCount,
@@ -979,17 +1037,17 @@ function getGuardedReferenceMedian(params: {
   };
 }
 
-type ReferenceMedian = ReturnType<typeof getGuardedReferenceMedian>;
-
 function getThreeDayHolidayMiddleReference(params: {
-  records: AreaCountRecord[];
+  shortRecords: AreaCountRecord[];
+  longRecords: AreaCountRecord[];
   areaId: AreaId;
   discountTime: AreaCountDiscountTime;
   actualWeekday: ActualWeekdayLabel;
 }): { reference: ReferenceRecords; referenceMedian?: ReferenceMedian } {
   const getGroupReference = (fallbackWeekdayGroup: ActualWeekdayGroup) =>
     getReferenceRecords({
-      records: params.records,
+      shortRecords: params.shortRecords,
+      longRecords: params.longRecords,
       areaId: params.areaId,
       discountTime: params.discountTime,
       actualWeekday: params.actualWeekday,
@@ -1050,17 +1108,20 @@ function getThreeDayHolidayMiddleReference(params: {
     : insufficientReference.longMatchedRecords;
 
   const combineValidMedians = (
-    selector: (median: ReferenceMedian) => number,
+    selector: (median: ReferenceMedian) => number | undefined,
   ): number | undefined => {
-    if (validReferences.length === 0) return undefined;
-    return validReferences.reduce((sum, item) => sum + selector(item.median), 0) /
-      validReferences.length;
+    const values = validReferences.flatMap((item) => {
+      const value = selector(item.median);
+      return value === undefined ? [] : [value];
+    });
+    if (values.length === 0) return undefined;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
   };
 
-  const referenceMedian = validReferences.length > 0
+  const referenceMedian: ReferenceMedian | undefined = validReferences.length > 0
     ? {
         shortMedianCount: combineValidMedians((median) => median.shortMedianCount) as number,
-        longMedianCount: combineValidMedians((median) => median.longMedianCount) as number,
+        longMedianCount: combineValidMedians((median) => median.longMedianCount),
         adoptedMedianCount: combineValidMedians((median) => median.adoptedMedianCount) as number,
         medianDownGuardApplied: validReferences.some(
           (item) => item.median.medianDownGuardApplied,
@@ -1095,6 +1156,7 @@ function getThreeDayHolidayMiddleReference(params: {
 function getDecreaseRecommendation(params: {
   records: AreaCountRecord[];
   referenceCurrentRecords: AreaCountRecord[];
+  demandCycle: DemandCycle;
   date: string;
   areaId: AreaId;
   discountTime: DiscountTime;
@@ -1120,6 +1182,7 @@ function getDecreaseRecommendation(params: {
     date: params.date,
     areaId: params.areaId,
     discountTime: previousDiscountTime,
+    demandCycle: params.demandCycle,
   });
 
   if (!previousRecord || previousRecord.count <= 0) {
@@ -1142,6 +1205,7 @@ function getDecreaseRecommendation(params: {
       date: record.date,
       areaId: params.areaId,
       discountTime: previousDiscountTime,
+      demandCycle: params.demandCycle,
     });
 
     if (!pairedPreviousRecord || pairedPreviousRecord.count <= 0) return [];
@@ -1200,9 +1264,11 @@ export function getAreaCountRecommendation(params: {
   discountTime: DiscountTime | null | undefined;
   weekday: number | null | undefined;
   date: string | null | undefined;
+  demandCycle?: DemandCycle | null;
   count: number;
 }): AreaCountRecommendation {
   const requiredSampleSize = REQUIRED_SAMPLE_SIZE;
+  const demandCycle = normalizeDemandCycle(params.demandCycle);
   const count = Math.max(0, Math.round(params.count));
 
   if (
@@ -1216,6 +1282,7 @@ export function getAreaCountRecommendation(params: {
   ) {
     return {
       status: "disabled",
+      demandCycle,
       count,
       sampleSize: 0,
       requiredSampleSize,
@@ -1250,21 +1317,49 @@ export function getAreaCountRecommendation(params: {
   // 呼び出し元がローカル・Supabase・混在データのどれでも、比較直前に
   // 旧曜日グループを現行仕様へ正規化してから参照する。
   const normalizedRecords = normalizeAreaCountRecords(params.records);
-  const historicalRecords = getHistoricalAreaCountRecords(normalizedRecords, date);
+  const historicalRecords = getHistoricalAreaCountRecords(
+    normalizedRecords,
+    date,
+    demandCycle,
+  );
+  const currentDateRecords = getCurrentDateAreaCountRecords(
+    normalizedRecords,
+    date,
+    demandCycle,
+  );
+  const currentYear = getCalendarYear(date);
+  const shortReferenceRecords = demandCycle === "summer"
+    ? historicalRecords.filter(
+        (record) =>
+          currentYear !== null && getCalendarYear(record.date) === currentYear,
+      )
+    : historicalRecords;
+  const longReferenceRecords = demandCycle === "summer"
+    ? historicalRecords.filter((record) => {
+        const recordYear = getCalendarYear(record.date);
+        return (
+          currentYear !== null &&
+          recordYear !== null &&
+          recordYear < currentYear
+        );
+      })
+    : historicalRecords;
   const recordsForDecrease = [
-    ...historicalRecords,
-    ...getCurrentDateAreaCountRecords(normalizedRecords, date),
+    ...shortReferenceRecords,
+    ...currentDateRecords,
   ];
   const middleReferenceResult = actualWeekdayGroup === "三連休中日"
     ? getThreeDayHolidayMiddleReference({
-        records: historicalRecords,
+        shortRecords: shortReferenceRecords,
+        longRecords: longReferenceRecords,
         areaId,
         discountTime,
         actualWeekday,
       })
     : null;
   const standardReference = getReferenceRecords({
-    records: historicalRecords,
+    shortRecords: shortReferenceRecords,
+    longRecords: longReferenceRecords,
     areaId,
     discountTime,
     actualWeekday,
@@ -1280,11 +1375,18 @@ export function getAreaCountRecommendation(params: {
         }
       : standardReference);
   const { matchedRecords, comparisonMode } = reference;
+  const isSummerCycle = demandCycle === "summer";
+  const summerComparisonLabel = comparisonMode === "three_day_holiday_middle"
+    ? "三連休中日"
+    : comparisonMode === "weekday"
+      ? `${actualWeekday}曜日`
+      : `${comparisonWeekdayGroup}グループ`;
 
   if (!reference.hasValidReference) {
     const middleReference = reference.threeDayHolidayMiddleReference;
     return {
       status: "insufficient",
+      demandCycle,
       count,
       sampleSize: matchedRecords.length,
       requiredSampleSize,
@@ -1293,24 +1395,28 @@ export function getAreaCountRecommendation(params: {
       actualWeekdayGroup,
       comparisonMode,
       threeDayHolidayMiddleReference: middleReference,
-      summaryText: `過去データ ${matchedRecords.length}/${requiredSampleSize}件`,
+      summaryText: isSummerCycle
+        ? `夏サイクル・${summerComparisonLabel}の今年の履歴 ${matchedRecords.length}/${requiredSampleSize}件`
+        : `過去データ ${matchedRecords.length}/${requiredSampleSize}件`,
       detailLines: comparisonMode === "three_day_holiday_middle" && middleReference
         ? [
             `今日の曜日：${actualWeekday}`,
-            `火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件`,
-            `金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏サイクル・" : ""}火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏サイクル・" : ""}金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件`,
             "三連休中日は、火木日と金土を別々に集計し、有効な基準ができるまで従来の履歴不足扱いにします。",
+            ...(isSummerCycle ? ["履歴不足のため手動判定"] : []),
             `今回の${count}個も、判定後に履歴へ保存されます。`,
           ]
         : [
             `今日の曜日：${actualWeekday}`,
-            `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
-            `暫定グループ（${comparisonWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏サイクル・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏サイクル・" : ""}暫定グループ（${comparisonWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
             useHolidayBeforeNormalWeekdayReference
               ? "今日は祝日で明日は平日のため、日曜日と同じ残数基準で判定します。"
               : reference.forceFallbackWeekdayGroup
                 ? "祝日まわりのため、通常曜日データではなく暫定グループで判定します。"
                 : "同じエリア・同じ時刻・同じ曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
+            ...(isSummerCycle ? ["履歴不足のため手動判定"] : []),
             `今回の${count}個も、判定後に履歴へ保存されます。`,
           ],
     };
@@ -1342,24 +1448,28 @@ export function getAreaCountRecommendation(params: {
         : `比較条件：暫定グループ（${comparisonWeekdayGroup}）`;
   const referenceSelectionLines = comparisonMode === "three_day_holiday_middle" && middleReference
     ? [
-        `火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fireThursdaySundayMedianCount ?? "なし"}個）`,
-        `金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fridaySaturdayMedianCount ?? "なし"}個）`,
+        `${isSummerCycle ? "今年の夏サイクル・" : ""}火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fireThursdaySundayMedianCount ?? "なし"}個）`,
+        `${isSummerCycle ? "今年の夏サイクル・" : ""}金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fridaySaturdayMedianCount ?? "なし"}個）`,
         middleReference.adoptedSource === "both"
           ? `両グループを50対50で合成し、採用基準を${medianCount}個とします。`
           : `${middleReference.adoptedSource}だけに有効な基準があるため、${medianCount}個を採用します。`,
       ]
     : [
-        `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+        `${isSummerCycle ? "今年の夏サイクル・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
         useHolidayBeforeNormalWeekdayReference
           ? "今日は祝日で明日は平日のため、日曜日と同じ残数基準を採用。"
           : reference.forceFallbackWeekdayGroup
             ? "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
             : "通常日は同じ曜日の記録を優先し、足りない時だけ暫定グループを採用。",
         comparisonMode === "weekday"
-          ? `短期中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
-          : `暫定中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
+          ? `${isSummerCycle ? "今年の夏短期" : "短期"}中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`
+          : `${isSummerCycle ? "今年の夏短期" : "暫定"}中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`,
         comparisonMode === "weekday"
-          ? `長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
+          ? isSummerCycle
+            ? referenceMedian.longMedianCount === undefined
+              ? "前年以前の夏長期中央値：なし（0件）"
+              : `前年以前の夏長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
+            : `長期中央値：${referenceMedian.longMedianCount}個（最大${reference.longMatchedRecords.length}件）`
           : "暫定グループは短期中央値で判定",
         referenceMedian.medianDownGuardApplied
           ? `短期が長期より少ないため、基準を下げすぎないように${medianCount}個で判定。`
@@ -1378,6 +1488,7 @@ export function getAreaCountRecommendation(params: {
 
     return {
       status: "ready",
+      demandCycle,
       count,
       sampleSize: matchedRecords.length,
       requiredSampleSize,
@@ -1418,6 +1529,7 @@ export function getAreaCountRecommendation(params: {
   const decreaseRecommendation = getDecreaseRecommendation({
     records: recordsForDecrease,
     referenceCurrentRecords: matchedRecords,
+    demandCycle,
     date,
     areaId,
     discountTime,
@@ -1435,6 +1547,7 @@ export function getAreaCountRecommendation(params: {
 
   return {
     status: "ready",
+    demandCycle,
     count,
     sampleSize: matchedRecords.length,
     requiredSampleSize,

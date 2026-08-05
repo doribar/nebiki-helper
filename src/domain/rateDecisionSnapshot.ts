@@ -3,6 +3,7 @@ import { getBaseRate, getNormalTimeRateDisplay } from "./discount.ts";
 import type {
   AreaJudge,
   AreaRateAdjustment,
+  DemandCycle,
   DiscountTime,
   FinalGuideData,
   ProductAdjustmentPolicySnapshot,
@@ -13,6 +14,7 @@ import type {
   RateLogicVersion,
   ResolvedWeatherInput,
 } from "./types.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
 import { normalizeTemperatureComfortAnalysis } from "./temperatureComfort.ts";
 
 const MINIMUM_RATE_PERCENT = 0 as const;
@@ -33,6 +35,7 @@ type NormalDiscountTime = Exclude<DiscountTime, "20">;
 type CommonRateDecisionSnapshotParams = {
   confirmedAt: string;
   sessionDiscountTime: NormalDiscountTime;
+  demandCycle?: DemandCycle;
   rateLogicVersion?: RateLogicVersion;
   weatherComfortAdjustmentPercent: number;
   areaJudge: Exclude<AreaJudge, null>;
@@ -61,6 +64,7 @@ export type BuildEarlyNextMinus5RateDecisionSnapshotParams =
 
 export type BuildFinalDiscountGuideSnapshotParams = {
   confirmedAt: string;
+  demandCycle?: DemandCycle;
   finalGuide: FinalGuideData;
   resolvedWeather: ResolvedWeatherInput;
   rateLogicVersion?: RateLogicVersion;
@@ -426,6 +430,7 @@ export function buildRateDecisionSnapshot(
   return deepFreeze({
     version: 1,
     ...versionInfo,
+    demandCycle: normalizeDemandCycle(params.demandCycle),
     confirmedAt: params.confirmedAt,
     sessionDiscountTime: params.sessionDiscountTime,
     effectiveRateDiscountTime: params.effectiveRateDiscountTime,
@@ -512,6 +517,7 @@ export function buildFinalDiscountGuideSnapshot(
   return deepFreeze({
     version: 1,
     ...getCurrentDataVersionInfo(),
+    demandCycle: normalizeDemandCycle(params.demandCycle),
     confirmedAt: params.confirmedAt,
     sessionDiscountTime: "20",
     effectiveRateDiscountTime: "20",
@@ -665,6 +671,7 @@ export function normalizeRateDecisionSnapshot(
     dataSchemaVersion: raw.dataSchemaVersion,
     appVersion: raw.appVersion,
     buildId: raw.buildId,
+    demandCycle: normalizeDemandCycle(raw.demandCycle),
     confirmedAt: raw.confirmedAt,
     sessionDiscountTime: raw.sessionDiscountTime,
     effectiveRateDiscountTime: raw.effectiveRateDiscountTime,

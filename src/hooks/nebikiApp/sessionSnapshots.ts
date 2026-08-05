@@ -3,6 +3,7 @@ import type {
   AreaId,
   AreaProgress,
   DailySessionSnapshot,
+  DemandCycle,
   DoneSummaryItem,
   Review19DayCheckSnapshot,
   Review19Reference,
@@ -28,12 +29,48 @@ import {
   evaluationText as getAreaCountEvaluationText,
 } from "../../domain/areaCountHistory.ts";
 import { getCurrentDataVersionInfo } from "../../domain/dataVersion.ts";
+import { normalizeDemandCycle } from "../../domain/demandCycle.ts";
 import { getAreaJudgeText } from "./ratePresentation.ts";
+
+function getAreaCountRecordDemandCycle(record: AreaCountRecord): DemandCycle {
+  return normalizeDemandCycle(
+    (record as AreaCountRecord & { demandCycle?: unknown }).demandCycle,
+  );
+}
+
+function cloneDailySessionSnapshotWithDemandCycle(
+  snapshot: DailySessionSnapshot,
+  fallbackDemandCycle?: DemandCycle,
+): DailySessionSnapshot {
+  const cloned = JSON.parse(JSON.stringify(snapshot)) as DailySessionSnapshot;
+  const demandCycle = normalizeDemandCycle(
+    cloned.demandCycle ?? cloned.session?.demandCycle ?? fallbackDemandCycle,
+  );
+  for (const areaId of Object.keys(cloned.areas) as AreaId[]) {
+    const area = cloned.areas[areaId];
+    const rateDecisionSnapshot = area?.rateDecisionSnapshot;
+    if (rateDecisionSnapshot) {
+      rateDecisionSnapshot.demandCycle = demandCycle;
+    }
+    if (area?.areaCountDecisionBasis) {
+      area.areaCountDecisionBasis.demandCycle = demandCycle;
+    }
+  }
+  return {
+    ...cloned,
+    demandCycle,
+    session: {
+      ...cloned.session,
+      demandCycle,
+    },
+  };
+}
 
 function buildAreaSnapshotsFromState(params: {
   areaProgressMap: Record<AreaId, AreaProgress>;
   doneSummaryItems: DoneSummaryItem[];
   excludedAreaIds?: AreaId[];
+  demandCycle: DemandCycle;
 }): Record<AreaId, Review19Snapshot["areas"][AreaId]> {
   const doneSummaryByArea = params.doneSummaryItems.reduce((acc, item) => {
     acc[item.areaId] = item;
@@ -45,7 +82,10 @@ function buildAreaSnapshotsFromState(params: {
     const progress = params.areaProgressMap[areaId];
     const summary = doneSummaryByArea[areaId];
     const rateDecisionSnapshot = progress?.rateDecisionSnapshot
-      ? JSON.parse(JSON.stringify(progress.rateDecisionSnapshot))
+      ? {
+          ...JSON.parse(JSON.stringify(progress.rateDecisionSnapshot)),
+          demandCycle: params.demandCycle,
+        }
       : undefined;
     const rateText =
       rateDecisionSnapshot?.displayedRateText ?? summary?.rateText ?? "未完了";
@@ -68,7 +108,10 @@ function buildAreaSnapshotsFromState(params: {
       areaCountEvaluation: progress?.areaCountEvaluation,
       areaCountEvaluationSource: progress?.areaCountEvaluationSource,
       areaCountDecisionBasis: progress?.areaCountDecisionBasis
-        ? JSON.parse(JSON.stringify(progress.areaCountDecisionBasis)) as AreaCountDecisionBasis
+        ? {
+            ...JSON.parse(JSON.stringify(progress.areaCountDecisionBasis)),
+            demandCycle: params.demandCycle,
+          } as AreaCountDecisionBasis
         : undefined,
       areaRateAdjustment: progress?.areaRateAdjustment,
       judgeText: summary?.judgeText ?? getAreaJudgeText(progress?.areaJudge ?? null),
@@ -122,10 +165,12 @@ export function createDailySessionSnapshot(params: {
 }): DailySessionSnapshot | null {
   const session = params.state.session;
   if (!session) return null;
+  const demandCycle = normalizeDemandCycle(session.demandCycle);
 
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
+    demandCycle,
     capturedAt: params.capturedAt,
     basisCapturedAt: params.capturedAt,
     sessionEndReason:
@@ -140,6 +185,7 @@ export function createDailySessionSnapshot(params: {
       date: session.date,
       weekday: session.weekday,
       discountTime: session.discountTime,
+      demandCycle,
       startedAt: session.startedAt,
       manualWeekdayOverride: session.manualWeekdayOverride,
       manualDiscountTimeOverride: session.manualDiscountTimeOverride,
@@ -164,6 +210,7 @@ export function createDailySessionSnapshot(params: {
       areaProgressMap: params.state.areaProgressMap,
       doneSummaryItems: params.doneSummaryItems,
       excludedAreaIds: params.state.review19ExcludedAreaIds,
+      demandCycle,
     }),
     doneSummaryItems: JSON.parse(JSON.stringify(params.doneSummaryItems)) as DoneSummaryItem[],
     currentAreaId: params.state.currentAreaId,
@@ -214,7 +261,15 @@ export function getLatestReview19DayCheck(date: string): Review19DayCheckSnapsho
 
   if (!latest?.recordedAt) return undefined;
   if (latest.daySnapshot?.review19Check) {
-    return JSON.parse(JSON.stringify(latest.daySnapshot.review19Check)) as Review19DayCheckSnapshot;
+    const cloned = JSON.parse(
+      JSON.stringify(latest.daySnapshot.review19Check),
+    ) as Review19DayCheckSnapshot;
+    return {
+      ...cloned,
+      demandCycle: normalizeDemandCycle(
+        cloned.demandCycle ?? latest.daySnapshot.demandCycle ?? latest.demandCycle,
+      ),
+    };
   }
 
   return {
@@ -222,6 +277,7 @@ export function getLatestReview19DayCheck(date: string): Review19DayCheckSnapsho
     dataSchemaVersion: latest.dataSchemaVersion,
     appVersion: latest.appVersion,
     buildId: latest.buildId,
+    demandCycle: normalizeDemandCycle(latest.demandCycle),
     review19Status: latest.review19Status,
     recordedAt: latest.recordedAt,
     sessionStartedAt: latest.sessionStartedAt,
@@ -248,15 +304,32 @@ export function getLatestReview19DayCheck(date: string): Review19DayCheckSnapsho
 export function createReview19DaySnapshot(params: {
   capturedAt: string;
   date: string;
+  demandCycle?: DemandCycle;
   areaCountRecords: AreaCountRecord[];
   sessions: DailySessionSnapshot[];
   review19Check?: NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>;
 }): NonNullable<Review19Result["daySnapshot"]> {
+  const sameDateSession = params.sessions.find(
+    (session) => session.session.date === params.date,
+  );
+  const sameDateAreaCountRecord = params.areaCountRecords.find(
+    (record) => record.date === params.date,
+  );
+  const demandCycle = normalizeDemandCycle(
+    params.demandCycle ??
+      params.review19Check?.demandCycle ??
+      sameDateSession?.demandCycle ??
+      sameDateSession?.session.demandCycle ??
+      (sameDateAreaCountRecord
+        ? getAreaCountRecordDemandCycle(sameDateAreaCountRecord)
+        : undefined),
+  );
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
     date: params.date,
+    demandCycle,
     rateLogicVersion: "time_basic_rate_v1",
     review19Status: params.review19Check?.review19Status ?? "not_performed",
     sessions: params.sessions
@@ -264,12 +337,21 @@ export function createReview19DaySnapshot(params: {
         session.session.date === params.date &&
         (session.screen === "done" || session.sessionEndReason === "auto_time_transition")
       )
-      .map((session) => JSON.parse(JSON.stringify(session)) as DailySessionSnapshot),
+      .map((session) =>
+        cloneDailySessionSnapshotWithDemandCycle(session, demandCycle),
+      ),
     review19Check: params.review19Check
-      ? JSON.parse(JSON.stringify(params.review19Check)) as NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>
+      ? {
+          ...JSON.parse(JSON.stringify(params.review19Check)),
+          demandCycle,
+        } as NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>
       : undefined,
     areaCountRecords: cloneAreaCountRecords(
-      params.areaCountRecords.filter((record) => record.date === params.date),
+      params.areaCountRecords.filter(
+        (record) =>
+          record.date === params.date &&
+          getAreaCountRecordDemandCycle(record) === demandCycle,
+      ),
     ),
   };
 }
@@ -286,16 +368,19 @@ export function createReview19Snapshot(params: {
   areaProgressMap: Record<AreaId, AreaProgress>;
   doneSummaryItems: DoneSummaryItem[];
 }): Review19Snapshot {
+  const demandCycle = normalizeDemandCycle(params.session.demandCycle);
   const areas = buildAreaSnapshotsFromState({
     areaProgressMap: params.areaProgressMap,
     doneSummaryItems: params.doneSummaryItems,
     excludedAreaIds: params.excludedAreaIds,
+    demandCycle,
   });
 
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
+    demandCycle,
     session: {
       dataSchemaVersion: params.session.dataSchemaVersion,
       appVersion: params.session.appVersion,
@@ -303,6 +388,7 @@ export function createReview19Snapshot(params: {
       date: params.session.date,
       weekday: params.session.weekday,
       discountTime: params.session.discountTime,
+      demandCycle,
       startedAt: params.session.startedAt,
       manualWeekdayOverride: params.session.manualWeekdayOverride,
       manualDiscountTimeOverride: params.session.manualDiscountTimeOverride,
@@ -325,7 +411,10 @@ export function createReview19Snapshot(params: {
     },
     areas,
     reviewReference: params.reviewReference
-      ? JSON.parse(JSON.stringify(params.reviewReference)) as Review19Reference
+      ? {
+          ...JSON.parse(JSON.stringify(params.reviewReference)),
+          demandCycle,
+        } as Review19Reference
       : undefined,
   };
 }
@@ -335,6 +424,7 @@ export function createReview19Reference(
   draft: SessionDraft,
   temperatureComfortAnalysis?: TemperatureComfortAnalysis,
 ): Review19Reference {
+  const demandCycle = normalizeDemandCycle(draft.demandCycle);
   const reviewDraft: SessionDraft = {
     ...draft,
     discountTime: "19",
@@ -365,6 +455,7 @@ export function createReview19Reference(
     date: reviewDraft.date,
     weekday: reviewDraft.weekday,
     discountTime: "19",
+    demandCycle,
     weather: JSON.parse(JSON.stringify(reviewDraft.weather)) as WeatherInput,
     resolvedWeather: JSON.parse(JSON.stringify(resolvedWeather)),
     basis: {
@@ -387,6 +478,7 @@ export function createReview19WeatherDraft(session: SessionData): SessionDraft {
     date: session.date,
     weekday: session.weekday,
     discountTime: "19",
+    demandCycle: normalizeDemandCycle(session.demandCycle),
     manualWeekdayOverride: session.manualWeekdayOverride,
     manualDiscountTimeOverride: false,
     weather: {

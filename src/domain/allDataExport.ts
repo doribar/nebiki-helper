@@ -1,4 +1,6 @@
 import { getCurrentDataVersionInfo } from "./dataVersion.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
+import { normalizeReview19DaySnapshotDemandCycle } from "./finalizedDayData.ts";
 import type { Review19DaySnapshot, Review19Result } from "./types.ts";
 
 const JST_TIME_ZONE = "Asia/Tokyo";
@@ -116,13 +118,58 @@ function resolveCurrentVersionInfo(): AllDataExportVersionInfo {
   };
 }
 
+function cloneReview19ResultWithDemandCycle(
+  item: Review19Result,
+): Review19Result {
+  const cloned = clone(item);
+  const demandCycle = normalizeDemandCycle(
+    cloned.demandCycle ??
+      cloned.daySnapshot?.demandCycle ??
+      cloned.snapshot?.demandCycle ??
+      cloned.reference?.demandCycle,
+  );
+  cloned.demandCycle = demandCycle;
+
+  if (cloned.reference) {
+    cloned.reference.demandCycle = demandCycle;
+  }
+  if (cloned.snapshot) {
+    cloned.snapshot.demandCycle = demandCycle;
+    cloned.snapshot.session.demandCycle = demandCycle;
+    if (cloned.snapshot.reviewReference) {
+      cloned.snapshot.reviewReference.demandCycle = demandCycle;
+    }
+    for (const area of Object.values(cloned.snapshot.areas)) {
+      if (area.areaCountDecisionBasis) {
+        area.areaCountDecisionBasis.demandCycle = demandCycle;
+      }
+      if (area.rateDecisionSnapshot) {
+        area.rateDecisionSnapshot.demandCycle = demandCycle;
+      }
+    }
+  }
+  if (cloned.daySnapshot) {
+    cloned.daySnapshot.demandCycle = demandCycle;
+    cloned.daySnapshot = normalizeReview19DaySnapshotDemandCycle(
+      cloned.daySnapshot,
+    );
+  }
+
+  return cloned;
+}
+
 export function buildAllDataExportPayload(params: {
   dailyData: readonly Review19DaySnapshot[];
   review19Data: readonly Review19Result[];
   exportedAt: string;
   versionInfo?: AllDataExportVersionInfo;
 }): AllDataExportPayload {
-  const validDaily = params.dailyData.filter((item) => isValidJstDateString(item.date));
+  const normalizedDaily = params.dailyData.map(
+    normalizeReview19DaySnapshotDemandCycle,
+  );
+  const validDaily = normalizedDaily.filter((item) =>
+    isValidJstDateString(item.date),
+  );
   const indeterminateDailyCount = params.dailyData.length - validDaily.length;
   const latestDailyByDate = selectLatestByDate({
     values: validDaily,
@@ -131,11 +178,14 @@ export function buildAllDataExportPayload(params: {
   });
   const dailyDates = new Set(latestDailyByDate.keys());
 
-  const applicableReview19 = params.review19Data.filter(
+  const normalizedReview19 = params.review19Data.map(
+    cloneReview19ResultWithDemandCycle,
+  );
+  const applicableReview19 = normalizedReview19.filter(
     (item) => item.review19Status !== "not_applicable",
   );
   const excludedNotApplicableCount =
-    params.review19Data.length - applicableReview19.length;
+    normalizedReview19.length - applicableReview19.length;
   const validReview19 = applicableReview19.filter((item) =>
     isValidJstDateString(item.date),
   );

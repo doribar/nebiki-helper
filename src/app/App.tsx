@@ -228,6 +228,28 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
 
   return (
     <>
+      {app.state.screen !== "start" ? (
+        <div
+          aria-label="現在の需要サイクル"
+          style={{
+            width: "fit-content",
+            maxWidth: "calc(100vw - 32px)",
+            margin: "6px auto -6px",
+            padding: "3px 9px",
+            border: "1px solid #cbd5e1",
+            borderRadius: 999,
+            background: app.derived.demandCycle === "summer" ? "#fff7ed" : "#f8fafc",
+            color: "#475569",
+            fontSize: 11,
+            fontWeight: 800,
+            lineHeight: 1.4,
+            textAlign: "center",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {app.derived.demandCycleBasisLabel}
+        </div>
+      ) : null}
       <AppRouter
         app={app}
         testNow={props.testMode?.now ?? null}

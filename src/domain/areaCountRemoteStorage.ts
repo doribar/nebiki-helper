@@ -1,5 +1,6 @@
 import type { AreaCountRecord } from "./areaCountHistory.ts";
 import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
 
 type SupabaseConfig = {
   url: string;
@@ -66,6 +67,8 @@ function rowToRecord(row: RemoteAreaCountRow): Partial<AreaCountRecord> {
     actualWeekday: row.actual_weekday ?? undefined,
     actualWeekdayGroup: row.actual_weekday_group as AreaCountRecord["actualWeekdayGroup"],
     count: row.count,
+    // Supabaseの固定列には需要サイクルを追加しない。既存・共有行はすべて通常扱い。
+    demandCycle: "normal",
   } as Partial<AreaCountRecord>;
 }
 
@@ -148,6 +151,13 @@ export async function loadRemoteAreaCountRecords(): Promise<RemoteAreaCountLoadR
 export async function upsertRemoteAreaCountRecord(
   record: AreaCountRecord,
 ): Promise<RemoteAreaCountSaveResult> {
+  // 夏サイクルはサイクル情報を失う固定列へ送らず、端末内JSONへ保存する。
+  if (normalizeDemandCycle(
+    (record as AreaCountRecord & { demandCycle?: unknown }).demandCycle,
+  ) === "summer") {
+    return { status: "disabled" };
+  }
+
   const config = getSupabaseConfig();
   if (!config) return { status: "disabled" };
 

@@ -5,6 +5,7 @@ import type {
   NextSessionSkipRecord,
   ScreenName,
 } from './types';
+import { normalizeDemandCycle } from './demandCycle.ts';
 
 export type NavigationSnapshot = {
   state: AppState;
@@ -15,7 +16,25 @@ export type NavigationSnapshot = {
 };
 
 export function cloneAppState(state: AppState): AppState {
-  return JSON.parse(JSON.stringify(state)) as AppState;
+  const cloned = JSON.parse(JSON.stringify(state)) as AppState;
+  if (cloned.session) {
+    const sessionDemandCycle = normalizeDemandCycle(cloned.session.demandCycle);
+    cloned.session.demandCycle = sessionDemandCycle;
+    cloned.sessionDraft = {
+      ...cloned.sessionDraft,
+      // During an active business day the started session is authoritative.
+      demandCycle: sessionDemandCycle,
+    };
+    return cloned;
+  }
+
+  cloned.sessionDraft = {
+    ...cloned.sessionDraft,
+    // Legacy navigation snapshots without the field normalize to normal.
+    demandCycle: normalizeDemandCycle(cloned.sessionDraft?.demandCycle),
+  };
+
+  return cloned;
 }
 
 export function cloneSkipRecords(
@@ -30,6 +49,7 @@ export function cloneLastSessionWeatherRecord(
   return record
     ? {
         ...record,
+        demandCycle: normalizeDemandCycle(record.demandCycle),
         ...(record.temperatureComfortAnalysis
           ? {
               temperatureComfortAnalysis: {

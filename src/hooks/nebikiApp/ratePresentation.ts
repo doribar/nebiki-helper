@@ -160,6 +160,7 @@ export function buildNextSessionSkipRecord(params: {
 }): NextSessionSkipRecord {
   return {
     date: params.date,
+    demandCycle: params.sourceSession.demandCycle ?? "normal",
     targetDiscountTime: params.targetDiscountTime,
     areaId: params.areaId,
     previousRateText: params.rateSnapshot.completedRateText,

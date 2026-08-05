@@ -18,6 +18,7 @@ import type {
   Review19Result,
   AreaCountEvaluation,
   AreaRateAdjustment,
+  DemandCycle,
 } from "../domain/types";
 import {
   buildFinalRateDecisionSnapshot,
@@ -218,6 +219,23 @@ import {
   getNearTemperatureC,
   resolveSessionTemperatureComfort,
 } from "./nebikiApp/temperatureComfortState.ts";
+import {
+  getDemandCycleBasisLabel,
+  getDemandCycleShortName,
+  normalizeDemandCycle,
+  resolveDemandCycleFromEvidence,
+} from "../domain/demandCycle.ts";
+import {
+  loadDemandCycleState,
+  loadSummerAreaCountRecords,
+  lockDemandCycleForDate,
+  saveDemandCycleState,
+  selectDemandCycleForDate,
+  selectDemandCycleLockForDate,
+  updateDemandCyclePreference,
+  upsertSummerAreaCountRecord,
+  type DemandCycleState,
+} from "../domain/demandCycleStorage.ts";
 
 export { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
 
@@ -276,10 +294,21 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       : loadPersistedNebikiStateForDate(initialDate);
   }
 
-  const initialLastUsedSessionDraft = buildStartDefaultDraft(
+  const initialToday = formatLocalDate(getRuntimeNow());
+  const initialDemandCycleState = isTestMode
+    ? ({
+        selectedCycle: "normal",
+        lockedDate: null,
+        lockedCycle: null,
+      } satisfies DemandCycleState)
+    : loadDemandCycleState();
+  const initialLastUsedSessionDraftBase = buildStartDefaultDraft(
     isTestMode ? null : initialPersistenceRef.current?.lastUsedSessionDraft ?? null
   );
-  const initialToday = formatLocalDate(getRuntimeNow());
+  const initialLastUsedSessionDraft: SessionDraft = {
+    ...initialLastUsedSessionDraftBase,
+    demandCycle: selectDemandCycleForDate(initialDemandCycleState, initialToday),
+  };
   const initialLoadedState = isTestMode
     ? null
     : shouldUseCheckpointInsteadOfCurrent({
@@ -301,10 +330,22 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       });
 
   const [state, setState] = useState<AppState>(() => {
-    const normalized = normalizeLoadedState(
+    const normalizedBase = normalizeLoadedState(
       initialLoadedState,
       initialLastUsedSessionDraft,
     );
+    const normalized = normalizedBase.session
+      ? normalizedBase
+      : {
+          ...normalizedBase,
+          sessionDraft: {
+            ...normalizedBase.sessionDraft,
+            demandCycle: selectDemandCycleForDate(
+              initialDemandCycleState,
+              normalizedBase.sessionDraft.date,
+            ),
+          },
+        };
 
     if (!initialWeatherConfirmationPending || !initialLoadedState) {
       return normalized;
@@ -355,7 +396,15 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [dailyMessageState, setDailyMessageState] = useState<DailyMessageState>(() =>
     normalizeDailyMessageState(initialPersistenceRef.current?.dailyMessageState ?? null)
   );
-  const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>([]);
+  const [demandCycleState, setDemandCycleState] = useState<DemandCycleState>(
+    initialDemandCycleState,
+  );
+  const [areaCountRemoteLoadStatus, setAreaCountRemoteLoadStatus] = useState<
+    "loading" | "ready" | "disabled" | "error"
+  >("loading");
+  const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
+    isTestMode ? [] : loadSummerAreaCountRecords()
+  );
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
   const [finalizedDayDataVersion, setFinalizedDayDataVersion] = useState(0);
   const lastFinalizedDayDataRef = useRef<StoredFinalizedDayData | null>(null);
@@ -426,11 +475,18 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     let cancelled = false;
 
     void loadRemoteAreaCountRecords().then((result) => {
-      if (cancelled || result.status !== "ready") return;
+      if (cancelled) return;
+      setAreaCountRemoteLoadStatus(result.status);
+      if (result.status !== "ready") return;
 
-      // エリア判定の履歴はSupabaseを正とする。
-      // 端末内のローカル履歴を混ぜると、削除済みテストデータで判定がズレるため使わない。
-      setAreaCountRecords(cloneAreaCountRecords(result.records));
+      // 通常サイクルは従来どおりSupabaseを正本とし、列を追加できない
+      // 夏サイクルだけを端末内の専用JSON履歴から併合する。
+      setAreaCountRecords((current) => {
+        const localSummerRecords = current.filter(
+          (record) => normalizeDemandCycle(record.demandCycle) === "summer",
+        );
+        return [...cloneAreaCountRecords(result.records), ...cloneAreaCountRecords(localSummerRecords)];
+      });
     });
 
     return () => {
@@ -562,6 +618,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     const nextRecord = {
       date: state.session.date,
       discountTime: state.session.discountTime,
+      demandCycle: normalizeDemandCycle(state.session.demandCycle),
       nearTermWeather: getNearTermWeatherForDiscount(state.session.weather, state.session.discountTime),
       nearTempC,
       sessionStartedAt: state.session.startedAt,
@@ -572,6 +629,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       if (
         current?.date === nextRecord.date &&
         current?.discountTime === nextRecord.discountTime &&
+        normalizeDemandCycle(current?.demandCycle) === nextRecord.demandCycle &&
         current?.nearTermWeather === nextRecord.nearTermWeather &&
         current?.nearTempC === nextRecord.nearTempC &&
         current?.sessionStartedAt === nextRecord.sessionStartedAt &&
@@ -1230,7 +1288,8 @@ const lateSkipNotice = useMemo(() => {
     void finalizedDayDataVersion;
     return loadFinalizedDayData();
   })();
-  const completedDailyDates = loadDailySessionSnapshots()
+  const savedDailySessionSnapshots = loadDailySessionSnapshots();
+  const completedDailyDates = savedDailySessionSnapshots
     .filter(
       (snapshot) =>
         snapshot.session.discountTime === "20" && snapshot.screen === "done",
@@ -1278,6 +1337,142 @@ const lateSkipNotice = useMemo(() => {
     now: new Date(nowMs),
     records: savedReview19Records,
   });
+
+  // 開始画面では、前日の完了セッションを保持したまま日付を跨ぐ場合がある。
+  // そのため営業日の判定対象は開始ドラフトの日付を優先し、運用中だけ
+  // 実セッションの日付を権威とする。
+  const demandCycleDate = state.screen === "start"
+    ? state.sessionDraft.date
+    : state.session?.date ?? state.sessionDraft.date;
+  const savedReview19SourceState = loadReview19SourceState();
+  const hasCurrentStateRateSnapshot = Boolean(state.session) && Object.values(state.areaProgressMap).some(
+    (progress) => Boolean(progress.rateDecisionSnapshot),
+  );
+  const inferredOperationDemandCycle = resolveDemandCycleFromEvidence(
+    demandCycleDate,
+    [
+      ...(state.session
+        ? [{ date: state.session.date, demandCycle: state.session.demandCycle }]
+        : []),
+      ...(state.review19
+        ? [{ date: state.review19.date, demandCycle: state.review19.demandCycle }]
+        : []),
+      ...(hasCurrentStateRateSnapshot
+        ? [{
+            date: state.session!.date,
+            demandCycle: state.session!.demandCycle,
+          }]
+        : []),
+      ...savedDailySessionSnapshots.map((snapshot) => ({
+        date: snapshot.session.date,
+        demandCycle: snapshot.demandCycle ?? snapshot.session.demandCycle,
+      })),
+      ...savedFinalizedDayData.map((record) => ({
+        date: record.date,
+        demandCycle: record.demandCycle,
+      })),
+      ...savedReview19Records.map((record) => ({
+        date: record.date,
+        demandCycle: record.demandCycle,
+      })),
+      ...areaCountRecords.map((record) => ({
+        date: record.date,
+        demandCycle: record.demandCycle,
+      })),
+      ...(savedReview19SourceState?.session
+        ? [{
+            date: savedReview19SourceState.session.date,
+            demandCycle: savedReview19SourceState.session.demandCycle,
+          }]
+        : []),
+      ...nextSessionSkipRecords.map((record) => ({
+        date: record.date,
+        demandCycle: record.demandCycle,
+      })),
+      ...(lastSessionWeather
+        ? [{ date: lastSessionWeather.date, demandCycle: lastSessionWeather.demandCycle }]
+        : []),
+    ],
+  );
+  const persistedDemandCycleLock = selectDemandCycleLockForDate(
+    demandCycleState,
+    demandCycleDate,
+  );
+  const activeDemandCycle =
+    persistedDemandCycleLock ??
+    inferredOperationDemandCycle ??
+    normalizeDemandCycle(
+      state.screen === "start"
+        ? state.sessionDraft.demandCycle
+        : state.session?.demandCycle ?? state.sessionDraft.demandCycle,
+    );
+  const demandCycleHistoryCheckPending = areaCountRemoteLoadStatus === "loading";
+  const demandCycleHistoryCheckFailed = areaCountRemoteLoadStatus === "error";
+  const canChangeDemandCycle =
+    state.screen === "start" &&
+    !inferredOperationDemandCycle &&
+    !persistedDemandCycleLock &&
+    !demandCycleHistoryCheckPending &&
+    !demandCycleHistoryCheckFailed;
+  const demandCycleChangeBlockedReason = canChangeDemandCycle
+    ? null
+    : demandCycleHistoryCheckPending
+      ? "当日の保存データを確認中のため、需要サイクルはまだ変更できません。"
+      : demandCycleHistoryCheckFailed
+        ? "当日の保存データを確認できなかったため、安全のため需要サイクルを変更できません。"
+        : "当日の値引運用がすでに始まっているため、需要サイクルは変更できません。";
+
+  useEffect(() => {
+    if (!inferredOperationDemandCycle) return;
+
+    const nextDemandCycleState = lockDemandCycleForDate(
+      demandCycleState,
+      demandCycleDate,
+      inferredOperationDemandCycle,
+    );
+    if (
+      nextDemandCycleState.selectedCycle !== demandCycleState.selectedCycle ||
+      nextDemandCycleState.lockedDate !== demandCycleState.lockedDate ||
+      nextDemandCycleState.lockedCycle !== demandCycleState.lockedCycle
+    ) {
+      setDemandCycleState(nextDemandCycleState);
+      if (!isTestMode) saveDemandCycleState(nextDemandCycleState);
+    }
+
+    setState((current) => {
+      const currentDraftCycle = normalizeDemandCycle(current.sessionDraft.demandCycle);
+      const currentSessionCycle = current.session
+        ? normalizeDemandCycle(current.session.demandCycle)
+        : null;
+      if (
+        currentDraftCycle === inferredOperationDemandCycle &&
+        (!current.session || currentSessionCycle === inferredOperationDemandCycle)
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        sessionDraft: {
+          ...current.sessionDraft,
+          demandCycle: inferredOperationDemandCycle,
+        },
+        session:
+          current.session?.date === demandCycleDate
+            ? { ...current.session, demandCycle: inferredOperationDemandCycle }
+            : current.session,
+      };
+    });
+    setLastUsedSessionDraft((current) =>
+      normalizeDemandCycle(current.demandCycle) === inferredOperationDemandCycle
+        ? current
+        : { ...current, demandCycle: inferredOperationDemandCycle },
+    );
+  }, [
+    demandCycleDate,
+    demandCycleState,
+    inferredOperationDemandCycle,
+    isTestMode,
+  ]);
 
 
   const doneNextSessionInfo = state.session
@@ -1458,6 +1653,30 @@ const lateSkipNotice = useMemo(() => {
         sessionDraft: syncAfterRainSelection(mergedDraft, lastSessionWeather),
       };
     });
+  }
+
+  function changeDemandCycle(nextDemandCycle: DemandCycle): boolean {
+    if (!canChangeDemandCycle) return false;
+    const normalizedNext = normalizeDemandCycle(nextDemandCycle);
+    const nextDemandCycleState = updateDemandCyclePreference(
+      demandCycleState,
+      normalizedNext,
+    );
+
+    setDemandCycleState(nextDemandCycleState);
+    if (!isTestMode) saveDemandCycleState(nextDemandCycleState);
+    setLastUsedSessionDraft((current) => ({
+      ...current,
+      demandCycle: normalizedNext,
+    }));
+    setState((current) => ({
+      ...current,
+      sessionDraft: {
+        ...current.sessionDraft,
+        demandCycle: normalizedNext,
+      },
+    }));
+    return true;
   }
 
   function buildDraftFromSource(source: SessionData | SessionDraft): SessionDraft {
@@ -1725,6 +1944,20 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startSession() {
+    if (
+      activeDemandCycle === "summer" &&
+      !persistedDemandCycleLock &&
+      !inferredOperationDemandCycle &&
+      (areaCountRemoteLoadStatus === "loading" ||
+        areaCountRemoteLoadStatus === "error")
+    ) {
+      window.alert(
+        areaCountRemoteLoadStatus === "loading"
+          ? "当日の保存データを確認中です。確認完了後にもう一度お試しください。"
+          : "当日の保存データを確認できないため、安全のため夏サイクルを開始できません。",
+      );
+      return;
+    }
     const now = getRuntimeNow();
     const startedAt = now.toISOString();
     const currentDate = formatLocalDate(now);
@@ -1745,6 +1978,7 @@ const lateSkipNotice = useMemo(() => {
       ...prev.sessionDraft,
       ...getCurrentDataVersionInfo(),
       date: currentDate,
+      demandCycle: activeDemandCycle,
       weekday: prev.sessionDraft.manualWeekdayOverride
         ? prev.sessionDraft.weekday
         : currentWeekday,
@@ -1776,6 +2010,17 @@ const lateSkipNotice = useMemo(() => {
       ...nextSessionBase,
       temperatureComfortAnalysis: temperatureComfort.analysis,
     };
+    const nextDemandCycleState = lockDemandCycleForDate(
+      demandCycleState,
+      currentDate,
+      activeDemandCycle,
+    );
+    setDemandCycleState(nextDemandCycleState);
+    if (!isTestMode) saveDemandCycleState(nextDemandCycleState);
+    setLastUsedSessionDraft((current) => ({
+      ...current,
+      demandCycle: activeDemandCycle,
+    }));
 
     let nextSkipRecords = cloneSkipRecords(nextSessionSkipRecordsRef.current);
     let nextState: AppState;
@@ -1917,6 +2162,21 @@ const lateSkipNotice = useMemo(() => {
       return;
     }
 
+    if (
+      activeDemandCycle === "summer" &&
+      !persistedDemandCycleLock &&
+      !inferredOperationDemandCycle &&
+      (areaCountRemoteLoadStatus === "loading" ||
+        areaCountRemoteLoadStatus === "error")
+    ) {
+      window.alert(
+        areaCountRemoteLoadStatus === "loading"
+          ? "当日の保存データを確認中です。確認完了後にもう一度お試しください。"
+          : "当日の保存データを確認できないため、安全のため夏サイクルを開始できません。",
+      );
+      return;
+    }
+
     weatherConfirmationSubmittingRef.current = true;
     setWeatherConfirmationPending(null);
     startSession();
@@ -1942,6 +2202,7 @@ const lateSkipNotice = useMemo(() => {
       discountTime: state.session?.discountTime,
       weekday: state.session?.weekday,
       date: state.session?.date,
+      demandCycle: state.session?.demandCycle,
       count,
     });
   }
@@ -2015,6 +2276,7 @@ const lateSkipNotice = useMemo(() => {
               finalGuide: guide,
               resolvedWeather: sessionSourceResolvedWeather,
               weatherComfortAdjustmentPercent: weekdayBaseInfo.baseRateBonus,
+              demandCycle: session.demandCycle,
             })
           : progress.rateDecisionSnapshot,
         rateDecisionSnapshotStatus: shouldCaptureRateSnapshot
@@ -2070,6 +2332,7 @@ const lateSkipNotice = useMemo(() => {
     const daySnapshot = createReview19DaySnapshot({
       capturedAt: params.exportedAt,
       date: session.date,
+      demandCycle: session.demandCycle,
       areaCountRecords: params.nextAreaCountRecords,
       sessions,
       review19Check: getLatestReview19DayCheck(session.date),
@@ -2176,6 +2439,7 @@ const lateSkipNotice = useMemo(() => {
       const nextRecord: AreaCountRecord = {
         ...getCurrentDataVersionInfo(),
         date: state.session.date,
+        demandCycle: normalizeDemandCycle(state.session.demandCycle),
         sessionStartedAt: state.session.startedAt,
         recordedAt: actionAt,
         areaId: state.currentAreaId,
@@ -2196,7 +2460,11 @@ const lateSkipNotice = useMemo(() => {
 
       nextAreaCountRecords = upsertAreaCountRecord(areaCountRecords, nextRecord);
       setAreaCountRecords(nextAreaCountRecords);
-      void upsertRemoteAreaCountRecord(nextRecord);
+      if (nextRecord.demandCycle === "summer") {
+        upsertSummerAreaCountRecord(nextRecord);
+      } else {
+        void upsertRemoteAreaCountRecord(nextRecord);
+      }
     }
 
     const nextStateForAction = applyAreaJudgeSelection(
@@ -2447,6 +2715,7 @@ const lateSkipNotice = useMemo(() => {
               finalGuide,
               resolvedWeather: sessionSourceResolvedWeather,
               weatherComfortAdjustmentPercent: weekdayBaseInfo.baseRateBonus,
+              demandCycle: state.session.demandCycle,
             })
           : state.session.discountTime !== "20" &&
             effectiveRateDiscountTime &&
@@ -2471,6 +2740,7 @@ const lateSkipNotice = useMemo(() => {
             weekday: state.session.weekday,
             date: state.session.date,
             ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
+            demandCycle: state.session.demandCycle,
           })
           : null
         : null;
@@ -2690,6 +2960,7 @@ const lateSkipNotice = useMemo(() => {
       const nextRecord: AreaCountRecord = {
         ...getCurrentDataVersionInfo(),
         date: state.session.date,
+        demandCycle: normalizeDemandCycle(state.session.demandCycle),
         sessionStartedAt: state.session.startedAt,
         recordedAt,
         areaId: currentAreaId,
@@ -2704,7 +2975,11 @@ const lateSkipNotice = useMemo(() => {
       };
       const nextAreaCountRecords = upsertAreaCountRecord(areaCountRecords, nextRecord);
       setAreaCountRecords(nextAreaCountRecords);
-      void upsertRemoteAreaCountRecord(nextRecord);
+      if (nextRecord.demandCycle === "summer") {
+        upsertSummerAreaCountRecord(nextRecord);
+      } else {
+        void upsertRemoteAreaCountRecord(nextRecord);
+      }
     }
 
     setState((prev) => {
@@ -2820,6 +3095,7 @@ const lateSkipNotice = useMemo(() => {
       const reviewDraft = createReview19WeatherDraft(session);
       const initialReview19 = createInitialReview19Result({
         date: session.date,
+        demandCycle: normalizeDemandCycle(session.demandCycle),
         sessionStartedAt: session.startedAt,
         reviewStartedAt: now.toISOString(),
         excludedAreaIds: sourceStateForReview.review19ExcludedAreaIds,
@@ -3016,11 +3292,13 @@ const lateSkipNotice = useMemo(() => {
     const daySnapshot = createReview19DaySnapshot({
       capturedAt: recordedAt,
       date: state.review19.date,
+      demandCycle: state.review19.demandCycle,
       areaCountRecords,
       sessions: getDailySessionSnapshotsForDate(state.review19.date),
       review19Check: {
         version: 1,
         ...getCurrentDataVersionInfo(),
+        demandCycle: state.review19.demandCycle,
         review19Status: "recorded",
         recordedAt,
         sessionStartedAt: state.review19.sessionStartedAt,
@@ -3090,6 +3368,9 @@ const lateSkipNotice = useMemo(() => {
     const draft = normalizeSessionDraft({
       ...state.sessionDraft,
       discountTime: "19",
+      demandCycle: normalizeDemandCycle(
+        state.session?.demandCycle ?? state.review19?.demandCycle,
+      ),
     });
     const nextSessionBase: SessionData = {
       ...draft,
@@ -3172,6 +3453,9 @@ const lateSkipNotice = useMemo(() => {
     const nextDraft: SessionDraft = {
       ...baseDraft,
       date: currentDate,
+      demandCycle: normalizeDemandCycle(
+        sourceState.session?.demandCycle ?? activeDemandCycle,
+      ),
       weekday: currentWeekday,
       discountTime: targetDiscountTime,
       manualWeekdayOverride: false,
@@ -3378,6 +3662,10 @@ const lateSkipNotice = useMemo(() => {
             .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
             .at(-1)?.capturedAt ?? getRuntimeNow().toISOString(),
         date,
+        demandCycle:
+          sessions[0]?.demandCycle ??
+          sessions[0]?.session.demandCycle ??
+          mergedAreaCountRecords.find((record) => record.date === date)?.demandCycle,
         areaCountRecords: mergedAreaCountRecords,
         sessions,
         review19Check: getLatestReview19DayCheck(date),
@@ -3488,6 +3776,12 @@ const lateSkipNotice = useMemo(() => {
             .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
             .at(-1)?.capturedAt ?? exportedAt,
         date,
+        demandCycle:
+          sessionSnapshots.find((snapshot) => snapshot.session.date === date)
+            ?.demandCycle ??
+          sessionSnapshots.find((snapshot) => snapshot.session.date === date)
+            ?.session.demandCycle ??
+          mergedAreaCountRecords.find((record) => record.date === date)?.demandCycle,
         areaCountRecords: mergedAreaCountRecords,
         sessions: sessionSnapshots.filter(
           (snapshot) => snapshot.session.date === date,
@@ -3530,7 +3824,10 @@ const lateSkipNotice = useMemo(() => {
     lastFinalizedDayDataRef.current = null;
     weatherConfirmationSubmittingRef.current = false;
     setWeatherConfirmationPending(null);
-    setState(createInitialState(buildStartDefaultDraft(lastUsedSessionDraft)));
+    setState(createInitialState({
+      ...buildStartDefaultDraft(lastUsedSessionDraft),
+      demandCycle: activeDemandCycle,
+    }));
     setAreaJudgeSelection(null);
     setResumeTargetScreen(null);
     setTimeSwitchTarget(null);
@@ -3582,6 +3879,11 @@ const lateSkipNotice = useMemo(() => {
   dataExport,
   allDataExport,
   canStartReview19Manually,
+  demandCycle: activeDemandCycle,
+  demandCycleLabel: getDemandCycleShortName(activeDemandCycle),
+  demandCycleBasisLabel: getDemandCycleBasisLabel(activeDemandCycle),
+  canChangeDemandCycle,
+  demandCycleChangeBlockedReason,
 },
     actions: {
       updateSessionDraft,
@@ -3622,6 +3924,7 @@ const lateSkipNotice = useMemo(() => {
       exportAllData,
       startReview19Manually,
       resetApp,
+      changeDemandCycle,
     },
   };
 }

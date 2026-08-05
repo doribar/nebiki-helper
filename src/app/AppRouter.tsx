@@ -59,6 +59,10 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           onOpenSettings={onOpenSettings}
           previousDayDiscardTarget={derived.previousDayDiscardTarget}
           onSavePreviousDayDiscardCount={actions.savePreviousDayDiscardCount}
+          demandCycle={derived.demandCycle}
+          canChangeDemandCycle={derived.canChangeDemandCycle}
+          demandCycleChangeBlockedReason={derived.demandCycleChangeBlockedReason}
+          onChangeDemandCycle={actions.changeDemandCycle}
         />
       );
 

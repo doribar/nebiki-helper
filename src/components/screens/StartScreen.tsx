@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DiscountTime,
+  DemandCycle,
   ForecastHourKey,
   ForecastWeatherKind,
   SessionData,
@@ -52,6 +53,10 @@ type StartScreenProps = {
   onOpenSettings?: () => void;
   previousDayDiscardTarget?: { date: string; count: number | null } | null;
   onSavePreviousDayDiscardCount?: (count: number | null) => void;
+  demandCycle: DemandCycle;
+  canChangeDemandCycle: boolean;
+  demandCycleChangeBlockedReason?: string | null;
+  onChangeDemandCycle: (demandCycle: DemandCycle) => boolean;
   now?: Date;
 };
 
@@ -416,6 +421,10 @@ export function StartScreen({
   onOpenSettings,
   previousDayDiscardTarget = null,
   onSavePreviousDayDiscardCount,
+  demandCycle,
+  canChangeDemandCycle,
+  demandCycleChangeBlockedReason = null,
+  onChangeDemandCycle,
   now = new Date(),
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
@@ -742,6 +751,26 @@ export function StartScreen({
     );
   }
 
+  const handleDemandCycleChange = () => {
+    if (!canChangeDemandCycle) {
+      window.alert(
+        demandCycleChangeBlockedReason ??
+          "当日の値引運用がすでに始まっているため、需要サイクルを変更できません。",
+      );
+      return;
+    }
+
+    const nextDemandCycle: DemandCycle =
+      demandCycle === "summer" ? "normal" : "summer";
+    const confirmed = window.confirm(
+      nextDemandCycle === "summer"
+        ? "夏サイクルへ切り替えます。\n今年の夏サイクルの同条件データが3件溜まるまでは手動判定になります。"
+        : "通常サイクルへ切り替えます。\n保存済みの通常サイクル履歴を再利用します。",
+    );
+    if (!confirmed) return;
+    onChangeDemandCycle(nextDemandCycle);
+  };
+
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <ScreenHeader
@@ -795,6 +824,50 @@ export function StartScreen({
           ) : null
         }
       />
+
+      <section
+        aria-label="需要サイクル"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 14,
+          padding: "10px 12px",
+          border: "1px solid #cbd5e1",
+          borderRadius: 12,
+          background: demandCycle === "summer" ? "#fff7ed" : "#f8fafc",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 900 }}>
+            需要サイクル：{demandCycle === "summer" ? "夏" : "通常"}
+          </div>
+          {!canChangeDemandCycle && demandCycleChangeBlockedReason ? (
+            <div style={{ marginTop: 3, color: "#64748b", fontSize: 11, lineHeight: 1.35 }}>
+              本日の運用開始後は変更できません
+            </div>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={handleDemandCycleChange}
+          style={{
+            flexShrink: 0,
+            minHeight: 44,
+            padding: "8px 16px",
+            borderRadius: 10,
+            border: "1px solid #94a3b8",
+            background: "#fff",
+            color: "#0f172a",
+            fontSize: 14,
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          変更
+        </button>
+      </section>
 
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>曜日</StartSectionLabel>

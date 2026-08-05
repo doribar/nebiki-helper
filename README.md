@@ -17,6 +17,7 @@ npm run check:rate-decision-snapshot
 npm run check:auto-skip-ui
 npm run check:data-export-and-supabase
 npm run check:schema-v3
+npm run check:demand-cycle
 npm run build
 ```
 
@@ -29,6 +30,15 @@ npm run build
 - 個別商品の「10個以上＋5％」は廃止しています。
 - 広告商品は当日の売れ方にかかわらず、表示値引率から常に−10％です。
 - 定番商品−10％、夜によく売れる商品−10％、見た目が悪い商品＋10％、不人気商品＋10％は従来どおりです。
+
+## 需要サイクル
+
+- `normal` は「通常サイクル」、`summer` は「夏サイクル」です。開始画面でユーザーが手動で切り替え、月・気温・季節による自動切替は行いません。
+- サイクルは営業日全体へ適用し、当日の運用開始後は固定します。選択状態は翌日以降へ引き継ぎます。
+- 残数履歴、自動判定、減少率履歴、20時30分の中央値判定はサイクル別に分離します。
+- 夏サイクルの短期履歴は対象年と同じ年、長期履歴は対象年より前の年の夏データだけを使用します。
+- 夏サイクルでは今年の同曜日3件を優先し、同曜日が不足する場合は今年の曜日グループ3件で自動判定します。どちらも3件未満なら手動判定です。
+- 旧データに `demandCycle` がない場合は `normal` として扱います。
 
 ## 値引率の保存
 
@@ -95,6 +105,6 @@ npm run build
 
 ## バージョン
 
-- `appVersion`: `2026.8.1-1`
+- `appVersion`: `2026.8.5-1`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260801-234913-jst`（Viteビルドごとに日本時間形式で生成。CIでは同形式の`NEBIKI_BUILD_ID`を指定できます）
+- `buildId`: `build-20260805-224146-jst`（Viteビルドごとに日本時間形式で生成。CIでは同形式の`NEBIKI_BUILD_ID`を指定できます）

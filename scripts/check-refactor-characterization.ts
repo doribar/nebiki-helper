@@ -115,6 +115,11 @@ function assertPublicHookContract(): void {
       "dataExport",
       "allDataExport",
       "canStartReview19Manually",
+      "demandCycle",
+      "demandCycleLabel",
+      "demandCycleBasisLabel",
+      "canChangeDemandCycle",
+      "demandCycleChangeBlockedReason",
     ]);
     assert.deepEqual(Object.keys(captured.actions), [
       "updateSessionDraft",
@@ -155,6 +160,7 @@ function assertPublicHookContract(): void {
       "exportAllData",
       "startReview19Manually",
       "resetApp",
+      "changeDemandCycle",
     ]);
     assert.equal(captured.state.screen, "start");
     assert.equal(captured.state.sessionDraft.discountTime, "15");
@@ -170,12 +176,12 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  assert.equal(body.length, 109593);
+  assert.equal(body.length, 119721);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "88bb0f0e0c223945a631203d19f560ab99b4f62625a9f2c5c070529bf893b444",
+    "d998ea38d708063591536993f2747ed9240a053e88a3b7ad7f376f304efc702f",
   );
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 17);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 18);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
 }
 
@@ -396,10 +402,10 @@ function assertExportJsonCharacterization(): void {
         : value
   );
 
-  assert.equal(json.length, 17791);
+  assert.equal(json.length, 18067);
   assert.equal(
     createHash("sha256").update(json).digest("hex"),
-    "be23f788408bdabe8cb7a9e547b07b140e8ef84b0570c4363e9f1202483ae0b3",
+    "089e5dadb676bc77521e5c20b782c3fe0bf65ce0d08f91706d807b681705e622",
   );
   assert.deepEqual(Object.keys(bundle.automatic), [
     "format",

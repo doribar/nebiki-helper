@@ -4,6 +4,7 @@ import type {
   AreaCountRecord,
 } from "./areaCountHistory.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
+export type DemandCycle = "normal" | "summer";
 
 export type AutoSkipKind = "late_plus5" | "early_next_minus5";
 export type MeasurementStatus = "measured" | "not_measured";
@@ -34,6 +35,7 @@ export type AreaId =
 
 export type NextSessionSkipRecord = {
   date: string;
+  demandCycle?: DemandCycle;
   targetDiscountTime: "18" | "19";
   areaId: AreaId;
   previousRateText?: string;
@@ -117,6 +119,8 @@ export type SessionDraft = {
   date: string;
   weekday: number;
   discountTime: DiscountTime;
+  /** 旧データに存在しない場合は通常サイクルとして扱う。 */
+  demandCycle?: DemandCycle;
   manualWeekdayOverride: boolean;
   manualDiscountTimeOverride: boolean;
   /**
@@ -274,6 +278,7 @@ export type RateDecisionSnapshot = {
   dataSchemaVersion: number;
   appVersion: string;
   buildId: string;
+  demandCycle?: DemandCycle;
   confirmedAt: string;
   sessionDiscountTime: DiscountTime;
   effectiveRateDiscountTime: DiscountTime;
@@ -372,6 +377,7 @@ export type WeatherGuideText = {
 export type LastSessionWeatherRecord = {
   date: string;
   discountTime: DiscountTime;
+  demandCycle?: DemandCycle;
   nearTermWeather: NearTermWeather;
   /** 同日内の次セッションで気温推移を比較するための、確定済み近接気温。 */
   nearTempC?: number;
@@ -459,6 +465,7 @@ export type Review19Reference = {
   date: string;
   weekday: number;
   discountTime: "19";
+  demandCycle?: DemandCycle;
   weather: WeatherInput;
   resolvedWeather: ResolvedWeatherInput;
   basis: {
@@ -487,6 +494,7 @@ export type Review19Snapshot = {
   appVersion?: string;
   buildId?: string;
   capturedAt: string;
+  demandCycle?: DemandCycle;
   session: {
     dataSchemaVersion?: number;
     appVersion?: string;
@@ -494,6 +502,7 @@ export type Review19Snapshot = {
     date: string;
     weekday: number;
     discountTime: DiscountTime;
+    demandCycle?: DemandCycle;
     startedAt: string;
     manualWeekdayOverride: boolean;
     manualDiscountTimeOverride: boolean;
@@ -531,6 +540,7 @@ export type DailySessionSnapshot = {
   appVersion?: string;
   buildId?: string;
   capturedAt: string;
+  demandCycle?: DemandCycle;
   basisCapturedAt?: string;
   sessionEndReason?: "completed" | "auto_time_transition";
   rateLogicVersion?: RateLogicVersion;
@@ -542,6 +552,7 @@ export type DailySessionSnapshot = {
     date: string;
     weekday: number;
     discountTime: DiscountTime;
+    demandCycle?: DemandCycle;
     startedAt: string;
     manualWeekdayOverride: boolean;
     manualDiscountTimeOverride: boolean;
@@ -574,6 +585,7 @@ export type Review19DayCheckSnapshot = {
   dataSchemaVersion?: number;
   appVersion?: string;
   buildId?: string;
+  demandCycle?: DemandCycle;
   review19Status: Exclude<Review19Status, "not_performed">;
   recordedAt: string;
   sessionStartedAt: string;
@@ -599,6 +611,7 @@ export type Review19DaySnapshot = {
   buildId?: string;
   capturedAt: string;
   date: string;
+  demandCycle?: DemandCycle;
   rateLogicVersion?: RateLogicVersion;
   review19Status: Review19Status;
   /** その日の通常値引セッションログ。19:00チェックはreview19Checkへ分けて保存する。 */
@@ -615,6 +628,7 @@ export type Review19Result = {
   buildId?: string;
   review19Status: Exclude<Review19Status, "not_performed">;
   date: string;
+  demandCycle?: DemandCycle;
   sessionStartedAt: string;
   reviewStartedAt?: string;
   reviewCompletedAt?: string;
@@ -728,6 +742,11 @@ export type UseNebikiAppDerived = {
     totalCount: number;
   };
   canStartReview19Manually: boolean;
+  demandCycle: DemandCycle;
+  demandCycleLabel: string;
+  demandCycleBasisLabel: string;
+  canChangeDemandCycle: boolean;
+  demandCycleChangeBlockedReason: string | null;
 };
 
 export type UseNebikiAppActions = {
@@ -775,6 +794,7 @@ export type UseNebikiAppActions = {
   exportAllData: () => void;
   startReview19Manually: () => void;
   resetApp: () => void;
+  changeDemandCycle: (demandCycle: DemandCycle) => boolean;
 };
 
 export type UseNebikiAppResult = {

@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.1-1",
+  "version": "2026.8.5-1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -25,7 +25,8 @@
     "check:refactor-characterization": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-refactor-characterization.ts",
     "check:memo-export-20260729": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-memo-export-20260729.ts",
     "check:weather-confirmation": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-weather-confirmation.ts",
-    "check:temperature-comfort": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-temperature-comfort.ts"
+    "check:temperature-comfort": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-temperature-comfort.ts",
+    "check:demand-cycle": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-demand-cycle.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

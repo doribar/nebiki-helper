@@ -37,6 +37,10 @@ import { normalizeAreaCountDecisionBasis } from "../../domain/areaCountHistory.t
 import { normalizeReview19Result } from "../../domain/review19.ts";
 import { normalizeDataVersionInfo } from "../../domain/dataVersion.ts";
 import {
+  DEFAULT_DEMAND_CYCLE,
+  normalizeDemandCycle,
+} from "../../domain/demandCycle.ts";
+import {
   formatLocalDate,
   getRuntimeNow,
   resolveDiscountTime,
@@ -49,6 +53,7 @@ export function createInitialSessionDraft(): SessionDraft {
     date: formatLocalDate(now),
     weekday: now.getDay(),
     discountTime: resolveDiscountTime(now),
+    demandCycle: DEFAULT_DEMAND_CYCLE,
     manualWeekdayOverride: false,
     manualDiscountTimeOverride: false,
     weather: {
@@ -394,7 +399,10 @@ export function createInitialState(
   return {
     screen: "start",
     session: null,
-    sessionDraft: initialSessionDraft,
+    sessionDraft: {
+      ...initialSessionDraft,
+      demandCycle: normalizeDemandCycle(initialSessionDraft.demandCycle),
+    },
     areaProgressMap: createInitialAreaProgressMap(),
     normalFlowOrder: [...NORMAL_ROUTE],
     currentAreaId: null,
@@ -523,6 +531,7 @@ export function normalizeSessionDraft(
     date: typeof raw?.date === "string" ? raw.date : fallback.date,
     weekday: typeof raw?.weekday === "number" ? raw.weekday : fallback.weekday,
     discountTime,
+    demandCycle: normalizeDemandCycle(raw?.demandCycle),
     manualWeekdayOverride:
       typeof raw?.manualWeekdayOverride === "boolean"
         ? raw.manualWeekdayOverride
@@ -662,10 +671,19 @@ export function normalizeLoadedState(
   const reviewScreens: ScreenName[] = ["review19_weather", "review19", "review19_done"];
   const screen = reviewScreens.includes(loaded.screen) ? "start" : loaded.screen;
   const review19 = reviewScreens.includes(loaded.screen) ? null : normalizedReview19;
-  const sessionDraft =
+  const normalizedSessionDraft =
     screen === "start" && !session
       ? buildStartDefaultDraft(loaded.sessionDraft)
       : normalizeSessionDraft(loaded.sessionDraft);
+  // Once a session exists, its cycle is authoritative for the whole business day.
+  // This also prevents an old or incomplete draft from changing the cycle when
+  // restoring condition editing, review, or an automatic time transition.
+  const sessionDraft = session
+    ? {
+        ...normalizedSessionDraft,
+        demandCycle: normalizeDemandCycle(session.demandCycle),
+      }
+    : normalizedSessionDraft;
 
   return {
     ...loadedWithoutLegacyTrainingFields,

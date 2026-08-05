@@ -16,6 +16,7 @@ import {
   normalizeWeatherConfirmationPending,
   type WeatherConfirmationPending,
 } from "./weatherConfirmation.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
@@ -56,6 +57,10 @@ function cloneSkipRecord(record: NextSessionSkipRecord): NextSessionSkipRecord {
     targetDiscountTime: record.targetDiscountTime,
     areaId: record.areaId,
   };
+
+  if (record.demandCycle === "normal" || record.demandCycle === "summer") {
+    cloned.demandCycle = record.demandCycle;
+  }
 
   if (typeof record.previousRateText === "string") cloned.previousRateText = record.previousRateText;
   if (typeof record.previousManyRateText === "string") cloned.previousManyRateText = record.previousManyRateText;
@@ -379,7 +384,26 @@ export function isDailySessionSnapshotDateConsistent(snapshot: DailySessionSnaps
 }
 
 function cloneDailySessionSnapshot(snapshot: DailySessionSnapshot): DailySessionSnapshot {
-  return JSON.parse(JSON.stringify(snapshot)) as DailySessionSnapshot;
+  const cloned = JSON.parse(JSON.stringify(snapshot)) as DailySessionSnapshot;
+  const demandCycle = normalizeDemandCycle(
+    cloned.demandCycle ?? cloned.session?.demandCycle,
+  );
+  cloned.demandCycle = demandCycle;
+  cloned.session.demandCycle = demandCycle;
+
+  if (cloned.areas && typeof cloned.areas === "object") {
+    for (const area of Object.values(cloned.areas)) {
+      if (!area || typeof area !== "object") continue;
+      if (area.rateDecisionSnapshot) {
+        area.rateDecisionSnapshot.demandCycle = demandCycle;
+      }
+      if (area.areaCountDecisionBasis) {
+        area.areaCountDecisionBasis.demandCycle = demandCycle;
+      }
+    }
+  }
+
+  return cloned;
 }
 
 function getDailySessionCompletionSignature(snapshot: DailySessionSnapshot): string {
