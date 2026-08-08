@@ -176,10 +176,10 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  assert.equal(body.length, 124162);
+  assert.equal(body.length, 126492);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "824fe8b571d0f539d9c94f28722f5e1842d691363570f278455d09dafbfb37c1",
+    "602c20d9b6d591f553b9203e37bc0aed51f8fe9414221dce9036da14624cf03e",
   );
   assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 20);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
@@ -402,10 +402,10 @@ function assertExportJsonCharacterization(): void {
         : value
   );
 
-  assert.equal(json.length, 18067);
+  assert.equal(json.length, 18833);
   assert.equal(
     createHash("sha256").update(json).digest("hex"),
-    "089e5dadb676bc77521e5c20b782c3fe0bf65ce0d08f91706d807b681705e622",
+    "2e2df776ea284124ac602db947d5215bf0f2d0239801c686e6e8b3dfc9fde0d8",
   );
   assert.deepEqual(Object.keys(bundle.automatic), [
     "format",

@@ -233,7 +233,13 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           calculatorDraftScope={
             state.review19?.sessionStartedAt ?? state.session?.startedAt ?? "review19-session"
           }
-          onChangeAreaCount={actions.updateReview19AreaCount}
+          onCompleteArea={(areaId, count, humanEvaluation) =>
+            actions.updateReview19AreaCount(
+              areaId,
+              count,
+              humanEvaluation,
+            )
+          }
           onSave={actions.saveReview19}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}

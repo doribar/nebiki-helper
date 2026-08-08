@@ -11,10 +11,10 @@
 
 ## 最新リリース
 
-- ZIP基準版: `nebiki-helper-20260808-1648.zip`
-- `appVersion`: `2026.8.8-1`
+- ZIP基準版: `nebiki-helper-20260808-1837.zip`
+- `appVersion`: `2026.8.8-2`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260808-163017-jst`
+- `buildId`: `build-20260808-182334-jst`
 
 ## 現行フロー
 
@@ -61,6 +61,18 @@
 - 旧完了データにスナップショットがない場合は `legacy_not_captured`。架空の値を作らない。
 - セッション `basis` は完了保存時に `basisCapturedAt` とともに固定し、エリア率の正本には使わない。
 - 日次品質は `processComplete` と `measurementComplete` を分離する。
+
+## 19:00チェックの人間評価と中央値評価
+
+- 各対象エリアは、19:00実残数と既存 `AreaCountEvaluation` の人間5段階評価が揃って完了する。除外エリアには要求しない。
+- 人間評価は売場を見た担当者の観測値であり、ground truthではない。数値と感覚が矛盾しても、どちらも入力どおり保持する。
+- 過去の19:00チェック残数だけを一時的な19時履歴として既存中央値エンジンへ渡し、中央値ベースの5段階評価を別センサーとして保存する。当日自身は母集団へ含めない。
+- `normal` / `summer` を混ぜず、既存の同曜日3件優先・曜日グループfallback・祝日例外を維持する。`summer` は今年を短期、前年以前を長期として分離する。
+- 履歴不足は `autoEvaluation: null` と `autoEvaluationStatus: "insufficient"` であり、「普通」を代入しない。
+- エリア別の正本は `areaEvaluations[areaId]`。`humanEvaluation`、`autoEvaluation`、`autoEvaluationStatus`、`autoEvaluationBasis` を19:00個別出力、日次スナップショット、統合JSONから追跡できる。
+- 中央値評価、中央値、件数、基準は入力画面にも完了画面にも表示しない。Work/Data Analyticsで human evaluation / median-based evaluation / later outcome・discard を比較するためのデータである。
+- 旧 `ratingStatus` / `ratings` / `ratingScores` は「減りすぎ／残りすぎ」の旧評価で意味が異なるため再利用しない。旧データに新しい人間評価を勝手に補完しない。
+- 時間固定モードは本番19:00履歴を読み込まず、本番履歴・Supabase・本番日次データへ保存しないため、自動評価は履歴不足になる。
 
 ## 先取り値引済みエリア
 

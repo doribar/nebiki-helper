@@ -420,6 +420,26 @@ export type AreaCountDataQuality = {
   missingReasons: Partial<Record<AreaId, MeasurementMissingReason>>;
 };
 
+export type Review19AutomaticEvaluation = {
+  /** 過去中央値との比較結果。人間評価の正解ラベルではなく、分析用の別観測値。 */
+  autoEvaluation: AreaCountEvaluation | null;
+  autoEvaluationStatus: "ready" | "insufficient";
+  /** 新規記録では必ず保存する。旧・不完全データの正規化時だけ欠損を許容する。 */
+  autoEvaluationBasis?: AreaCountDecisionBasis;
+};
+
+export type Review19AreaEvaluation = Review19AutomaticEvaluation & {
+  /** 売場を見た担当者の観測値。ground truthとして扱わない。 */
+  humanEvaluation: AreaCountEvaluation;
+};
+
+export type Review19DataQuality = AreaCountDataQuality & {
+  humanEvaluationExpectedAreaCount: number;
+  humanEvaluationRecordedAreaCount: number;
+  missingHumanEvaluationAreaIds: AreaId[];
+  humanEvaluationComplete: boolean;
+};
+
 export type Review19AreaSnapshot = {
   dataSchemaVersion?: number;
   appVersion?: string;
@@ -597,9 +617,10 @@ export type Review19DayCheckSnapshot = {
   ratings: Record<AreaId, Review19Rating> | null;
   ratingScores: Record<AreaId, Review19RatingScore> | null;
   areaCounts: Partial<Record<AreaId, number>>;
+  areaEvaluations?: Partial<Record<AreaId, Review19AreaEvaluation>>;
   excludedAreaIds: AreaId[];
   excludeReasons: Partial<Record<AreaId, Review19ExcludeReason>>;
-  dataQuality: AreaCountDataQuality;
+  dataQuality: Review19DataQuality;
   reference?: Review19Reference;
   snapshot?: Review19Snapshot;
 };
@@ -638,9 +659,10 @@ export type Review19Result = {
   ratings: Record<AreaId, Review19Rating> | null;
   ratingScores: Record<AreaId, Review19RatingScore> | null;
   areaCounts: Partial<Record<AreaId, number>>;
+  areaEvaluations?: Partial<Record<AreaId, Review19AreaEvaluation>>;
   excludedAreaIds: AreaId[];
   excludeReasons: Partial<Record<AreaId, Review19ExcludeReason>>;
-  dataQuality: AreaCountDataQuality;
+  dataQuality: Review19DataQuality;
   recordedAt?: string;
   exportedAt?: string;
   reference?: Review19Reference;
@@ -652,6 +674,7 @@ export type Review19AreaItem = {
   areaId: AreaId;
   areaName: string;
   count?: number;
+  humanEvaluation?: AreaCountEvaluation;
   excluded: boolean;
   excludeReasonText?: string;
 };
@@ -776,10 +799,21 @@ export type UseNebikiAppActions = {
   skipAutoSkippedAreaWithoutMeasurement: () => void;
   processAutoSkippedAreaNormally: () => void;
   advanceFinalTimeStep: () => void;
-  updateReview19AreaCount: (areaId: AreaId, count: number) => void;
+  updateReview19AreaCount: (
+    areaId: AreaId,
+    count: number,
+    humanEvaluation?: AreaCountEvaluation,
+  ) => void;
   skipReview19Area: (areaId: AreaId) => void;
   startReview19AfterWeather: () => void;
-  saveReview19: (latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) => void;
+  saveReview19: (
+    latestAreaCount?: {
+      areaId: AreaId;
+      count: number;
+      humanEvaluation?: AreaCountEvaluation;
+    },
+    latestExcludedAreaId?: AreaId,
+  ) => void;
   startAreaCountCorrection: (areaId: AreaId) => void;
   saveFinalizedDayMemo: (memo: string | null) => void;
   savePreviousDayDiscardCount: (count: number | null) => void;

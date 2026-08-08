@@ -2357,9 +2357,12 @@ const totalChecks = 87;
   const completedQuality = buildReview19DataQuality({
     date,
     areaCounts,
+    areaEvaluations: {},
     excludedAreaIds: [missingAreaId],
   });
-  assert.equal(completedQuality.complete, true);
+  assert.equal(completedQuality.complete, false);
+  assert.equal(completedQuality.measurementComplete, true);
+  assert.equal(completedQuality.humanEvaluationComplete, false);
   assert.equal(completedQuality.recordedAreaCount + completedQuality.excludedAreaCount, NORMAL_ROUTE.length);
   passed += 1;
 }

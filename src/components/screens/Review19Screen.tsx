@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import type { AreaId, Review19AreaItem } from "../../domain/types";
+import type {
+  AreaCountEvaluation,
+  AreaId,
+  Review19AreaItem,
+} from "../../domain/types";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import {
@@ -8,6 +12,7 @@ import {
   loadCalculatorDraft,
   saveCalculatorDraft,
 } from "../../domain/calculatorDraft";
+import { evaluationText } from "../../domain/areaCountHistory.ts";
 
 const cardStyle: CSSProperties = {
   border: "1px solid #ddd",
@@ -52,12 +57,27 @@ function calculateAdditionResult(value: string): number | null {
   return Math.round(total);
 }
 
+function getEvaluationLabelLines(
+  evaluation: AreaCountEvaluation,
+): string[] {
+  const label = evaluationText(evaluation);
+  return label.startsWith("やや") ? ["やや", label.slice(2)] : [label];
+}
+
 type Review19ScreenProps = {
   items: Review19AreaItem[];
   calculatorDraftScope: string;
-  onChangeAreaCount: (areaId: AreaId, count: number) => void;
+  onCompleteArea: (
+    areaId: AreaId,
+    count: number,
+    humanEvaluation: AreaCountEvaluation,
+  ) => void;
   onSave: (
-    latestAreaCount?: { areaId: AreaId; count: number },
+    latestObservation?: {
+      areaId: AreaId;
+      count: number;
+      humanEvaluation: AreaCountEvaluation;
+    },
     latestExcludedAreaId?: AreaId,
   ) => void;
   onGoBack: () => void;
@@ -67,7 +87,7 @@ type Review19ScreenProps = {
 export function Review19Screen({
   items,
   calculatorDraftScope,
-  onChangeAreaCount,
+  onCompleteArea,
   onSave,
   onGoBack,
   onReturnHome,
@@ -87,6 +107,10 @@ export function Review19Screen({
   const [countCalculatorText, setCountCalculatorText] = useState(() =>
     getCountText(activeItem?.count),
   );
+  const [humanEvaluation, setHumanEvaluation] =
+    useState<AreaCountEvaluation | null>(
+      activeItem?.humanEvaluation ?? null,
+    );
   const countCalculatorResult = calculateAdditionResult(countCalculatorText);
 
   useEffect(() => {
@@ -117,10 +141,18 @@ export function Review19Screen({
     );
   }, [activeItem?.areaId, activeItem?.count, calculatorDraftScope]);
 
+  useEffect(() => {
+    setHumanEvaluation(activeItem?.humanEvaluation ?? null);
+  }, [activeItem?.areaId, activeItem?.humanEvaluation]);
+
   const recordedCount = useMemo(
     () =>
-      items.filter((item) => !item.excluded && typeof item.count === "number")
-        .length,
+      items.filter(
+        (item) =>
+          !item.excluded &&
+          typeof item.count === "number" &&
+          item.humanEvaluation !== undefined,
+      ).length,
     [items],
   );
   const targetCount = useMemo(
@@ -136,15 +168,19 @@ export function Review19Screen({
     [items],
   );
 
-  const hasAllCountsAfter = (latestAreaCount?: {
+  const hasAllObservationsAfter = (latestObservation?: {
     areaId: AreaId;
     count: number;
+    humanEvaluation: AreaCountEvaluation;
   }) => {
     return items
       .filter((item) => !item.excluded)
       .every((item) => {
-        if (latestAreaCount?.areaId === item.areaId) return true;
-        return typeof item.count === "number";
+        if (latestObservation?.areaId === item.areaId) return true;
+        return (
+          typeof item.count === "number" &&
+          item.humanEvaluation !== undefined
+        );
       });
   };
 
@@ -241,21 +277,31 @@ export function Review19Screen({
   };
 
   const completeCountEntry = () => {
-    if (!activeItem || activeItem.excluded || countCalculatorResult === null) {
+    if (
+      !activeItem ||
+      activeItem.excluded ||
+      countCalculatorResult === null ||
+      humanEvaluation === null
+    ) {
       return;
     }
 
-    const latestAreaCount = {
+    const latestObservation = {
       areaId: activeItem.areaId,
       count: countCalculatorResult,
+      humanEvaluation,
     };
 
     clearCountCalculatorDraft(activeItem.areaId);
-    onChangeAreaCount(activeItem.areaId, countCalculatorResult);
+    onCompleteArea(
+      activeItem.areaId,
+      countCalculatorResult,
+      humanEvaluation,
+    );
 
-    if (hasAllCountsAfter(latestAreaCount)) {
+    if (hasAllObservationsAfter(latestObservation)) {
       setCountCorrectionReturnAreaId(null);
-      window.setTimeout(() => onSave(latestAreaCount), 0);
+      window.setTimeout(() => onSave(latestObservation), 0);
       return;
     }
 
@@ -274,7 +320,7 @@ export function Review19Screen({
   const goNextExcludedArea = () => {
     if (!activeItem || !activeItem.excluded) return;
 
-    if (hasAllCountsAfter()) {
+    if (hasAllObservationsAfter()) {
       window.setTimeout(() => onSave(), 0);
       return;
     }
@@ -322,7 +368,8 @@ export function Review19Screen({
     );
   }
 
-  const willCompleteExcluded = activeItem.excluded && hasAllCountsAfter();
+  const willCompleteExcluded =
+    activeItem.excluded && hasAllObservationsAfter();
   const swipeToSkipHandlers = useSwipeToSkip({
     onSwipeLeft: goSkip,
     enabled: Boolean(
@@ -547,23 +594,120 @@ export function Review19Screen({
                   ⌫
                 </button>
               </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  fontSize: 14,
+                  fontWeight: 900,
+                  color: "#333",
+                }}
+              >
+                売場を見た残数評価
+              </div>
+              <div
+                aria-label="人間目線の5段階残数評価"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                  gap: 4,
+                  marginTop: 8,
+                  minWidth: 0,
+                }}
+              >
+                {([
+                  {
+                    value: "many",
+                    color: "#b71c1c",
+                    selectedBackground: "#ffebee",
+                  },
+                  {
+                    value: "slightly_many",
+                    color: "#b71c1c",
+                    selectedBackground: "#ffebee",
+                  },
+                  {
+                    value: "normal",
+                    color: "#1b5e20",
+                    selectedBackground: "#e8f5e9",
+                  },
+                  {
+                    value: "slightly_few",
+                    color: "#0d47a1",
+                    selectedBackground: "#e3f2fd",
+                  },
+                  {
+                    value: "few",
+                    color: "#0d47a1",
+                    selectedBackground: "#e3f2fd",
+                  },
+                ] as const).map((option) => {
+                  const selected = humanEvaluation === option.value;
+                  const disabled = countCalculatorResult === null;
+                  const labelLines = getEvaluationLabelLines(option.value);
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setHumanEvaluation(option.value)}
+                      disabled={disabled}
+                      aria-pressed={selected}
+                      style={{
+                        minWidth: 0,
+                        minHeight: 52,
+                        padding: "5px 1px",
+                        borderRadius: 10,
+                        border: selected
+                          ? "2px solid #2f5ef5"
+                          : "1px solid #ccc",
+                        background: selected
+                          ? option.selectedBackground
+                          : disabled
+                            ? "#eee"
+                            : "#fff",
+                        color: disabled ? "#999" : option.color,
+                        fontSize: 12,
+                        fontWeight: 900,
+                        lineHeight: 1.15,
+                        cursor: disabled ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {labelLines.map((line, index) => (
+                        <span key={line}>
+                          {index > 0 ? <br /> : null}
+                          {line}
+                        </span>
+                      ))}
+                    </button>
+                  );
+                })}
+              </div>
               <button
                 type="button"
                 onClick={completeCountEntry}
-                disabled={countCalculatorResult === null}
+                disabled={
+                  countCalculatorResult === null || humanEvaluation === null
+                }
                 style={{
                   ...subActionButtonStyle,
                   width: "100%",
                   marginTop: 10,
                   border:
-                    countCalculatorResult !== null
+                    countCalculatorResult !== null && humanEvaluation !== null
                       ? "2px solid #2f5ef5"
                       : "1px solid #ccc",
                   background:
-                    countCalculatorResult !== null ? "#e8f0ff" : "#eee",
-                  color: countCalculatorResult !== null ? "#111" : "#999",
+                    countCalculatorResult !== null && humanEvaluation !== null
+                      ? "#e8f0ff"
+                      : "#eee",
+                  color:
+                    countCalculatorResult !== null && humanEvaluation !== null
+                      ? "#111"
+                      : "#999",
                   cursor:
-                    countCalculatorResult !== null ? "pointer" : "not-allowed",
+                    countCalculatorResult !== null && humanEvaluation !== null
+                      ? "pointer"
+                      : "not-allowed",
                 }}
               >
                 完了

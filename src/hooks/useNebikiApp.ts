@@ -29,7 +29,11 @@ import {
   shouldShowHolidayBeforeNormalWeekdayNotice,
   shouldShowThreeDayHolidayMiddleNotice,
 } from "../domain/dayBeforeHolidayNotice.ts";
-import { DONE_SUMMARY_ROUTE, NORMAL_ROUTE, getAreaName } from "../domain/area";
+import {
+  DONE_SUMMARY_ROUTE,
+  NORMAL_ROUTE,
+  getAreaName,
+} from "../domain/area";
 import {
   getBasisGuideDisplay,
   getWeatherGuideText,
@@ -86,6 +90,7 @@ import {
   getReview19AreaItems,
   REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
+import { buildReview19AutomaticEvaluation } from "../domain/review19Evaluation.ts";
 import {
   buildAllDataExportPayload,
   getAllDataExportFilename,
@@ -1306,6 +1311,8 @@ const lateSkipNotice = useMemo(() => {
       return {
         ...item,
         count: state.review19?.areaCounts?.[item.areaId],
+        humanEvaluation:
+          state.review19?.areaEvaluations?.[item.areaId]?.humanEvaluation,
         excluded: excludedAreaIdSet.has(item.areaId),
         excludeReasonText: excludeReason
           ? REVIEW19_EXCLUDE_REASON_TEXT[excludeReason]
@@ -3307,7 +3314,13 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function updateReview19AreaCount(areaId: AreaId, count: number) {
+  function updateReview19AreaCount(
+    areaId: AreaId,
+    count: number,
+    humanEvaluation?: AreaCountEvaluation,
+  ) {
+    const historicalRecords = isTestMode ? [] : loadReview19Records();
+
     setState((prev) => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
 
@@ -3320,12 +3333,32 @@ const lateSkipNotice = useMemo(() => {
         ...prev.review19.areaCounts,
         [areaId]: safeCount,
       };
+      const nextAreaEvaluations = { ...prev.review19.areaEvaluations };
+      if (humanEvaluation) {
+        nextAreaEvaluations[areaId] = {
+          humanEvaluation,
+          ...buildReview19AutomaticEvaluation({
+            areaId,
+            count: safeCount,
+            date: prev.review19.date,
+            weekday:
+              prev.review19.reference?.weekday ??
+              prev.session?.weekday ??
+              prev.sessionDraft.weekday,
+            demandCycle: normalizeDemandCycle(prev.review19.demandCycle),
+            historicalRecords,
+          }),
+        };
+      } else {
+        delete nextAreaEvaluations[areaId];
+      }
 
       return {
         ...prev,
         review19: {
           ...prev.review19,
           areaCounts: nextAreaCounts,
+          areaEvaluations: nextAreaEvaluations,
           areaCountRecordedAt: {
             ...prev.review19.areaCountRecordedAt,
             [areaId]: recordedAt,
@@ -3335,6 +3368,7 @@ const lateSkipNotice = useMemo(() => {
           dataQuality: buildReview19DataQuality({
             date: prev.review19.date,
             areaCounts: nextAreaCounts,
+            areaEvaluations: nextAreaEvaluations,
             excludedAreaIds: nextExcludedAreaIds,
           }),
         },
@@ -3348,6 +3382,8 @@ const lateSkipNotice = useMemo(() => {
 
       const nextAreaCounts = { ...prev.review19.areaCounts };
       delete nextAreaCounts[areaId];
+      const nextAreaEvaluations = { ...prev.review19.areaEvaluations };
+      delete nextAreaEvaluations[areaId];
       const nextAreaCountRecordedAt = { ...prev.review19.areaCountRecordedAt };
       delete nextAreaCountRecordedAt[areaId];
 
@@ -3360,6 +3396,7 @@ const lateSkipNotice = useMemo(() => {
         review19: {
           ...prev.review19,
           areaCounts: nextAreaCounts,
+          areaEvaluations: nextAreaEvaluations,
           areaCountRecordedAt: nextAreaCountRecordedAt,
           excludedAreaIds: nextExcludedAreaIds,
           excludeReasons: {
@@ -3369,6 +3406,7 @@ const lateSkipNotice = useMemo(() => {
           dataQuality: buildReview19DataQuality({
             date: prev.review19.date,
             areaCounts: nextAreaCounts,
+            areaEvaluations: nextAreaEvaluations,
             excludedAreaIds: nextExcludedAreaIds,
           }),
         },
@@ -3377,7 +3415,11 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function buildRecordedReview19Result(
-    latestAreaCount?: { areaId: AreaId; count: number },
+    latestAreaCount?: {
+      areaId: AreaId;
+      count: number;
+      humanEvaluation?: AreaCountEvaluation;
+    },
     latestExcludedAreaId?: AreaId
   ): Review19Result | null {
     if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
@@ -3403,8 +3445,30 @@ const lateSkipNotice = useMemo(() => {
       ...state.review19.areaCounts,
       ...latestAreaCounts,
     };
+    const areaEvaluations = { ...state.review19.areaEvaluations };
+    if (latestAreaCount) {
+      if (latestAreaCount.humanEvaluation) {
+        areaEvaluations[latestAreaCount.areaId] = {
+          humanEvaluation: latestAreaCount.humanEvaluation,
+          ...buildReview19AutomaticEvaluation({
+            areaId: latestAreaCount.areaId,
+            count: Math.max(0, Math.round(latestAreaCount.count)),
+            date: state.review19.date,
+            weekday:
+              state.review19.reference?.weekday ??
+              state.session?.weekday ??
+              state.sessionDraft.weekday,
+            demandCycle: normalizeDemandCycle(state.review19.demandCycle),
+            historicalRecords: isTestMode ? [] : loadReview19Records(),
+          }),
+        };
+      } else {
+        delete areaEvaluations[latestAreaCount.areaId];
+      }
+    }
     for (const areaId of excludedAreaIdSet) {
       delete recordedAreaCounts[areaId];
+      delete areaEvaluations[areaId];
     }
     const areaCountRecordedAt = {
       ...state.review19.areaCountRecordedAt,
@@ -3416,11 +3480,14 @@ const lateSkipNotice = useMemo(() => {
       delete areaCountRecordedAt[areaId];
     }
 
-    const excludedAreaIds = NORMAL_ROUTE.filter((areaId) => excludedAreaIdSet.has(areaId));
+    const excludedAreaIds = NORMAL_ROUTE.filter((areaId) =>
+      excludedAreaIdSet.has(areaId),
+    );
     const recordedAt = state.review19.recordedAt ?? completedAt;
     const dataQuality = buildReview19DataQuality({
       date: state.review19.date,
       areaCounts: recordedAreaCounts,
+      areaEvaluations,
       excludedAreaIds,
     });
     const snapshot = state.session
@@ -3459,6 +3526,7 @@ const lateSkipNotice = useMemo(() => {
         ratings: null,
         ratingScores: null,
         areaCounts: recordedAreaCounts,
+        areaEvaluations,
         excludedAreaIds,
         excludeReasons,
         dataQuality,
@@ -3477,6 +3545,7 @@ const lateSkipNotice = useMemo(() => {
       ratings: null,
       ratingScores: null,
       areaCounts: recordedAreaCounts,
+      areaEvaluations,
       areaCountRecordedAt,
       excludedAreaIds,
       excludeReasons,
@@ -3488,9 +3557,16 @@ const lateSkipNotice = useMemo(() => {
     };
   }
 
-  function saveReview19(latestAreaCount?: { areaId: AreaId; count: number }, latestExcludedAreaId?: AreaId) {
+  function saveReview19(
+    latestAreaCount?: {
+      areaId: AreaId;
+      count: number;
+      humanEvaluation?: AreaCountEvaluation;
+    },
+    latestExcludedAreaId?: AreaId,
+  ) {
     const recordedReview = buildRecordedReview19Result(latestAreaCount, latestExcludedAreaId);
-    if (!recordedReview) return;
+    if (!recordedReview?.dataQuality.complete) return;
 
     if (!isTestMode) {
       appendReview19Record(recordedReview);

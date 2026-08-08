@@ -20,6 +20,7 @@ npm run check:schema-v3
 npm run check:demand-cycle
 npm run check:summer-mode
 npm run check:done-summary-current-rate
+npm run check:review19-human-auto
 npm run build
 ```
 
@@ -44,6 +45,15 @@ npm run build
 - `summer` の短期履歴は対象年と同じ年、長期履歴は対象年より前の年の夏データだけを使用します。
 - `summer` では今年の同曜日3件を優先し、同曜日が不足する場合は今年の曜日グループ3件で自動判定します。どちらも3件未満なら手動判定です。
 - 旧データに `demandCycle` がない場合は `normal` として扱います。既存の `summer` 履歴はそのまま再利用します。
+
+## 19:00チェックの2つの残数評価
+
+- 各対象エリアでは、実残数と、売場を見た担当者による既存5段階の残数評価を記録します。除外エリアを除き、両方が揃うと完了です。
+- 人間評価は現場感覚を保存する観測値であり、正解ラベルではありません。
+- 入力した当日値を含めず、過去の19:00チェック残数だけから既存中央値ロジックによる5段階評価も計算し、別の観測値として保存します。
+- 中央値評価は `normal` / `summer`、同曜日／既存曜日グループ、夏季モードの今年短期・前年以前長期の条件を維持します。履歴不足時は「普通」へ補完せず `insufficient` とします。
+- 中央値評価、中央値、サンプル数、判定基準は入力中・完了後とも現場UIへ表示しません。JSON内の `areaEvaluations` から、人間評価・中央値評価・後日の結果や廃棄を分析時に比較できます。
+- 旧 `ratingStatus` / `ratings` / `ratingScores` は「減りすぎ／残りすぎ」の旧評価であり、今回の人間5段階残数評価とは別データとして維持します。
 
 ## 値引率の保存
 
@@ -110,6 +120,6 @@ npm run build
 
 ## バージョン
 
-- `appVersion`: `2026.8.8-1`
+- `appVersion`: `2026.8.8-2`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260808-163017-jst`（Viteビルドごとに日本時間形式で生成。CIでは同形式の`NEBIKI_BUILD_ID`を指定できます）
+- `buildId`: `build-20260808-182334-jst`（Viteビルドごとに日本時間形式で生成。CIでは同形式の`NEBIKI_BUILD_ID`を指定できます）

@@ -292,6 +292,9 @@ export function getLatestReview19DayCheck(date: string): Review19DayCheckSnapsho
       ? JSON.parse(JSON.stringify(latest.ratingScores)) as Review19DayCheckSnapshot["ratingScores"]
       : null,
     areaCounts: JSON.parse(JSON.stringify(latest.areaCounts)) as Review19DayCheckSnapshot["areaCounts"],
+    areaEvaluations: latest.areaEvaluations
+      ? JSON.parse(JSON.stringify(latest.areaEvaluations)) as Review19DayCheckSnapshot["areaEvaluations"]
+      : undefined,
     excludedAreaIds: [...latest.excludedAreaIds],
     excludeReasons: JSON.parse(JSON.stringify(latest.excludeReasons)) as Review19DayCheckSnapshot["excludeReasons"],
     dataQuality: JSON.parse(JSON.stringify(latest.dataQuality)) as Review19DayCheckSnapshot["dataQuality"],

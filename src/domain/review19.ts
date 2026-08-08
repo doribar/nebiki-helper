@@ -1,14 +1,20 @@
 import { NORMAL_ROUTE, getAreaName, getNormalRoute } from "./area.ts";
-import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
+import {
+  normalizeAreaCountDecisionBasis,
+  normalizeAreaCountRecords,
+} from "./areaCountHistory.ts";
 import {
   getCurrentDataVersionInfo,
   normalizeDataVersionInfo,
 } from "./dataVersion.ts";
 import type {
+  AreaCountEvaluation,
   AreaId,
   DailySessionSnapshot,
   DemandCycle,
   Review19AreaSnapshot,
+  Review19AreaEvaluation,
+  Review19DataQuality,
   Review19Rating,
   Review19RatingScore,
   Review19Reference,
@@ -112,9 +118,7 @@ export function createInitialReview19Result(params: {
   reviewStartedAt?: string;
   excludedAreaIds?: AreaId[];
 }): Review19Result {
-  const excludedAreaIds = normalizeExcludedAreaIds(
-    params.excludedAreaIds ?? [],
-  );
+  const excludedAreaIds = normalizeExcludedAreaIds(params.excludedAreaIds ?? []);
 
   return {
     ...getCurrentDataVersionInfo(),
@@ -129,11 +133,13 @@ export function createInitialReview19Result(params: {
     ratings: null,
     ratingScores: null,
     areaCounts: {},
+    areaEvaluations: {},
     excludedAreaIds,
     excludeReasons: createExcludeReasons(excludedAreaIds),
     dataQuality: buildReview19DataQuality({
       date: params.date,
       areaCounts: {},
+      areaEvaluations: {},
       excludedAreaIds,
       review19Status: "recorded",
     }),
@@ -143,9 +149,10 @@ export function createInitialReview19Result(params: {
 export function buildReview19DataQuality(params: {
   date: string;
   areaCounts: Partial<Record<AreaId, number>>;
+  areaEvaluations: Partial<Record<AreaId, Review19AreaEvaluation>>;
   excludedAreaIds: AreaId[];
   review19Status?: "recorded" | "not_applicable";
-}) {
+}): Review19DataQuality {
   if (params.review19Status === "not_applicable") {
     return {
       expectedAreaCount: 0,
@@ -158,10 +165,15 @@ export function buildReview19DataQuality(params: {
       measurementComplete: true,
       notMeasuredAreaIds: [],
       missingReasons: {},
+      humanEvaluationExpectedAreaCount: 0,
+      humanEvaluationRecordedAreaCount: 0,
+      missingHumanEvaluationAreaIds: [],
+      humanEvaluationComplete: true,
     };
   }
 
   const expectedAreaIds = getNormalRoute(params.date);
+  const areaEvaluations = params.areaEvaluations;
   const excludedAreaIdSet = new Set(params.excludedAreaIds);
   const recordedAreaIds = expectedAreaIds.filter((areaId) => {
     return !excludedAreaIdSet.has(areaId) && typeof params.areaCounts[areaId] === "number";
@@ -170,6 +182,20 @@ export function buildReview19DataQuality(params: {
   const missingAreaIds = expectedAreaIds.filter((areaId) => {
     return !excludedAreaIdSet.has(areaId) && typeof params.areaCounts[areaId] !== "number";
   });
+  const humanEvaluationExpectedAreaIds = expectedAreaIds.filter(
+    (areaId) => !excludedAreaIdSet.has(areaId),
+  );
+  const humanEvaluationRecordedAreaIds = humanEvaluationExpectedAreaIds.filter(
+    (areaId) =>
+      isAreaCountEvaluation(areaEvaluations[areaId]?.humanEvaluation),
+  );
+  const missingHumanEvaluationAreaIds = humanEvaluationExpectedAreaIds.filter(
+    (areaId) =>
+      !isAreaCountEvaluation(areaEvaluations[areaId]?.humanEvaluation),
+  );
+  const measurementComplete = missingAreaIds.length === 0;
+  const humanEvaluationComplete = missingHumanEvaluationAreaIds.length === 0;
+  const processComplete = measurementComplete && humanEvaluationComplete;
 
   return {
     expectedAreaCount: expectedAreaIds.length,
@@ -177,14 +203,18 @@ export function buildReview19DataQuality(params: {
     excludedAreaCount: excludedAreaIds.length,
     missingAreaIds,
     duplicateAreaIds: [],
-    complete: missingAreaIds.length === 0,
-    processComplete: missingAreaIds.length === 0,
-    measurementComplete: missingAreaIds.length === 0,
+    complete: processComplete,
+    processComplete,
+    measurementComplete,
     notMeasuredAreaIds: [...missingAreaIds],
     missingReasons: missingAreaIds.reduce((acc, areaId) => {
       acc[areaId] = "legacy_unknown";
       return acc;
     }, {} as Partial<Record<AreaId, "legacy_unknown">>),
+    humanEvaluationExpectedAreaCount: humanEvaluationExpectedAreaIds.length,
+    humanEvaluationRecordedAreaCount: humanEvaluationRecordedAreaIds.length,
+    missingHumanEvaluationAreaIds,
+    humanEvaluationComplete,
   };
 }
 
@@ -200,6 +230,76 @@ export function getReview19AreaItems(): Array<{
 
 export function isValidReview19Rating(value: unknown): value is Review19Rating {
   return REVIEW19_RATINGS.some((rating) => rating.value === value);
+}
+
+function isAreaCountEvaluation(value: unknown): value is AreaCountEvaluation {
+  return (
+    value === "many" ||
+    value === "slightly_many" ||
+    value === "normal" ||
+    value === "slightly_few" ||
+    value === "few"
+  );
+}
+
+function normalizeReview19AreaEvaluations(
+  raw: unknown,
+  fallbackDemandCycle?: DemandCycle,
+): Partial<Record<AreaId, Review19AreaEvaluation>> {
+  const normalized: Partial<Record<AreaId, Review19AreaEvaluation>> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return normalized;
+
+  for (const areaId of NORMAL_ROUTE) {
+    const value = (raw as Partial<Record<AreaId, unknown>>)[areaId];
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+
+    const candidate = value as Partial<Review19AreaEvaluation>;
+    if (!isAreaCountEvaluation(candidate.humanEvaluation)) continue;
+
+    const autoEvaluationBasis = normalizeAreaCountDecisionBasis(
+      candidate.autoEvaluationBasis,
+      fallbackDemandCycle,
+    );
+    const hasMatchingDemandCycle = Boolean(
+      autoEvaluationBasis &&
+      autoEvaluationBasis.demandCycle !==
+        undefined &&
+      autoEvaluationBasis.demandCycle ===
+        normalizeDemandCycle(fallbackDemandCycle),
+    );
+
+    if (
+      candidate.autoEvaluationStatus === "ready" &&
+      isAreaCountEvaluation(candidate.autoEvaluation) &&
+      autoEvaluationBasis?.recommendationStatus === "ready" &&
+      hasMatchingDemandCycle
+    ) {
+      normalized[areaId] = {
+        humanEvaluation: candidate.humanEvaluation,
+        autoEvaluation: candidate.autoEvaluation,
+        autoEvaluationStatus: "ready",
+        autoEvaluationBasis,
+      };
+      continue;
+    }
+
+    const normalizedEvaluation: Review19AreaEvaluation = {
+      humanEvaluation: candidate.humanEvaluation,
+      autoEvaluation: null,
+      autoEvaluationStatus: "insufficient",
+    };
+    if (
+      candidate.autoEvaluationStatus === "insufficient" &&
+      candidate.autoEvaluation === null &&
+      autoEvaluationBasis?.recommendationStatus === "insufficient" &&
+      hasMatchingDemandCycle
+    ) {
+      normalizedEvaluation.autoEvaluationBasis = autoEvaluationBasis;
+    }
+    normalized[areaId] = normalizedEvaluation;
+  }
+
+  return normalized;
 }
 
 export function parseReview19RatePercent(text?: string): number | undefined {
@@ -362,6 +462,13 @@ function normalizeReview19DayCheckSnapshot(
       raw.reference?.demandCycle ??
       fallbackDemandCycle,
   );
+  const areaEvaluations = normalizeReview19AreaEvaluations(
+    raw.areaEvaluations,
+    demandCycle,
+  );
+  for (const areaId of excludedAreaIds) {
+    delete areaEvaluations[areaId];
+  }
 
   return JSON.parse(JSON.stringify({
     ...raw,
@@ -375,6 +482,7 @@ function normalizeReview19DayCheckSnapshot(
       typeof raw.reviewCompletedAt === "string" ? raw.reviewCompletedAt : raw.recordedAt,
     areaCountRecordedAt,
     areaCounts,
+    areaEvaluations,
     excludedAreaIds,
     excludeReasons:
       raw.excludeReasons && typeof raw.excludeReasons === "object"
@@ -383,6 +491,7 @@ function normalizeReview19DayCheckSnapshot(
     dataQuality: buildReview19DataQuality({
       date,
       areaCounts,
+      areaEvaluations,
       excludedAreaIds,
       review19Status,
     }),
@@ -489,7 +598,9 @@ function cloneReview19Reference(
 }
 
 
-function normalizeReview19AreaCounts(raw: unknown): Partial<Record<AreaId, number>> {
+function normalizeReview19AreaCounts(
+  raw: unknown,
+): Partial<Record<AreaId, number>> {
   const result: Partial<Record<AreaId, number>> = {};
   if (!raw || typeof raw !== "object") return result;
 
@@ -565,7 +676,9 @@ export function normalizeReview19Result(
     }
   }
 
-  const areaCounts = normalizeReview19AreaCounts((raw as Partial<Review19Result>).areaCounts);
+  const areaCounts = normalizeReview19AreaCounts(
+    (raw as Partial<Review19Result>).areaCounts,
+  );
   for (const areaId of base.excludedAreaIds) {
     delete areaCounts[areaId];
   }
@@ -574,6 +687,13 @@ export function normalizeReview19Result(
     raw.date,
     base.excludedAreaIds,
   );
+  const areaEvaluations = normalizeReview19AreaEvaluations(
+    raw.areaEvaluations,
+    demandCycle,
+  );
+  for (const areaId of base.excludedAreaIds) {
+    delete areaEvaluations[areaId];
+  }
   const recordedAt = typeof raw.recordedAt === "string" ? raw.recordedAt : undefined;
 
   return {
@@ -588,11 +708,13 @@ export function normalizeReview19Result(
       typeof raw.reviewCompletedAt === "string" ? raw.reviewCompletedAt : recordedAt,
     areaCountRecordedAt,
     areaCounts,
+    areaEvaluations,
     excludedAreaIds: base.excludedAreaIds,
     excludeReasons,
     dataQuality: buildReview19DataQuality({
       date: raw.date,
       areaCounts,
+      areaEvaluations,
       excludedAreaIds: base.excludedAreaIds,
       review19Status: legacyReview19Status,
     }),
@@ -686,6 +808,9 @@ export function buildReview19ExportPayload(params: {
       date: record.date,
       sessionStartedAt: record.sessionStartedAt,
       missingAreaIds: [...record.dataQuality.missingAreaIds],
+      missingHumanEvaluationAreaIds: [
+        ...record.dataQuality.missingHumanEvaluationAreaIds,
+      ],
     }));
   return {
     format: "nebiki-helper-review19-export",
