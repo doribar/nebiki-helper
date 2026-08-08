@@ -5,12 +5,14 @@ import {
 } from "./areaCountHistory.ts";
 import {
   DEFAULT_DEMAND_CYCLE,
+  isSummerModeAvailable,
   normalizeDemandCycle,
 } from "./demandCycle.ts";
 import type { DemandCycle } from "./types.ts";
 
 export const DEMAND_CYCLE_STORAGE_KEYS = {
   state: "nebiki-helper/demand-cycle-state-v1",
+  fixedTimeState: "nebiki-helper/fixed-time-demand-cycle-state-v1",
   summerAreaCountRecords: "nebiki-helper/summer-area-count-records-v1",
 } as const;
 
@@ -54,6 +56,18 @@ export function normalizeDemandCycleState(raw: unknown): DemandCycleState {
   };
 }
 
+/**
+ * 営業日が夏季モード対象期間外なら、選択状態と日次ロックを解除して
+ * 通常扱いへ戻す。期間内では既存の正規化結果をそのまま維持する。
+ */
+export function normalizeDemandCycleStateForBusinessDate(
+  raw: unknown,
+  date: string,
+): DemandCycleState {
+  const normalized = normalizeDemandCycleState(raw);
+  return isSummerModeAvailable(date) ? normalized : { ...DEFAULT_STATE };
+}
+
 export function loadDemandCycleState(): DemandCycleState {
   return normalizeDemandCycleState(
     parseJson(localStorage.getItem(DEMAND_CYCLE_STORAGE_KEYS.state)),
@@ -63,6 +77,19 @@ export function loadDemandCycleState(): DemandCycleState {
 export function saveDemandCycleState(state: DemandCycleState): void {
   localStorage.setItem(
     DEMAND_CYCLE_STORAGE_KEYS.state,
+    JSON.stringify(normalizeDemandCycleState(state)),
+  );
+}
+
+export function loadFixedTimeDemandCycleState(): DemandCycleState {
+  return normalizeDemandCycleState(
+    parseJson(localStorage.getItem(DEMAND_CYCLE_STORAGE_KEYS.fixedTimeState)),
+  );
+}
+
+export function saveFixedTimeDemandCycleState(state: DemandCycleState): void {
+  localStorage.setItem(
+    DEMAND_CYCLE_STORAGE_KEYS.fixedTimeState,
     JSON.stringify(normalizeDemandCycleState(state)),
   );
 }

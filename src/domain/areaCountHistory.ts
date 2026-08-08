@@ -1396,21 +1396,21 @@ export function getAreaCountRecommendation(params: {
       comparisonMode,
       threeDayHolidayMiddleReference: middleReference,
       summaryText: isSummerCycle
-        ? `夏サイクル・${summerComparisonLabel}の今年の履歴 ${matchedRecords.length}/${requiredSampleSize}件`
+        ? `夏季モード・${summerComparisonLabel}の今年の履歴 ${matchedRecords.length}/${requiredSampleSize}件`
         : `過去データ ${matchedRecords.length}/${requiredSampleSize}件`,
       detailLines: comparisonMode === "three_day_holiday_middle" && middleReference
         ? [
             `今日の曜日：${actualWeekday}`,
-            `${isSummerCycle ? "今年の夏サイクル・" : ""}火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件`,
-            `${isSummerCycle ? "今年の夏サイクル・" : ""}金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏季モード・" : ""}火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏季モード・" : ""}金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件`,
             "三連休中日は、火木日と金土を別々に集計し、有効な基準ができるまで従来の履歴不足扱いにします。",
             ...(isSummerCycle ? ["履歴不足のため手動判定"] : []),
             `今回の${count}個も、判定後に履歴へ保存されます。`,
           ]
         : [
             `今日の曜日：${actualWeekday}`,
-            `${isSummerCycle ? "今年の夏サイクル・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
-            `${isSummerCycle ? "今年の夏サイクル・" : ""}暫定グループ（${comparisonWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏季モード・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+            `${isSummerCycle ? "今年の夏季モード・" : ""}暫定グループ（${comparisonWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
             useHolidayBeforeNormalWeekdayReference
               ? "今日は祝日で明日は平日のため、日曜日と同じ残数基準で判定します。"
               : reference.forceFallbackWeekdayGroup
@@ -1448,14 +1448,14 @@ export function getAreaCountRecommendation(params: {
         : `比較条件：暫定グループ（${comparisonWeekdayGroup}）`;
   const referenceSelectionLines = comparisonMode === "three_day_holiday_middle" && middleReference
     ? [
-        `${isSummerCycle ? "今年の夏サイクル・" : ""}火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fireThursdaySundayMedianCount ?? "なし"}個）`,
-        `${isSummerCycle ? "今年の夏サイクル・" : ""}金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fridaySaturdayMedianCount ?? "なし"}個）`,
+        `${isSummerCycle ? "今年の夏季モード・" : ""}火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fireThursdaySundayMedianCount ?? "なし"}個）`,
+        `${isSummerCycle ? "今年の夏季モード・" : ""}金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fridaySaturdayMedianCount ?? "なし"}個）`,
         middleReference.adoptedSource === "both"
           ? `両グループを50対50で合成し、採用基準を${medianCount}個とします。`
           : `${middleReference.adoptedSource}だけに有効な基準があるため、${medianCount}個を採用します。`,
       ]
     : [
-        `${isSummerCycle ? "今年の夏サイクル・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
+        `${isSummerCycle ? "今年の夏季モード・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
         useHolidayBeforeNormalWeekdayReference
           ? "今日は祝日で明日は平日のため、日曜日と同じ残数基準を採用。"
           : reference.forceFallbackWeekdayGroup

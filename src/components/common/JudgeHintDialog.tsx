@@ -1,6 +1,12 @@
 import { PrimaryButton } from "../layout/PrimaryButton";
 
-function JudgeHintContent({ compact = false }: { compact?: boolean }) {
+function JudgeHintContent({
+  compact = false,
+  showSummerModeJudgeHint = false,
+}: {
+  compact?: boolean;
+  showSummerModeJudgeHint?: boolean;
+}) {
   return (
     <div style={{ lineHeight: 1.8 }}>
       {!compact ? (
@@ -47,6 +53,28 @@ function JudgeHintContent({ compact = false }: { compact?: boolean }) {
           （売り切り優先）
         </span>
       </div>
+      {showSummerModeJudgeHint ? (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 12px",
+            border: "1px solid #f59e0b",
+            borderRadius: 10,
+            background: "#fffbeb",
+            color: "#78350f",
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontWeight: 900 }}>夏季モード中（17:59まで）</div>
+          <div>
+            残数判定で迷った場合だけ、1段階少ない側に寄せます。
+          </div>
+          <div>
+            明らかに多い場合は無理に下げず、夕方〜夜の売れ方も考慮して個別に判断します。
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -54,9 +82,11 @@ function JudgeHintContent({ compact = false }: { compact?: boolean }) {
 export function JudgeHintDialog({
   onClose,
   compact = false,
+  showSummerModeJudgeHint = false,
 }: {
   onClose: () => void;
   compact?: boolean;
+  showSummerModeJudgeHint?: boolean;
 }) {
   return (
     <div
@@ -93,7 +123,10 @@ export function JudgeHintDialog({
           迷った時の判断基準
         </div>
 
-        <JudgeHintContent compact={compact} />
+        <JudgeHintContent
+          compact={compact}
+          showSummerModeJudgeHint={showSummerModeJudgeHint}
+        />
 
         <div style={{ marginTop: 18 }}>
           <PrimaryButton onClick={onClose}>OK</PrimaryButton>

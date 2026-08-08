@@ -41,6 +41,7 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
+  showSummerModeJudgeHint?: boolean;
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
   showThreeDayHolidayMiddleNotice?: boolean;
@@ -118,11 +119,13 @@ function RateInstructionCard({
   step,
   currentIndex,
   totalCount,
+  showSummerModeJudgeHint,
   onDone,
 }: {
   step: RateInstructionStep;
   currentIndex: number;
   totalCount: number;
+  showSummerModeJudgeHint: boolean;
   onDone: () => void;
 }) {
   const [showJudgeHint, setShowJudgeHint] = useState(false);
@@ -200,7 +203,10 @@ function RateInstructionCard({
       </div>
 
       {showJudgeHint ? (
-        <JudgeHintDialog onClose={() => setShowJudgeHint(false)} />
+        <JudgeHintDialog
+          showSummerModeJudgeHint={showSummerModeJudgeHint}
+          onClose={() => setShowJudgeHint(false)}
+        />
       ) : null}
     </>
   );
@@ -251,6 +257,7 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
+  showSummerModeJudgeHint = false,
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
   showThreeDayHolidayMiddleNotice = false,
@@ -489,6 +496,7 @@ export function RateDisplayScreen({
                 step={currentRateInstructionStep}
                 currentIndex={rateInstructionStepIndex}
                 totalCount={rateInstructionSteps.length}
+                showSummerModeJudgeHint={showSummerModeJudgeHint}
                 onDone={handleRateInstructionDone}
               />
             ) : null}

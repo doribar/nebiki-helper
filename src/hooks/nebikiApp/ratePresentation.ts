@@ -2,6 +2,7 @@ import type {
   AreaId,
   AreaJudge,
   AreaProgress,
+  DiscountTime,
   NextSessionSkipRecord,
   RateDisplayData,
   ResolvedWeatherInput,
@@ -46,6 +47,47 @@ export function applyRateOffsetToDisplay(
         : undefined,
     },
   };
+}
+
+/**
+ * 現在の値引率表示と完了画面の現在推奨値で共有する、純粋な表示計算。
+ * 時刻境界の判定や天候解決は呼び出し側で既存ロジックを用い、
+ * ここでは渡された有効時刻・補正をそのまま通常表示へ反映する。
+ */
+export function buildCurrentNormalRateDisplay(params: {
+  session: SessionData | null;
+  progress: AreaProgress | null | undefined;
+  effectiveDiscountTime: DiscountTime | null | undefined;
+  weatherBonus: number;
+  ignoreTimeRateCap: boolean;
+  rateOffsetPercent?: number;
+}): RateDisplayData | null {
+  const { session, progress, effectiveDiscountTime } = params;
+  if (
+    !session ||
+    session.discountTime === "20" ||
+    !progress?.areaJudge ||
+    !effectiveDiscountTime ||
+    effectiveDiscountTime === "20"
+  ) {
+    return null;
+  }
+
+  const display = getNormalTimeRateDisplay({
+    discountTime: effectiveDiscountTime,
+    weekday: session.weekday,
+    date: session.date,
+    weatherBonus: params.weatherBonus,
+    areaJudge: progress.areaJudge,
+    isSunday: session.weekday === 0 && effectiveDiscountTime === "15",
+    ignoreTimeRateCap: params.ignoreTimeRateCap,
+    areaRateAdjustment: progress.areaRateAdjustment,
+  });
+  const rateOffsetPercent = params.rateOffsetPercent ?? 0;
+
+  return rateOffsetPercent === 0
+    ? display
+    : applyRateOffsetToDisplay(display, rateOffsetPercent);
 }
 
 export function getAreaJudgeText(judge: AreaJudge): string {

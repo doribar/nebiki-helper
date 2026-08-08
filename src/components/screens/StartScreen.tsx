@@ -54,6 +54,7 @@ type StartScreenProps = {
   previousDayDiscardTarget?: { date: string; count: number | null } | null;
   onSavePreviousDayDiscardCount?: (count: number | null) => void;
   demandCycle: DemandCycle;
+  summerModeAvailable: boolean;
   canChangeDemandCycle: boolean;
   demandCycleChangeBlockedReason?: string | null;
   onChangeDemandCycle: (demandCycle: DemandCycle) => boolean;
@@ -422,6 +423,7 @@ export function StartScreen({
   previousDayDiscardTarget = null,
   onSavePreviousDayDiscardCount,
   demandCycle,
+  summerModeAvailable,
   canChangeDemandCycle,
   demandCycleChangeBlockedReason = null,
   onChangeDemandCycle,
@@ -755,7 +757,7 @@ export function StartScreen({
     if (!canChangeDemandCycle) {
       window.alert(
         demandCycleChangeBlockedReason ??
-          "当日の値引運用がすでに始まっているため、需要サイクルを変更できません。",
+          "当日の値引運用がすでに始まっているため、夏季モードを変更できません。",
       );
       return;
     }
@@ -764,8 +766,8 @@ export function StartScreen({
       demandCycle === "summer" ? "normal" : "summer";
     const confirmed = window.confirm(
       nextDemandCycle === "summer"
-        ? "夏サイクルへ切り替えます。\n今年の夏サイクルの同条件データが3件溜まるまでは手動判定になります。"
-        : "通常サイクルへ切り替えます。\n保存済みの通常サイクル履歴を再利用します。",
+        ? "夏季モードをONにします。\n今年の夏季モードの同条件データが3件溜まるまでは手動判定になります。"
+        : "夏季モードをOFFにします。\n保存済みの通常履歴を再利用します。",
     );
     if (!confirmed) return;
     onChangeDemandCycle(nextDemandCycle);
@@ -825,8 +827,9 @@ export function StartScreen({
         }
       />
 
+      {summerModeAvailable ? (
       <section
-        aria-label="需要サイクル"
+        aria-label="夏季モード"
         style={{
           display: "flex",
           alignItems: "center",
@@ -841,7 +844,7 @@ export function StartScreen({
       >
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 900 }}>
-            需要サイクル：{demandCycle === "summer" ? "夏" : "通常"}
+            夏季モード：{demandCycle === "summer" ? "ON" : "OFF"}
           </div>
           {!canChangeDemandCycle && demandCycleChangeBlockedReason ? (
             <div style={{ marginTop: 3, color: "#64748b", fontSize: 11, lineHeight: 1.35 }}>
@@ -868,6 +871,7 @@ export function StartScreen({
           変更
         </button>
       </section>
+      ) : null}
 
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>曜日</StartSectionLabel>

@@ -26,6 +26,7 @@ type AreaJudgeScreenProps = {
   areaName: string;
   calculatorDraftScope: string;
   showJudgeGuide?: boolean;
+  showSummerModeJudgeHint?: boolean;
   basisGuide: {
     noticeText?: string;
     weekdaySummaryText?: string;
@@ -224,6 +225,7 @@ export function AreaJudgeScreen({
   areaId,
   areaName,
   calculatorDraftScope,
+  showSummerModeJudgeHint = false,
   basisGuide,
   timeSwitchNotice,
   areaCountAssistEnabled = false,
@@ -987,6 +989,7 @@ export function AreaJudgeScreen({
       {showJudgeHint ? (
         <JudgeHintDialog
           compact
+          showSummerModeJudgeHint={showSummerModeJudgeHint}
           onClose={() => setShowJudgeHint(false)}
         />
       ) : null}

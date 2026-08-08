@@ -38,7 +38,6 @@ import {
 } from "../domain/weekdayBase";
 import {
   getFinalTimeGuide,
-  getNormalTimeRateDisplay,
 } from "../domain/discount";
 import {
   appendSkipRecordsInMemory,
@@ -144,7 +143,7 @@ import {
 } from "../domain/weatherConfirmation.ts";
 import { getCurrentDataVersionInfo } from "../domain/dataVersion.ts";
 import {
-  applyRateOffsetToDisplay,
+  buildCurrentNormalRateDisplay,
   buildCompletedRateSnapshot,
   buildNextSessionSkipRecord,
   getAreaJudgeText,
@@ -222,13 +221,17 @@ import {
 import {
   getDemandCycleBasisLabel,
   getDemandCycleShortName,
+  isSummerModeAvailable,
   normalizeDemandCycle,
   resolveDemandCycleFromEvidence,
 } from "../domain/demandCycle.ts";
 import {
+  loadFixedTimeDemandCycleState,
   loadDemandCycleState,
   loadSummerAreaCountRecords,
   lockDemandCycleForDate,
+  normalizeDemandCycleStateForBusinessDate,
+  saveFixedTimeDemandCycleState,
   saveDemandCycleState,
   selectDemandCycleForDate,
   selectDemandCycleLockForDate,
@@ -277,6 +280,7 @@ function downloadJsonFile(payload: unknown, filename: string): void {
 export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppResult {
   setRuntimeNowOverride(params?.testNow ?? null);
   const isTestMode = params?.testNow instanceof Date;
+  const testNowMs = params?.testNow?.getTime() ?? null;
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
 
   if (!initialPersistenceRef.current) {
@@ -295,13 +299,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }
 
   const initialToday = formatLocalDate(getRuntimeNow());
-  const initialDemandCycleState = isTestMode
-    ? ({
-        selectedCycle: "normal",
-        lockedDate: null,
-        lockedCycle: null,
-      } satisfies DemandCycleState)
-    : loadDemandCycleState();
+  const initialDemandCycleState = normalizeDemandCycleStateForBusinessDate(
+    isTestMode ? loadFixedTimeDemandCycleState() : loadDemandCycleState(),
+    initialToday,
+  );
   const initialLastUsedSessionDraftBase = buildStartDefaultDraft(
     isTestMode ? null : initialPersistenceRef.current?.lastUsedSessionDraft ?? null
   );
@@ -474,6 +475,14 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   useEffect(() => {
     let cancelled = false;
 
+    if (isTestMode) {
+      setAreaCountRemoteLoadStatus("disabled");
+      setAreaCountRecords([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void loadRemoteAreaCountRecords().then((result) => {
       if (cancelled) return;
       setAreaCountRemoteLoadStatus(result.status);
@@ -492,7 +501,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isTestMode]);
 
   useEffect(() => {
     // 動作確認モードでは入力結果を端末内のlocalStorageへ残さない。
@@ -696,6 +705,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     };
   }, []);
 
+  useEffect(() => {
+    setNowMs(getRuntimeNowMs());
+  }, [testNowMs]);
+
 
   useEffect(() => {
   if (state.screen !== "start") return;
@@ -748,7 +761,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const id = window.setInterval(syncDraftTime, 30000);
 
   return () => window.clearInterval(id);
-}, [state.screen]);
+}, [state.screen, testNowMs]);
 
   useEffect(() => {
     if (state.screen !== "start") return;
@@ -801,12 +814,20 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       date: state.session.date,
       discountTime: state.session.discountTime,
       weather: state.session.weather,
-      snapshots: getDailySessionSnapshotsForDate(state.session.date),
+      snapshots: isTestMode
+        ? []
+        : getDailySessionSnapshotsForDate(state.session.date),
       lastSessionWeather,
       existingAnalysis: state.session.temperatureComfortAnalysis,
       legacyUnresolvedTempLevel: state.session.legacyUnresolvedTempLevel,
     }).resolvedWeather;
-  }, [state.session, sessionSource.weather, sessionSource.discountTime, lastSessionWeather]);
+  }, [
+    state.session,
+    sessionSource.weather,
+    sessionSource.discountTime,
+    lastSessionWeather,
+    isTestMode,
+  ]);
   const startDraftNearTermWeather = useMemo(() => {
     return getNearTermWeatherForDiscount(state.sessionDraft.weather, state.sessionDraft.discountTime);
   }, [state.sessionDraft.weather, state.sessionDraft.discountTime]);
@@ -882,7 +903,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       date: state.session.date,
       discountTime: targetDiscountTime,
       weather: state.session.weather,
-      snapshots: getDailySessionSnapshotsForDate(state.session.date),
+      snapshots: isTestMode
+        ? []
+        : getDailySessionSnapshotsForDate(state.session.date),
       lastSessionWeather,
       previousSession: state.session,
     }).resolvedWeather;
@@ -910,6 +933,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     state.session,
     nowMs,
     lastSessionWeather,
+    isTestMode,
   ]);
 
   useEffect(() => {
@@ -1091,37 +1115,26 @@ const lateSkipNotice = useMemo(() => {
 
 
   const rateDisplay = useMemo(() => {
-    if (!state.session || !currentAreaProgress) return null;
-    if (state.session.discountTime === "20") return null;
-    if (!currentAreaProgress.areaJudge) return null;
-
-    const rateDiscountTime = (effectiveRateDiscountTime ?? state.session.discountTime) as Exclude<DiscountTime, "20">;
-    const display = getNormalTimeRateDisplay({
-      discountTime: rateDiscountTime,
-      weekday: state.session.weekday,
-      date: state.session.date,
+    return buildCurrentNormalRateDisplay({
+      session: state.session,
+      progress: currentAreaProgress,
+      effectiveDiscountTime:
+        effectiveRateDiscountTime ?? state.session?.discountTime,
       weatherBonus: earlyNextMinus5Info
         ? earlyNextMinus5Info.weekdayBaseInfo.baseRateBonus
         : weekdayBaseInfo.baseRateBonus + lateTimeBonus,
-      areaJudge: currentAreaProgress.areaJudge,
-      isSunday: state.session.weekday === 0 && rateDiscountTime === "15",
       ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
-      areaRateAdjustment: currentAreaProgress.areaRateAdjustment,
+      rateOffsetPercent: earlyNextMinus5Info ? -5 : 0,
     });
-
-    return earlyNextMinus5Info ? applyRateOffsetToDisplay(display, -5) : display;
   }, [
-  state.session,
-  currentAreaProgress,
-  weekdayBaseInfo.baseRateBonus,
-  lateTimeBonus,
-  ignoreNormalTimeRateCap,
-  weekdayBaseInfo.adjusted,
-  effectiveRateDiscountTime,
-  effectiveRateIgnoreTimeRateCap,
-  earlyNextMinus5Info,
-  currentAreaProgress?.areaRateAdjustment,
-]);
+    state.session,
+    currentAreaProgress,
+    weekdayBaseInfo.baseRateBonus,
+    lateTimeBonus,
+    effectiveRateDiscountTime,
+    effectiveRateIgnoreTimeRateCap,
+    earlyNextMinus5Info,
+  ]);
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
 
@@ -1134,7 +1147,7 @@ const lateSkipNotice = useMemo(() => {
   });
 }, [state.session, weekdayBaseInfo.weekdayShift, currentAreaProgress?.areaCountEvaluation]);
 
-  const doneSummaryItems = useMemo<DoneSummaryItem[]>(() => {
+  const capturedDoneSummaryItems = useMemo<DoneSummaryItem[]>(() => {
     const session = state.session;
     if (!session) return [];
     if (session.discountTime === "20") {
@@ -1206,6 +1219,51 @@ const lateSkipNotice = useMemo(() => {
     weekdayBaseInfo.weekdayShift,
   ]);
 
+  const doneSummaryItems = useMemo<DoneSummaryItem[]>(() => {
+    const session = state.session;
+    if (!session || session.discountTime === "20") {
+      return capturedDoneSummaryItems;
+    }
+
+    const weatherBonus = earlyNextMinus5Info
+      ? earlyNextMinus5Info.weekdayBaseInfo.baseRateBonus
+      : weekdayBaseInfo.baseRateBonus + lateTimeBonus;
+
+    return capturedDoneSummaryItems.map((item) => {
+      const progress = state.areaProgressMap[item.areaId];
+      if (!progress || progress.status !== "completed" || !progress.areaJudge) {
+        return item;
+      }
+
+      const currentDisplay = buildCurrentNormalRateDisplay({
+        session,
+        progress,
+        effectiveDiscountTime:
+          effectiveRateDiscountTime ?? session.discountTime,
+        weatherBonus,
+        ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
+        rateOffsetPercent: earlyNextMinus5Info ? -5 : 0,
+      });
+      if (!currentDisplay) return item;
+
+      return {
+        ...item,
+        rateText: currentDisplay.normal.main,
+        normalRateText: currentDisplay.normal.main,
+        manyRateText: currentDisplay.many.main,
+      };
+    });
+  }, [
+    capturedDoneSummaryItems,
+    state.session,
+    state.areaProgressMap,
+    earlyNextMinus5Info,
+    weekdayBaseInfo.baseRateBonus,
+    lateTimeBonus,
+    effectiveRateDiscountTime,
+    effectiveRateIgnoreTimeRateCap,
+  ]);
+
   useEffect(() => {
     if (isTestMode) return;
     if (!state.session) return;
@@ -1224,7 +1282,7 @@ const lateSkipNotice = useMemo(() => {
       weekdayBaseInfo,
       basisGuide,
       lateTimeBonus,
-      doneSummaryItems,
+      doneSummaryItems: capturedDoneSummaryItems,
     });
 
     if (snapshot) {
@@ -1237,7 +1295,7 @@ const lateSkipNotice = useMemo(() => {
     weekdayBaseInfo,
     basisGuide,
     lateTimeBonus,
-    doneSummaryItems,
+    capturedDoneSummaryItems,
   ]);
 
   const review19Items = useMemo(() => {
@@ -1322,7 +1380,7 @@ const lateSkipNotice = useMemo(() => {
         ) ?? null
       : null);
   const previousDayDate = getPreviousJstCalendarDate(new Date(nowMs));
-  const previousDayFinalizedData = previousDayDate
+  const previousDayFinalizedData = !isTestMode && previousDayDate
     ? selectFinalizedDayDataByDate(savedFinalizedDayData, previousDayDate)
     : null;
   const previousDayDiscardTarget = previousDayFinalizedData
@@ -1335,7 +1393,7 @@ const lateSkipNotice = useMemo(() => {
   const canStartReview19Manually = canStartReview19FromCurrentState({
     state,
     now: new Date(nowMs),
-    records: savedReview19Records,
+    records: isTestMode ? [] : savedReview19Records,
   });
 
   // 開始画面では、前日の完了セッションを保持したまま日付を跨ぐ場合がある。
@@ -1344,11 +1402,16 @@ const lateSkipNotice = useMemo(() => {
   const demandCycleDate = state.screen === "start"
     ? state.sessionDraft.date
     : state.session?.date ?? state.sessionDraft.date;
-  const savedReview19SourceState = loadReview19SourceState();
+  const summerModeAvailable = isSummerModeAvailable(demandCycleDate);
+  const seasonalDemandCycleState = normalizeDemandCycleStateForBusinessDate(
+    demandCycleState,
+    demandCycleDate,
+  );
+  const savedReview19SourceState = isTestMode ? null : loadReview19SourceState();
   const hasCurrentStateRateSnapshot = Boolean(state.session) && Object.values(state.areaProgressMap).some(
     (progress) => Boolean(progress.rateDecisionSnapshot),
   );
-  const inferredOperationDemandCycle = resolveDemandCycleFromEvidence(
+  const inferredOperationDemandCycleRaw = resolveDemandCycleFromEvidence(
     demandCycleDate,
     [
       ...(state.session
@@ -1363,22 +1426,30 @@ const lateSkipNotice = useMemo(() => {
             demandCycle: state.session!.demandCycle,
           }]
         : []),
-      ...savedDailySessionSnapshots.map((snapshot) => ({
-        date: snapshot.session.date,
-        demandCycle: snapshot.demandCycle ?? snapshot.session.demandCycle,
-      })),
-      ...savedFinalizedDayData.map((record) => ({
-        date: record.date,
-        demandCycle: record.demandCycle,
-      })),
-      ...savedReview19Records.map((record) => ({
-        date: record.date,
-        demandCycle: record.demandCycle,
-      })),
-      ...areaCountRecords.map((record) => ({
-        date: record.date,
-        demandCycle: record.demandCycle,
-      })),
+      ...(!isTestMode
+        ? savedDailySessionSnapshots.map((snapshot) => ({
+            date: snapshot.session.date,
+            demandCycle: snapshot.demandCycle ?? snapshot.session.demandCycle,
+          }))
+        : []),
+      ...(!isTestMode
+        ? savedFinalizedDayData.map((record) => ({
+            date: record.date,
+            demandCycle: record.demandCycle,
+          }))
+        : []),
+      ...(!isTestMode
+        ? savedReview19Records.map((record) => ({
+            date: record.date,
+            demandCycle: record.demandCycle,
+          }))
+        : []),
+      ...(!isTestMode
+        ? areaCountRecords.map((record) => ({
+            date: record.date,
+            demandCycle: record.demandCycle,
+          }))
+        : []),
       ...(savedReview19SourceState?.session
         ? [{
             date: savedReview19SourceState.session.date,
@@ -1394,21 +1465,24 @@ const lateSkipNotice = useMemo(() => {
         : []),
     ],
   );
+  const inferredOperationDemandCycle = inferredOperationDemandCycleRaw
+    ? summerModeAvailable
+      ? inferredOperationDemandCycleRaw
+      : "normal"
+    : null;
   const persistedDemandCycleLock = selectDemandCycleLockForDate(
-    demandCycleState,
+    seasonalDemandCycleState,
     demandCycleDate,
   );
-  const activeDemandCycle =
-    persistedDemandCycleLock ??
-    inferredOperationDemandCycle ??
-    normalizeDemandCycle(
-      state.screen === "start"
-        ? state.sessionDraft.demandCycle
-        : state.session?.demandCycle ?? state.sessionDraft.demandCycle,
-    );
+  const activeDemandCycle = summerModeAvailable
+    ? persistedDemandCycleLock ??
+      inferredOperationDemandCycle ??
+      selectDemandCycleForDate(seasonalDemandCycleState, demandCycleDate)
+    : "normal";
   const demandCycleHistoryCheckPending = areaCountRemoteLoadStatus === "loading";
   const demandCycleHistoryCheckFailed = areaCountRemoteLoadStatus === "error";
   const canChangeDemandCycle =
+    summerModeAvailable &&
     state.screen === "start" &&
     !inferredOperationDemandCycle &&
     !persistedDemandCycleLock &&
@@ -1416,11 +1490,66 @@ const lateSkipNotice = useMemo(() => {
     !demandCycleHistoryCheckFailed;
   const demandCycleChangeBlockedReason = canChangeDemandCycle
     ? null
-    : demandCycleHistoryCheckPending
-      ? "当日の保存データを確認中のため、需要サイクルはまだ変更できません。"
-      : demandCycleHistoryCheckFailed
-        ? "当日の保存データを確認できなかったため、安全のため需要サイクルを変更できません。"
-        : "当日の値引運用がすでに始まっているため、需要サイクルは変更できません。";
+    : !summerModeAvailable
+      ? "夏季モードは7月1日〜9月30日の営業開始前だけ変更できます。"
+      : demandCycleHistoryCheckPending
+        ? "当日の保存データを確認中のため、夏季モードはまだ変更できません。"
+        : demandCycleHistoryCheckFailed
+          ? "当日の保存データを確認できなかったため、安全のため夏季モードを変更できません。"
+          : "当日の値引運用がすでに始まっているため、夏季モードを変更できません。";
+
+  useEffect(() => {
+    if (summerModeAvailable) return;
+
+    const nextDemandCycleState = normalizeDemandCycleStateForBusinessDate(
+      demandCycleState,
+      demandCycleDate,
+    );
+    if (
+      nextDemandCycleState.selectedCycle !== demandCycleState.selectedCycle ||
+      nextDemandCycleState.lockedDate !== demandCycleState.lockedDate ||
+      nextDemandCycleState.lockedCycle !== demandCycleState.lockedCycle
+    ) {
+      setDemandCycleState(nextDemandCycleState);
+    }
+    // 初期化時に期間外のsummerをnormalへ正規化済みでも、保存値自体を
+    // normalへ戻して翌年7月に勝手にONへ復帰しないようにする。
+    if (isTestMode) {
+      saveFixedTimeDemandCycleState(nextDemandCycleState);
+    } else {
+      saveDemandCycleState(nextDemandCycleState);
+    }
+
+    setState((current) => {
+      const draftNeedsUpdate =
+        current.sessionDraft.date === demandCycleDate &&
+        normalizeDemandCycle(current.sessionDraft.demandCycle) !== "normal";
+      const sessionNeedsUpdate =
+        current.session?.date === demandCycleDate &&
+        normalizeDemandCycle(current.session.demandCycle) !== "normal";
+      if (!draftNeedsUpdate && !sessionNeedsUpdate) return current;
+
+      return {
+        ...current,
+        sessionDraft: draftNeedsUpdate
+          ? { ...current.sessionDraft, demandCycle: "normal" }
+          : current.sessionDraft,
+        session: sessionNeedsUpdate
+          ? { ...current.session!, demandCycle: "normal" }
+          : current.session,
+      };
+    });
+    setLastUsedSessionDraft((current) =>
+      normalizeDemandCycle(current.demandCycle) === "normal"
+        ? current
+        : { ...current, demandCycle: "normal" },
+    );
+  }, [
+    demandCycleDate,
+    demandCycleState,
+    isTestMode,
+    summerModeAvailable,
+  ]);
 
   useEffect(() => {
     if (!inferredOperationDemandCycle) return;
@@ -1436,7 +1565,11 @@ const lateSkipNotice = useMemo(() => {
       nextDemandCycleState.lockedCycle !== demandCycleState.lockedCycle
     ) {
       setDemandCycleState(nextDemandCycleState);
-      if (!isTestMode) saveDemandCycleState(nextDemandCycleState);
+      if (isTestMode) {
+        saveFixedTimeDemandCycleState(nextDemandCycleState);
+      } else {
+        saveDemandCycleState(nextDemandCycleState);
+      }
     }
 
     setState((current) => {
@@ -1658,13 +1791,18 @@ const lateSkipNotice = useMemo(() => {
   function changeDemandCycle(nextDemandCycle: DemandCycle): boolean {
     if (!canChangeDemandCycle) return false;
     const normalizedNext = normalizeDemandCycle(nextDemandCycle);
+    if (normalizedNext === "summer" && !summerModeAvailable) return false;
     const nextDemandCycleState = updateDemandCyclePreference(
       demandCycleState,
       normalizedNext,
     );
 
     setDemandCycleState(nextDemandCycleState);
-    if (!isTestMode) saveDemandCycleState(nextDemandCycleState);
+    if (isTestMode) {
+      saveFixedTimeDemandCycleState(nextDemandCycleState);
+    } else {
+      saveDemandCycleState(nextDemandCycleState);
+    }
     setLastUsedSessionDraft((current) => ({
       ...current,
       demandCycle: normalizedNext,
@@ -1954,7 +2092,7 @@ const lateSkipNotice = useMemo(() => {
       window.alert(
         areaCountRemoteLoadStatus === "loading"
           ? "当日の保存データを確認中です。確認完了後にもう一度お試しください。"
-          : "当日の保存データを確認できないため、安全のため夏サイクルを開始できません。",
+          : "当日の保存データを確認できないため、安全のため夏季モードを開始できません。",
       );
       return;
     }
@@ -1999,7 +2137,9 @@ const lateSkipNotice = useMemo(() => {
       date: nextSessionBase.date,
       discountTime: nextSessionBase.discountTime,
       weather: nextSessionBase.weather,
-      snapshots: getDailySessionSnapshotsForDate(nextSessionBase.date),
+      snapshots: isTestMode
+        ? []
+        : getDailySessionSnapshotsForDate(nextSessionBase.date),
       lastSessionWeather,
       previousSession: isResumingSameDiscountSession ? null : prev.session,
       existingAnalysis: isResumingSameDiscountSession
@@ -2016,7 +2156,11 @@ const lateSkipNotice = useMemo(() => {
       activeDemandCycle,
     );
     setDemandCycleState(nextDemandCycleState);
-    if (!isTestMode) saveDemandCycleState(nextDemandCycleState);
+    if (isTestMode) {
+      saveFixedTimeDemandCycleState(nextDemandCycleState);
+    } else {
+      saveDemandCycleState(nextDemandCycleState);
+    }
     setLastUsedSessionDraft((current) => ({
       ...current,
       demandCycle: activeDemandCycle,
@@ -2172,7 +2316,7 @@ const lateSkipNotice = useMemo(() => {
       window.alert(
         areaCountRemoteLoadStatus === "loading"
           ? "当日の保存データを確認中です。確認完了後にもう一度お試しください。"
-          : "当日の保存データを確認できないため、安全のため夏サイクルを開始できません。",
+          : "当日の保存データを確認できないため、安全のため夏季モードを開始できません。",
       );
       return;
     }
@@ -3077,7 +3221,7 @@ const lateSkipNotice = useMemo(() => {
         !canStartReview19FromCurrentState({
           state: prev,
           now,
-          records: loadReview19Records(),
+          records: isTestMode ? [] : loadReview19Records(),
         })
       ) {
         return prev;
@@ -3086,7 +3230,7 @@ const lateSkipNotice = useMemo(() => {
       const currentDate = formatLocalDate(now);
       const sourceStateForReview = selectReview19SourceState({
         currentState: prev,
-        savedSourceState: loadReview19SourceState(),
+        savedSourceState: isTestMode ? null : loadReview19SourceState(),
         currentDate,
       });
       const session = sourceStateForReview?.session;
@@ -3104,7 +3248,9 @@ const lateSkipNotice = useMemo(() => {
         date: reviewDraft.date,
         discountTime: "19",
         weather: reviewDraft.weather,
-        snapshots: getDailySessionSnapshotsForDate(reviewDraft.date),
+        snapshots: isTestMode
+          ? []
+          : getDailySessionSnapshotsForDate(reviewDraft.date),
         lastSessionWeather,
         previousSession: session,
       }).analysis;
@@ -3139,7 +3285,9 @@ const lateSkipNotice = useMemo(() => {
         date: prev.sessionDraft.date,
         discountTime: "19",
         weather: prev.sessionDraft.weather,
-        snapshots: getDailySessionSnapshotsForDate(prev.sessionDraft.date),
+        snapshots: isTestMode
+          ? []
+          : getDailySessionSnapshotsForDate(prev.sessionDraft.date),
         lastSessionWeather,
         previousSession: prev.session,
       }).analysis;
@@ -3285,7 +3433,7 @@ const lateSkipNotice = useMemo(() => {
           lateTimeBonus,
           excludedAreaIds,
           areaProgressMap: state.areaProgressMap,
-          doneSummaryItems,
+          doneSummaryItems: capturedDoneSummaryItems,
         })
       : state.review19.snapshot;
 
@@ -3294,7 +3442,9 @@ const lateSkipNotice = useMemo(() => {
       date: state.review19.date,
       demandCycle: state.review19.demandCycle,
       areaCountRecords,
-      sessions: getDailySessionSnapshotsForDate(state.review19.date),
+      sessions: isTestMode
+        ? []
+        : getDailySessionSnapshotsForDate(state.review19.date),
       review19Check: {
         version: 1,
         ...getCurrentDataVersionInfo(),
@@ -3386,7 +3536,9 @@ const lateSkipNotice = useMemo(() => {
       date: nextSessionBase.date,
       discountTime: "19",
       weather: nextSessionBase.weather,
-      snapshots: getDailySessionSnapshotsForDate(nextSessionBase.date),
+      snapshots: isTestMode
+        ? []
+        : getDailySessionSnapshotsForDate(nextSessionBase.date),
       lastSessionWeather,
       previousSession: state.session,
     }).analysis;
@@ -3443,6 +3595,7 @@ const lateSkipNotice = useMemo(() => {
     const sourceState = options?.sourceState ?? state;
 
     if (
+      !isTestMode &&
       sourceState.session?.date === currentDate &&
       sourceState.session.discountTime === "17"
     ) {
@@ -3482,8 +3635,10 @@ const lateSkipNotice = useMemo(() => {
       return;
     }
 
-    clearWorkSessionCheckpoint();
-    clearRuntimeState();
+    if (!isTestMode) {
+      clearWorkSessionCheckpoint();
+      clearRuntimeState();
+    }
     screenHistoryRef.current = [];
     previousRenderRef.current = null;
     suppressHistoryPushRef.current = false;
@@ -3514,10 +3669,12 @@ const lateSkipNotice = useMemo(() => {
         weekdayBaseInfo,
         basisGuide,
         lateTimeBonus,
-        doneSummaryItems,
+        doneSummaryItems: capturedDoneSummaryItems,
         sessionEndReason: "auto_time_transition",
       });
-      if (interruptedSnapshot) upsertDailySessionSnapshot(interruptedSnapshot);
+      if (!isTestMode && interruptedSnapshot) {
+        upsertDailySessionSnapshot(interruptedSnapshot);
+      }
     }
 
     const prioritizeUnfinishedAreas =
@@ -3812,12 +3969,18 @@ const lateSkipNotice = useMemo(() => {
   function resetApp() {
     const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
-    if (state.session?.date === currentDate && state.session.discountTime === "17") {
+    if (
+      !isTestMode &&
+      state.session?.date === currentDate &&
+      state.session.discountTime === "17"
+    ) {
       saveReview19SourceState(cloneAppState(state));
     }
 
-    clearWorkSessionCheckpoint();
-    clearRuntimeState();
+    if (!isTestMode) {
+      clearWorkSessionCheckpoint();
+      clearRuntimeState();
+    }
     screenHistoryRef.current = [];
     previousRenderRef.current = null;
     suppressHistoryPushRef.current = false;

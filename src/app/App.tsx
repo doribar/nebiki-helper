@@ -230,7 +230,7 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
     <>
       {app.state.screen !== "start" ? (
         <div
-          aria-label="現在の需要サイクル"
+          aria-label="現在の夏季モード"
           style={{
             width: "fit-content",
             maxWidth: "calc(100vw - 32px)",
