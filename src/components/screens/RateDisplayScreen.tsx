@@ -4,6 +4,8 @@ import type {
   DiscountTime,
   EditableAreaCountItem,
   FinalGuideData,
+  HumanEvaluationDetails,
+  HumanEvaluationSelection,
   RateDisplayData,
   SkipTargetOption,
 } from "../../domain/types";
@@ -20,6 +22,9 @@ import {
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
+import { evaluationText } from "../../domain/areaCountHistory.ts";
+import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
+import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
 
 type RateDisplayScreenProps = {
   weekdayText: string;
@@ -41,6 +46,9 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
+  humanEvaluationDetails?: HumanEvaluationDetails;
+  canOverrideAreaCountEvaluation?: boolean;
+  onOverrideAreaCountEvaluation?: (selection: HumanEvaluationSelection) => void;
   showSummerModeJudgeHint?: boolean;
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
@@ -257,6 +265,9 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
+  humanEvaluationDetails,
+  canOverrideAreaCountEvaluation = false,
+  onOverrideAreaCountEvaluation,
   showSummerModeJudgeHint = false,
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
@@ -275,11 +286,12 @@ export function RateDisplayScreen({
   onStartAreaCountCorrection,
 }: RateDisplayScreenProps) {
   const isFinalTime = discountTime === "20";
-  const swipeToSkipHandlers = useSwipeToSkip({
+  const { cancelSwipeGesture, ...swipeToSkipHandlers } = useSwipeToSkip({
     enabled: !showDailyNotice,
     onSwipeLeft: onSkip,
   });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
+  const [showManualEvaluationOverride, setShowManualEvaluationOverride] = useState(false);
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
   const normalColor = "#008000";
@@ -319,6 +331,7 @@ export function RateDisplayScreen({
 
   useEffect(() => {
     setShowSkipTargetPicker(false);
+    setShowManualEvaluationOverride(false);
     setRateInstructionStepIndex(0);
   }, [
     areaName,
@@ -424,6 +437,76 @@ export function RateDisplayScreen({
           }}
         >
           <div>{timeSwitchNotice}</div>
+        </section>
+      ) : null}
+
+      {humanEvaluationDetails &&
+      humanEvaluationDetails.humanEvaluationScore9 % 2 === 0 &&
+      humanEvaluationDetails.resolvedEvaluation ? (
+        <section
+          style={{
+            border: "1px solid #c4b5fd",
+            borderRadius: 10,
+            padding: "9px 11px",
+            marginBottom: 12,
+            background: "#f5f3ff",
+            color: "#4c1d95",
+            fontSize: 13,
+            fontWeight: 800,
+            lineHeight: 1.6,
+          }}
+        >
+          {getHumanEvaluationRangeLabel(humanEvaluationDetails, evaluationText)}
+          <br />→ この時間帯は「
+          {evaluationText(humanEvaluationDetails.resolvedEvaluation)}」として計算
+        </section>
+      ) : null}
+
+      {!isFinalTime &&
+      canOverrideAreaCountEvaluation &&
+      onOverrideAreaCountEvaluation ? (
+        <section
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 10,
+            padding: 10,
+            marginBottom: 12,
+            background: "#fafafa",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setShowManualEvaluationOverride((current) => !current)
+            }
+            aria-expanded={showManualEvaluationOverride}
+            style={{
+              width: "100%",
+              minHeight: 44,
+              border: "1px solid #aaa",
+              borderRadius: 10,
+              background: "#fff",
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            自動判定を手動で変更
+          </button>
+          {showManualEvaluationOverride ? (
+            <div style={{ marginTop: 10 }}>
+              <HumanEvaluationSelector
+                ariaLabel={`自動判定の手動変更-${areaName}`}
+                layout="stacked"
+                showRateAdjustments
+                onLongPressActivated={cancelSwipeGesture}
+                onCommit={(selection) => {
+                  setShowManualEvaluationOverride(false);
+                  onOverrideAreaCountEvaluation(selection);
+                }}
+              />
+            </div>
+          ) : null}
         </section>
       ) : null}
 

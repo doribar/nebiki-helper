@@ -107,6 +107,9 @@ function buildAreaSnapshotsFromState(params: {
       stapleItemCount: progress?.stapleItemCount,
       areaCountEvaluation: progress?.areaCountEvaluation,
       areaCountEvaluationSource: progress?.areaCountEvaluationSource,
+      humanEvaluationDetails: progress?.humanEvaluationDetails
+        ? JSON.parse(JSON.stringify(progress.humanEvaluationDetails))
+        : undefined,
       areaCountDecisionBasis: progress?.areaCountDecisionBasis
         ? {
             ...JSON.parse(JSON.stringify(progress.areaCountDecisionBasis)),

@@ -7,11 +7,18 @@ import {
   getCurrentDataVersionInfo,
   normalizeDataVersionInfo,
 } from "./dataVersion.ts";
+import {
+  getEvaluationFromOddHumanScore,
+  getLegacyHumanEvaluationDetails,
+  normalizeHumanEvaluationDetails,
+  resolveHumanEvaluationDetails,
+} from "./humanEvaluation.ts";
 import type {
   AreaCountEvaluation,
   AreaId,
   DailySessionSnapshot,
   DemandCycle,
+  HumanEvaluationDetails,
   Review19AreaSnapshot,
   Review19AreaEvaluation,
   Review19DataQuality,
@@ -186,12 +193,10 @@ export function buildReview19DataQuality(params: {
     (areaId) => !excludedAreaIdSet.has(areaId),
   );
   const humanEvaluationRecordedAreaIds = humanEvaluationExpectedAreaIds.filter(
-    (areaId) =>
-      isAreaCountEvaluation(areaEvaluations[areaId]?.humanEvaluation),
+    (areaId) => resolveReview19HumanEvaluationDetails(areaEvaluations[areaId]) !== undefined,
   );
   const missingHumanEvaluationAreaIds = humanEvaluationExpectedAreaIds.filter(
-    (areaId) =>
-      !isAreaCountEvaluation(areaEvaluations[areaId]?.humanEvaluation),
+    (areaId) => resolveReview19HumanEvaluationDetails(areaEvaluations[areaId]) === undefined,
   );
   const measurementComplete = missingAreaIds.length === 0;
   const humanEvaluationComplete = missingHumanEvaluationAreaIds.length === 0;
@@ -242,6 +247,44 @@ function isAreaCountEvaluation(value: unknown): value is AreaCountEvaluation {
   );
 }
 
+function isReview19HumanEvaluationDetails(
+  details: HumanEvaluationDetails,
+  fallbackDemandCycle?: DemandCycle,
+): boolean {
+  if (details.humanEvaluationScale === 5) return true;
+
+  return (
+    details.resolutionReason === "review19_observation" &&
+    details.resolutionDirection === "not_applicable" &&
+    details.resolvedEvaluation === undefined &&
+    details.sessionDiscountTime === "19" &&
+    (fallbackDemandCycle === undefined ||
+      details.demandCycle === normalizeDemandCycle(fallbackDemandCycle))
+  );
+}
+
+function resolveReview19HumanEvaluationDetails(
+  candidate?: Partial<Review19AreaEvaluation>,
+  fallbackDemandCycle?: DemandCycle,
+): HumanEvaluationDetails | undefined {
+  if (!candidate) return undefined;
+
+  if (candidate.humanEvaluationDetails !== undefined) {
+    const details = normalizeHumanEvaluationDetails(
+      candidate.humanEvaluationDetails,
+    );
+    return details &&
+      isReview19HumanEvaluationDetails(details, fallbackDemandCycle)
+      ? details
+      : undefined;
+  }
+
+  const legacyEvaluation = isAreaCountEvaluation(candidate.humanEvaluation)
+    ? candidate.humanEvaluation
+    : undefined;
+  return resolveHumanEvaluationDetails(undefined, legacyEvaluation);
+}
+
 function normalizeReview19AreaEvaluations(
   raw: unknown,
   fallbackDemandCycle?: DemandCycle,
@@ -254,7 +297,28 @@ function normalizeReview19AreaEvaluations(
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
 
     const candidate = value as Partial<Review19AreaEvaluation>;
-    if (!isAreaCountEvaluation(candidate.humanEvaluation)) continue;
+    const resolvedHumanEvaluationDetails =
+      resolveReview19HumanEvaluationDetails(candidate, fallbackDemandCycle);
+    if (!resolvedHumanEvaluationDetails) continue;
+
+    const hasCanonicalDetails =
+      candidate.humanEvaluationDetails !== undefined;
+    const humanEvaluation = hasCanonicalDetails
+      ? getEvaluationFromOddHumanScore(
+          resolvedHumanEvaluationDetails.humanEvaluationScore9,
+        ) ?? undefined
+      : isAreaCountEvaluation(candidate.humanEvaluation)
+        ? candidate.humanEvaluation
+        : undefined;
+    const humanEvaluationFields: Pick<
+      Review19AreaEvaluation,
+      "humanEvaluation" | "humanEvaluationDetails"
+    > = {
+      ...(humanEvaluation ? { humanEvaluation } : {}),
+      ...(hasCanonicalDetails
+        ? { humanEvaluationDetails: resolvedHumanEvaluationDetails }
+        : {}),
+    };
 
     const autoEvaluationBasis = normalizeAreaCountDecisionBasis(
       candidate.autoEvaluationBasis,
@@ -275,7 +339,7 @@ function normalizeReview19AreaEvaluations(
       hasMatchingDemandCycle
     ) {
       normalized[areaId] = {
-        humanEvaluation: candidate.humanEvaluation,
+        ...humanEvaluationFields,
         autoEvaluation: candidate.autoEvaluation,
         autoEvaluationStatus: "ready",
         autoEvaluationBasis,
@@ -284,7 +348,7 @@ function normalizeReview19AreaEvaluations(
     }
 
     const normalizedEvaluation: Review19AreaEvaluation = {
-      humanEvaluation: candidate.humanEvaluation,
+      ...humanEvaluationFields,
       autoEvaluation: null,
       autoEvaluationStatus: "insufficient",
     };
@@ -743,6 +807,89 @@ export function cloneReview19Records(
     .filter((record): record is Review19Result => record !== null);
 }
 
+function materializeLegacyReview19AreaEvaluationsForExport(
+  areaEvaluations: Partial<Record<AreaId, Review19AreaEvaluation>> | undefined,
+): void {
+  if (!areaEvaluations) return;
+  for (const areaId of NORMAL_ROUTE) {
+    const evaluation = areaEvaluations[areaId];
+    if (
+      !evaluation ||
+      evaluation.humanEvaluationDetails ||
+      !isAreaCountEvaluation(evaluation.humanEvaluation)
+    ) {
+      continue;
+    }
+    evaluation.humanEvaluationDetails = getLegacyHumanEvaluationDetails(
+      evaluation.humanEvaluation,
+    );
+  }
+}
+
+function materializeLegacyManualAreaSnapshotsForExport(
+  areas: Record<AreaId, Review19AreaSnapshot> | undefined,
+): void {
+  if (!areas) return;
+  for (const areaId of NORMAL_ROUTE) {
+    const area = areas[areaId];
+    if (
+      !area ||
+      area.humanEvaluationDetails ||
+      area.areaCountEvaluationSource !== "manual" ||
+      !isAreaCountEvaluation(area.areaCountEvaluation)
+    ) {
+      continue;
+    }
+    area.humanEvaluationDetails = getLegacyHumanEvaluationDetails(
+      area.areaCountEvaluation,
+    );
+  }
+}
+
+/**
+ * 旧5段階の人間評価を、保存済みデータ自体は書き換えず、出力時だけ奇数scoreへ展開する。
+ */
+export function materializeReview19DaySnapshotHumanEvaluationsForExport<
+  T extends Review19DaySnapshot,
+>(snapshot: T): T {
+  const cloned = JSON.parse(JSON.stringify(snapshot)) as T;
+  for (const session of cloned.sessions) {
+    materializeLegacyManualAreaSnapshotsForExport(session.areas);
+  }
+  for (const record of cloned.areaCountRecords) {
+    if (
+      !record.humanEvaluationDetails &&
+      isAreaCountEvaluation(record.userJudge)
+    ) {
+      record.humanEvaluationDetails = getLegacyHumanEvaluationDetails(
+        record.userJudge,
+      );
+    }
+  }
+  materializeLegacyReview19AreaEvaluationsForExport(
+    cloned.review19Check?.areaEvaluations,
+  );
+  materializeLegacyManualAreaSnapshotsForExport(
+    cloned.review19Check?.snapshot?.areas,
+  );
+  return cloned;
+}
+
+export function materializeReview19ResultHumanEvaluationsForExport(
+  record: Review19Result,
+): Review19Result {
+  const cloned = JSON.parse(JSON.stringify(record)) as Review19Result;
+  materializeLegacyReview19AreaEvaluationsForExport(cloned.areaEvaluations);
+  materializeLegacyManualAreaSnapshotsForExport(cloned.snapshot?.areas);
+  if (cloned.daySnapshot) {
+    cloned.daySnapshot =
+      materializeReview19DaySnapshotHumanEvaluationsForExport(
+        cloned.daySnapshot,
+      );
+  }
+  return cloned;
+}
+
 export function appendReview19RecordInMemory(params: {
   currentRecords: Review19Result[];
   recordToAdd: Review19Result;
@@ -801,6 +948,7 @@ export function buildReview19ExportPayload(params: {
   exportedAt: string;
 }) {
   const records = cloneReview19Records(params.records)
+    .map(materializeReview19ResultHumanEvaluationsForExport)
     .filter((record) => record.review19Status === "recorded");
   const incompleteRecords = records
     .filter((record) => !record.dataQuality.complete)

@@ -8,6 +8,7 @@ import type {
   AreaRateAdjustment,
   DemandCycle,
   DiscountTime,
+  HumanEvaluationDetails,
   WeekdayBaseLabel,
 } from "./types";
 import {
@@ -21,6 +22,7 @@ import {
   isJapaneseHolidayOrObserved,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
+import { normalizeHumanEvaluationDetails } from "./humanEvaluation.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
 
@@ -88,6 +90,8 @@ export type AreaCountRecord = {
   count: number;
   /** 手動で選んだ5段階のエリア判定。自動判定時は保存しない。 */
   userJudge?: AreaCountEvaluation;
+  /** 人間の1〜9段階の生判断。値引用の5段階へ解決した値で上書きしない。 */
+  humanEvaluationDetails?: HumanEvaluationDetails;
   suggestedEvaluation?: AreaCountEvaluation;
   areaRateAdjustment?: AreaRateAdjustment;
   /** 判定元が手動か履歴中央値かを明示する。 */
@@ -329,6 +333,9 @@ function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
     actualWeekdayGroup: record.actualWeekdayGroup,
     count: record.count,
     userJudge: record.userJudge,
+    humanEvaluationDetails: record.humanEvaluationDetails
+      ? JSON.parse(JSON.stringify(record.humanEvaluationDetails)) as HumanEvaluationDetails
+      : undefined,
     suggestedEvaluation: record.suggestedEvaluation,
     areaRateAdjustment: record.areaRateAdjustment,
     evaluationSource: record.evaluationSource,
@@ -611,6 +618,9 @@ export function normalizeAreaCountRecords(
     const demandCycle = normalizeDemandCycle(
       record.demandCycle ?? fallbackDemandCycle,
     );
+    const humanEvaluationDetails = normalizeHumanEvaluationDetails(
+      record.humanEvaluationDetails,
+    );
 
     return [
       {
@@ -639,6 +649,10 @@ export function normalizeAreaCountRecords(
         actualWeekdayGroup,
         count: Math.round(record.count),
         userJudge,
+        humanEvaluationDetails:
+          humanEvaluationDetails?.demandCycle === demandCycle
+            ? humanEvaluationDetails
+            : undefined,
         suggestedEvaluation: isAreaCountEvaluation(record.suggestedEvaluation)
           ? record.suggestedEvaluation
           : undefined,

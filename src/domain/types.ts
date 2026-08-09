@@ -159,6 +159,7 @@ export type AreaProgress = {
   stapleItemCount?: number | null;
   areaCountEvaluation?: AreaCountEvaluation;
   areaCountEvaluationSource?: AreaCountEvaluationSource;
+  humanEvaluationDetails?: HumanEvaluationDetails;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
   areaRateAdjustment?: AreaRateAdjustment;
   visitedAt?: string;
@@ -215,6 +216,41 @@ export type ActualWeekdayGroup =
   | "三連休中日"
   | "翌日平日祝日";
 export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
+export type HumanEvaluationScore9 = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type HumanEvaluationScale = 5 | 9;
+export type HumanEvaluationSelections =
+  | [AreaCountEvaluation]
+  | [AreaCountEvaluation, AreaCountEvaluation];
+export type HumanEvaluationSelection = {
+  humanEvaluationScore9: HumanEvaluationScore9;
+  humanEvaluationSelections: HumanEvaluationSelections;
+};
+export type HumanEvaluationResolutionDirection =
+  | "none"
+  | "lower"
+  | "higher"
+  | "not_applicable";
+export type HumanEvaluationResolutionReason =
+  | "single_selection"
+  | "normal_15"
+  | "normal_17_or_later"
+  | "summer_before_1800"
+  | "summer_1800_or_later"
+  | "review19_observation"
+  | "legacy_5_level";
+export type HumanEvaluationDetails = {
+  humanEvaluationScore9: HumanEvaluationScore9;
+  humanEvaluationScale: HumanEvaluationScale;
+  humanEvaluationSelections: HumanEvaluationSelections;
+  /** 手動変更前の履歴自動判定。自動判定がない場合は保存しない。 */
+  automaticEvaluation?: AreaCountEvaluation;
+  resolvedEvaluation?: AreaCountEvaluation;
+  resolutionDirection: HumanEvaluationResolutionDirection;
+  resolutionReason: HumanEvaluationResolutionReason;
+  demandCycle?: DemandCycle;
+  evaluatedAt?: string;
+  sessionDiscountTime?: DiscountTime;
+};
 export type AreaCountEvaluationSource = "manual" | "history";
 export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
 export type RateLogicVersion = "weekday_basis_v1" | "time_basic_rate_v1";
@@ -430,7 +466,8 @@ export type Review19AutomaticEvaluation = {
 
 export type Review19AreaEvaluation = Review19AutomaticEvaluation & {
   /** 売場を見た担当者の観測値。ground truthとして扱わない。 */
-  humanEvaluation: AreaCountEvaluation;
+  humanEvaluation?: AreaCountEvaluation;
+  humanEvaluationDetails?: HumanEvaluationDetails;
 };
 
 export type Review19DataQuality = AreaCountDataQuality & {
@@ -455,6 +492,7 @@ export type Review19AreaSnapshot = {
   stapleItemCount?: number | null;
   areaCountEvaluation?: AreaCountEvaluation;
   areaCountEvaluationSource?: AreaCountEvaluationSource;
+  humanEvaluationDetails?: HumanEvaluationDetails;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
   areaRateAdjustment?: AreaRateAdjustment;
   judgeText: string;
@@ -675,6 +713,7 @@ export type Review19AreaItem = {
   areaName: string;
   count?: number;
   humanEvaluation?: AreaCountEvaluation;
+  humanEvaluationDetails?: HumanEvaluationDetails;
   excluded: boolean;
   excludeReasonText?: string;
 };
@@ -788,6 +827,7 @@ export type UseNebikiAppActions = {
     areaCount?: number | null,
     manualAreaCountEvaluation?: AreaCountEvaluation,
     stapleItemCount?: number | null,
+    humanEvaluationSelection?: HumanEvaluationSelection,
   ) => void;
   getCurrentAreaCountRecommendation: (count: number) => AreaCountRecommendation;
   skipCurrentArea: () => void;
@@ -803,6 +843,7 @@ export type UseNebikiAppActions = {
     areaId: AreaId,
     count: number,
     humanEvaluation?: AreaCountEvaluation,
+    humanEvaluationSelection?: HumanEvaluationSelection,
   ) => void;
   skipReview19Area: (areaId: AreaId) => void;
   startReview19AfterWeather: () => void;
@@ -811,6 +852,7 @@ export type UseNebikiAppActions = {
       areaId: AreaId;
       count: number;
       humanEvaluation?: AreaCountEvaluation;
+      humanEvaluationSelection?: HumanEvaluationSelection;
     },
     latestExcludedAreaId?: AreaId,
   ) => void;

@@ -19,6 +19,8 @@ import type {
   AreaCountEvaluation,
   AreaRateAdjustment,
   DemandCycle,
+  HumanEvaluationDetails,
+  HumanEvaluationSelection,
 } from "../domain/types";
 import {
   buildFinalRateDecisionSnapshot,
@@ -244,6 +246,12 @@ import {
   upsertSummerAreaCountRecord,
   type DemandCycleState,
 } from "../domain/demandCycleStorage.ts";
+import {
+  createReview19HumanEvaluationDetails,
+  getEvaluationFromOddHumanScore,
+  resolveHumanEvaluationDetails,
+  resolveHumanEvaluationForDiscount,
+} from "../domain/humanEvaluation.ts";
 
 export { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
 
@@ -1313,6 +1321,10 @@ const lateSkipNotice = useMemo(() => {
         count: state.review19?.areaCounts?.[item.areaId],
         humanEvaluation:
           state.review19?.areaEvaluations?.[item.areaId]?.humanEvaluation,
+        humanEvaluationDetails: resolveHumanEvaluationDetails(
+          state.review19?.areaEvaluations?.[item.areaId]?.humanEvaluationDetails,
+          state.review19?.areaEvaluations?.[item.areaId]?.humanEvaluation,
+        ),
         excluded: excludedAreaIdSet.has(item.areaId),
         excludeReasonText: excludeReason
           ? REVIEW19_EXCLUDE_REASON_TEXT[excludeReason]
@@ -1920,6 +1932,7 @@ const lateSkipNotice = useMemo(() => {
     },
     areaCountEvaluationSource?: NonNullable<AreaProgress["areaCountEvaluationSource"]>,
     areaCountDecisionBasis?: AreaCountDecisionBasis,
+    humanEvaluationDetails?: HumanEvaluationDetails,
     stapleItemCount?: number | null,
   ): AppState {
     if (!prev.currentAreaId) return prev;
@@ -1945,6 +1958,7 @@ const lateSkipNotice = useMemo(() => {
               : {}),
             areaCountEvaluation: areaCountResult?.evaluation,
             areaCountEvaluationSource,
+            humanEvaluationDetails,
             areaCountDecisionBasis,
             areaRateAdjustment: areaCountResult?.rateAdjustment,
             visitedAt: getRuntimeNow().toISOString(),
@@ -1982,6 +1996,7 @@ const lateSkipNotice = useMemo(() => {
           : {}),
         areaCountEvaluation: areaCountResult?.evaluation,
         areaCountEvaluationSource,
+        humanEvaluationDetails,
         areaCountDecisionBasis,
         areaRateAdjustment: areaCountResult?.rateAdjustment,
         visitedAt: currentVisitedAt,
@@ -2011,6 +2026,7 @@ const lateSkipNotice = useMemo(() => {
           : {}),
         areaCountEvaluation: areaCountResult?.evaluation,
         areaCountEvaluationSource,
+        humanEvaluationDetails,
         areaCountDecisionBasis,
         areaRateAdjustment: areaCountResult?.rateAdjustment,
         status: "postponed_few" as const,
@@ -2508,9 +2524,12 @@ const lateSkipNotice = useMemo(() => {
     areaCount?: number | null,
     manualAreaCountEvaluation?: AreaCountEvaluation,
     stapleItemCount?: number | null,
+    humanEvaluationSelection?: HumanEvaluationSelection,
   ) {
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
+    const actionNow = getRuntimeNow();
+    const actionAt = actionNow.toISOString();
 
     const roundedAreaCount =
       typeof areaCount === "number" && Number.isFinite(areaCount) && areaCount >= 0
@@ -2539,6 +2558,18 @@ const lateSkipNotice = useMemo(() => {
     const areaCountRecommendation = roundedAreaCount !== null
       ? getCurrentAreaCountRecommendation(roundedAreaCount)
       : null;
+    const resolvedHumanEvaluationDetails =
+      humanEvaluationSelection && state.session
+        ? resolveHumanEvaluationForDiscount({
+            selection: humanEvaluationSelection,
+            demandCycle: normalizeDemandCycle(state.session.demandCycle),
+            sessionDiscountTime: state.session.discountTime,
+            nowMs: actionNow.getTime(),
+            evaluatedAt: actionAt,
+          })
+        : undefined;
+    const resolvedManualEvaluation =
+      resolvedHumanEvaluationDetails?.resolvedEvaluation ?? manualAreaCountEvaluation;
     const readyAreaCountResult =
       areaCountRecommendation?.status === "ready" &&
       areaCountRecommendation.suggestedEvaluation &&
@@ -2548,18 +2579,24 @@ const lateSkipNotice = useMemo(() => {
             rateAdjustment: areaCountRecommendation.areaRateAdjustment,
           }
         : undefined;
+    const humanEvaluationDetails = resolvedHumanEvaluationDetails
+      ? {
+          ...resolvedHumanEvaluationDetails,
+          automaticEvaluation: readyAreaCountResult?.evaluation,
+        }
+      : undefined;
     const manualAreaCountResult =
-      roundedAreaCount !== null && manualAreaCountEvaluation
+      roundedAreaCount !== null && resolvedManualEvaluation
         ? {
-            evaluation: manualAreaCountEvaluation,
-            rateAdjustment: getAreaCountRateAdjustment(manualAreaCountEvaluation),
+            evaluation: resolvedManualEvaluation,
+            rateAdjustment: getAreaCountRateAdjustment(resolvedManualEvaluation),
           }
         : undefined;
-    const effectiveAreaCountResult = readyAreaCountResult ?? manualAreaCountResult;
-    const areaCountEvaluationSource = readyAreaCountResult
-      ? "history" as const
-      : manualAreaCountResult
+    const effectiveAreaCountResult = manualAreaCountResult ?? readyAreaCountResult;
+    const areaCountEvaluationSource = manualAreaCountResult
       ? "manual" as const
+      : readyAreaCountResult
+      ? "history" as const
       : undefined;
     const areaCountDecisionBasis = areaCountRecommendation
       ? buildAreaCountDecisionBasis({
@@ -2574,7 +2611,6 @@ const lateSkipNotice = useMemo(() => {
     const effectiveJudge: Exclude<AreaJudge, null> = effectiveAreaCountResult ? "normal" : judge;
     setAreaJudgeSelection(effectiveJudge);
 
-    const actionAt = getRuntimeNow().toISOString();
     let nextAreaCountRecords = areaCountRecords;
 
     if (
@@ -2602,7 +2638,8 @@ const lateSkipNotice = useMemo(() => {
           date: state.session.date,
         }),
         count: roundedAreaCount,
-        userJudge: manualAreaCountEvaluation,
+        userJudge: resolvedManualEvaluation,
+        humanEvaluationDetails,
         suggestedEvaluation: effectiveAreaCountResult?.evaluation,
         areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
         evaluationSource: areaCountEvaluationSource,
@@ -2625,6 +2662,7 @@ const lateSkipNotice = useMemo(() => {
       effectiveAreaCountResult,
       areaCountEvaluationSource,
       areaCountDecisionBasis,
+      humanEvaluationDetails,
       normalizedStapleItemCount,
     );
 
@@ -2642,6 +2680,7 @@ const lateSkipNotice = useMemo(() => {
         effectiveAreaCountResult,
         areaCountEvaluationSource,
         areaCountDecisionBasis,
+        humanEvaluationDetails,
         normalizedStapleItemCount,
       );
       return finalizedDayData
@@ -3318,14 +3357,26 @@ const lateSkipNotice = useMemo(() => {
     areaId: AreaId,
     count: number,
     humanEvaluation?: AreaCountEvaluation,
+    humanEvaluationSelection?: HumanEvaluationSelection,
   ) {
     const historicalRecords = isTestMode ? [] : loadReview19Records();
+    const recordedAt = getRuntimeNow().toISOString();
 
     setState((prev) => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
 
       const safeCount = Math.max(0, Math.round(count));
-      const recordedAt = getRuntimeNow().toISOString();
+      const demandCycle = normalizeDemandCycle(prev.review19.demandCycle);
+      const humanEvaluationDetails = humanEvaluationSelection
+        ? createReview19HumanEvaluationDetails({
+            selection: humanEvaluationSelection,
+            demandCycle,
+            evaluatedAt: recordedAt,
+          })
+        : undefined;
+      const compatibleHumanEvaluation = humanEvaluationSelection
+        ? getEvaluationFromOddHumanScore(humanEvaluationSelection.humanEvaluationScore9) ?? undefined
+        : humanEvaluation;
       const nextExcludedAreaIds = prev.review19.excludedAreaIds.filter((id) => id !== areaId);
       const nextExcludeReasons = { ...prev.review19.excludeReasons };
       delete nextExcludeReasons[areaId];
@@ -3334,9 +3385,10 @@ const lateSkipNotice = useMemo(() => {
         [areaId]: safeCount,
       };
       const nextAreaEvaluations = { ...prev.review19.areaEvaluations };
-      if (humanEvaluation) {
+      if (humanEvaluationDetails || compatibleHumanEvaluation) {
         nextAreaEvaluations[areaId] = {
-          humanEvaluation,
+          humanEvaluation: compatibleHumanEvaluation,
+          humanEvaluationDetails,
           ...buildReview19AutomaticEvaluation({
             areaId,
             count: safeCount,
@@ -3345,7 +3397,7 @@ const lateSkipNotice = useMemo(() => {
               prev.review19.reference?.weekday ??
               prev.session?.weekday ??
               prev.sessionDraft.weekday,
-            demandCycle: normalizeDemandCycle(prev.review19.demandCycle),
+            demandCycle,
             historicalRecords,
           }),
         };
@@ -3419,6 +3471,7 @@ const lateSkipNotice = useMemo(() => {
       areaId: AreaId;
       count: number;
       humanEvaluation?: AreaCountEvaluation;
+      humanEvaluationSelection?: HumanEvaluationSelection;
     },
     latestExcludedAreaId?: AreaId
   ): Review19Result | null {
@@ -3447,9 +3500,23 @@ const lateSkipNotice = useMemo(() => {
     };
     const areaEvaluations = { ...state.review19.areaEvaluations };
     if (latestAreaCount) {
-      if (latestAreaCount.humanEvaluation) {
+      const demandCycle = normalizeDemandCycle(state.review19.demandCycle);
+      const humanEvaluationDetails = latestAreaCount.humanEvaluationSelection
+        ? createReview19HumanEvaluationDetails({
+            selection: latestAreaCount.humanEvaluationSelection,
+            demandCycle,
+            evaluatedAt: completedAt,
+          })
+        : undefined;
+      const compatibleHumanEvaluation = latestAreaCount.humanEvaluationSelection
+        ? getEvaluationFromOddHumanScore(
+            latestAreaCount.humanEvaluationSelection.humanEvaluationScore9,
+          ) ?? undefined
+        : latestAreaCount.humanEvaluation;
+      if (humanEvaluationDetails || compatibleHumanEvaluation) {
         areaEvaluations[latestAreaCount.areaId] = {
-          humanEvaluation: latestAreaCount.humanEvaluation,
+          humanEvaluation: compatibleHumanEvaluation,
+          humanEvaluationDetails,
           ...buildReview19AutomaticEvaluation({
             areaId: latestAreaCount.areaId,
             count: Math.max(0, Math.round(latestAreaCount.count)),
@@ -3458,7 +3525,7 @@ const lateSkipNotice = useMemo(() => {
               state.review19.reference?.weekday ??
               state.session?.weekday ??
               state.sessionDraft.weekday,
-            demandCycle: normalizeDemandCycle(state.review19.demandCycle),
+            demandCycle,
             historicalRecords: isTestMode ? [] : loadReview19Records(),
           }),
         };
@@ -3562,6 +3629,7 @@ const lateSkipNotice = useMemo(() => {
       areaId: AreaId;
       count: number;
       humanEvaluation?: AreaCountEvaluation;
+      humanEvaluationSelection?: HumanEvaluationSelection;
     },
     latestExcludedAreaId?: AreaId,
   ) {

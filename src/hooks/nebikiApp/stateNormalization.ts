@@ -34,6 +34,7 @@ import {
 import { normalizeDailyMessageState } from "../../domain/storage";
 import { applyAfterRainSelectionDefaults } from "../../domain/afterRain";
 import { normalizeAreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
+import { normalizeHumanEvaluationDetails } from "../../domain/humanEvaluation.ts";
 import { normalizeReview19Result } from "../../domain/review19.ts";
 import { normalizeDataVersionInfo } from "../../domain/dataVersion.ts";
 import {
@@ -278,6 +279,9 @@ export function normalizeAreaProgressMap(
       areaCountEvaluationSource: isValidAreaCountEvaluationSource(progress.areaCountEvaluationSource)
         ? progress.areaCountEvaluationSource
         : undefined,
+      humanEvaluationDetails: normalizeHumanEvaluationDetails(
+        progress.humanEvaluationDetails,
+      ),
       areaCountDecisionBasis: normalizeAreaCountDecisionBasis(progress.areaCountDecisionBasis),
       areaRateAdjustment: isValidAreaRateAdjustment(progress.areaRateAdjustment)
         ? progress.areaRateAdjustment

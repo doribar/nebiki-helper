@@ -4,6 +4,7 @@ import type {
   AreaId,
   AreaJudge,
   EditableAreaCountItem,
+  HumanEvaluationSelection,
   SkipTargetOption,
 } from "../../domain/types";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
@@ -18,6 +19,7 @@ import {
   loadCalculatorDraft,
   saveCalculatorDraft,
 } from "../../domain/calculatorDraft";
+import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
 
 type AreaJudgeScreenProps = {
   weekdayText: string;
@@ -53,6 +55,7 @@ type AreaJudgeScreenProps = {
     areaCount?: number | null,
     manualAreaCountEvaluation?: AreaCountEvaluation,
     stapleItemCount?: number | null,
+    humanEvaluationSelection?: HumanEvaluationSelection,
   ) => void;
   onSkip: () => void;
   onGoBack: () => void;
@@ -251,7 +254,7 @@ export function AreaJudgeScreen({
   const [areaCountCalculatorText, setAreaCountCalculatorText] = useState("");
   const [stapleItemCountText, setStapleItemCountText] = useState("");
   const [stapleItemCountError, setStapleItemCountError] = useState<string | null>(null);
-  const normalManualJudgeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const normalManualJudgeButtonRef = useRef<HTMLDivElement | null>(null);
   const areaCountCalculatorDraftKey = buildCalculatorDraftKey({
     kind: "area-count",
     scopeId: calculatorDraftScope,
@@ -349,16 +352,21 @@ export function AreaJudgeScreen({
     onChooseSkipTarget?.(areaId);
   };
 
-  const swipeToSkipHandlers = useSwipeToSkip({ onSwipeLeft: handleSkip });
+  const {
+    cancelSwipeGesture,
+    ...swipeToSkipHandlers
+  } = useSwipeToSkip({ onSwipeLeft: handleSkip });
 
   const handleJudge = (judge: Exclude<AreaJudge, null>) => {
     clearAreaCountCalculatorDraft();
     onJudge(judge, parsedAreaCount);
   };
 
-  const handleManualAreaCountEvaluation = (evaluation: AreaCountEvaluation) => {
+  const handleHumanEvaluationSelection = (
+    selection: HumanEvaluationSelection,
+  ) => {
     clearAreaCountCalculatorDraft();
-    onJudge("normal", parsedAreaCount, evaluation);
+    onJudge("normal", parsedAreaCount, undefined, undefined, selection);
   };
 
   const handleAreaCountCalculatorDigit = (digit: string) => {
@@ -814,49 +822,16 @@ export function AreaJudgeScreen({
                 weekdayText={weekdayText}
                 timeText={timeText}
               />
-              <JudgeOptionButton
-                label="多い"
-                subLabel="+10%"
-                selected={false}
-                onClick={() =>
-                  canUseManualJudge && handleManualAreaCountEvaluation("many")
-                }
-              />
-              <JudgeOptionButton
-                label="やや多い"
-                subLabel="+5%"
-                selected={false}
-                onClick={() =>
-                  canUseManualJudge &&
-                  handleManualAreaCountEvaluation("slightly_many")
-                }
-              />
-              <JudgeOptionButton
-                label="普通"
-                subLabel="±0%"
-                selected={false}
-                buttonRef={normalManualJudgeButtonRef}
-                onClick={() =>
-                  canUseManualJudge && handleManualAreaCountEvaluation("normal")
-                }
-              />
-              <JudgeOptionButton
-                label="やや少ない"
-                subLabel="-5%"
-                selected={false}
-                onClick={() =>
-                  canUseManualJudge &&
-                  handleManualAreaCountEvaluation("slightly_few")
-                }
-              />
-              <JudgeOptionButton
-                label="少ない"
-                subLabel="-10%"
-                selected={false}
-                onClick={() =>
-                  canUseManualJudge && handleManualAreaCountEvaluation("few")
-                }
-              />
+              <div ref={normalManualJudgeButtonRef}>
+                <HumanEvaluationSelector
+                  ariaLabel={`人間目線の実質9段階残数評価-${areaId}`}
+                  layout="stacked"
+                  showRateAdjustments
+                  disabled={!canUseManualJudge}
+                  onLongPressActivated={cancelSwipeGesture}
+                  onCommit={handleHumanEvaluationSelection}
+                />
+              </div>
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>

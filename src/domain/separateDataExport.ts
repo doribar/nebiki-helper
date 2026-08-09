@@ -12,6 +12,7 @@ import {
 import {
   buildReview19ExportPayload,
   cloneReview19Records,
+  materializeReview19DaySnapshotHumanEvaluationsForExport,
 } from "./review19.ts";
 import type { Review19Result } from "./types.ts";
 
@@ -99,7 +100,9 @@ export function buildAllFinalizedDayDataExportPayload(params: {
   records: readonly FinalizedDayData[];
   exportedAt: string;
 }): FinalizedDayDataExportPayload {
-  const records = selectAllFinalizedDayData(params.records);
+  const records = selectAllFinalizedDayData(params.records).map(
+    materializeReview19DaySnapshotHumanEvaluationsForExport,
+  );
   const incompleteDates = records
     .filter(
       (record) =>

@@ -167,6 +167,28 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
+          humanEvaluationDetails={
+            state.currentAreaId
+              ? state.areaProgressMap[state.currentAreaId]?.humanEvaluationDetails
+              : undefined
+          }
+          canOverrideAreaCountEvaluation={Boolean(
+            state.currentAreaId &&
+            state.areaProgressMap[state.currentAreaId]?.areaCountEvaluationSource === "history" &&
+            typeof state.areaProgressMap[state.currentAreaId]?.areaCount === "number",
+          )}
+          onOverrideAreaCountEvaluation={(selection) => {
+            if (!state.currentAreaId) return;
+            const count = state.areaProgressMap[state.currentAreaId]?.areaCount;
+            if (typeof count !== "number") return;
+            actions.judgeCurrentArea(
+              "normal",
+              count,
+              undefined,
+              undefined,
+              selection,
+            );
+          }}
           showSummerModeJudgeHint={showSummerModeJudgeHint}
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           showDayBeforeHolidayNotice={derived.showDayBeforeHolidayNotice}
@@ -233,11 +255,12 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           calculatorDraftScope={
             state.review19?.sessionStartedAt ?? state.session?.startedAt ?? "review19-session"
           }
-          onCompleteArea={(areaId, count, humanEvaluation) =>
+          onCompleteArea={(areaId, count, humanEvaluationSelection) =>
             actions.updateReview19AreaCount(
               areaId,
               count,
-              humanEvaluation,
+              undefined,
+              humanEvaluationSelection,
             )
           }
           onSave={actions.saveReview19}

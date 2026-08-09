@@ -435,6 +435,16 @@ test("19:00 exportへhuman/auto/status/median/basis/demandCycleを含める", ()
   const exported = payload.records[0];
   assert.equal(exported.demandCycle, "summer");
   assert.equal(exported.areaEvaluations?.bento_men?.humanEvaluation, "few");
+  assert.equal(
+    exported.areaEvaluations?.bento_men?.humanEvaluationDetails
+      ?.humanEvaluationScore9,
+    1,
+  );
+  assert.equal(
+    exported.areaEvaluations?.bento_men?.humanEvaluationDetails
+      ?.humanEvaluationScale,
+    5,
+  );
   assert.equal(exported.areaEvaluations?.bento_men?.autoEvaluation, "many");
   assert.equal(exported.areaEvaluations?.bento_men?.autoEvaluationStatus, "ready");
   assert.equal(exported.areaEvaluations?.bento_men?.autoEvaluationBasis?.medianCount, 10);
@@ -483,6 +493,8 @@ test("daySnapshotと統合JSONから19:00のhuman/autoを追跡できる", () =>
   });
   const nested = payload.dailyData[0].review19Check?.areaEvaluations?.bento_men;
   assert.equal(nested?.humanEvaluation, "few");
+  assert.equal(nested?.humanEvaluationDetails?.humanEvaluationScore9, 1);
+  assert.equal(nested?.humanEvaluationDetails?.humanEvaluationScale, 5);
   assert.equal(nested?.autoEvaluationStatus, "insufficient");
   assert.equal(payload.review19Data.length, 0);
 });
@@ -493,12 +505,21 @@ test("fixed-time相当の空履歴では本番履歴を使わずinsufficientに�
   assert.equal(result.autoEvaluation, null);
 });
 
-test("入力画面は人間5段階だけを表示し中央値・自動評価を表示しない", () => {
-  const source = readFileSync(
+test("入力画面は共通9段階selectorを使い中央値・自動評価を表示しない", () => {
+  const review19Source = readFileSync(
     new URL("../src/components/screens/Review19Screen.tsx", import.meta.url),
     "utf8",
   );
-  assert.ok(source.includes("evaluationText"));
+  const selectorSource = readFileSync(
+    new URL("../src/components/common/HumanEvaluationSelector.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.ok(review19Source.includes("HumanEvaluationSelector"));
+  assert.ok(review19Source.includes('ariaLabel="人間目線の9段階残数評価"'));
+  assert.ok(review19Source.includes('layout="compact"'));
+  assert.ok(review19Source.includes("onLongPressActivated={cancelSwipeGesture}"));
+  assert.ok(selectorSource.includes("evaluationText"));
   for (const value of [
     'value: "many"',
     'value: "slightly_many"',
@@ -506,13 +527,16 @@ test("入力画面は人間5段階だけを表示し中央値・自動評価を�
     'value: "slightly_few"',
     'value: "few"',
   ]) {
-    assert.ok(source.includes(value));
+    assert.ok(selectorSource.includes(value));
   }
-  assert.ok(source.includes('gridTemplateColumns: "repeat(5, minmax(0, 1fr))"'));
-  assert.ok(source.includes('overflowX: "hidden"'));
-  assert.ok(!source.includes("中央値"));
-  assert.ok(!source.includes("自動評価"));
-  assert.ok(!source.includes("autoEvaluation"));
+  assert.ok(
+    selectorSource.includes('gridTemplateColumns: "repeat(5, minmax(0, 1fr))"'),
+  );
+  assert.ok(review19Source.includes('overflowX: "hidden"'));
+  assert.ok(!review19Source.includes("中央値"));
+  assert.ok(!review19Source.includes("自動評価"));
+  assert.ok(!review19Source.includes("autoEvaluation"));
+  assert.ok(!selectorSource.includes("autoEvaluation"));
 });
 
 test("完了画面にも中央値の答え合わせを追加していない", () => {

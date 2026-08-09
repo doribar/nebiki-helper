@@ -36,23 +36,23 @@ function JudgeHintContent({
         </>
       ) : null}
       <div>
-        15時
+        15時：2つの間で迷う場合は選択肢を長押し。
+        <br />中間評価として記録し、値引率は
         <span style={{ color: "#e65100", fontWeight: 700 }}>
-          ➡少ない側に寄せる
+          少ない側の判定
         </span>
-        <span style={{ color: "#666", fontSize: 13 }}>
-          （品揃え確保優先）
-        </span>
+        で計算します。
       </div>
-      <div>
-        17時以降
-        <span style={{ color: "#e65100", fontWeight: 700 }}>
-          ➡多い側に寄せる
-        </span>
-        <span style={{ color: "#666", fontSize: 13 }}>
-          （売り切り優先）
-        </span>
-      </div>
+      {!showSummerModeJudgeHint ? (
+        <div style={{ marginTop: 8 }}>
+          17時以降：2つの間で迷う場合は選択肢を長押し。
+          <br />中間評価として記録し、値引率は
+          <span style={{ color: "#e65100", fontWeight: 700 }}>
+            多い側の判定
+          </span>
+          で計算します。
+        </div>
+      ) : null}
       {showSummerModeJudgeHint ? (
         <div
           style={{
@@ -68,7 +68,7 @@ function JudgeHintContent({
         >
           <div style={{ fontWeight: 900 }}>夏季モード中（17:59まで）</div>
           <div>
-            残数判定で迷った場合だけ、1段階少ない側に寄せます。
+            残数判定で2つの間に迷う場合は選択肢を長押し。隣の項目を選ぶと中間評価として記録し、値引率は少ない側の判定で計算します。
           </div>
           <div>
             明らかに多い場合は無理に下げず、夕方〜夜の売れ方も考慮して個別に判断します。

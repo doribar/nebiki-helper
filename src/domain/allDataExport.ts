@@ -1,6 +1,10 @@
 import { getCurrentDataVersionInfo } from "./dataVersion.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
 import { normalizeReview19DaySnapshotDemandCycle } from "./finalizedDayData.ts";
+import {
+  materializeReview19DaySnapshotHumanEvaluationsForExport,
+  materializeReview19ResultHumanEvaluationsForExport,
+} from "./review19.ts";
 import type { Review19DaySnapshot, Review19Result } from "./types.ts";
 
 const JST_TIME_ZONE = "Asia/Tokyo";
@@ -164,9 +168,9 @@ export function buildAllDataExportPayload(params: {
   exportedAt: string;
   versionInfo?: AllDataExportVersionInfo;
 }): AllDataExportPayload {
-  const normalizedDaily = params.dailyData.map(
-    normalizeReview19DaySnapshotDemandCycle,
-  );
+  const normalizedDaily = params.dailyData
+    .map(normalizeReview19DaySnapshotDemandCycle)
+    .map(materializeReview19DaySnapshotHumanEvaluationsForExport);
   const validDaily = normalizedDaily.filter((item) =>
     isValidJstDateString(item.date),
   );
@@ -178,9 +182,9 @@ export function buildAllDataExportPayload(params: {
   });
   const dailyDates = new Set(latestDailyByDate.keys());
 
-  const normalizedReview19 = params.review19Data.map(
-    cloneReview19ResultWithDemandCycle,
-  );
+  const normalizedReview19 = params.review19Data
+    .map(cloneReview19ResultWithDemandCycle)
+    .map(materializeReview19ResultHumanEvaluationsForExport);
   const applicableReview19 = normalizedReview19.filter(
     (item) => item.review19Status !== "not_applicable",
   );

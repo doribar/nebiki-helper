@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type {
-  AreaCountEvaluation,
   AreaId,
+  HumanEvaluationDetails,
+  HumanEvaluationSelection,
   Review19AreaItem,
 } from "../../domain/types";
 import { PrimaryButton } from "../layout/PrimaryButton";
+import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import {
   buildCalculatorDraftKey,
@@ -12,7 +14,7 @@ import {
   loadCalculatorDraft,
   saveCalculatorDraft,
 } from "../../domain/calculatorDraft";
-import { evaluationText } from "../../domain/areaCountHistory.ts";
+import { resolveHumanEvaluationDetails } from "../../domain/humanEvaluation.ts";
 
 const cardStyle: CSSProperties = {
   border: "1px solid #ddd",
@@ -57,11 +59,38 @@ function calculateAdditionResult(value: string): number | null {
   return Math.round(total);
 }
 
-function getEvaluationLabelLines(
-  evaluation: AreaCountEvaluation,
-): string[] {
-  const label = evaluationText(evaluation);
-  return label.startsWith("やや") ? ["やや", label.slice(2)] : [label];
+function getItemHumanEvaluationDetails(
+  item?: Review19AreaItem | null,
+): HumanEvaluationDetails | null {
+  if (!item) return null;
+  return (
+    resolveHumanEvaluationDetails(
+      item.humanEvaluationDetails,
+      item.humanEvaluation,
+    ) ?? null
+  );
+}
+
+function createDisplayHumanEvaluationDetails(
+  selection: HumanEvaluationSelection,
+): HumanEvaluationDetails {
+  return {
+    ...selection,
+    humanEvaluationScale: 9,
+    resolutionDirection: "not_applicable",
+    resolutionReason: "review19_observation",
+  };
+}
+
+function getHumanEvaluationSelection(
+  details: HumanEvaluationDetails,
+): HumanEvaluationSelection {
+  const [first, second] = details.humanEvaluationSelections;
+  return {
+    humanEvaluationScore9: details.humanEvaluationScore9,
+    humanEvaluationSelections:
+      second === undefined ? [first] : [first, second],
+  };
 }
 
 type Review19ScreenProps = {
@@ -70,13 +99,13 @@ type Review19ScreenProps = {
   onCompleteArea: (
     areaId: AreaId,
     count: number,
-    humanEvaluation: AreaCountEvaluation,
+    humanEvaluationSelection: HumanEvaluationSelection,
   ) => void;
   onSave: (
     latestObservation?: {
       areaId: AreaId;
       count: number;
-      humanEvaluation: AreaCountEvaluation;
+      humanEvaluationSelection: HumanEvaluationSelection;
     },
     latestExcludedAreaId?: AreaId,
   ) => void;
@@ -107,10 +136,17 @@ export function Review19Screen({
   const [countCalculatorText, setCountCalculatorText] = useState(() =>
     getCountText(activeItem?.count),
   );
-  const [humanEvaluation, setHumanEvaluation] =
-    useState<AreaCountEvaluation | null>(
-      activeItem?.humanEvaluation ?? null,
-    );
+  const activeHumanEvaluationKey = activeItem
+    ? `${calculatorDraftScope}:${activeItem.areaId}`
+    : null;
+  const [humanEvaluationDraft, setHumanEvaluationDraft] = useState<{
+    key: string;
+    details: HumanEvaluationDetails;
+  } | null>(null);
+  const humanEvaluationDetails =
+    humanEvaluationDraft?.key === activeHumanEvaluationKey
+      ? humanEvaluationDraft.details
+      : getItemHumanEvaluationDetails(activeItem);
   const countCalculatorResult = calculateAdditionResult(countCalculatorText);
 
   useEffect(() => {
@@ -141,17 +177,13 @@ export function Review19Screen({
     );
   }, [activeItem?.areaId, activeItem?.count, calculatorDraftScope]);
 
-  useEffect(() => {
-    setHumanEvaluation(activeItem?.humanEvaluation ?? null);
-  }, [activeItem?.areaId, activeItem?.humanEvaluation]);
-
   const recordedCount = useMemo(
     () =>
       items.filter(
         (item) =>
           !item.excluded &&
           typeof item.count === "number" &&
-          item.humanEvaluation !== undefined,
+          getItemHumanEvaluationDetails(item) !== null,
       ).length,
     [items],
   );
@@ -171,7 +203,7 @@ export function Review19Screen({
   const hasAllObservationsAfter = (latestObservation?: {
     areaId: AreaId;
     count: number;
-    humanEvaluation: AreaCountEvaluation;
+    humanEvaluationSelection: HumanEvaluationSelection;
   }) => {
     return items
       .filter((item) => !item.excluded)
@@ -179,7 +211,7 @@ export function Review19Screen({
         if (latestObservation?.areaId === item.areaId) return true;
         return (
           typeof item.count === "number" &&
-          item.humanEvaluation !== undefined
+          getItemHumanEvaluationDetails(item) !== null
         );
       });
   };
@@ -281,22 +313,26 @@ export function Review19Screen({
       !activeItem ||
       activeItem.excluded ||
       countCalculatorResult === null ||
-      humanEvaluation === null
+      humanEvaluationDetails === null
     ) {
       return;
     }
 
+    const humanEvaluationSelection = getHumanEvaluationSelection(
+      humanEvaluationDetails,
+    );
+
     const latestObservation = {
       areaId: activeItem.areaId,
       count: countCalculatorResult,
-      humanEvaluation,
+      humanEvaluationSelection,
     };
 
     clearCountCalculatorDraft(activeItem.areaId);
     onCompleteArea(
       activeItem.areaId,
       countCalculatorResult,
-      humanEvaluation,
+      humanEvaluationSelection,
     );
 
     if (hasAllObservationsAfter(latestObservation)) {
@@ -327,6 +363,13 @@ export function Review19Screen({
 
     moveToNextArea();
   };
+
+  const { cancelSwipeGesture, ...swipeToSkipHandlers } = useSwipeToSkip({
+    onSwipeLeft: goSkip,
+    enabled: Boolean(
+      activeItem && !activeItem.excluded && orderedAreaIds.length > 1,
+    ),
+  });
 
   if (!activeItem) {
     return (
@@ -370,12 +413,6 @@ export function Review19Screen({
 
   const willCompleteExcluded =
     activeItem.excluded && hasAllObservationsAfter();
-  const swipeToSkipHandlers = useSwipeToSkip({
-    onSwipeLeft: goSkip,
-    enabled: Boolean(
-      activeItem && !activeItem.excluded && orderedAreaIds.length > 1,
-    ),
-  });
 
   return (
     <main
@@ -605,107 +642,50 @@ export function Review19Screen({
               >
                 売場を見た残数評価
               </div>
-              <div
-                aria-label="人間目線の5段階残数評価"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-                  gap: 4,
-                  marginTop: 8,
-                  minWidth: 0,
+              <HumanEvaluationSelector
+                ariaLabel="人間目線の9段階残数評価"
+                disabled={countCalculatorResult === null}
+                layout="compact"
+                resetKey={activeHumanEvaluationKey ?? activeItem.areaId}
+                value={humanEvaluationDetails}
+                onLongPressActivated={cancelSwipeGesture}
+                onCommit={(selection) => {
+                  if (!activeHumanEvaluationKey) return;
+                  setHumanEvaluationDraft({
+                    key: activeHumanEvaluationKey,
+                    details: createDisplayHumanEvaluationDetails(selection),
+                  });
                 }}
-              >
-                {([
-                  {
-                    value: "many",
-                    color: "#b71c1c",
-                    selectedBackground: "#ffebee",
-                  },
-                  {
-                    value: "slightly_many",
-                    color: "#b71c1c",
-                    selectedBackground: "#ffebee",
-                  },
-                  {
-                    value: "normal",
-                    color: "#1b5e20",
-                    selectedBackground: "#e8f5e9",
-                  },
-                  {
-                    value: "slightly_few",
-                    color: "#0d47a1",
-                    selectedBackground: "#e3f2fd",
-                  },
-                  {
-                    value: "few",
-                    color: "#0d47a1",
-                    selectedBackground: "#e3f2fd",
-                  },
-                ] as const).map((option) => {
-                  const selected = humanEvaluation === option.value;
-                  const disabled = countCalculatorResult === null;
-                  const labelLines = getEvaluationLabelLines(option.value);
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setHumanEvaluation(option.value)}
-                      disabled={disabled}
-                      aria-pressed={selected}
-                      style={{
-                        minWidth: 0,
-                        minHeight: 52,
-                        padding: "5px 1px",
-                        borderRadius: 10,
-                        border: selected
-                          ? "2px solid #2f5ef5"
-                          : "1px solid #ccc",
-                        background: selected
-                          ? option.selectedBackground
-                          : disabled
-                            ? "#eee"
-                            : "#fff",
-                        color: disabled ? "#999" : option.color,
-                        fontSize: 12,
-                        fontWeight: 900,
-                        lineHeight: 1.15,
-                        cursor: disabled ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {labelLines.map((line, index) => (
-                        <span key={line}>
-                          {index > 0 ? <br /> : null}
-                          {line}
-                        </span>
-                      ))}
-                    </button>
-                  );
-                })}
-              </div>
+              />
               <button
                 type="button"
                 onClick={completeCountEntry}
                 disabled={
-                  countCalculatorResult === null || humanEvaluation === null
+                  countCalculatorResult === null ||
+                  humanEvaluationDetails === null
                 }
                 style={{
                   ...subActionButtonStyle,
                   width: "100%",
                   marginTop: 10,
                   border:
-                    countCalculatorResult !== null && humanEvaluation !== null
+                    countCalculatorResult !== null &&
+                    humanEvaluationDetails !== null
                       ? "2px solid #2f5ef5"
                       : "1px solid #ccc",
                   background:
-                    countCalculatorResult !== null && humanEvaluation !== null
+                    countCalculatorResult !== null &&
+                    humanEvaluationDetails !== null
                       ? "#e8f0ff"
                       : "#eee",
                   color:
-                    countCalculatorResult !== null && humanEvaluation !== null
+                    countCalculatorResult !== null &&
+                    humanEvaluationDetails !== null
                       ? "#111"
                       : "#999",
                   cursor:
-                    countCalculatorResult !== null && humanEvaluation !== null
+                    countCalculatorResult !== null &&
+                    humanEvaluationDetails !== null
                       ? "pointer"
                       : "not-allowed",
                 }}

@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.8-2",
+  "version": "2026.8.9-1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -29,7 +29,8 @@
     "check:demand-cycle": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-demand-cycle.ts",
     "check:summer-mode": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-summer-mode.ts",
     "check:done-summary-current-rate": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-done-summary-current-rate.ts",
-    "check:review19-human-auto": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-human-auto.ts"
+    "check:review19-human-auto": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-human-auto.ts",
+    "check:human-evaluation-9scale": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-human-evaluation-9scale.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

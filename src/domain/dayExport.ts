@@ -6,6 +6,7 @@ import type {
 } from "./types.ts";
 import { getCurrentDataVersionInfo } from "./dataVersion.ts";
 import { normalizeReview19DaySnapshotDemandCycle } from "./finalizedDayData.ts";
+import { materializeReview19DaySnapshotHumanEvaluationsForExport } from "./review19.ts";
 
 const DAY_EXPORT_DISCOUNT_TIMES: DiscountTime[] = ["15", "17", "18", "19", "20"];
 
@@ -106,8 +107,8 @@ export function buildAutomaticDayExportPayload(params: {
   date: string;
   daySnapshot: Review19DaySnapshot;
 }): AutomaticDayExportPayload {
-  const daySnapshot = normalizeReview19DaySnapshotDemandCycle(
-    params.daySnapshot,
+  const daySnapshot = materializeReview19DaySnapshotHumanEvaluationsForExport(
+    normalizeReview19DaySnapshotDemandCycle(params.daySnapshot),
   );
   return {
     format: "nebiki-helper-day-export",
