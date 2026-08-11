@@ -796,7 +796,7 @@ test("34. 需要サイクル項目のない旧19時チェックを読み込め�
   assert.equal(normalizeReview19Result(legacy)?.demandCycle, "normal");
 });
 
-test("35. Supabaseスキーマ変更なしで保存・復元できる", async () => {
+test("35. Supabase新スキーマでsummerをnormalと分離して保存・復元できる", async () => {
   localStorage.clear();
   const summerRecord = makeRecord({
     date: CURRENT_YEAR_WEEKDAYS[0],
@@ -818,9 +818,10 @@ test("35. Supabaseスキーマ変更なしで保存・復元できる", async ()
   assert.ok(localStorage.getItem(DEMAND_CYCLE_STORAGE_KEYS.summerAreaCountRecords));
 
   const remoteRow = buildRemoteAreaCountRow(summerRecord);
-  assert.equal(Object.prototype.hasOwnProperty.call(remoteRow, "demand_cycle"), false);
+  assert.equal(remoteRow.demand_cycle, "summer");
   const [restoredRemote] = normalizeRemoteAreaCountRows([remoteRow]);
-  assert.equal(restoredRemote?.demandCycle, "normal");
+  assert.equal(restoredRemote?.demandCycle, "summer");
+  assert.equal(restoredRemote?.decisionBasis?.demandCycle, "summer");
   assert.deepEqual(await upsertRemoteAreaCountRecord(summerRecord), {
     status: "disabled",
   });
@@ -834,6 +835,12 @@ test("35. Supabaseスキーマ変更なしで保存・復元できる", async ()
   ]) {
     assert.doesNotMatch(readRepoFile(file), /demand[_ ]cycle/i, file);
   }
+  const cloudMigration = readRepoFile(
+    "supabase_area_count_records_cloud_sync_migration.sql",
+  );
+  assert.match(cloudMigration, /demand_cycle/i);
+  assert.match(cloudMigration, /record_details\s+jsonb/i);
+  assert.match(cloudMigration, /review19_records/i);
 });
 
 let passed = 0;

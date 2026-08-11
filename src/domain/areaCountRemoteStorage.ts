@@ -1,10 +1,35 @@
 import type { AreaCountRecord } from "./areaCountHistory.ts";
 import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
+import type {
+  AreaCountEvaluation,
+  AreaCountEvaluationSource,
+  AreaRateAdjustment,
+  DemandCycle,
+  HumanEvaluationDetails,
+} from "./types.ts";
+import type { AreaCountDecisionBasis } from "./areaCountHistory.ts";
+import { getLegacyHumanEvaluationDetails } from "./humanEvaluation.ts";
 
 type SupabaseConfig = {
   url: string;
   anonKey: string;
+};
+
+export type RemoteAreaCountRequestOptions = {
+  config?: SupabaseConfig | null;
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+};
+
+export type RemoteAreaCountDetails = {
+  userJudge?: AreaCountEvaluation;
+  humanEvaluationDetails?: HumanEvaluationDetails;
+  suggestedEvaluation?: AreaCountEvaluation;
+  areaRateAdjustment?: AreaRateAdjustment;
+  evaluationSource?: AreaCountEvaluationSource;
+  decisionBasis?: AreaCountDecisionBasis;
+  comfortPoint?: number;
 };
 
 export type RemoteAreaCountRow = {
@@ -19,22 +44,51 @@ export type RemoteAreaCountRow = {
   actual_weekday?: string | null;
   actual_weekday_group: string;
   count: number;
+  demand_cycle?: DemandCycle | null;
+  record_details?: RemoteAreaCountDetails | null;
 };
+
+export type RemoteStorageErrorKind =
+  | "network"
+  | "rate_limited"
+  | "server"
+  | "auth"
+  | "schema"
+  | "unknown";
 
 export type RemoteAreaCountLoadResult =
   | { status: "disabled" }
   | { status: "ready"; records: AreaCountRecord[] }
-  | { status: "error"; message: string };
+  | {
+      status: "error";
+      message: string;
+      errorKind: RemoteStorageErrorKind;
+      httpStatus?: number;
+    };
 
 export type RemoteAreaCountSaveResult =
   | { status: "disabled" }
-  | { status: "saved"; savedCount?: number }
-  | { status: "error"; message: string };
+  | { status: "saved"; savedCount: number }
+  | {
+      status: "error";
+      message: string;
+      errorKind: RemoteStorageErrorKind;
+      httpStatus?: number;
+    };
 
 const TABLE_NAME = "area_count_records";
+export const AREA_COUNT_REMOTE_CONFLICT_COLUMNS = [
+  "date",
+  "session_started_at",
+  "area_id",
+  "discount_time",
+  "demand_cycle",
+] as const;
 
 function getSupabaseConfig(): SupabaseConfig | null {
-  const env = import.meta.env as Record<string, string | undefined>;
+  const env = (
+    import.meta as ImportMeta & { readonly env?: Record<string, string | undefined> }
+  ).env ?? {};
   const rawUrl = env.VITE_SUPABASE_URL?.trim();
   const anonKey = env.VITE_SUPABASE_ANON_KEY?.trim();
 
@@ -46,6 +100,23 @@ function getSupabaseConfig(): SupabaseConfig | null {
   };
 }
 
+function resolveSupabaseConfig(
+  options?: RemoteAreaCountRequestOptions,
+): SupabaseConfig | null {
+  if (options && Object.prototype.hasOwnProperty.call(options, "config")) {
+    const rawUrl = options.config?.url.trim();
+    const anonKey = options.config?.anonKey.trim();
+    if (!rawUrl || !anonKey) return null;
+    return { url: rawUrl.replace(/\/+$/, ""), anonKey };
+  }
+  return getSupabaseConfig();
+}
+
+function resolveFetch(options?: RemoteAreaCountRequestOptions): typeof fetch | null {
+  if (options?.fetchImpl) return options.fetchImpl;
+  return typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : null;
+}
+
 function buildHeaders(config: SupabaseConfig): HeadersInit {
   return {
     apikey: config.anonKey,
@@ -54,7 +125,21 @@ function buildHeaders(config: SupabaseConfig): HeadersInit {
   };
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function normalizeRemoteDetails(raw: unknown): RemoteAreaCountDetails {
+  if (!isObject(raw)) return {};
+  return cloneJson(raw) as RemoteAreaCountDetails;
+}
+
 function rowToRecord(row: RemoteAreaCountRow): Partial<AreaCountRecord> {
+  const details = normalizeRemoteDetails(row.record_details);
   return {
     dataSchemaVersion: row.data_schema_version ?? undefined,
     appVersion: row.app_version ?? undefined,
@@ -67,31 +152,55 @@ function rowToRecord(row: RemoteAreaCountRow): Partial<AreaCountRecord> {
     actualWeekday: row.actual_weekday ?? undefined,
     actualWeekdayGroup: row.actual_weekday_group as AreaCountRecord["actualWeekdayGroup"],
     count: row.count,
-    // Supabaseの固定列には需要サイクルを追加しない。既存・共有行はすべて通常扱い。
-    demandCycle: "normal",
+    demandCycle: normalizeDemandCycle(row.demand_cycle),
+    userJudge: details.userJudge,
+    humanEvaluationDetails: details.humanEvaluationDetails,
+    suggestedEvaluation: details.suggestedEvaluation,
+    areaRateAdjustment: details.areaRateAdjustment,
+    evaluationSource: details.evaluationSource,
+    decisionBasis: details.decisionBasis,
+    comfortPoint: details.comfortPoint,
   } as Partial<AreaCountRecord>;
 }
 
+/**
+ * `demand_cycle`のない旧rowはnormalとして読める。
+ * 実際のremote queryはmigration済みschemaに対してcycle条件を必ず付ける。
+ */
 export function normalizeRemoteAreaCountRows(raw: unknown): AreaCountRecord[] {
   if (!Array.isArray(raw)) return [];
-  const sourceRecords = raw
-    .filter((row): row is RemoteAreaCountRow => Boolean(row) && typeof row === "object")
-    .map(rowToRecord);
-  const buildIdByRecordKey = new Map<string, string>();
-  for (const record of sourceRecords) {
-    if (typeof record.buildId !== "string" || !record.buildId.trim()) continue;
-    buildIdByRecordKey.set(
-      `${record.date}::${record.sessionStartedAt}::${record.areaId}::${record.discountTime}`,
-      record.buildId,
-    );
-  }
+  return normalizeAreaCountRecords(
+    raw
+      .filter((row): row is RemoteAreaCountRow => Boolean(row) && typeof row === "object")
+      .map(rowToRecord),
+  );
+}
 
-  return normalizeAreaCountRecords(sourceRecords).map((record) => ({
-    ...record,
-    buildId: buildIdByRecordKey.get(
-      `${record.date}::${record.sessionStartedAt}::${record.areaId}::${record.discountTime}`,
-    ),
-  }));
+export function buildRemoteAreaCountDetails(
+  record: AreaCountRecord,
+): RemoteAreaCountDetails {
+  const details: RemoteAreaCountDetails = {};
+  if (record.userJudge !== undefined) details.userJudge = record.userJudge;
+  if (record.humanEvaluationDetails !== undefined) {
+    details.humanEvaluationDetails = cloneJson(record.humanEvaluationDetails);
+  } else if (record.userJudge !== undefined) {
+    // 旧5段階記録は物理データを書き換えず、cloud payload上だけscale=5として明示する。
+    details.humanEvaluationDetails = getLegacyHumanEvaluationDetails(record.userJudge);
+  }
+  if (record.suggestedEvaluation !== undefined) {
+    details.suggestedEvaluation = record.suggestedEvaluation;
+  }
+  if (record.areaRateAdjustment !== undefined) {
+    details.areaRateAdjustment = record.areaRateAdjustment;
+  }
+  if (record.evaluationSource !== undefined) {
+    details.evaluationSource = record.evaluationSource;
+  }
+  if (record.decisionBasis !== undefined) {
+    details.decisionBasis = cloneJson(record.decisionBasis);
+  }
+  if (record.comfortPoint !== undefined) details.comfortPoint = record.comfortPoint;
+  return details;
 }
 
 export function buildRemoteAreaCountRow(record: AreaCountRecord): RemoteAreaCountRow {
@@ -107,89 +216,138 @@ export function buildRemoteAreaCountRow(record: AreaCountRecord): RemoteAreaCoun
     actual_weekday: record.actualWeekday ?? null,
     actual_weekday_group: record.actualWeekdayGroup,
     count: record.count,
+    demand_cycle: normalizeDemandCycle(record.demandCycle),
+    record_details: buildRemoteAreaCountDetails(record),
   };
 }
 
+/** 新schemaへ送る単一payloadだけを返す。旧schema向けfallbackは意図的に持たない。 */
 export function buildRemoteAreaCountWriteAttempts(
   record: AreaCountRecord,
-): [RemoteAreaCountRow, Partial<RemoteAreaCountRow>] {
-  const row = buildRemoteAreaCountRow(record);
-  const withoutBuildIdRow: Partial<RemoteAreaCountRow> = { ...row };
-  delete withoutBuildIdRow.build_id;
-  return [row, withoutBuildIdRow];
+): readonly [RemoteAreaCountRow] {
+  return [buildRemoteAreaCountRow(record)];
 }
 
-export async function loadRemoteAreaCountRecords(): Promise<RemoteAreaCountLoadResult> {
-  const config = getSupabaseConfig();
+function classifyHttpError(status: number): RemoteStorageErrorKind {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429) return "rate_limited";
+  if (status >= 500) return "server";
+  if (status === 400 || status === 404 || status === 409) return "schema";
+  return "unknown";
+}
+
+async function getErrorMessage(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).trim();
+    return text ? `HTTP ${response.status}: ${text.slice(0, 500)}` : `HTTP ${response.status}`;
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+}
+
+export function buildRemoteAreaCountReadPath(demandCycle?: DemandCycle): string {
+  const cycleFilter = demandCycle
+    ? `demand_cycle=eq.${encodeURIComponent(demandCycle)}`
+    : "demand_cycle=in.(normal,summer)";
+  return `/rest/v1/${TABLE_NAME}?select=*&${cycleFilter}&order=recorded_at.asc`;
+}
+
+export async function loadRemoteAreaCountRecords(
+  demandCycle?: DemandCycle,
+  options?: RemoteAreaCountRequestOptions,
+): Promise<RemoteAreaCountLoadResult> {
+  const config = resolveSupabaseConfig(options);
   if (!config) return { status: "disabled" };
+  const fetchImpl = resolveFetch(options);
+  if (!fetchImpl) {
+    return { status: "error", message: "Fetch is unavailable", errorKind: "network" };
+  }
 
   try {
-    const response = await fetch(
-      `${config.url}/rest/v1/${TABLE_NAME}?select=*&order=recorded_at.asc`,
+    const response = await fetchImpl(
+      `${config.url}${buildRemoteAreaCountReadPath(demandCycle)}`,
       {
         method: "GET",
         headers: buildHeaders(config),
+        signal: options?.signal,
       },
     );
 
     if (!response.ok) {
-      return { status: "error", message: `HTTP ${response.status}` };
+      return {
+        status: "error",
+        message: await getErrorMessage(response),
+        errorKind: classifyHttpError(response.status),
+        httpStatus: response.status,
+      };
     }
 
-    const records = normalizeRemoteAreaCountRows(await response.json());
+    const records = normalizeRemoteAreaCountRows(await response.json()).filter(
+      (record) =>
+        demandCycle === undefined || normalizeDemandCycle(record.demandCycle) === demandCycle,
+    );
 
     return { status: "ready", records };
   } catch (error) {
     return {
       status: "error",
       message: error instanceof Error ? error.message : "unknown error",
+      errorKind: "network",
     };
   }
 }
 
-
-export async function upsertRemoteAreaCountRecord(
-  record: AreaCountRecord,
+export async function upsertRemoteAreaCountRecords(
+  records: readonly AreaCountRecord[],
+  options?: RemoteAreaCountRequestOptions,
 ): Promise<RemoteAreaCountSaveResult> {
-  // 夏サイクルはサイクル情報を失う固定列へ送らず、端末内JSONへ保存する。
-  if (normalizeDemandCycle(
-    (record as AreaCountRecord & { demandCycle?: unknown }).demandCycle,
-  ) === "summer") {
-    return { status: "disabled" };
+  const config = resolveSupabaseConfig(options);
+  if (!config) return { status: "disabled" };
+  const fetchImpl = resolveFetch(options);
+  if (!fetchImpl) {
+    return { status: "error", message: "Fetch is unavailable", errorKind: "network" };
   }
 
-  const config = getSupabaseConfig();
-  if (!config) return { status: "disabled" };
+  const normalized = normalizeAreaCountRecords(records);
+  if (normalized.length === 0) return { status: "saved", savedCount: 0 };
 
   try {
-    const url = `${config.url}/rest/v1/${TABLE_NAME}?on_conflict=date,session_started_at,area_id,discount_time`;
-    const requestInit = (body: unknown): RequestInit => ({
-      method: "POST",
-      headers: {
-        ...buildHeaders(config),
-        Prefer: "resolution=merge-duplicates,return=minimal",
+    const conflictColumns = AREA_COUNT_REMOTE_CONFLICT_COLUMNS.join(",");
+    const response = await fetchImpl(
+      `${config.url}/rest/v1/${TABLE_NAME}?on_conflict=${conflictColumns}`,
+      {
+        method: "POST",
+        headers: {
+          ...buildHeaders(config),
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(normalized.map(buildRemoteAreaCountRow)),
+        signal: options?.signal,
       },
-      body: JSON.stringify([body]),
-    });
-    const [row, withoutBuildIdRow] = buildRemoteAreaCountWriteAttempts(record);
-    const response = await fetch(url, requestInit(row));
+    );
 
     if (!response.ok) {
-      // build_id追加前のDBでも、従来の保持列は保存する。
-      const withoutBuildIdResponse = await fetch(
-        url,
-        requestInit(withoutBuildIdRow),
-      );
-      if (!withoutBuildIdResponse.ok) {
-        return { status: "error", message: `HTTP ${response.status}` };
-      }
+      return {
+        status: "error",
+        message: await getErrorMessage(response),
+        errorKind: classifyHttpError(response.status),
+        httpStatus: response.status,
+      };
     }
 
-    return { status: "saved" };
+    return { status: "saved", savedCount: normalized.length };
   } catch (error) {
     return {
       status: "error",
       message: error instanceof Error ? error.message : "unknown error",
+      errorKind: "network",
     };
   }
+}
+
+export async function upsertRemoteAreaCountRecord(
+  record: AreaCountRecord,
+  options?: RemoteAreaCountRequestOptions,
+): Promise<RemoteAreaCountSaveResult> {
+  return upsertRemoteAreaCountRecords([record], options);
 }

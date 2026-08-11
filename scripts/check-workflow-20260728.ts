@@ -82,7 +82,7 @@ test("残数修正コンテキストは再読込後もcount-only種別と復帰�
   assert.deepEqual(restored.areaCountCorrection, state.areaCountCorrection);
 });
 
-test("先取りcount-only修正は通常値引へ変換せず既存upsert経路で復帰", () => {
+test("先取りcount-only修正は通常値引へ変換せずlocal-first同期経路で復帰", () => {
   const startBlock = hookSource.slice(
     hookSource.indexOf("function startAreaCountCorrection"),
     hookSource.indexOf("function startEditingConditions"),
@@ -94,8 +94,8 @@ test("先取りcount-only修正は通常値引へ変換せず既存upsert経路�
   assert.match(startBlock, /earlyDiscountResolution === "count_only"/);
   assert.match(startBlock, /"auto_skip_count_only"/);
   assert.match(startBlock, /"auto_skip_count"/);
-  assert.match(saveBlock, /upsertAreaCountRecord\(areaCountRecords, nextRecord\)/);
-  assert.match(saveBlock, /upsertRemoteAreaCountRecord\(nextRecord\)/);
+  assert.match(saveBlock, /persistAreaCountRecordLocalFirst\(nextRecord\)/);
+  assert.match(saveBlock, /retryPendingCloudSync\(\)/);
   assert.match(saveBlock, /areaCountCorrection\.mode === "auto_skip_count_only"/);
   assert.match(saveBlock, /screen: correction\.returnScreen/);
 });

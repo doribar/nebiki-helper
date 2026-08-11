@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppState,
   AreaId,
@@ -21,6 +21,7 @@ import type {
   DemandCycle,
   HumanEvaluationDetails,
   HumanEvaluationSelection,
+  SupabaseBackfillResult,
 } from "../domain/types";
 import {
   buildFinalRateDecisionSnapshot,
@@ -57,6 +58,7 @@ import {
   clearRuntimeState,
   appendReview19Record,
   loadReview19Records,
+  saveReview19Records,
   loadReview19SourceState,
   saveReview19SourceState,
   clearReview19SourceState,
@@ -87,6 +89,7 @@ import {
   resolveWeatherInputForDiscount,
 } from "../domain/hourlyWeather.ts";
 import {
+  advanceReview19SourceUpdatedAt,
   createInitialReview19Result,
   buildReview19DataQuality,
   getReview19AreaItems,
@@ -132,12 +135,31 @@ import {
   getAreaCountRecommendation as buildAreaCountRecommendation,
   getAreaCountSameItemLimit,
   isAreaCountAssistTarget,
+  mergeAreaCountRecordCollections,
   upsertAreaCountRecord,
 } from "../domain/areaCountHistory.ts";
 import {
   loadRemoteAreaCountRecords,
-  upsertRemoteAreaCountRecord,
 } from "../domain/areaCountRemoteStorage.ts";
+import {
+  loadLegacySummerAreaCountRecords,
+  loadLegacyNormalAreaCountRecords,
+  loadLocalAreaCountRecords,
+  loadUnifiedAreaCountRecords,
+  saveLocalAreaCountRecords,
+} from "../domain/areaCountLocalStorage.ts";
+import { collectAreaCountBackfillRecords } from "../domain/areaCountBackfill.ts";
+import {
+  enqueueAreaCountRecordsForCloud,
+  enqueueReview19RecordForCloud,
+  flushCloudSyncQueue,
+  getCloudSyncStatus,
+  persistAreaCountRecordLocalFirst,
+} from "../domain/cloudSync.ts";
+import {
+  loadRemoteReview19Records,
+  mergeReview19MedianHistory,
+} from "../domain/review19RemoteStorage.ts";
 import {
   getEarlyNextMinus5NoticeText,
   getEarlyNextMinus5TargetDiscountTime,
@@ -235,7 +257,6 @@ import {
 import {
   loadFixedTimeDemandCycleState,
   loadDemandCycleState,
-  loadSummerAreaCountRecords,
   lockDemandCycleForDate,
   normalizeDemandCycleStateForBusinessDate,
   saveFixedTimeDemandCycleState,
@@ -243,7 +264,6 @@ import {
   selectDemandCycleForDate,
   selectDemandCycleLockForDate,
   updateDemandCyclePreference,
-  upsertSummerAreaCountRecord,
   type DemandCycleState,
 } from "../domain/demandCycleStorage.ts";
 import {
@@ -413,15 +433,46 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [demandCycleState, setDemandCycleState] = useState<DemandCycleState>(
     initialDemandCycleState,
   );
-  const [areaCountRemoteLoadStatus, setAreaCountRemoteLoadStatus] = useState<
+  const [, setAreaCountRemoteLoadStatus] = useState<
     "loading" | "ready" | "disabled" | "error"
   >("loading");
   const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
-    isTestMode ? [] : loadSummerAreaCountRecords()
+    isTestMode ? [] : loadLocalAreaCountRecords()
   );
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
   const [finalizedDayDataVersion, setFinalizedDayDataVersion] = useState(0);
+  const [cloudSyncVersion, setCloudSyncVersion] = useState(0);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [lastBackfillResult, setLastBackfillResult] =
+    useState<SupabaseBackfillResult | null>(null);
   const lastFinalizedDayDataRef = useRef<StoredFinalizedDayData | null>(null);
+  const review19CloudFingerprintRef = useRef<string | null>(null);
+
+  const retryPendingCloudSync = useCallback(async () => {
+    if (isTestMode) {
+      return { attempted: 0, succeeded: 0, failed: 0, retained: 0 };
+    }
+    setCloudSyncing(true);
+    try {
+      const firstPass = await flushCloudSyncQueue();
+      let result = { ...firstPass };
+      // 送信中に同じidentityの新しいpayloadが積まれた場合、最初のflushは
+      // 送信済みrevisionを安全に残す。成功後にもう一度だけ追送して取りこぼさない。
+      if (result.failed === 0 && getCloudSyncStatus().pendingCount > 0) {
+        const followUp = await flushCloudSyncQueue();
+        result = {
+          attempted: result.attempted + followUp.attempted,
+          succeeded: result.succeeded + followUp.succeeded,
+          failed: result.failed + followUp.failed,
+          retained: followUp.retained,
+        };
+      }
+      setCloudSyncVersion((version) => version + 1);
+      return result;
+    } finally {
+      setCloudSyncing(false);
+    }
+  }, [isTestMode]);
 
   if (!lastFinalizedDayDataRef.current && state.finalizedDayRecordId) {
     lastFinalizedDayDataRef.current =
@@ -496,25 +547,64 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       };
     }
 
-    void loadRemoteAreaCountRecords().then((result) => {
+    void Promise.all([
+      loadRemoteAreaCountRecords("normal"),
+      loadRemoteAreaCountRecords("summer"),
+      loadRemoteReview19Records("normal"),
+      loadRemoteReview19Records("summer"),
+    ]).then(([normalArea, summerArea, normalReview19, summerReview19]) => {
       if (cancelled) return;
-      setAreaCountRemoteLoadStatus(result.status);
-      if (result.status !== "ready") return;
 
-      // 通常サイクルは従来どおりSupabaseを正本とし、列を追加できない
-      // 夏サイクルだけを端末内の専用JSON履歴から併合する。
-      setAreaCountRecords((current) => {
-        const localSummerRecords = current.filter(
-          (record) => normalizeDemandCycle(record.demandCycle) === "summer",
-        );
-        return [...cloneAreaCountRecords(result.records), ...cloneAreaCountRecords(localSummerRecords)];
-      });
+      const areaResults = [normalArea, summerArea];
+      setAreaCountRemoteLoadStatus(
+        areaResults.some((result) => result.status === "error")
+          ? "error"
+          : areaResults.every((result) => result.status === "disabled")
+            ? "disabled"
+            : "ready",
+      );
+
+      const remoteAreaRecords = areaResults.flatMap((result) =>
+        result.status === "ready" ? result.records : [],
+      );
+      const localAreaRecords = loadLocalAreaCountRecords();
+      const mergedAreaRecords = mergeAreaCountRecordCollections(
+        localAreaRecords,
+        remoteAreaRecords,
+      );
+      saveLocalAreaCountRecords(mergedAreaRecords);
+      setAreaCountRecords(cloneAreaCountRecords(mergedAreaRecords));
+
+      const remoteReview19Records = [normalReview19, summerReview19].flatMap(
+        (result) => (result.status === "ready" ? result.records : []),
+      );
+      if (remoteReview19Records.length > 0) {
+        const mergedReview19Records = mergeReview19MedianHistory({
+          localRecords: loadReview19Records(),
+          remoteRecords: remoteReview19Records,
+        });
+        saveReview19Records(mergedReview19Records);
+        setReview19RecordsVersion((version) => version + 1);
+      }
     });
 
     return () => {
       cancelled = true;
     };
   }, [isTestMode]);
+
+  useEffect(() => {
+    if (isTestMode) return;
+
+    const retry = () => {
+      void retryPendingCloudSync();
+    };
+    retry();
+    window.addEventListener("online", retry);
+    return () => {
+      window.removeEventListener("online", retry);
+    };
+  }, [isTestMode, retryPendingCloudSync]);
 
   useEffect(() => {
     // 動作確認モードでは入力結果を端末内のlocalStorageへ残さない。
@@ -542,6 +632,25 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     lastUsedSessionDraft,
     dailyMessageState,
   ]);
+
+  useEffect(() => {
+    if (isTestMode || !state.review19) return;
+    if (
+      state.screen !== "review19_weather" &&
+      state.screen !== "review19" &&
+      state.screen !== "review19_done"
+    ) {
+      return;
+    }
+
+    const fingerprint = JSON.stringify(state.review19);
+    if (review19CloudFingerprintRef.current === fingerprint) return;
+    review19CloudFingerprintRef.current = fingerprint;
+    if (enqueueReview19RecordForCloud(state.review19)) {
+      setCloudSyncVersion((version) => version + 1);
+      void retryPendingCloudSync();
+    }
+  }, [isTestMode, retryPendingCloudSync, state.review19, state.screen]);
 
 
   useEffect(() => {
@@ -1385,6 +1494,14 @@ const lateSkipNotice = useMemo(() => {
       ...completedDailyDates,
     ]).size,
   };
+  void cloudSyncVersion;
+  const cloudSyncStatus = isTestMode
+    ? {
+        pendingCount: 0,
+        areaCountPendingCount: 0,
+        review19PendingCount: 0,
+      }
+    : getCloudSyncStatus();
   const editableAreaCounts = NORMAL_ROUTE.flatMap((areaId) => {
     const count = state.areaProgressMap[areaId]?.areaCount;
     return typeof count === "number"
@@ -1498,24 +1615,16 @@ const lateSkipNotice = useMemo(() => {
       inferredOperationDemandCycle ??
       selectDemandCycleForDate(seasonalDemandCycleState, demandCycleDate)
     : "normal";
-  const demandCycleHistoryCheckPending = areaCountRemoteLoadStatus === "loading";
-  const demandCycleHistoryCheckFailed = areaCountRemoteLoadStatus === "error";
   const canChangeDemandCycle =
     summerModeAvailable &&
     state.screen === "start" &&
     !inferredOperationDemandCycle &&
-    !persistedDemandCycleLock &&
-    !demandCycleHistoryCheckPending &&
-    !demandCycleHistoryCheckFailed;
+    !persistedDemandCycleLock;
   const demandCycleChangeBlockedReason = canChangeDemandCycle
     ? null
     : !summerModeAvailable
       ? "夏季モードは7月1日〜9月30日の営業開始前だけ変更できます。"
-      : demandCycleHistoryCheckPending
-        ? "当日の保存データを確認中のため、夏季モードはまだ変更できません。"
-        : demandCycleHistoryCheckFailed
-          ? "当日の保存データを確認できなかったため、安全のため夏季モードを変更できません。"
-          : "当日の値引運用がすでに始まっているため、夏季モードを変更できません。";
+      : "当日の値引運用がすでに始まっているため、夏季モードを変更できません。";
 
   useEffect(() => {
     if (summerModeAvailable) return;
@@ -2105,20 +2214,6 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startSession() {
-    if (
-      activeDemandCycle === "summer" &&
-      !persistedDemandCycleLock &&
-      !inferredOperationDemandCycle &&
-      (areaCountRemoteLoadStatus === "loading" ||
-        areaCountRemoteLoadStatus === "error")
-    ) {
-      window.alert(
-        areaCountRemoteLoadStatus === "loading"
-          ? "当日の保存データを確認中です。確認完了後にもう一度お試しください。"
-          : "当日の保存データを確認できないため、安全のため夏季モードを開始できません。",
-      );
-      return;
-    }
     const now = getRuntimeNow();
     const startedAt = now.toISOString();
     const currentDate = formatLocalDate(now);
@@ -2326,21 +2421,6 @@ const lateSkipNotice = useMemo(() => {
         sessionDraft: state.sessionDraft,
       })
     ) {
-      return;
-    }
-
-    if (
-      activeDemandCycle === "summer" &&
-      !persistedDemandCycleLock &&
-      !inferredOperationDemandCycle &&
-      (areaCountRemoteLoadStatus === "loading" ||
-        areaCountRemoteLoadStatus === "error")
-    ) {
-      window.alert(
-        areaCountRemoteLoadStatus === "loading"
-          ? "当日の保存データを確認中です。確認完了後にもう一度お試しください。"
-          : "当日の保存データを確認できないため、安全のため夏季モードを開始できません。",
-      );
       return;
     }
 
@@ -2646,13 +2726,10 @@ const lateSkipNotice = useMemo(() => {
         decisionBasis: areaCountDecisionBasis,
       };
 
-      nextAreaCountRecords = upsertAreaCountRecord(areaCountRecords, nextRecord);
+      nextAreaCountRecords = persistAreaCountRecordLocalFirst(nextRecord);
       setAreaCountRecords(nextAreaCountRecords);
-      if (nextRecord.demandCycle === "summer") {
-        upsertSummerAreaCountRecord(nextRecord);
-      } else {
-        void upsertRemoteAreaCountRecord(nextRecord);
-      }
+      setCloudSyncVersion((version) => version + 1);
+      void retryPendingCloudSync();
     }
 
     const nextStateForAction = applyAreaJudgeSelection(
@@ -3163,13 +3240,10 @@ const lateSkipNotice = useMemo(() => {
         }),
         count: roundedCount,
       };
-      const nextAreaCountRecords = upsertAreaCountRecord(areaCountRecords, nextRecord);
+      const nextAreaCountRecords = persistAreaCountRecordLocalFirst(nextRecord);
       setAreaCountRecords(nextAreaCountRecords);
-      if (nextRecord.demandCycle === "summer") {
-        upsertSummerAreaCountRecord(nextRecord);
-      } else {
-        void upsertRemoteAreaCountRecord(nextRecord);
-      }
+      setCloudSyncVersion((version) => version + 1);
+      void retryPendingCloudSync();
     }
 
     setState((prev) => {
@@ -3324,6 +3398,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startReview19AfterWeather() {
+    const actionTimestamp = getRuntimeNow().toISOString();
     setState((prev) => {
       if (prev.screen !== "review19_weather" || !prev.session || !prev.review19) return prev;
 
@@ -3343,7 +3418,11 @@ const lateSkipNotice = useMemo(() => {
         screen: "review19",
         review19: {
           ...prev.review19,
-          reviewStartedAt: prev.review19.reviewStartedAt ?? getRuntimeNow().toISOString(),
+          reviewStartedAt: prev.review19.reviewStartedAt ?? actionTimestamp,
+          sourceUpdatedAt: advanceReview19SourceUpdatedAt(
+            prev.review19,
+            actionTimestamp,
+          ),
           reference: createReview19Reference(
             prev.sessionDraft,
             reviewTemperatureComfort,
@@ -3359,7 +3438,12 @@ const lateSkipNotice = useMemo(() => {
     humanEvaluation?: AreaCountEvaluation,
     humanEvaluationSelection?: HumanEvaluationSelection,
   ) {
-    const historicalRecords = isTestMode ? [] : loadReview19Records();
+    const historicalRecords = isTestMode
+      ? []
+      : mergeReview19MedianHistory({
+          localRecords: loadReview19Records(),
+          remoteRecords: [],
+        });
     const recordedAt = getRuntimeNow().toISOString();
 
     setState((prev) => {
@@ -3409,6 +3493,10 @@ const lateSkipNotice = useMemo(() => {
         ...prev,
         review19: {
           ...prev.review19,
+          sourceUpdatedAt: advanceReview19SourceUpdatedAt(
+            prev.review19,
+            recordedAt,
+          ),
           areaCounts: nextAreaCounts,
           areaEvaluations: nextAreaEvaluations,
           areaCountRecordedAt: {
@@ -3429,6 +3517,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function skipReview19Area(areaId: AreaId) {
+    const actionTimestamp = getRuntimeNow().toISOString();
     setState((prev) => {
       if (prev.screen !== "review19" || !prev.review19) return prev;
 
@@ -3447,6 +3536,10 @@ const lateSkipNotice = useMemo(() => {
         ...prev,
         review19: {
           ...prev.review19,
+          sourceUpdatedAt: advanceReview19SourceUpdatedAt(
+            prev.review19,
+            actionTimestamp,
+          ),
           areaCounts: nextAreaCounts,
           areaEvaluations: nextAreaEvaluations,
           areaCountRecordedAt: nextAreaCountRecordedAt,
@@ -3526,7 +3619,12 @@ const lateSkipNotice = useMemo(() => {
               state.session?.weekday ??
               state.sessionDraft.weekday,
             demandCycle,
-            historicalRecords: isTestMode ? [] : loadReview19Records(),
+            historicalRecords: isTestMode
+              ? []
+              : mergeReview19MedianHistory({
+                  localRecords: loadReview19Records(),
+                  remoteRecords: [],
+                }),
           }),
         };
       } else {
@@ -3551,6 +3649,23 @@ const lateSkipNotice = useMemo(() => {
       excludedAreaIdSet.has(areaId),
     );
     const recordedAt = state.review19.recordedAt ?? completedAt;
+    // Review19Screen intentionally passes the last observation to protect the
+    // final save from React state-flush timing. Treat that observation and the
+    // final save as two ordered mutations even when both share one millisecond.
+    const sourceBeforeFinal =
+      latestAreaCount || latestExcludedAreaId
+        ? {
+            ...state.review19,
+            sourceUpdatedAt: advanceReview19SourceUpdatedAt(
+              state.review19,
+              completedAt,
+            ),
+          }
+        : state.review19;
+    const sourceUpdatedAt = advanceReview19SourceUpdatedAt(
+      sourceBeforeFinal,
+      completedAt,
+    );
     const dataQuality = buildReview19DataQuality({
       date: state.review19.date,
       areaCounts: recordedAreaCounts,
@@ -3588,6 +3703,7 @@ const lateSkipNotice = useMemo(() => {
         sessionStartedAt: state.review19.sessionStartedAt,
         reviewStartedAt: state.review19.reviewStartedAt,
         reviewCompletedAt: completedAt,
+        sourceUpdatedAt,
         areaCountRecordedAt,
         ratingStatus: "not_collected",
         ratings: null,
@@ -3617,6 +3733,7 @@ const lateSkipNotice = useMemo(() => {
       excludedAreaIds,
       excludeReasons,
       reviewCompletedAt: completedAt,
+      sourceUpdatedAt,
       dataQuality,
       recordedAt,
       snapshot,
@@ -3638,6 +3755,9 @@ const lateSkipNotice = useMemo(() => {
 
     if (!isTestMode) {
       appendReview19Record(recordedReview);
+      enqueueReview19RecordForCloud(recordedReview);
+      setCloudSyncVersion((version) => version + 1);
+      void retryPendingCloudSync();
       clearReview19SourceState();
       setReview19RecordsVersion((version) => version + 1);
     }
@@ -4110,6 +4230,66 @@ const lateSkipNotice = useMemo(() => {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
+  async function syncLocalDataToSupabase(): Promise<SupabaseBackfillResult> {
+    if (isTestMode) {
+      const skipped: SupabaseBackfillResult = {
+        detectedAreaCount: 0,
+        detectedReview19Count: 0,
+        queuedCount: 0,
+        attemptedCount: 0,
+        succeededCount: 0,
+        failedCount: 0,
+        pendingCount: 0,
+        allSynced: false,
+        skippedReason: "fixed_time_mode",
+      };
+      setLastBackfillResult(skipped);
+      return skipped;
+    }
+
+    const nowMsForBackfill = getRuntimeNowMs();
+    const localReview19Records = mergeReview19MedianHistory({
+      localRecords: loadReview19Records(),
+      remoteRecords: [],
+    });
+    const collectedAreaRecords = collectAreaCountBackfillRecords({
+      unifiedCacheRecords: mergeAreaCountRecordCollections(
+        loadUnifiedAreaCountRecords(),
+        loadLegacyNormalAreaCountRecords(),
+      ),
+      summerCacheRecords: loadLegacySummerAreaCountRecords(),
+      finalizedDayRecords: loadFinalizedDayData(),
+      review19Records: loadReview19Records(),
+      dailySessionSnapshots: loadDailySessionSnapshots(),
+      currentState: state,
+      nowMs: nowMsForBackfill,
+    });
+
+    saveLocalAreaCountRecords(collectedAreaRecords);
+    const queuedAreaCount = enqueueAreaCountRecordsForCloud(collectedAreaRecords);
+    let queuedReview19Count = 0;
+    for (const record of localReview19Records) {
+      if (enqueueReview19RecordForCloud(record)) queuedReview19Count += 1;
+    }
+    setCloudSyncVersion((version) => version + 1);
+
+    const flushResult = await retryPendingCloudSync();
+    const pendingCount = getCloudSyncStatus().pendingCount;
+    const result: SupabaseBackfillResult = {
+      detectedAreaCount: collectedAreaRecords.length,
+      detectedReview19Count: localReview19Records.length,
+      queuedCount: queuedAreaCount + queuedReview19Count,
+      attemptedCount: flushResult.attempted,
+      succeededCount: flushResult.succeeded,
+      failedCount: flushResult.failed,
+      pendingCount,
+      allSynced: pendingCount === 0,
+    };
+    setLastBackfillResult(result);
+    setAreaCountRecords(loadLocalAreaCountRecords());
+    return result;
+  }
+
   function resetApp() {
     const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
@@ -4185,6 +4365,11 @@ const lateSkipNotice = useMemo(() => {
   previousDayDiscardTarget,
   dataExport,
   allDataExport,
+  cloudSync: {
+    ...cloudSyncStatus,
+    syncing: cloudSyncing,
+    lastBackfillResult,
+  },
   canStartReview19Manually,
   demandCycle: activeDemandCycle,
   demandCycleLabel: getDemandCycleShortName(activeDemandCycle),
@@ -4229,6 +4414,7 @@ const lateSkipNotice = useMemo(() => {
       start19DiscountAfterReview,
       startNextDoneSession,
       exportAllData,
+      syncLocalDataToSupabase,
       startReview19Manually,
       resetApp,
       changeDemandCycle,

@@ -263,6 +263,8 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
           onExportLatestReview19Data={app.actions.exportLatestReview19Data}
           onExportAllDailyData={app.actions.exportAllDailyData}
           onExportLatestDailyData={app.actions.exportLatestDailyData}
+          cloudSync={app.derived.cloudSync}
+          onSyncLocalDataToSupabase={app.actions.syncLocalDataToSupabase}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

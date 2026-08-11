@@ -118,14 +118,93 @@ export function createDefaultReview19Ratings(): Record<AreaId, Review19Rating> {
   );
 }
 
+type Review19SourceTimestampFields = {
+  sourceUpdatedAt?: unknown;
+  recordedAt?: unknown;
+  reviewCompletedAt?: unknown;
+  areaCountRecordedAt?: unknown;
+  reviewStartedAt?: unknown;
+  sessionStartedAt?: unknown;
+};
+
+function isValidReview19Timestamp(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function getReview19AreaTimestampValues(raw: unknown): unknown[] {
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? Object.values(raw as Record<string, unknown>)
+    : [];
+}
+
+/**
+ * Resolves old records without sourceUpdatedAt from their latest valid source
+ * timestamp. sourceUpdatedAt is listed first so its representation wins ties.
+ */
+export function getReview19SourceUpdatedAt(
+  record: Review19SourceTimestampFields,
+): string | undefined {
+  const candidates: unknown[] = [
+    record.sourceUpdatedAt,
+    record.recordedAt,
+    record.reviewCompletedAt,
+    ...getReview19AreaTimestampValues(record.areaCountRecordedAt),
+    record.reviewStartedAt,
+    record.sessionStartedAt,
+  ];
+  let latest: string | undefined;
+  let latestTime = Number.NEGATIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    if (!isValidReview19Timestamp(candidate)) continue;
+    const timestamp = Date.parse(candidate);
+    if (timestamp > latestTime) {
+      latest = candidate;
+      latestTime = timestamp;
+    }
+  }
+
+  return latest;
+}
+
+/**
+ * Advances a Review19 mutation timestamp monotonically even when the runtime
+ * clock has millisecond ties or moves backwards.
+ */
+export function advanceReview19SourceUpdatedAt(
+  previous: Review19SourceTimestampFields,
+  actionTimestamp: string,
+): string {
+  if (!isValidReview19Timestamp(actionTimestamp)) {
+    throw new TypeError("Review19 action timestamp must be valid");
+  }
+
+  const previousTimestamp = getReview19SourceUpdatedAt(previous);
+  const previousTime = previousTimestamp
+    ? Date.parse(previousTimestamp)
+    : Number.NEGATIVE_INFINITY;
+  const actionTime = Date.parse(actionTimestamp);
+  return new Date(Math.max(actionTime, previousTime + 1)).toISOString();
+}
+
 export function createInitialReview19Result(params: {
   date: string;
   sessionStartedAt: string;
   demandCycle?: DemandCycle;
   reviewStartedAt?: string;
+  sourceUpdatedAt?: string;
   excludedAreaIds?: AreaId[];
 }): Review19Result {
   const excludedAreaIds = normalizeExcludedAreaIds(params.excludedAreaIds ?? []);
+  const sourceUpdatedAt = getReview19SourceUpdatedAt({
+    sourceUpdatedAt: params.sourceUpdatedAt,
+    reviewStartedAt: params.reviewStartedAt,
+    sessionStartedAt: params.sessionStartedAt,
+  });
 
   return {
     ...getCurrentDataVersionInfo(),
@@ -135,6 +214,7 @@ export function createInitialReview19Result(params: {
     sessionStartedAt: params.sessionStartedAt,
     reviewStartedAt: params.reviewStartedAt,
     reviewCompletedAt: undefined,
+    sourceUpdatedAt,
     areaCountRecordedAt: {},
     ratingStatus: "not_collected",
     ratings: null,
@@ -544,6 +624,7 @@ function normalizeReview19DayCheckSnapshot(
       typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
     reviewCompletedAt:
       typeof raw.reviewCompletedAt === "string" ? raw.reviewCompletedAt : raw.recordedAt,
+    sourceUpdatedAt: getReview19SourceUpdatedAt(raw),
     areaCountRecordedAt,
     areaCounts,
     areaEvaluations,
@@ -770,6 +851,7 @@ export function normalizeReview19Result(
       typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
     reviewCompletedAt:
       typeof raw.reviewCompletedAt === "string" ? raw.reviewCompletedAt : recordedAt,
+    sourceUpdatedAt: getReview19SourceUpdatedAt(raw),
     areaCountRecordedAt,
     areaCounts,
     areaEvaluations,

@@ -484,7 +484,7 @@ test("the hook resolves discount values with the fixed-time-aware runtime clock"
   assert.ok(!updateReview19Block.includes("resolveHumanEvaluationForDiscount({"));
 });
 
-test("raw metadata stays local while the Supabase row and SQL schema remain unchanged", () => {
+test("raw metadata roundtrips losslessly through the cycle-aware Supabase JSONB row", () => {
   const details = resolveHumanEvaluationForDiscount({
     selection: requireSelection("few", "slightly_few"),
     demandCycle: "normal",
@@ -520,12 +520,25 @@ test("raw metadata stays local while the Supabase row and SQL schema remain unch
     "count",
     "data_schema_version",
     "date",
+    "demand_cycle",
     "discount_time",
+    "record_details",
     "recorded_at",
     "session_started_at",
   ]);
-  assert.ok(!JSON.stringify(remoteRow).includes("humanEvaluation"));
-  assert.ok(!JSON.stringify(remoteRow).includes("resolvedEvaluation"));
+  assert.equal(remoteRow.demand_cycle, "normal");
+  assert.equal(
+    remoteRow.record_details?.humanEvaluationDetails?.humanEvaluationScore9,
+    2,
+  );
+  assert.equal(
+    remoteRow.record_details?.humanEvaluationDetails?.resolvedEvaluation,
+    "slightly_few",
+  );
+  assert.deepEqual(
+    remoteRow.record_details?.humanEvaluationDetails?.humanEvaluationSelections,
+    ["few", "slightly_few"],
+  );
 
   const sqlFiles = [
     "supabase_area_count_records.sql",
@@ -570,6 +583,12 @@ test("raw metadata stays local while the Supabase row and SQL schema remain unch
   ]) {
     assert.doesNotMatch(canonicalSql, new RegExp(`\\b${removedColumn}\\b`));
   }
+  const cloudMigration = readFileSync(
+    new URL("../supabase_area_count_records_cloud_sync_migration.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(cloudMigration, /record_details\s+jsonb/i);
+  assert.match(cloudMigration, /demand_cycle/i);
 });
 
 if (failed > 0) {

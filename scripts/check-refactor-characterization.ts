@@ -114,6 +114,7 @@ function assertPublicHookContract(): void {
       "previousDayDiscardTarget",
       "dataExport",
       "allDataExport",
+      "cloudSync",
       "canStartReview19Manually",
       "demandCycle",
       "demandCycleLabel",
@@ -158,6 +159,7 @@ function assertPublicHookContract(): void {
       "start19DiscountAfterReview",
       "startNextDoneSession",
       "exportAllData",
+      "syncLocalDataToSupabase",
       "startReview19Manually",
       "resetApp",
       "changeDemandCycle",
@@ -176,12 +178,12 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  assert.equal(body.length, 129201);
+  assert.equal(body.length, 134881);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "9963301df9fb4d176defd877413119a70da3fb5d3df98dc070eccc5630b8ebd3",
+    "d8a5dce22d538a292ae79a6898cea9feafaa9a6423a8f9ffb866109b1b14144e",
   );
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 20);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 22);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
 }
 
@@ -402,10 +404,10 @@ function assertExportJsonCharacterization(): void {
         : value
   );
 
-  assert.equal(json.length, 18833);
+  assert.equal(json.length, 18923);
   assert.equal(
     createHash("sha256").update(json).digest("hex"),
-    "2e2df776ea284124ac602db947d5215bf0f2d0239801c686e6e8b3dfc9fde0d8",
+    "366613e5e0072d1f0a527d48679ea074ede7302064863debccd88c540aaa1abd",
   );
   assert.deepEqual(Object.keys(bundle.automatic), [
     "format",

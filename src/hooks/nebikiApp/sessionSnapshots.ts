@@ -286,6 +286,7 @@ export function getLatestReview19DayCheck(date: string): Review19DayCheckSnapsho
     sessionStartedAt: latest.sessionStartedAt,
     reviewStartedAt: latest.reviewStartedAt,
     reviewCompletedAt: latest.reviewCompletedAt ?? latest.recordedAt,
+    sourceUpdatedAt: latest.sourceUpdatedAt,
     areaCountRecordedAt: JSON.parse(JSON.stringify(latest.areaCountRecordedAt)) as Review19DayCheckSnapshot["areaCountRecordedAt"],
     ratingStatus: latest.ratingStatus,
     ratings: latest.ratings

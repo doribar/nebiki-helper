@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-1",
+  "version": "2026.8.9-2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -30,7 +30,10 @@
     "check:summer-mode": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-summer-mode.ts",
     "check:done-summary-current-rate": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-done-summary-current-rate.ts",
     "check:review19-human-auto": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-human-auto.ts",
-    "check:human-evaluation-9scale": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-human-evaluation-9scale.ts"
+    "check:human-evaluation-9scale": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-human-evaluation-9scale.ts",
+    "check:supabase-sync-domain": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-sync-domain.ts",
+    "check:review19-remote-storage": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-remote-storage.ts",
+    "check:supabase-cloud-sync-sql": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-cloud-sync-sql.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

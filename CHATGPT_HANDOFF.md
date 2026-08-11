@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-09（日本時間）
+最終更新: 2026-08-10（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,11 +11,11 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260808-1837.zip`
-- `appVersion`: `2026.8.9-1`
+- 作業基準ZIP: `nebiki-helper-20260809-2144.zip`
+- `appVersion`: `2026.8.9-2`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260809-213438-jst`
-- リリースZIP: `nebiki-helper-20260809-2144.zip`。本欄と同じ識別情報で再生成した `dist` を収録する。
+- `buildId`: `build-20260811-104055-jst`
+- リリースZIP: 今回JST日時で生成する `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
 
@@ -54,17 +54,15 @@
 - 減少率履歴と20時30分の中央値判定もサイクル別に分離する。
 - 19時チェック、日次スナップショット、`rateDecisionSnapshot`、JSON出力へ需要サイクルを保存する。
 
-## 夏季モードの保存制約
+## 夏季モードとクラウド保存
 
-- 通常サイクルの残数履歴は従来どおりSupabaseへ保存する。
-- 夏サイクルの残数履歴はlocalStorage専用で、キーは `nebiki-helper/summer-area-count-records-v1`。
-- サイクル選択と当日ロックのキーは `nebiki-helper/demand-cycle-state-v1`。
-- 時間固定モードの選択と当日ロックは `nebiki-helper/fixed-time-demand-cycle-state-v1`。本番キーと相互に変更しない。
-- 夏履歴は別端末へ自動同期されず、ブラウザデータを削除すると失われる。
-- 完了済み日の夏履歴は日次JSONにも含まれる。
-- 20時30分まで完了していない日の夏履歴は、端末内履歴だけに存在する可能性がある。
-- Supabase SQL、列、`dataSchemaVersion` は需要サイクル対応では変更していない。
-- 9段階対応でもSupabase SQL・列・`dataSchemaVersion` は変更しない。固定時間モードは人間評価rawを含む本番履歴・日次保存・Supabaseを読み書きしない。
+- 通常・夏季の残数履歴を同じlocal-first同期経路で扱う。端末保存が先、Supabase upsertは後であり、remote失敗で値引フローを止めない。
+- 統合端末cacheは `nebiki-helper/area-count-records-v2`。旧normalの `nebiki-helper/area-count-records` と旧summerの `nebiki-helper/summer-area-count-records-v1` は読込互換を維持し、summer keyは旧版互換のためdual-writeする。同期成功後も端末データを削除しない。
+- Supabaseの `area_count_records.demand_cycle` へ `normal` / `summer` を正式保存する。remote queryも必ずcycleで分離し、normalとsummerを同じ中央値・減少率・20時30分判定の母集団へ混ぜない。
+- サイクル選択と当日ロックのキーは `nebiki-helper/demand-cycle-state-v1`。時間固定モード側は `nebiki-helper/fixed-time-demand-cycle-state-v1` で、本番設定と相互に変更しない。
+- 固定時間モードは本番local history、Supabase、pending queue、Review19、日次データを読み書きせず、手動backfillも `fixed_time_mode` として実行しない。
+- 完了済み日の通常・夏季履歴は日次JSONにも含まれ、JSON exportは引き続き分析・監査・可搬backupとして維持する。
+- `dataSchemaVersion` はJSON schemaのversionであり、今回のJSON側追加はoptionalかつ後方互換なため `3` のまま。Supabase schema migrationは別管理とする。
 
 ## 分析データ
 
@@ -115,14 +113,48 @@
 - 重複除外・判定不能・旧対象外の件数を `dataQuality` に保存。
 - 新しいscale 9詳細はセッション、日次スナップショット、19:00個別、日次個別、統合JSONでroundtripする。旧scale 5は保存済みデータを変更せず、出力用cloneだけへ奇数scoreとしてmaterializeする。
 
-## Supabase
+## Supabaseクラウド同期
 
-- `area_count_records` は残数履歴の最小列だけを使用する。
-- 通常サイクルの端末内 `AreaCountRecord` は `humanEvaluationDetails` を持つが、Supabase送信rowへraw詳細の列は追加しない。したがって通常履歴のraw詳細は完了済み日次スナップショット／JSON exportがdurable正本であり、Supabaseの最小履歴だけからは復元できない。
-- 9段階対応によるSQL変更はなく、`dataSchemaVersion` は `3` のまま。SQL Editorで追加作業は不要。
-- 以前の最小列migrationが未適用の環境だけは、従来どおりbackup → migration → verifyの順でSQL Editorから手動実行する。
-- 問題時はrollbackを使用する。リモートSQLを自動実行しない。
+### 現行schema確認とmigration
+
+- migration前の `area_count_records` は `id`、version 3列、日付・session・record時刻、area・discount時刻、曜日・曜日group、count、作成・更新時刻の14列。unique keyは `date × session_started_at × area_id × discount_time`。RLSは共有売場を前提にanonのSELECT／INSERT／UPDATEを許可し、DELETEは許可しない。
+- 新migrationは既存rowを削除せず、`demand_cycle text not null default 'normal'` と `record_details jsonb not null default '{}'` を追加する。既存rowはDEFAULTでnormalとなる。CHECKでcycleを `normal` / `summer`、detailsをJSON objectへ制限する。
+- unique keyを `date × session_started_at × area_id × discount_time × demand_cycle` へ置換し、cycle・area・discount時刻・曜日／曜日group・record時刻用indexを追加する。
+- `record_details` は `userJudge`、`humanEvaluationDetails`、`suggestedEvaluation`、`areaRateAdjustment`、`evaluationSource`、`decisionBasis`、`comfortPoint` を保持する。旧5段階はcloud payload上だけscale 5と奇数scoreへ展開し、新9段階はraw score、selection順、resolved 5段階、direction/reasonを保持する。アプリstate全体は格納しない。
+- `review19_records` を新設し、1営業日・1cycleを1 rowとしてupsertする。version、date、session、cycle、`recorded_at`、`source_updated_at`、`is_complete`、`payload jsonb`、作成・更新時刻を持ち、unique keyは `date × demand_cycle`。
+- Review19のpartialは `recorded_at = null`、finalはrecorded_atあり。各入力・除外・修正・完了で `sourceUpdatedAt` を単調増加させる。triggerは古いrevisionとfinalからpartialへの逆戻りを拒否する。旧recordに `sourceUpdatedAt` がなければrecorded/completed/area count/start時刻のうち最新の有効時刻を論理的に利用する。
+- 新tableのRLS／権限は既存area tableと同じanon SELECT／INSERT／UPDATE、DELETEなし。area tableの現行RLS modelは変更しない。service role keyはfrontendへ追加しない。
+
+### local-first、pending、retry
+
+- AreaCountは端末cacheへupsertしてからoutboxへ積み、Review19は端末state／recordを保存してからoutboxへ積む。Supabase成功を現場保存の条件にしない。
+- pending keyは `nebiki-helper/pending-supabase-sync-v1`。itemは `type`（`area_count` / `review19`）、identity、payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持つ。
+- 同じtype・identityはqueue内で1 itemにまとめる。retryはapp起動、online event、新しいAreaCount／Review19保存後、管理設定の手動同期で行う。送信は直列で、process内のsingle in-flight lockにより並列flushを抑止する。送信中に同identityの新revisionが積まれた場合はCASで消さず、必要なら成功後にもう一度だけ追送する。
+- remote失敗、Supabase設定なし、schema未適用はすべてpendingに残す。特にsummerを旧schemaへnormalとして送るfallbackはない。
+- Review19は各エリア確定後のpartialも送る。final payloadがpartialへ退行しないようqueueとDB triggerの両方で保護する。remoteから中央値履歴へ取り込むのはcomplete・finalだけ。
+
+### identity、dedupe、merge precedence
+
+- AreaCount identityは `date × sessionStartedAt × areaId × discountTime × demandCycle`。同じlocal／remote recordを1sampleにし、normalとsummerは別recordとして扱う。
+- app側はrecordedAtが新しいrecordのcount・固定値を優先し、欠けたoptional detailを古いrecordから補完する。同一revisionでは詳細量の多い方を優先して不足項目を補い、同率なら安定fingerprintで決定する。
+- DB側は遅れて届いた古いrecordedAtを無視する。同じrecordedAtでは既存固定値を保持し、欠けたJSON keyだけ補完する。ただしscale 9の `humanEvaluationDetails` はscale 5 envelopeより優先する。新しいrecordedAtでは新revisionの値を採用し、未送信の旧JSON keyを残す。
+- Review19 identityは `date × demandCycle`。local／remote中央値履歴はcomplete・finalだけを1日1cycleへ統合し、完全なtieではremoteを採用する。人間rawと中央値auto評価はpayload内に共存し、相互に上書きしない。
+
+### 端末内データbackfill
+
+- 管理設定の「端末内データをSupabaseへ同期」で手動実行する。対象は統合cache、旧normal cache、旧summer cache、finalized day、Review19のday snapshot、daily session snapshot、確定済みcurrent session、およびlocalのcomplete・final Review19。
+- future record、invalid date／area／count／timestamp／cycle、未測定、確定前UI state、fixed-time dataを除外する。複数保存元の同一recordは送信前にidentityで統合し、rich detailsを保持する。
+- 送信はidempotent upsert。何度実行してもrow／中央値sampleを増殖させず、remote既存rowをnull detailで劣化させず、localデータは削除しない。
+- 結果UIは残数／19:00の検出数、送信対象、成功、失敗、pendingを表示する。pending 0だけを「すべて同期済み」の条件とする。Supabase APIのため新規／更新を推測表示しない。
+
+### SQL実行と実環境確認
+
+- SQLは `supabase_area_count_records_cloud_sync_backup.sql` → `supabase_area_count_records_cloud_sync_migration.sql` → `supabase_area_count_records_cloud_sync_verify.sql` の順。旧clientの書込みを止めてから実行し、verify成功後に新アプリをdeployする。
+- deploy後、実使用端末で新版を起動し、「端末内データをSupabaseへ同期」を実行して成功／失敗／pendingを確認する。
+- 問題時は新アプリを停止／旧版へ戻してから `supabase_area_count_records_cloud_sync_rollback.sql` を使う。summer rowがある場合はrollbackを中止し、Review19 tableは削除せずprivate quarantineへrenameする。
+- 開発環境にはSupabase接続情報がないため、migrationとremote read/writeは実DBで未実行。SQL、schema verification、mock／domain testまでが開発環境での検証範囲であり、実DB確認済みとは扱わない。
+- 20時30分の残数中央値、30/40/50型・40/50型・全品50型、1個・2個・3個以上ルールは変更しない。20時30分recordもcycleを保持して同期するが、人間9段階UIは追加しない。
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:human-evaluation-9scale` と `check:review19-human-auto`）、TypeScript型チェック、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の実行結果は変更報告を参照する。
+README記載の全 `check:*`（特に `check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の実行結果は `CHANGE_REPORT_20260810_SUPABASE_CLOUD_SYNC.md` を参照する。

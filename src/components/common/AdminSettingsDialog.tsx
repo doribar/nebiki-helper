@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import { APP_VERSION, BUILD_ID, DATA_SCHEMA_VERSION } from "../../domain/dataVersion.ts";
+import type { SupabaseBackfillResult } from "../../domain/types.ts";
 
 type ExportAction = () => boolean | Promise<boolean>;
 
@@ -10,11 +11,19 @@ type AdminSettingsDialogProps = {
   onExportLatestReview19Data?: ExportAction;
   onExportAllDailyData?: ExportAction;
   onExportLatestDailyData?: ExportAction;
+  cloudSync?: {
+    pendingCount: number;
+    syncing: boolean;
+    lastBackfillResult: SupabaseBackfillResult | null;
+  };
+  onSyncLocalDataToSupabase?: () => Promise<SupabaseBackfillResult>;
   onClose: () => void;
 };
 
 const panelStyle: CSSProperties = {
   width: "min(92vw, 520px)",
+  maxWidth: "100%",
+  boxSizing: "border-box",
   maxHeight: "88svh",
   overflowY: "auto",
   borderRadius: 22,
@@ -42,6 +51,8 @@ export function AdminSettingsDialog({
   onExportLatestReview19Data,
   onExportAllDailyData,
   onExportLatestDailyData,
+  cloudSync,
+  onSyncLocalDataToSupabase,
   onClose,
 }: AdminSettingsDialogProps) {
   const [status, setStatus] = useState<string | null>(null);
@@ -57,6 +68,30 @@ export function AdminSettingsDialog({
     try {
       const exported = await action();
       setStatus(exported ? "JSONを出力しました。" : emptyMessage);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runCloudSync = async () => {
+    if (!onSyncLocalDataToSupabase || busy || cloudSync?.syncing) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await onSyncLocalDataToSupabase();
+      if (result.skippedReason === "fixed_time_mode") {
+        setStatus("時刻固定モードでは本番Supabaseへ同期しません。");
+        return;
+      }
+      setStatus(
+        result.allSynced
+          ? `同期完了：成功 ${result.succeededCount}件、未同期 0件`
+          : `同期結果：成功 ${result.succeededCount}件、失敗 ${result.failedCount}件、未同期 ${result.pendingCount}件`,
+      );
+    } catch (error) {
+      setStatus(
+        `同期処理を完了できませんでした：${error instanceof Error ? error.message : "不明なエラー"}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -148,7 +183,7 @@ export function AdminSettingsDialog({
           </div>
         </section>
 
-        <section>
+        <section style={{ marginBottom: 18 }}>
           <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 900 }}>
             1日データ（{dailyCount}件）
           </div>
@@ -170,6 +205,47 @@ export function AdminSettingsDialog({
               最新の1日データを出力
             </button>
           </div>
+        </section>
+
+        <section
+          style={{
+            borderTop: "1px solid #e2e8f0",
+            paddingTop: 16,
+          }}
+        >
+          <div style={{ marginBottom: 6, fontSize: 16, fontWeight: 900 }}>
+            Supabase同期
+          </div>
+          <div style={{ color: "#475569", fontSize: 13, lineHeight: 1.6, marginBottom: 10 }}>
+            端末内の通常・夏季の残数履歴と19:00チェックをクラウドへ送ります。
+            端末内データは削除しません。
+            <br />
+            クラウド未同期：{cloudSync?.pendingCount ?? 0}件
+          </div>
+          <button
+            type="button"
+            disabled={busy || cloudSync?.syncing || !onSyncLocalDataToSupabase}
+            onClick={() => void runCloudSync()}
+            style={{
+              ...exportButtonStyle,
+              borderColor: "#0369a1",
+              color: "#075985",
+              background: "#f0f9ff",
+            }}
+          >
+            {busy || cloudSync?.syncing
+              ? "同期中…"
+              : "端末内データをSupabaseへ同期"}
+          </button>
+          {cloudSync?.lastBackfillResult ? (
+            <div style={{ marginTop: 8, color: "#475569", fontSize: 12, lineHeight: 1.5 }}>
+              検出：残数 {cloudSync.lastBackfillResult.detectedAreaCount}件・19:00 {cloudSync.lastBackfillResult.detectedReview19Count}件
+              <br />
+              送信対象 {cloudSync.lastBackfillResult.queuedCount}件
+              <br />
+              成功 {cloudSync.lastBackfillResult.succeededCount}件／失敗 {cloudSync.lastBackfillResult.failedCount}件／未同期 {cloudSync.lastBackfillResult.pendingCount}件
+            </div>
+          ) : null}
         </section>
 
         {status ? (

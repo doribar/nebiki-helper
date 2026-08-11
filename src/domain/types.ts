@@ -649,6 +649,8 @@ export type Review19DayCheckSnapshot = {
   sessionStartedAt: string;
   reviewStartedAt?: string;
   reviewCompletedAt?: string;
+  /** Cloud同期で同一営業日のmutation順序を保証する単調増加timestamp。 */
+  sourceUpdatedAt?: string;
   areaCountRecordedAt: Partial<Record<AreaId, string>>;
   /** 旧手動評価データだけ recorded。現在の残数入力方式では not_collected。 */
   ratingStatus: Review19RatingStatus;
@@ -691,6 +693,8 @@ export type Review19Result = {
   sessionStartedAt: string;
   reviewStartedAt?: string;
   reviewCompletedAt?: string;
+  /** 旧データは他の記録timestamp最大値から論理導出する。 */
+  sourceUpdatedAt?: string;
   areaCountRecordedAt: Partial<Record<AreaId, string>>;
   /** 旧手動評価データだけ recorded。現在の残数入力方式では not_collected。 */
   ratingStatus: Review19RatingStatus;
@@ -722,6 +726,18 @@ export type EditableAreaCountItem = {
   areaId: AreaId;
   areaName: string;
   count: number;
+};
+
+export type SupabaseBackfillResult = {
+  detectedAreaCount: number;
+  detectedReview19Count: number;
+  queuedCount: number;
+  attemptedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  pendingCount: number;
+  allSynced: boolean;
+  skippedReason?: "fixed_time_mode";
 };
 
 export type AreaCountCorrectionContext = {
@@ -803,6 +819,13 @@ export type UseNebikiAppDerived = {
   allDataExport: {
     totalCount: number;
   };
+  cloudSync: {
+    pendingCount: number;
+    areaCountPendingCount: number;
+    review19PendingCount: number;
+    syncing: boolean;
+    lastBackfillResult: SupabaseBackfillResult | null;
+  };
   canStartReview19Manually: boolean;
   demandCycle: DemandCycle;
   demandCycleLabel: string;
@@ -868,6 +891,7 @@ export type UseNebikiAppActions = {
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
   exportAllData: () => void;
+  syncLocalDataToSupabase: () => Promise<SupabaseBackfillResult>;
   startReview19Manually: () => void;
   resetApp: () => void;
   changeDemandCycle: (demandCycle: DemandCycle) => boolean;

@@ -171,7 +171,7 @@ test("統合出力ファイル名はexportedAtのJST日付を使う", () => {
   assert.equal(getAllDataExportFilename("invalid"), "nebiki-all-data.json");
 });
 
-test("Supabase送信行は保持列とbuild_idだけ", () => {
+test("Supabase送信行は需要サイクルと観測詳細をlosslessに保持する", () => {
   const record: AreaCountRecord = {
     dataSchemaVersion: 2,
     appVersion: "test",
@@ -201,18 +201,20 @@ test("Supabase送信行は保持列とbuild_idだけ", () => {
     "count",
     "data_schema_version",
     "date",
+    "demand_cycle",
     "discount_time",
+    "record_details",
     "recorded_at",
     "session_started_at",
   ]);
   assert.equal(row.build_id, "build-test");
-  const [primary, preBuildIdFallback] = buildRemoteAreaCountWriteAttempts(record);
+  assert.equal(row.demand_cycle, "normal");
+  assert.equal(row.record_details?.userJudge, "many");
+  assert.equal(row.record_details?.evaluationSource, "manual");
+  const attempts = buildRemoteAreaCountWriteAttempts(record);
+  const [primary] = attempts;
   assert.equal(primary.build_id, "build-test");
-  assert.equal(Object.prototype.hasOwnProperty.call(preBuildIdFallback, "build_id"), false);
-  assert.deepEqual(
-    Object.keys(preBuildIdFallback).sort(),
-    Object.keys(primary).filter((key) => key !== "build_id").sort(),
-  );
+  assert.equal(attempts.length, 1, "旧schemaへ列を落として再送してはいけない");
 });
 
 test("Supabase旧行は削除済み列を無視して読み込む", () => {

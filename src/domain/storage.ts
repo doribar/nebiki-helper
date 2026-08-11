@@ -254,10 +254,6 @@ export function clearLastUsedSessionDraft(): void {
 }
 
 
-function clearLegacyAreaCountRecords(): void {
-  localStorage.removeItem("nebiki-helper/area-count-records");
-}
-
 const defaultDailyMessageState: DailyMessageState = {
   bentoJudgeGuideShownDate: null,
   rateNoticeShownDate: null,
@@ -537,8 +533,6 @@ export function sanitizePersistedNebikiStateForDate(
 }
 
 export function loadPersistedNebikiState(): PersistedNebikiState {
-  clearLegacyAreaCountRecords();
-
   return {
     currentSession: loadCurrentSession(),
     workSessionCheckpoint: loadWorkSessionCheckpoint(),
@@ -591,7 +585,6 @@ export function savePersistedNebikiState(state: PersistedNebikiState): void {
   }
 
   saveDailyMessageState(state.dailyMessageState);
-  clearLegacyAreaCountRecords();
 }
 
 export function appendSkipRecordsInMemory(params: {

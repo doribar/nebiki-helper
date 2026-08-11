@@ -350,6 +350,168 @@ export function cloneAreaCountRecords(records: AreaCountRecord[]): AreaCountReco
   return records.map(cloneAreaCountRecord);
 }
 
+export function getAreaCountRecordIdentity(
+  record: Pick<
+    AreaCountRecord,
+    "date" | "sessionStartedAt" | "areaId" | "discountTime" | "demandCycle"
+  >,
+): string {
+  return JSON.stringify([
+    record.date,
+    record.sessionStartedAt,
+    record.areaId,
+    record.discountTime,
+    normalizeDemandCycle(record.demandCycle),
+  ]);
+}
+
+const AREA_COUNT_RECORD_DETAIL_FIELDS = [
+  "dataSchemaVersion",
+  "appVersion",
+  "buildId",
+  "weekdayBase",
+  "actualWeekday",
+  "userJudge",
+  "humanEvaluationDetails",
+  "suggestedEvaluation",
+  "areaRateAdjustment",
+  "evaluationSource",
+  "decisionBasis",
+  "comfortPoint",
+] as const satisfies readonly (keyof AreaCountRecord)[];
+
+function countDefinedDetailLeaves(value: unknown): number {
+  if (value === undefined || value === null) return 0;
+  if (Array.isArray(value)) {
+    return 1 + value.reduce(
+      (sum, item) => sum + countDefinedDetailLeaves(item),
+      0,
+    );
+  }
+  if (typeof value === "object") {
+    return 1 + Object.values(value).reduce(
+      (sum, item) => sum + countDefinedDetailLeaves(item),
+      0,
+    );
+  }
+  return 1;
+}
+
+export function getAreaCountRecordDetailRichness(
+  record: AreaCountRecord,
+): number {
+  return AREA_COUNT_RECORD_DETAIL_FIELDS.reduce(
+    (score, field) => score + countDefinedDetailLeaves(record[field]),
+    0,
+  );
+}
+
+function getDeterministicRecordFingerprint(record: AreaCountRecord): string {
+  return JSON.stringify(cloneAreaCountRecord(record));
+}
+
+function selectDeterministicRichRecord(
+  first: AreaCountRecord,
+  second: AreaCountRecord,
+): { primary: AreaCountRecord; secondary: AreaCountRecord } {
+  const firstRichness = getAreaCountRecordDetailRichness(first);
+  const secondRichness = getAreaCountRecordDetailRichness(second);
+  if (firstRichness !== secondRichness) {
+    return firstRichness > secondRichness
+      ? { primary: first, secondary: second }
+      : { primary: second, secondary: first };
+  }
+
+  return getDeterministicRecordFingerprint(first) >=
+    getDeterministicRecordFingerprint(second)
+    ? { primary: first, secondary: second }
+    : { primary: second, secondary: first };
+}
+
+function supplementAreaCountRecordDetails(
+  primary: AreaCountRecord,
+  secondary: AreaCountRecord,
+): AreaCountRecord {
+  const merged = cloneAreaCountRecord(primary);
+
+  for (const field of AREA_COUNT_RECORD_DETAIL_FIELDS) {
+    if (merged[field] !== undefined || secondary[field] === undefined) continue;
+    Object.assign(merged, {
+      [field]: JSON.parse(JSON.stringify(secondary[field])) as unknown,
+    });
+  }
+
+  return merged;
+}
+
+function compareAreaCountRecordTimestamps(
+  first: AreaCountRecord,
+  second: AreaCountRecord,
+): number {
+  const firstTimestamp = Date.parse(first.recordedAt);
+  const secondTimestamp = Date.parse(second.recordedAt);
+  if (Number.isFinite(firstTimestamp) && Number.isFinite(secondTimestamp)) {
+    return firstTimestamp - secondTimestamp;
+  }
+  return first.recordedAt.localeCompare(second.recordedAt);
+}
+
+export function mergeAreaCountRecordPair(
+  first: AreaCountRecord,
+  second: AreaCountRecord,
+): AreaCountRecord {
+  if (
+    getAreaCountRecordIdentity(first) !== getAreaCountRecordIdentity(second)
+  ) {
+    throw new Error("Cannot merge AreaCountRecord values with different identities");
+  }
+
+  const sameRevision =
+    first.recordedAt === second.recordedAt && first.count === second.count;
+  if (sameRevision) {
+    const { primary, secondary } = selectDeterministicRichRecord(first, second);
+    return supplementAreaCountRecordDetails(primary, secondary);
+  }
+
+  const recordedAtComparison = compareAreaCountRecordTimestamps(first, second);
+  if (recordedAtComparison !== 0) {
+    return recordedAtComparison > 0
+      ? supplementAreaCountRecordDetails(first, second)
+      : supplementAreaCountRecordDetails(second, first);
+  }
+
+  const { primary, secondary } = selectDeterministicRichRecord(first, second);
+  return supplementAreaCountRecordDetails(primary, secondary);
+}
+
+export function mergeAreaCountRecordCollections(
+  ...collections: readonly (readonly AreaCountRecord[])[]
+): AreaCountRecord[] {
+  const mergedByIdentity = new Map<string, AreaCountRecord>();
+
+  for (const collection of collections) {
+    for (const record of collection) {
+      const identity = getAreaCountRecordIdentity(record);
+      const current = mergedByIdentity.get(identity);
+      mergedByIdentity.set(
+        identity,
+        current
+          ? mergeAreaCountRecordPair(current, record)
+          : cloneAreaCountRecord(record),
+      );
+    }
+  }
+
+  return [...mergedByIdentity.values()].sort((a, b) => {
+    const recordedAtComparison = compareAreaCountRecordTimestamps(a, b);
+    return recordedAtComparison !== 0
+      ? recordedAtComparison
+      : getAreaCountRecordIdentity(a).localeCompare(
+          getAreaCountRecordIdentity(b),
+        );
+  });
+}
+
 function isAreaCountEvaluation(value: unknown): value is AreaCountEvaluation {
   return (
     value === "many" ||
@@ -621,6 +783,18 @@ export function normalizeAreaCountRecords(
     const humanEvaluationDetails = normalizeHumanEvaluationDetails(
       record.humanEvaluationDetails,
     );
+    const rawHumanEvaluationDemandCycle =
+      record.humanEvaluationDetails &&
+      typeof record.humanEvaluationDetails === "object"
+        ? (record.humanEvaluationDetails as { demandCycle?: unknown }).demandCycle
+        : undefined;
+    const hasMatchingHumanEvaluationDemandCycle = Boolean(
+      humanEvaluationDetails &&
+      (humanEvaluationDetails.demandCycle === demandCycle ||
+        (humanEvaluationDetails.humanEvaluationScale === 5 &&
+          humanEvaluationDetails.demandCycle === undefined &&
+          rawHumanEvaluationDemandCycle === undefined)),
+    );
 
     return [
       {
@@ -649,10 +823,9 @@ export function normalizeAreaCountRecords(
         actualWeekdayGroup,
         count: Math.round(record.count),
         userJudge,
-        humanEvaluationDetails:
-          humanEvaluationDetails?.demandCycle === demandCycle
-            ? humanEvaluationDetails
-            : undefined,
+        humanEvaluationDetails: hasMatchingHumanEvaluationDemandCycle
+          ? humanEvaluationDetails
+          : undefined,
         suggestedEvaluation: isAreaCountEvaluation(record.suggestedEvaluation)
           ? record.suggestedEvaluation
           : undefined,
@@ -679,20 +852,7 @@ export function upsertAreaCountRecord(
   records: AreaCountRecord[],
   nextRecord: AreaCountRecord,
 ): AreaCountRecord[] {
-  const filtered = records.filter((record) => {
-    return !(
-      record.date === nextRecord.date &&
-      record.sessionStartedAt === nextRecord.sessionStartedAt &&
-      record.areaId === nextRecord.areaId &&
-      record.discountTime === nextRecord.discountTime &&
-      normalizeDemandCycle(record.demandCycle) ===
-        normalizeDemandCycle(nextRecord.demandCycle)
-    );
-  });
-
-  return [...filtered, cloneAreaCountRecord(nextRecord)].sort((a, b) => {
-    return a.recordedAt.localeCompare(b.recordedAt);
-  });
+  return mergeAreaCountRecordCollections(records, [nextRecord]);
 }
 
 function compareRecordFreshness(a: AreaCountRecord, b: AreaCountRecord): number {
