@@ -9,6 +9,8 @@ const executableSql = (source: string) =>
   source
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*--.*$/gm, "");
+const normalizedSqlWhitespace = (source: string) =>
+  source.toLowerCase().replace(/\s+/g, " ");
 
 const backup = read("supabase_area_count_records_cloud_sync_backup.sql");
 const migration = read("supabase_area_count_records_cloud_sync_migration.sql");
@@ -161,10 +163,83 @@ assert.match(
 );
 assert.doesNotMatch(verify, /review19_records_complete_recorded_at_check/i);
 assert.match(verify, /sourceupdatedat%source_updated_at/i);
+
+const review19MigrationGuard = migration.match(
+  /create or replace function public\.guard_review19_records_update\(\)[\s\S]*?\n\$\$;/i,
+)?.[0];
+assert.ok(review19MigrationGuard, "review19 migration guard function is missing");
 assert.match(
-  verify,
-  /new\.source_updated_at < old\.source_updated_at[\s\S]*new\.source_updated_at = old\.source_updated_at[\s\S]*old\.recorded_at is null and new\.recorded_at is not null/i,
+  review19MigrationGuard,
+  /old\.recorded_at is null\s+and new\.recorded_at is not null/i,
+  "the regression fixture must keep the real multiline partial-to-final guard",
 );
+
+const normalizedReview19MigrationGuard = normalizedSqlWhitespace(
+  review19MigrationGuard,
+);
+for (const requiredGuard of [
+  "old.recorded_at is not null and new.recorded_at is null",
+  "new.source_updated_at < old.source_updated_at",
+  "new.source_updated_at = old.source_updated_at",
+  "old.recorded_at is null and new.recorded_at is not null",
+]) {
+  assert.ok(
+    normalizedReview19MigrationGuard.includes(requiredGuard),
+    `review19 migration guard is missing: ${requiredGuard}`,
+  );
+}
+
+const review19VerifyFunctionPosition = verify.indexOf(
+  "function_entry.proname = 'guard_review19_records_update'",
+);
+const review19VerifyGuardStart = verify.lastIndexOf(
+  "if not exists (",
+  review19VerifyFunctionPosition,
+);
+const review19VerifyGuardEndMarker =
+  "raise exception 'review19_records final/freshness guard definition is wrong';";
+const review19VerifyGuardEnd = verify.indexOf(
+  review19VerifyGuardEndMarker,
+  review19VerifyFunctionPosition,
+);
+assert.ok(
+  review19VerifyFunctionPosition >= 0 &&
+    review19VerifyGuardStart >= 0 &&
+    review19VerifyGuardEnd >= 0,
+  "review19 verify guard block is missing",
+);
+const review19VerifyGuard = verify.slice(
+  review19VerifyGuardStart,
+  review19VerifyGuardEnd + review19VerifyGuardEndMarker.length,
+);
+assert.match(
+  review19VerifyGuard,
+  /regexp_replace\([\s\S]*lower\(pg_get_functiondef\(function_entry\.oid\)\)[\s\S]*'\[\[:space:\]\]\+'[\s\S]*'g'[\s\S]*as normalized_definition/i,
+  "verify must normalize PL/pgSQL whitespace before checking the guard",
+);
+assert.doesNotMatch(
+  review19VerifyGuard,
+  /lower\(pg_get_functiondef\(function_entry\.oid\)\)\s+like/i,
+  "verify must not compare the raw multiline function definition",
+);
+for (const requiredGuard of [
+  "old.recorded_at is not null and new.recorded_at is null",
+  "new.source_updated_at < old.source_updated_at",
+  "new.source_updated_at = old.source_updated_at",
+  "old.recorded_at is null and new.recorded_at is not null",
+]) {
+  assert.match(
+    review19VerifyGuard,
+    new RegExp(
+      `function_definition\\.normalized_definition\\s+like '%${requiredGuard.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&",
+      )}%'`,
+      "i",
+    ),
+    `verify must retain the normalized guard check: ${requiredGuard}`,
+  );
+}
 
 assert.match(rollback, /where demand_cycle <> 'normal'/i);
 assert.match(rollback, /having count\(\*\) > 1/i);

@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-2",
+  "version": "2026.8.9-3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,6 +32,7 @@
     "check:review19-human-auto": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-human-auto.ts",
     "check:human-evaluation-9scale": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-human-evaluation-9scale.ts",
     "check:supabase-sync-domain": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-sync-domain.ts",
+    "check:supabase-sync-diagnostics": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-sync-diagnostics.ts",
     "check:review19-remote-storage": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-remote-storage.ts",
     "check:supabase-cloud-sync-sql": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-cloud-sync-sql.ts"
   },

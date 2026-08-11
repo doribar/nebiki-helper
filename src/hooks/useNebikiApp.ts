@@ -156,6 +156,8 @@ import {
   getCloudSyncStatus,
   persistAreaCountRecordLocalFirst,
 } from "../domain/cloudSync.ts";
+import { loadPendingSupabaseSyncQueue } from "../domain/supabaseSyncQueue.ts";
+import { buildPendingSupabaseSyncErrorDetails } from "../domain/supabaseSyncDiagnostics.ts";
 import {
   loadRemoteReview19Records,
   mergeReview19MedianHistory,
@@ -1495,13 +1497,21 @@ const lateSkipNotice = useMemo(() => {
     ]).size,
   };
   void cloudSyncVersion;
-  const cloudSyncStatus = isTestMode
-    ? {
-        pendingCount: 0,
-        areaCountPendingCount: 0,
-        review19PendingCount: 0,
-      }
-    : getCloudSyncStatus();
+  const pendingCloudSyncItems = isTestMode
+    ? []
+    : loadPendingSupabaseSyncQueue();
+  const cloudSyncStatus = {
+    pendingCount: pendingCloudSyncItems.length,
+    areaCountPendingCount: pendingCloudSyncItems.filter(
+      (item) => item.type === "area_count",
+    ).length,
+    review19PendingCount: pendingCloudSyncItems.filter(
+      (item) => item.type === "review19",
+    ).length,
+  };
+  const cloudSyncErrorDetails = buildPendingSupabaseSyncErrorDetails(
+    pendingCloudSyncItems,
+  );
   const editableAreaCounts = NORMAL_ROUTE.flatMap((areaId) => {
     const count = state.areaProgressMap[areaId]?.areaCount;
     return typeof count === "number"
@@ -4367,6 +4377,7 @@ const lateSkipNotice = useMemo(() => {
   allDataExport,
   cloudSync: {
     ...cloudSyncStatus,
+    errorDetails: cloudSyncErrorDetails,
     syncing: cloudSyncing,
     lastBackfillResult,
   },

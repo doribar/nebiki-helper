@@ -376,15 +376,23 @@ begin
     from pg_proc as function_entry
     join pg_namespace as namespace_entry
       on namespace_entry.oid = function_entry.pronamespace
+    cross join lateral (
+      select regexp_replace(
+        lower(pg_get_functiondef(function_entry.oid)),
+        '[[:space:]]+',
+        ' ',
+        'g'
+      ) as normalized_definition
+    ) as function_definition
     where namespace_entry.nspname = 'public'
       and function_entry.proname = 'guard_review19_records_update'
-      and lower(pg_get_functiondef(function_entry.oid))
+      and function_definition.normalized_definition
         like '%old.recorded_at is not null and new.recorded_at is null%'
-      and lower(pg_get_functiondef(function_entry.oid))
+      and function_definition.normalized_definition
         like '%new.source_updated_at < old.source_updated_at%'
-      and lower(pg_get_functiondef(function_entry.oid))
+      and function_definition.normalized_definition
         like '%new.source_updated_at = old.source_updated_at%'
-      and lower(pg_get_functiondef(function_entry.oid))
+      and function_definition.normalized_definition
         like '%old.recorded_at is null and new.recorded_at is not null%'
   ) then
     raise exception 'review19_records final/freshness guard definition is wrong';

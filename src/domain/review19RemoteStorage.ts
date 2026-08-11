@@ -4,6 +4,7 @@ import {
   getReview19SourceUpdatedAt,
   normalizeReview19Result,
 } from "./review19.ts";
+import { formatSupabaseHttpError } from "./supabaseSyncDiagnostics.ts";
 import type { DemandCycle, Review19Result } from "./types.ts";
 
 export { getReview19SourceUpdatedAt } from "./review19.ts";
@@ -120,6 +121,14 @@ function buildHeaders(config: RemoteReview19Config): HeadersInit {
     Authorization: `Bearer ${config.anonKey}`,
     "Content-Type": "application/json",
   };
+}
+
+async function getErrorMessage(response: Response): Promise<string> {
+  try {
+    return formatSupabaseHttpError(response.status, await response.text());
+  } catch {
+    return `HTTP ${response.status}`;
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -481,7 +490,7 @@ export async function loadRemoteReview19Records(
       signal: options?.signal,
     });
     if (!response.ok) {
-      return { status: "error", message: `HTTP ${response.status}` };
+      return { status: "error", message: await getErrorMessage(response) };
     }
 
     const records = normalizeRemoteReview19Rows(
@@ -541,7 +550,7 @@ export async function upsertRemoteReview19Records(
     });
     if (!response.ok) {
       // A missing table/column is an error. Do not retry against an older schema.
-      return { status: "error", message: `HTTP ${response.status}` };
+      return { status: "error", message: await getErrorMessage(response) };
     }
 
     return { status: "saved", savedCount: rows.length };

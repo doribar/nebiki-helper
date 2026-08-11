@@ -114,6 +114,14 @@ npm run build
 
 pending itemは `type`、record identity、payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持ちます。同じtype・identityは1 itemへまとめ、app起動、online復帰、新しい残数／19:00チェック保存後、管理設定の手動同期時に直列再送します。同期処理はin-flight lockで多重実行を防ぎます。新schemaが未適用なら旧schemaへnormalとして送るfallbackは行わず、normal／summerを保持したままpendingに残します。
 
+### 同期エラーの確認
+
+pendingが1件以上ある場合だけ、管理設定のSupabase同期欄へ「エラー詳細」を表示します。既存の `nebiki-helper/pending-supabase-sync-v1` を正本とし、`record type × demandCycle × lastError` で同一原因を集約するため、大量の未同期recordを1件ずつ描画しません。cycleが欠けるlegacy／不正itemはnormalへ推測せず「不明」、`lastError`がないitemは「エラー未記録」として件数へ含めます。
+
+「エラー内容をコピー」はappVersion、buildId、pending総数、group別のtype／cycle／件数／試行回数範囲／最初の失敗／最後の試行／全文errorを診断用テキストにします。payload全体は表示・コピーしません。Authorization、Cookie、API key、access／refresh token、JWT、Supabase key、URL認証情報等は除去し、HTTP status、PostgREST code／message／details／hint、constraint、column等は保持します。Clipboard APIが利用できない場合はアプリを停止せず画面へ失敗を通知します。
+
+新規HTTP失敗では、安全に取得できるPostgREST診断本文を `lastError` に保持します。既存pendingのschemaは変更せず、すでに保存されている `lastError` もそのまま集約・表示できます。これは原因確認のためのUIであり、retry回数、retry timing、CAS、in-flight lock、queue identity、local-first動作は変更しません。
+
 ### `area_count_records`
 
 既存14列を維持し、次を追加します。
@@ -163,12 +171,14 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 既存 `area_count_records` のRLSは、共有売場を前提としたanonのSELECT／INSERT／UPDATE許可、DELETE不許可の現行モデルを変更しません。新しい `review19_records` も同じモデルでRLSと権限を設定します。service role keyはフロントエンドへ追加しません。
 
-今回の環境ではSupabase接続情報がなく、SQLはリモートDBへ未実行です。上記backup／migration／verifyと、実端末からのbackfillは利用者が実環境で行ってください。
+2026-08-11に利用者が実DBへcloud-sync migrationを適用済みです。旧verify artifactはPL/pgSQL関数定義の改行位置に依存し、正常なguardを誤って失敗扱いにしていました。現行verifyは関数定義の空白・改行・インデントを正規化してから、final→partial禁止、古いrevision禁止、同一revision guard、同時刻partial→final例外の4条件を検証します。DB上のguard実動作、schema、migration、RLSはこの修正では変更しません。
+
+このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
 `dataSchemaVersion` はJSON schemaのversionです。今回のJSON側変更は既存読込を壊さないoptional情報（Review19の `sourceUpdatedAt` 等）であり、DB migrationは別管理のため `3` を維持します。20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、JSON exportは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-2`
+- `appVersion`: `2026.8.9-3`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260811-104055-jst`
+- `buildId`: `build-20260811-130021-jst`

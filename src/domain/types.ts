@@ -3,6 +3,7 @@ import type {
   AreaCountRecommendation,
   AreaCountRecord,
 } from "./areaCountHistory.ts";
+import type { PendingSupabaseSyncErrorDetails } from "./supabaseSyncDiagnostics.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 export type DemandCycle = "normal" | "summer";
 
@@ -823,6 +824,7 @@ export type UseNebikiAppDerived = {
     pendingCount: number;
     areaCountPendingCount: number;
     review19PendingCount: number;
+    errorDetails: PendingSupabaseSyncErrorDetails;
     syncing: boolean;
     lastBackfillResult: SupabaseBackfillResult | null;
   };

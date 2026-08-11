@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-10（日本時間）
+最終更新: 2026-08-11（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,10 +11,10 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260809-2144.zip`
-- `appVersion`: `2026.8.9-2`
+- 作業基準ZIP: `nebiki-helper-20260811-1042.zip`
+- `appVersion`: `2026.8.9-3`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260811-104055-jst`
+- `buildId`: `build-20260811-130021-jst`
 - リリースZIP: 今回JST日時で生成する `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
@@ -133,6 +133,16 @@
 - remote失敗、Supabase設定なし、schema未適用はすべてpendingに残す。特にsummerを旧schemaへnormalとして送るfallbackはない。
 - Review19は各エリア確定後のpartialも送る。final payloadがpartialへ退行しないようqueueとDB triggerの両方で保護する。remoteから中央値履歴へ取り込むのはcomplete・finalだけ。
 
+### pending同期エラー診断
+
+- pendingが1件以上ある場合だけ、管理設定に「エラー詳細」を表示する。既存の `nebiki-helper/pending-supabase-sync-v1` を直接読み、別のerror logは作らない。
+- group keyは `type × payload直下のdemandCycle × sanitized lastError`。cycle欠損はnormalへ推測せず「不明」、error欠損も「エラー未記録」としてgroup件数へ含める。
+- 表示・コピー対象はtype、cycle、件数、試行回数の最小／最大、最初の失敗、最後の試行、error本文。payload全体や全record一覧は表示しない。
+- コピー前にAuthorization、Cookie、API key、access／refresh token、JWT、Supabase key、URL認証情報を除去する。HTTP status、PostgREST code／message／details／hint、constraint、columnは保持する。
+- 新規HTTP失敗は安全なPostgREST本文を `lastError` へ追加保持する。既存pending schema、retry回数／時機、CAS、in-flight guard、identity、local-first同期は変更しない。
+- retry成功後は既存のcloud sync version更新でgroupを再生成し、pending 0なら診断UIを消す。固定時間モードではqueueを読まず、診断groupも空にする。
+- 実使用端末で報告された165件の同期失敗原因は未特定。2026.8.9-3は原因を推測修正せず、既存pendingのerrorを表示・コピー可能にする診断リリースである。
+
 ### identity、dedupe、merge precedence
 
 - AreaCount identityは `date × sessionStartedAt × areaId × discountTime × demandCycle`。同じlocal／remote recordを1sampleにし、normalとsummerは別recordとして扱う。
@@ -152,9 +162,11 @@
 - SQLは `supabase_area_count_records_cloud_sync_backup.sql` → `supabase_area_count_records_cloud_sync_migration.sql` → `supabase_area_count_records_cloud_sync_verify.sql` の順。旧clientの書込みを止めてから実行し、verify成功後に新アプリをdeployする。
 - deploy後、実使用端末で新版を起動し、「端末内データをSupabaseへ同期」を実行して成功／失敗／pendingを確認する。
 - 問題時は新アプリを停止／旧版へ戻してから `supabase_area_count_records_cloud_sync_rollback.sql` を使う。summer rowがある場合はrollbackを中止し、Review19 tableは削除せずprivate quarantineへrenameする。
-- 開発環境にはSupabase接続情報がないため、migrationとremote read/writeは実DBで未実行。SQL、schema verification、mock／domain testまでが開発環境での検証範囲であり、実DB確認済みとは扱わない。
+- 利用者報告では、2026-08-11にcloud-sync migrationを実DBへ適用済みで、guard関数自体も正常。旧verify SQLだけが `pg_get_functiondef()` 内の改行位置に依存して誤失敗し、該当判定を手動修正するとverify全体が完走した。
+- 2026.8.9-3のverifyは関数定義の空白・改行・インデントを正規化してから、final→partial禁止、古いrevision禁止、同一revision guard、partial→final例外の4条件を検査する。migration、guard runtime、schema、unique、RLS、rollbackは変更しない。
+- この開発環境にはSupabase接続情報がないため、新verifyを実DBで再実行したとは報告しない。実端末の同期error本文を確認後に原因と次の修正を判断する。
 - 20時30分の残数中央値、30/40/50型・40/50型・全品50型、1個・2個・3個以上ルールは変更しない。20時30分recordもcycleを保持して同期するが、人間9段階UIは追加しない。
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の実行結果は `CHANGE_REPORT_20260810_SUPABASE_CLOUD_SYNC.md` を参照する。
+README記載の全 `check:*`（特に `check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の実行結果は `CHANGE_REPORT_20260811_SUPABASE_SYNC_ERROR_DIAGNOSTICS.md` を参照する。

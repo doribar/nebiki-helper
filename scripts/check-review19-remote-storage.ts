@@ -51,6 +51,8 @@ function jsonResponse(body: unknown, status = 200): Response {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
+    text: async () =>
+      typeof body === "string" ? body : JSON.stringify(body),
   } as Response;
 }
 
@@ -370,7 +372,7 @@ await test("schema/table HTTP errorは旧fallbackせず1回でerrorにする", a
 
   assert.deepEqual(await loadRemoteReview19Records("normal", options), {
     status: "error",
-    message: "HTTP 404",
+    message: "HTTP 404\nmessage: missing relation",
   });
   assert.equal(called, 1);
 
@@ -379,7 +381,7 @@ await test("schema/table HTTP errorは旧fallbackせず1回でerrorにする", a
       buildRecord({ date: "2026-08-09" }),
       options,
     ),
-    { status: "error", message: "HTTP 404" },
+    { status: "error", message: "HTTP 404\nmessage: missing relation" },
   );
   assert.equal(called, 2);
 });

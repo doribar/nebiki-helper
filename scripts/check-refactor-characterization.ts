@@ -178,10 +178,10 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  assert.equal(body.length, 134881);
+  assert.equal(body.length, 135249);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "d8a5dce22d538a292ae79a6898cea9feafaa9a6423a8f9ffb866109b1b14144e",
+    "33f29083e201e0f34baaa7dcdfbd37768eca5bd28a85db9b34e3b65ccbd4baa8",
   );
   assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 22);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);

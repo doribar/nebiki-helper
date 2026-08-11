@@ -1,6 +1,11 @@
 import { useState, type CSSProperties } from "react";
 import { APP_VERSION, BUILD_ID, DATA_SCHEMA_VERSION } from "../../domain/dataVersion.ts";
 import type { SupabaseBackfillResult } from "../../domain/types.ts";
+import {
+  buildSupabaseSyncErrorCopyText,
+  type PendingSupabaseSyncErrorDetails,
+  type PendingSupabaseSyncErrorGroup,
+} from "../../domain/supabaseSyncDiagnostics.ts";
 
 type ExportAction = () => boolean | Promise<boolean>;
 
@@ -13,6 +18,7 @@ type AdminSettingsDialogProps = {
   onExportLatestDailyData?: ExportAction;
   cloudSync?: {
     pendingCount: number;
+    errorDetails: PendingSupabaseSyncErrorDetails;
     syncing: boolean;
     lastBackfillResult: SupabaseBackfillResult | null;
   };
@@ -43,6 +49,22 @@ const exportButtonStyle: CSSProperties = {
   fontWeight: 900,
   cursor: "pointer",
 };
+
+function getSyncTypeLabel(type: PendingSupabaseSyncErrorGroup["type"]): string {
+  return type === "area_count" ? "AreaCount" : "Review19";
+}
+
+function getSyncCycleLabel(
+  cycle: PendingSupabaseSyncErrorGroup["demandCycle"],
+): string {
+  return cycle === "unknown" ? "不明" : cycle;
+}
+
+function getAttemptCountText(group: PendingSupabaseSyncErrorGroup): string {
+  return group.attemptCountMin === group.attemptCountMax
+    ? `${group.attemptCountMin}回`
+    : `${group.attemptCountMin}〜${group.attemptCountMax}回`;
+}
 
 export function AdminSettingsDialog({
   review19Count = 0,
@@ -94,6 +116,25 @@ export function AdminSettingsDialog({
       );
     } finally {
       setBusy(false);
+    }
+  };
+
+  const copyCloudSyncErrors = async () => {
+    const details = cloudSync?.errorDetails;
+    if (!details || details.pendingCount === 0) return;
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API is unavailable");
+      }
+      const copyText = buildSupabaseSyncErrorCopyText(details, {
+        appVersion: APP_VERSION,
+        buildId: BUILD_ID,
+      });
+      await navigator.clipboard.writeText(copyText);
+      setStatus("エラー内容をコピーしました。");
+    } catch {
+      setStatus("コピーできませんでした。ブラウザのクリップボード権限を確認してください。");
     }
   };
 
@@ -245,6 +286,141 @@ export function AdminSettingsDialog({
               <br />
               成功 {cloudSync.lastBackfillResult.succeededCount}件／失敗 {cloudSync.lastBackfillResult.failedCount}件／未同期 {cloudSync.lastBackfillResult.pendingCount}件
             </div>
+          ) : null}
+          {cloudSync && cloudSync.errorDetails.pendingCount > 0 ? (
+            <details
+              style={{
+                marginTop: 12,
+                maxWidth: "100%",
+                minWidth: 0,
+                border: "1px solid #fecaca",
+                borderRadius: 12,
+                background: "#fff7f7",
+                overflowX: "hidden",
+              }}
+            >
+              <summary
+                style={{
+                  minHeight: 44,
+                  boxSizing: "border-box",
+                  padding: "11px 12px",
+                  color: "#991b1b",
+                  fontSize: 14,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                エラー詳細（{cloudSync.errorDetails.pendingCount}件）
+              </summary>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  maxWidth: "100%",
+                  minWidth: 0,
+                  padding: "0 10px 10px",
+                  overflowX: "hidden",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => void copyCloudSyncErrors()}
+                  style={{
+                    ...exportButtonStyle,
+                    minHeight: 44,
+                    borderColor: "#b91c1c",
+                    color: "#991b1b",
+                    background: "#fff",
+                    fontSize: 14,
+                  }}
+                >
+                  エラー内容をコピー
+                </button>
+                {cloudSync.errorDetails.groups.map((group, index) => (
+                  <section
+                    key={`${group.type}-${group.demandCycle}-${index}`}
+                    style={{
+                      maxWidth: "100%",
+                      minWidth: 0,
+                      padding: 10,
+                      borderRadius: 10,
+                      background: "#fff",
+                      color: "#334155",
+                      fontSize: 12,
+                      lineHeight: 1.55,
+                      overflowX: "hidden",
+                    }}
+                  >
+                    <div style={{ color: "#0f172a", fontSize: 14, fontWeight: 900 }}>
+                      {getSyncTypeLabel(group.type)} / {getSyncCycleLabel(group.demandCycle)}
+                    </div>
+                    <div style={{ marginTop: 2 }}>
+                      {group.count}件・試行回数 {getAttemptCountText(group)}
+                    </div>
+                    {group.firstFailedAt ? (
+                      <div>最初の失敗：{group.firstFailedAt}</div>
+                    ) : null}
+                    {group.lastAttemptAt ? (
+                      <div>最後の試行：{group.lastAttemptAt}</div>
+                    ) : null}
+                    <div style={{ marginTop: 6, fontWeight: 800 }}>エラー：</div>
+                    {group.isErrorTruncated ? (
+                      <details style={{ maxWidth: "100%", minWidth: 0 }}>
+                        <summary
+                          style={{
+                            minHeight: 44,
+                            padding: "6px 0",
+                            boxSizing: "border-box",
+                            cursor: "pointer",
+                            whiteSpace: "pre-wrap",
+                            overflowWrap: "anywhere",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {group.errorPreview}
+                          <br />
+                          全文を表示
+                        </summary>
+                        <pre
+                          style={{
+                            margin: "4px 0 0",
+                            maxWidth: "100%",
+                            padding: 8,
+                            borderRadius: 8,
+                            background: "#f8fafc",
+                            font: "inherit",
+                            whiteSpace: "pre-wrap",
+                            overflowWrap: "anywhere",
+                            wordBreak: "break-word",
+                            overflowX: "hidden",
+                          }}
+                        >
+                          {group.errorText}
+                        </pre>
+                      </details>
+                    ) : (
+                      <pre
+                        style={{
+                          margin: 0,
+                          maxWidth: "100%",
+                          padding: 8,
+                          borderRadius: 8,
+                          background: "#f8fafc",
+                          font: "inherit",
+                          whiteSpace: "pre-wrap",
+                          overflowWrap: "anywhere",
+                          wordBreak: "break-word",
+                          overflowX: "hidden",
+                        }}
+                      >
+                        {group.errorText ?? "エラー未記録"}
+                      </pre>
+                    )}
+                  </section>
+                ))}
+              </div>
+            </details>
           ) : null}
         </section>
 

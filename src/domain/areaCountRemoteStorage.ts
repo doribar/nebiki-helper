@@ -10,6 +10,7 @@ import type {
 } from "./types.ts";
 import type { AreaCountDecisionBasis } from "./areaCountHistory.ts";
 import { getLegacyHumanEvaluationDetails } from "./humanEvaluation.ts";
+import { formatSupabaseHttpError } from "./supabaseSyncDiagnostics.ts";
 
 type SupabaseConfig = {
   url: string;
@@ -238,8 +239,7 @@ function classifyHttpError(status: number): RemoteStorageErrorKind {
 
 async function getErrorMessage(response: Response): Promise<string> {
   try {
-    const text = (await response.text()).trim();
-    return text ? `HTTP ${response.status}: ${text.slice(0, 500)}` : `HTTP ${response.status}`;
+    return formatSupabaseHttpError(response.status, await response.text());
   } catch {
     return `HTTP ${response.status}`;
   }
