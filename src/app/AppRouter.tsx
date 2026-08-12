@@ -88,9 +88,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           areaId={state.currentAreaId!}
           areaName={derived.currentAreaName}
           calculatorDraftScope={state.session?.startedAt ?? "current-session"}
-          showJudgeGuide={derived.showBentoJudgeGuide}
-          showSummerModeJudgeHint={showSummerModeJudgeHint}
-          onJudgeGuideShown={actions.markBentoJudgeGuideShown}
+          demandCycle={derived.demandCycle}
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
           timeSwitchNotice={derived.timeSwitchNotice}
@@ -161,6 +159,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
           areaName={derived.currentAreaName}
+          demandCycle={derived.demandCycle}
           basisGuide={derived.basisGuide}
           pendingBanner={derived.pendingBanner}
           timeSwitchNotice={derived.timeSwitchNotice}

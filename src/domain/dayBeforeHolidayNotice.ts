@@ -1,6 +1,7 @@
 import {
   isDayBeforeJapaneseHoliday,
   isHolidayBeforeNormalWeekday,
+  isJapaneseHolidayOrObserved,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 import type { DiscountTime } from "./types.ts";
@@ -11,6 +12,7 @@ export function shouldShowDayBeforeHolidayNotice(params: {
 }): boolean {
   return (
     isDayBeforeJapaneseHoliday(params.sessionDate) &&
+    !isJapaneseHolidayOrObserved(params.sessionDate) &&
     !isThreeDayHolidayMiddle(params.sessionDate) &&
     !isHolidayBeforeNormalWeekday(params.sessionDate)
   );

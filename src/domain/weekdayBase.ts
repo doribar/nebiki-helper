@@ -10,7 +10,8 @@ import type {
 } from "./types";
 import {
   addDaysToDateString,
-  isHolidayBeforeNormalWeekday,
+  isDayBeforeJapaneseHoliday,
+  isJapaneseHolidayOrObserved,
   isJapaneseHolidayOrWeekend,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
@@ -64,6 +65,104 @@ function getActualWeekdayText(weekday: number): string {
     default:
       return "不明曜日";
   }
+}
+
+export type IndividualAmountReferenceKind =
+  | "three_day_holiday_middle"
+  | "day_before_holiday"
+  | "holiday"
+  | "actual_weekday";
+
+export type IndividualAmountReferenceComparisonMode =
+  | "three_day_holiday_middle"
+  | "weekday_group"
+  | "weekday";
+
+export type IndividualAmountReferenceContext = {
+  kind: IndividualAmountReferenceKind;
+  comparisonMode: IndividualAmountReferenceComparisonMode;
+  referenceWeekday: number | null;
+  referenceWeekdayGroup: WeekdayBaseLabel | null;
+  referenceDiscountTime: DiscountTime;
+  reason: IndividualAmountReferenceKind;
+  referenceText: string;
+};
+
+/**
+ * 個別量判断で表示・保存する曜日基準を、同じ優先順位で解決する。
+ * 三連休中日（17時以降）→非祝日の祝日前日→祝日当日→実曜日の順。
+ * 三連休中日の15時は、従来どおり実曜日を使う。
+ */
+export function getIndividualAmountReferenceContext(params: {
+  date?: string;
+  weekday: number;
+  discountTime: DiscountTime;
+}): IndividualAmountReferenceContext {
+  const timeText = getBasisTimeText(params.discountTime);
+  const isThreeDayHolidayMiddleDate =
+    typeof params.date === "string" && isThreeDayHolidayMiddle(params.date);
+  const useThreeDayHolidayMiddleReference =
+    params.discountTime !== "15" &&
+    isThreeDayHolidayMiddleDate;
+
+  if (useThreeDayHolidayMiddleReference) {
+    return {
+      kind: "three_day_holiday_middle",
+      comparisonMode: "three_day_holiday_middle",
+      referenceWeekday: 0,
+      referenceWeekdayGroup: "金土",
+      referenceDiscountTime: params.discountTime,
+      reason: "three_day_holiday_middle",
+      referenceText: "通常の日曜夜と金曜・土曜夜の中間を基準に考えて",
+    };
+  }
+
+  if (
+    typeof params.date === "string" &&
+    !isThreeDayHolidayMiddleDate &&
+    !isJapaneseHolidayOrObserved(params.date) &&
+    isDayBeforeJapaneseHoliday(params.date)
+  ) {
+    return {
+      kind: "day_before_holiday",
+      comparisonMode: "weekday_group",
+      referenceWeekday: null,
+      referenceWeekdayGroup: "金土",
+      referenceDiscountTime: params.discountTime,
+      reason: "day_before_holiday",
+      referenceText: `金曜日・土曜日の${timeText}を基準に考えて`,
+    };
+  }
+
+  if (
+    typeof params.date === "string" &&
+    isJapaneseHolidayOrObserved(params.date)
+  ) {
+    return {
+      kind: "holiday",
+      comparisonMode: "weekday",
+      referenceWeekday: 0,
+      referenceWeekdayGroup: null,
+      referenceDiscountTime: params.discountTime,
+      reason: "holiday",
+      referenceText: `日曜日の${timeText}を基準に考えて`,
+    };
+  }
+
+  return {
+    kind: "actual_weekday",
+    comparisonMode: "weekday",
+    referenceWeekday:
+      Number.isInteger(params.weekday) &&
+      params.weekday >= 0 &&
+      params.weekday <= 6
+        ? params.weekday
+        : null,
+    referenceWeekdayGroup: null,
+    referenceDiscountTime: params.discountTime,
+    reason: "actual_weekday",
+    referenceText: `${getActualWeekdayText(params.weekday)}の${timeText}を基準に考えて`,
+  };
 }
 
 export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
@@ -795,14 +894,7 @@ export function getBasisGuideDisplay(params: {
   weather: ResolvedWeatherInput;
 }): BasisGuideDisplay {
   const resolved = resolveWeatherEffect(params);
-  const useThreeDayHolidayMiddleReference =
-    params.discountTime !== "15" &&
-    typeof params.date === "string" &&
-    isThreeDayHolidayMiddle(params.date);
-  const useHolidayBeforeNormalWeekdayReference =
-    typeof params.date === "string" &&
-    !useThreeDayHolidayMiddleReference &&
-    isHolidayBeforeNormalWeekday(params.date);
+  const individualAmountReference = getIndividualAmountReferenceContext(params);
 
   return {
     noticeText: resolved.noticeText,
@@ -816,11 +908,7 @@ export function getBasisGuideDisplay(params: {
     bonusResultText: resolved.bonusResultText,
     bonusCalcParts: resolved.bonusCalcParts,
     bonusTotal: resolved.baseRateBonus,
-    referenceText: useThreeDayHolidayMiddleReference
-      ? "通常の日曜夜と金曜・土曜夜の中間を基準に考えて"
-      : useHolidayBeforeNormalWeekdayReference
-        ? `日曜日の${getBasisTimeText(params.discountTime)}を基準に考えて`
-        : `${getActualWeekdayText(params.weekday)}の${getBasisTimeText(params.discountTime)}を基準に考えて`,
+    referenceText: individualAmountReference.referenceText,
   };
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-3",
+  "version": "2026.8.9-5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -34,7 +34,10 @@
     "check:supabase-sync-domain": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-sync-domain.ts",
     "check:supabase-sync-diagnostics": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-sync-diagnostics.ts",
     "check:review19-remote-storage": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-remote-storage.ts",
-    "check:supabase-cloud-sync-sql": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-cloud-sync-sql.ts"
+    "check:supabase-cloud-sync-sql": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-supabase-cloud-sync-sql.ts",
+    "check:cycle-separated-export": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-cycle-separated-export.ts",
+    "check:analysis-metadata-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-analysis-metadata-ui.ts",
+    "check:analysis-metadata": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-analysis-metadata.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

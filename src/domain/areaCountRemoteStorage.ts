@@ -11,6 +11,10 @@ import type {
 import type { AreaCountDecisionBasis } from "./areaCountHistory.ts";
 import { getLegacyHumanEvaluationDetails } from "./humanEvaluation.ts";
 import { formatSupabaseHttpError } from "./supabaseSyncDiagnostics.ts";
+import type {
+  AnalysisCalendarContext,
+  AnalysisWeatherContext,
+} from "./analysisMetadata.ts";
 
 type SupabaseConfig = {
   url: string;
@@ -31,6 +35,8 @@ export type RemoteAreaCountDetails = {
   evaluationSource?: AreaCountEvaluationSource;
   decisionBasis?: AreaCountDecisionBasis;
   comfortPoint?: number;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
 };
 
 export type RemoteAreaCountRow = {
@@ -161,6 +167,8 @@ function rowToRecord(row: RemoteAreaCountRow): Partial<AreaCountRecord> {
     evaluationSource: details.evaluationSource,
     decisionBasis: details.decisionBasis,
     comfortPoint: details.comfortPoint,
+    calendarContext: details.calendarContext,
+    analysisWeatherContext: details.analysisWeatherContext,
   } as Partial<AreaCountRecord>;
 }
 
@@ -201,6 +209,12 @@ export function buildRemoteAreaCountDetails(
     details.decisionBasis = cloneJson(record.decisionBasis);
   }
   if (record.comfortPoint !== undefined) details.comfortPoint = record.comfortPoint;
+  if (record.calendarContext !== undefined) {
+    details.calendarContext = cloneJson(record.calendarContext);
+  }
+  if (record.analysisWeatherContext !== undefined) {
+    details.analysisWeatherContext = cloneJson(record.analysisWeatherContext);
+  }
   return details;
 }
 

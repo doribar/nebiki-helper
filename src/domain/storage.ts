@@ -17,6 +17,12 @@ import {
   type WeatherConfirmationPending,
 } from "./weatherConfirmation.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
+import {
+  buildAnalysisWeatherContext,
+  buildSessionCalendarContextFromSnapshot,
+  chooseBestAnalysisWeatherContext,
+  normalizeAnalysisCalendarContext,
+} from "./analysisMetadata.ts";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
@@ -386,6 +392,16 @@ function cloneDailySessionSnapshot(snapshot: DailySessionSnapshot): DailySession
   );
   cloned.demandCycle = demandCycle;
   cloned.session.demandCycle = demandCycle;
+  cloned.calendarContext =
+    normalizeAnalysisCalendarContext(cloned.calendarContext) ??
+    buildSessionCalendarContextFromSnapshot(cloned);
+  cloned.analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    cloned.analysisWeatherContext,
+    buildAnalysisWeatherContext(
+      cloned.session.weather,
+      cloned.session.discountTime,
+    ),
+  ]);
 
   if (cloned.areas && typeof cloned.areas === "object") {
     for (const area of Object.values(cloned.areas)) {

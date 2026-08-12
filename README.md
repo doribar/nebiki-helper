@@ -25,6 +25,8 @@ npm run check:human-evaluation-9scale
 npm run check:supabase-sync-domain
 npm run check:review19-remote-storage
 npm run check:supabase-cloud-sync-sql
+npm run check:cycle-separated-export
+npm run check:analysis-metadata-ui
 npm run build
 ```
 
@@ -33,6 +35,7 @@ npm run build
 - 操作フローは従来の詳細モード相当の1種類です。簡易モードとモード切替はありません。
 - 15時・17時・18時30分・19時30分・20時30分の値引フロー、19時チェック、自動時刻遷移、早め次時刻−5％を維持しています。
 - 天候入力は16時〜21時です。15時値引そのものは維持し、15時専用の天候欄だけを廃止しています。
+- 天候入力の確認表は、天気記号の行名だけを「天気」と表示します。内部の天候データ名・計算・保存形式は変更していません。
 - エリアの残数評価は5つの基準ボタンを維持し、長押し時だけ隣接項目との中間を選べる9段階入力です。曜日グループ、祝前日、三連休中日、翌日平日祝日のロジックは維持しています。
 - 20時30分は従来の最終残数入力と1個・2個・3個以上ルールを維持し、5択の人間評価UIがないため9段階入力の対象外です。
 - 個別商品の「10個以上＋5％」は廃止しています。
@@ -57,6 +60,8 @@ npm run build
 - 夏季モードは営業日全体へ適用し、当日の運用開始後は固定します。期間内の選択状態は翌日以降へ引き継ぎます。
 - 時間固定モードでは固定したJST営業日を基準に期間判定し、本番設定とは別の `nebiki-helper/fixed-time-demand-cycle-state-v1` に選択と当日ロックを保存します。本番の残数履歴は読み書きしません。
 - ON時の17:59までは、9段階の中間値を少ない側へ解決する案内を表示します。18:00以降は中間値を多い側へ解決します。単独の5基準項目は時刻で変更しません。
+- 個別商品の量判断は、ON時だけ基準文の先頭へ「夏の」を付けます。手動エリア残数判定にも「夏季モード基準：夏の残数基準」を表示し、現在summer基準であることを明示します。
+- エリア残数判定側の「迷ったら…」は廃止しました。個別商品の量判断にある「迷ったら…」は従来どおり維持します。
 - 残数履歴、自動判定、減少率履歴、20時30分の中央値判定は従来どおり `normal` / `summer` 別に分離します。
 - `summer` の短期履歴は対象年と同じ年、長期履歴は対象年より前の年の夏データだけを使用します。
 - `summer` では今年の同曜日3件を優先し、同曜日が不足する場合は今年の曜日グループ3件で自動判定します。どちらも3件未満なら手動判定です。
@@ -71,6 +76,19 @@ npm run build
 - 中央値評価は `normal` / `summer`、同曜日／既存曜日グループ、夏季モードの今年短期・前年以前長期の条件を維持します。履歴不足時は「普通」へ補完せず `insufficient` とします。
 - 中央値による自動5段階評価、中央値、サンプル数、判定基準は入力中・完了後とも現場UIへ表示しません。JSON内の `areaEvaluations` から、人間raw評価・自動5段階評価・後日の結果や廃棄を分析時に比較できます。
 - 旧 `ratingStatus` / `ratings` / `ratingScores` は「減りすぎ／残りすぎ」の旧評価であり、今回の人間9段階残数評価とは別データとして維持します。
+
+## 判断基準と分析メタデータ
+
+- 個別量判断の曜日基準は、三連休中日の既存特殊基準（17時以降）→非祝日の祝日前日→祝日当日→通常曜日の順で選びます。三連休中日の15時は従来どおり実曜日基準です。
+- 非祝日の祝日前日は個別量判断を金土基準、祝日当日は日曜基準とし、表示文もアプリが採用済みの基準として示します。エリア残数判定は既存の履歴選択を変更せず、実際に採用した同曜日・曜日グループ・特殊比較を保存します。
+- `calendarContext` は実曜日と採用基準を分けて保持します。日付、`actualWeekday`、祝日／祝日前日／三連休等の条件、個別量基準、セッション・エリアごとの残数比較基準、理由、比較モードを含みます。15時と17時、またはエリア間で基準が異なる場合も表示文の解析なしで追跡できます。
+- `analysisWeatherContext` は各値引セッションで既存入力対象となる時間別予報（15時は16〜21時、17時は18〜21時、18時30分は19〜21時、19時30分は20〜21時、20時30分は21時）から `dry / rain / snow / mixed / unknown` を要約します。`weatherDataSource` は `entered_hourly_forecast` であり、実測天候を表しません。元の `hourlyForecasts`、解決済み天候、天候点・降水補正はそのまま残します。
+- `productionAnalysis.areas[areaId].productionShortageSuspicion` は、15時・17時に実際の値引判断へ採用した最終5段階エリア判定と、19時のReview19人間raw評価から「製造不足疑い」を導出します。15時・17時は自動中央値判定を変更せず採用した場合も有効checkpointで、`source: "history"` として保持します。人間が変更した場合は変更後の判定を使い、`source: "manual"` とします。19時は引き続き `source: "human_review19"` の人間観察だけを使い、自動中央値評価で補完しません。
+- 15時・17時は最終5段階の `few / slightly_few` を少ない側、19時はhuman raw score `1〜4` を少ない側とします。3/3=`strong`、2/3=`medium`、1/3=`weak`、0/3=`none` です。3時点のどれかが欠損・除外・未測定・セッション欠損、または必要な最終判定／19時人間評価がなければ `insufficient` とし、2/2等から推測しません。
+- `checkpointEvaluations` は15時・17時の最終採用5段階、`checkpointSources` は `history / manual / human_review19` の情報源を追跡します。`checkpointScores` と `checkpointSourceScale` は人間評価があるcheckpointだけに保存し、手動変更時のraw 9段階／scaleを保持する一方、history採用へ架空の人間raw scoreを生成しません。旧5段階の人間評価は従来の互換規則で奇数scoreへ論理変換しますが、`humanEvaluationScale: 5` は維持し、保存済みデータを物理更新しません。
+- 製造不足疑いは上記3checkpointの観測・採用結果から機械的に作る分析flagです。雨・雪を理由に消去・弱体化せず、Work/Data Analyticsでは `analysisWeatherContext` と併読します。これらのメタデータは値引率、20時30分tier、残数中央値へ影響しません。
+
+分析時は `normal` と `summer` を別母集団として扱います。天気の `dry / rain / snow / mixed` は母集団自体を分断せず、各サイクル内の説明変数・層別条件として扱います。祝日分析では実曜日だけでなく、`calendarContext` に保存された実際のreference basisを使用してください。
 
 ## 値引率の保存
 
@@ -107,6 +125,10 @@ npm run build
 - 旧 `not_applicable` は読み込み可能なまま保持しますが、新規作成せず、統合出力の業務データから除外します。
 - 旧15時天候フィールドは新しい統合出力へ持ち込みません。
 - `humanEvaluationDetails` はセッション／日次スナップショット、19:00個別出力、日次個別出力、統合JSONで保持します。旧5段階は保存済みデータを更新せず、出力用cloneだけへ奇数score・scale 5を展開します。
+- 管理設定の「19:00チェックデータを全件出力」と「1日データを全件出力」は、ボタンを増やさず `normal` / `summer` を別ファイルへ分けます。両方に有効データがあれば2ファイル、片方が0件なら有効な側だけを出力します。
+- 全件ファイルは `nebiki-review19-{normal|summer}-YYYYMMDD-HHMM.json`、`nebiki-daily-{normal|summer}-YYYYMMDD-HHMM.json`（JST）です。rootの任意項目 `exportFilter.demandCycle` でも対象サイクルを判別できます。各ファイルの業務schema・detailは同一で、反対側のcycleを含みません。
+- 「最新の19:00チェックデータを出力」「最新の1日データを出力」は従来どおり対象1件を1ファイルで出力します。
+- `calendarContext`、`analysisWeatherContext`、`productionAnalysis` は日次・Review19・統合JSONの既存snapshot経路で保持します。旧データにこれらがなくても読込・出力を継続します。
 
 ## Supabaseクラウド同期
 
@@ -131,7 +153,7 @@ pendingが1件以上ある場合だけ、管理設定のSupabase同期欄へ「�
 
 upsert identityとunique keyは `date × session_started_at × area_id × discount_time × demand_cycle` です。remote読込もcycle条件を必ず付け、normalとsummerを同じ中央値母集団へ混ぜません。旧remote rowはmigrationのDEFAULTによりnormalです。
 
-`record_details` は1件の残数観測に属する `userJudge`、`humanEvaluationDetails`、`suggestedEvaluation`、`areaRateAdjustment`、`evaluationSource`、`decisionBasis`、`comfortPoint` を保持します。旧5段階記録はcloud payload上だけscale 5の奇数scoreとして表現し、新9段階記録のraw score・選択順・resolved 5段階・解決理由をlosslessに保存します。アプリstate全体は保存しません。
+`record_details` は1件の残数観測に属する `userJudge`、`humanEvaluationDetails`、`suggestedEvaluation`、`areaRateAdjustment`、`evaluationSource`、`decisionBasis`、`comfortPoint` と任意の分析メタデータを保持します。Review19側は既存の `payload jsonb` へ同日の分析メタデータを含めます。旧5段階記録はcloud payload上だけscale 5の奇数scoreとして表現し、新9段階記録のraw score・選択順・resolved 5段階・解決理由をlosslessに保存します。アプリstate全体は保存しません。
 
 localとremoteは上記identityでdedupeします。異なるrevisionでは新しい `recordedAt` のcount・固定項目を採用し、欠けたoptional detailだけを古いrecordから補います。同一revisionでは詳細量が多いrecordを優先して不足項目を補い、同じ情報量なら安定したfingerprintで決定します。DB側でも古いupsertは無視し、同時刻では既存の固定値を維持しながら欠損JSONを補完します。`humanEvaluationScale: 9` はscale 5 envelopeより優先します。
 
@@ -175,10 +197,10 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のJSON側変更は既存読込を壊さないoptional情報（Review19の `sourceUpdatedAt` 等）であり、DB migrationは別管理のため `3` を維持します。20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、JSON exportは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回の `calendarContext`、`analysisWeatherContext`、`productionAnalysis`、`exportFilter` はすべてoptionalな後方互換追加であり、既存JSONBへ保存できるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-3`
+- `appVersion`: `2026.8.9-5`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260811-130021-jst`
+- `buildId`: `build-20260812-082404-jst`

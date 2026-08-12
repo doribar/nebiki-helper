@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-11（日本時間）
+最終更新: 2026-08-12（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,11 +11,11 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260811-1042.zip`
-- `appVersion`: `2026.8.9-3`
+- 作業基準ZIP: `nebiki-helper-20260812-0051.zip`
+- `appVersion`: `2026.8.9-5`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260811-130021-jst`
-- リリースZIP: 今回JST日時で生成する `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
+- `buildId`: `build-20260812-082404-jst`
+- リリースZIP: JSTの生成日時を使う `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
 
@@ -25,6 +25,8 @@
 - 19時チェック開始は天候入力画面から行う。18時30分完了画面には開始ボタンを出さない。
 - 19時チェックの新規「対象外」登録はない。旧 `not_applicable` は読み込み互換のみ。
 - 20時30分は従来の最終残数入力と1個・2個・3個以上ルールを維持する。既存5択の人間評価UIがないため、今回の9段階入力は適用しない。
+- 天候確認表の天気記号行は「天気」と表示する。見出しや他画面を一括置換せず、内部のweather field・計算・保存形式は変更しない。
+- エリア残数判定側の「迷ったら…」は削除済み。個別商品の量判断側の「迷ったら…」は維持する。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -53,6 +55,7 @@
 - 曜日単体判定では、既存の「長期中央値より最大2個低い位置まで」のガードを使用する。曜日グループ判定では長期ガードを使用しない。
 - 減少率履歴と20時30分の中央値判定もサイクル別に分離する。
 - 19時チェック、日次スナップショット、`rateDecisionSnapshot`、JSON出力へ需要サイクルを保存する。
+- 個別商品の量判断ではsummer時だけ、採用基準の先頭へ「夏の」を付ける。手動エリア残数判定も「夏季モード基準：夏の残数基準」を表示する。normal時は夏表示を出さない。
 
 ## 夏季モードとクラウド保存
 
@@ -74,6 +77,40 @@
 - セッション `basis` は完了保存時に `basisCapturedAt` とともに固定し、エリア率の正本には使わない。
 - 日次品質は `processComplete` と `measurementComplete` を分離する。
 - `humanEvaluationDetails` はraw score・選択順・scale・解決値と理由を保持する。`decisionBasis` へ重複保存しない。
+
+### 祝日基準と `calendarContext`
+
+- 個別量判断の採用優先順位は、三連休中日の既存特殊基準（17時以降）→非祝日の祝日前日→祝日当日→通常曜日。三連休中日の15時は従来どおり実曜日を使う。
+- 非祝日の祝日前日は金土基準、祝日当日は日曜基準。祝日であり翌日も祝日のケースは「祝日前日」へ落とさず、祝日／連休の既存特殊判定を優先する。
+- 個別量の祝日前日表示は「金曜日・土曜日の○時を基準に考えて」、祝日当日は「日曜日の○時を基準に考えて」とし、人間に追加考慮を求めず採用済み基準を説明する。
+- エリア残数の履歴選択ロジックは変更しない。祝日前日の既存15時／17時以降の基準、同曜日優先、曜日group fallback、三連休中日、翌日平日祝日の比較結果を正本にし、採用結果をメタデータへ写す。
+- `calendarContext` は `version: 1` のoptional情報。`date`、`scope`、`actualWeekday`、`isHoliday`、`isDayBeforeHoliday`、`calendarCondition`、手動曜日override有無を持つ。
+- `individualAmountReference` はセッションごとにkind／comparison mode／採用曜日またはgroup／対象値引時刻／reason／表示基準を保持する。`areaCountReference` はセッション・値引時刻・エリアごとに、同曜日、曜日group、複合group、履歴不足等の実際のcomparison modeとreasonを保持する。
+- 日次 `calendarContext` は各sessionとAreaCount recordのcontextを統合し、15時と17時、またはエリア間で基準が異なる場合も潰さない。Workは `actualWeekday` から採用基準を推測せず、各referenceを使用する。
+
+### `productionAnalysis`（製造不足疑い）
+
+- day-levelの `productionAnalysis.areas[areaId]` に15時・17時の最終採用5段階判定、19時のhuman raw score、checkpoint status／source、human source scale、low-side件数、`productionShortageSuspicion` を保存する。確定診断やground truthではなく、3 checkpointから機械的に作る分析flagである。
+- 15時・17時は、その時点で値引判断へ最終的に採用した `areaCountEvaluation`／`areaCountDecisionBasis.finalEvaluation` 相当の5段階を正本にする。自動中央値判定をそのまま採用した場合も有効checkpointで、sourceは既存canonical値の `history`。人間が変更した場合は変更後の最終判定を使い、sourceは `manual`。
+- 15時・17時は最終採用5段階の `few / slightly_few` を少ない側とする。manual時は既存のraw 9-scaleとscaleを保持するが、history時に人間raw scoreやscaleを捏造しない。元のautomatic evaluation、manual evaluation、final evaluationは相互に上書きせず、`productionAnalysis` は既存データからderiveする。
+- 19時はReview19のhuman observationだけを使用し、sourceは `human_review19`。raw score `1 / 2 / 3 / 4` を少ない側、`5` を普通、`6 / 7 / 8 / 9` を多い側とし、中央値 `autoEvaluation` は人間評価の代用にしない。
+- 3 checkpointが全て有効な場合だけ、low側3=`strong`、2=`medium`、1=`weak`、0=`none`。15時／17時のsessionまたは最終採用判定、19時のReview19 human評価がない場合、あるいはmissing／excluded／not measured／session missingなら `insufficient`。2/2や1/1から強度を推測しない。15時／17時にhuman manual評価がないことだけでは `insufficient` にしない。
+- 旧5段階human評価は既存互換に従い `few / slightly_few / normal / slightly_many / many` を `1 / 3 / 5 / 7 / 9` へ論理deriveするが、source scaleは5のまま。2026.8.9-4の保存済み `productionAnalysis` もoptional field欠損を許容して読込み、既存session／recordから安全に復元できる場合だけ再deriveする。過去recordを物理更新しない。
+- 雨・雪・予報状態を理由にflagを削除・弱体化しない。15/17/19が全て少ない側ならrainでもsnowでも `strong` を保持し、天気は別のanalysis variableとして併読する。
+
+### `analysisWeatherContext`
+
+- 各値引セッションで既存入力対象となる時間別予報（15時は16〜21時、17時は18〜21時、18時30分は19〜21時、19時30分は20〜21時、20時30分は21時）を `weatherDataSource: "entered_hourly_forecast"`、`analysisWeatherClass: "dry" | "rain" | "snow" | "mixed" | "unknown"` へ要約する。実測天候を示すfield名は使わない。
+- 雨だけならrain、雪だけならsnow、雨と雪が混在すればmixed、全対象時刻が揃い降水なしならdry、対象時間の不足・判別不能はunknown。`hasPrecipitation`、`precipitationTypes`、判定対象・dry・rain・snowの時刻も保持する。
+- このsummaryは元の `hourlyForecasts`、`resolvedWeather`、`precipitationRateBonus`、`weatherPointScore` を置換しない。値引率・天候補正にも使わない。
+
+### Work / Data Analyticsの解釈規則
+
+- `normal` と `summer` は別母集団として扱う。
+- dry／rain／snow／mixedでデータセットを物理分割しない。weather classはnormal／summer内の説明変数・層別条件とし、製造量や残数水準では可能な限り同条件比較する。
+- `productionShortageSuspicion` は15時・17時の最終採用エリア判定と19時のraw human observation由来で、天候補正済みの結論ではない。checkpoint source（`history / manual / human_review19`）を区別し、必ず `analysisWeatherContext` と併読して雨天時の製造抑制等は分析段階で解釈する。
+- 祝日分析は実曜日だけを使わず、`calendarContext` の採用reference・reason・comparison modeを使う。
+- 将来はhuman raw evaluation、中央値auto evaluation、製造不足疑い、その後の残数、最終廃棄、天気予報contextを並べて検証する。どれかを正解ラベルとして相互上書きしない。
 
 ## 19:00チェックの人間評価と中央値評価
 
@@ -112,6 +149,10 @@
 - 同日は日次データを正本とし、19時チェック側を除外。
 - 重複除外・判定不能・旧対象外の件数を `dataQuality` に保存。
 - 新しいscale 9詳細はセッション、日次スナップショット、19:00個別、日次個別、統合JSONでroundtripする。旧scale 5は保存済みデータを変更せず、出力用cloneだけへ奇数scoreとしてmaterializeする。
+- 「19:00チェックデータを全件出力」と「1日データを全件出力」は、UIボタンを増やさずnormal／summer別ファイルを生成する。両方にrecordがあれば2ファイル、片側0件なら有効側だけ。ファイル名は `nebiki-review19-{cycle}-YYYYMMDD-HHMM.json` と `nebiki-daily-{cycle}-YYYYMMDD-HHMM.json`（JST）。
+- 各全件ファイルは従来の完全schemaを保ち、optionalな `exportFilter.demandCycle` をrootへ加える。normal fileへsummer、summer fileへnormalを混ぜない。
+- 「最新の19:00チェックデータ」「最新の1日データ」は従来どおり、対象recordのcycleに関係なく1操作1ファイル。
+- `calendarContext`、`analysisWeatherContext`、`productionAnalysis` をday snapshot／Review19／日次・統合JSONの既存経路で追跡可能にする。旧データでfield欠損なら未取得として扱い、推測補完しない。
 
 ## Supabaseクラウド同期
 
@@ -124,6 +165,7 @@
 - `review19_records` を新設し、1営業日・1cycleを1 rowとしてupsertする。version、date、session、cycle、`recorded_at`、`source_updated_at`、`is_complete`、`payload jsonb`、作成・更新時刻を持ち、unique keyは `date × demand_cycle`。
 - Review19のpartialは `recorded_at = null`、finalはrecorded_atあり。各入力・除外・修正・完了で `sourceUpdatedAt` を単調増加させる。triggerは古いrevisionとfinalからpartialへの逆戻りを拒否する。旧recordに `sourceUpdatedAt` がなければrecorded/completed/area count/start時刻のうち最新の有効時刻を論理的に利用する。
 - 新tableのRLS／権限は既存area tableと同じanon SELECT／INSERT／UPDATE、DELETEなし。area tableの現行RLS modelは変更しない。service role keyはfrontendへ追加しない。
+- 今回のanalysis metadataは `area_count_records.record_details` と `review19_records.payload` の既存JSONB、および既存snapshot経路にoptional fieldとして保存する。新column、migration、RLS／policy変更はない。
 
 ### local-first、pending、retry
 
@@ -141,7 +183,7 @@
 - コピー前にAuthorization、Cookie、API key、access／refresh token、JWT、Supabase key、URL認証情報を除去する。HTTP status、PostgREST code／message／details／hint、constraint、columnは保持する。
 - 新規HTTP失敗は安全なPostgREST本文を `lastError` へ追加保持する。既存pending schema、retry回数／時機、CAS、in-flight guard、identity、local-first同期は変更しない。
 - retry成功後は既存のcloud sync version更新でgroupを再生成し、pending 0なら診断UIを消す。固定時間モードではqueueを読まず、診断groupも空にする。
-- 実使用端末で報告された165件の同期失敗原因は未特定。2026.8.9-3は原因を推測修正せず、既存pendingのerrorを表示・コピー可能にする診断リリースである。
+- 2026.8.9-3の実使用端末では、残数950件・19:00チェック3件の計953件が成功、失敗0件・pending 0まで同期完走し、Supabase上の `demand_cycle = summer` も確認済み。これは利用者による実端末確認結果であり、今回のリリースではcloud sync基盤を変更していない。
 
 ### identity、dedupe、merge precedence
 
@@ -167,6 +209,13 @@
 - この開発環境にはSupabase接続情報がないため、新verifyを実DBで再実行したとは報告しない。実端末の同期error本文を確認後に原因と次の修正を判断する。
 - 20時30分の残数中央値、30/40/50型・40/50型・全品50型、1個・2個・3個以上ルールは変更しない。20時30分recordもcycleを保持して同期するが、人間9段階UIは追加しない。
 
+## 今回変更しない重要仕様
+
+- cloud syncのlocal-first、pending queue、retry timing、CAS、in-flight guard、rich merge、normal／summer dedupe、Review19 partial／final、backfill、fixed-time隔離を変更しない。
+- Supabase SQL、schema、column、unique key、index、RLS、policyを変更しない。追加analysis metadataは既存JSONBで保持する。
+- 値引率基本値、天候・気温補正、夏季期間、9段階interaction／500ms長押し、完了画面の現在時刻率、20時30分ルールを変更しない。
+- `dataSchemaVersion` はoptional additive metadataのみのため `3` を維持する。
+
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の実行結果は `CHANGE_REPORT_20260811_SUPABASE_SYNC_ERROR_DIAGNOSTICS.md` を参照する。
+README記載の全 `check:*`（特に `check:analysis-metadata`、`check:analysis-metadata-ui`、`check:cycle-separated-export`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の実行結果は `CHANGE_REPORT_20260812_PRODUCTION_CHECKPOINT.md` を参照する。

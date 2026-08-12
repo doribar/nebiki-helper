@@ -18,7 +18,7 @@ import type {
   AreaCountDecisionBasis,
   AreaCountRecord,
 } from "../../domain/areaCountHistory.ts";
-import { DONE_SUMMARY_ROUTE, getAreaName } from "../../domain/area";
+import { DONE_SUMMARY_ROUTE, getAreaName, getNormalRoute } from "../../domain/area";
 import { getBasisGuideDisplay, getWeekdayBaseInfo } from "../../domain/weekdayBase";
 import { getFinalTimeGuide, getFinalTimeInstructionSteps } from "../../domain/discount";
 import { loadReview19Records } from "../../domain/storage";
@@ -31,6 +31,14 @@ import {
 import { getCurrentDataVersionInfo } from "../../domain/dataVersion.ts";
 import { normalizeDemandCycle } from "../../domain/demandCycle.ts";
 import { getAreaJudgeText } from "./ratePresentation.ts";
+import {
+  buildAnalysisWeatherContext,
+  buildDayAnalysisCalendarContext,
+  buildProductionAnalysis,
+  buildSessionAnalysisCalendarContext,
+  chooseBestAnalysisWeatherContext,
+  normalizeAnalysisCalendarContext,
+} from "../../domain/analysisMetadata.ts";
 
 function getAreaCountRecordDemandCycle(record: AreaCountRecord): DemandCycle {
   return normalizeDemandCycle(
@@ -169,11 +177,27 @@ export function createDailySessionSnapshot(params: {
   const session = params.state.session;
   if (!session) return null;
   const demandCycle = normalizeDemandCycle(session.demandCycle);
+  const calendarContext = buildSessionAnalysisCalendarContext({
+    date: session.date,
+    weekday: session.weekday,
+    discountTime: session.discountTime,
+    sessionStartedAt: session.startedAt,
+    manualWeekdayOverride: session.manualWeekdayOverride,
+    areaDecisionBases: DONE_SUMMARY_ROUTE.map((areaId) => ({
+      areaId,
+      basis: params.state.areaProgressMap[areaId]?.areaCountDecisionBasis,
+    })),
+  });
 
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
     demandCycle,
+    calendarContext,
+    analysisWeatherContext: buildAnalysisWeatherContext(
+      session.weather,
+      session.discountTime,
+    ),
     capturedAt: params.capturedAt,
     basisCapturedAt: params.capturedAt,
     sessionEndReason:
@@ -256,9 +280,21 @@ export function buildFinalSessionDoneSummaryItems(params: {
   });
 }
 
-export function getLatestReview19DayCheck(date: string): Review19DayCheckSnapshot | undefined {
+export function getLatestReview19DayCheck(
+  date: string,
+  demandCycle?: DemandCycle,
+): Review19DayCheckSnapshot | undefined {
+  const targetDemandCycle = demandCycle === undefined
+    ? undefined
+    : normalizeDemandCycle(demandCycle);
   const latest = loadReview19Records()
-    .filter((record) => record.date === date && Boolean(record.recordedAt))
+    .filter(
+      (record) =>
+        record.date === date &&
+        Boolean(record.recordedAt) &&
+        (targetDemandCycle === undefined ||
+          normalizeDemandCycle(record.demandCycle) === targetDemandCycle),
+    )
     .sort((a, b) => (a.recordedAt ?? "").localeCompare(b.recordedAt ?? ""))
     .at(-1);
 
@@ -302,6 +338,18 @@ export function getLatestReview19DayCheck(date: string): Review19DayCheckSnapsho
     excludedAreaIds: [...latest.excludedAreaIds],
     excludeReasons: JSON.parse(JSON.stringify(latest.excludeReasons)) as Review19DayCheckSnapshot["excludeReasons"],
     dataQuality: JSON.parse(JSON.stringify(latest.dataQuality)) as Review19DayCheckSnapshot["dataQuality"],
+    calendarContext: latest.calendarContext
+      ? JSON.parse(JSON.stringify(latest.calendarContext))
+      : latest.reference?.calendarContext ?? latest.snapshot?.calendarContext,
+    analysisWeatherContext: latest.analysisWeatherContext
+      ? JSON.parse(JSON.stringify(latest.analysisWeatherContext))
+      : latest.reference?.analysisWeatherContext ?? latest.snapshot?.analysisWeatherContext,
+    productionAnalysis: latest.productionAnalysis
+      ? JSON.parse(JSON.stringify(latest.productionAnalysis))
+      : undefined,
+    reference: latest.reference
+      ? JSON.parse(JSON.stringify(latest.reference))
+      : undefined,
     snapshot: latest.snapshot
       ? JSON.parse(JSON.stringify(latest.snapshot)) as Review19Snapshot
       : undefined,
@@ -331,35 +379,77 @@ export function createReview19DaySnapshot(params: {
         ? getAreaCountRecordDemandCycle(sameDateAreaCountRecord)
         : undefined),
   );
+  const sessions = params.sessions
+    .filter((session) =>
+      session.session.date === params.date &&
+      normalizeDemandCycle(
+        session.demandCycle ?? session.session.demandCycle,
+      ) === demandCycle &&
+      (session.screen === "done" || session.sessionEndReason === "auto_time_transition")
+    )
+    .map((session) =>
+      cloneDailySessionSnapshotWithDemandCycle(session, demandCycle),
+    );
+  const areaCountRecords = cloneAreaCountRecords(
+    params.areaCountRecords.filter(
+      (record) =>
+        record.date === params.date &&
+        getAreaCountRecordDemandCycle(record) === demandCycle,
+    ),
+  );
+  const review19Check = params.review19Check &&
+      normalizeDemandCycle(params.review19Check.demandCycle) === demandCycle
+    ? {
+        ...JSON.parse(JSON.stringify(params.review19Check)),
+        demandCycle,
+      } as NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>
+    : undefined;
+  const calendarContext = buildDayAnalysisCalendarContext({
+    date: params.date,
+    sessionContexts: [
+      ...sessions.map((session) => session.calendarContext),
+      review19Check?.snapshot?.calendarContext,
+      review19Check?.reference?.calendarContext,
+    ],
+    areaRecordContexts: areaCountRecords.map((record) => record.calendarContext),
+  });
+  const analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    review19Check?.analysisWeatherContext,
+    review19Check?.reference?.analysisWeatherContext,
+    review19Check?.snapshot?.analysisWeatherContext,
+    ...sessions.toReversed().map((session) => session.analysisWeatherContext),
+  ]);
+  const productionAnalysis = buildProductionAnalysis({
+    date: params.date,
+    demandCycle,
+    areaIds: getNormalRoute(params.date),
+    areaCountRecords,
+    sessions,
+    review19Check,
+  });
+  if (review19Check) {
+    review19Check.calendarContext =
+      normalizeAnalysisCalendarContext(review19Check.calendarContext) ??
+      normalizeAnalysisCalendarContext(review19Check.reference?.calendarContext) ??
+      normalizeAnalysisCalendarContext(review19Check.snapshot?.calendarContext);
+    review19Check.analysisWeatherContext = analysisWeatherContext;
+    review19Check.productionAnalysis = productionAnalysis;
+  }
+
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
     date: params.date,
     demandCycle,
+    calendarContext,
+    analysisWeatherContext,
+    productionAnalysis,
     rateLogicVersion: "time_basic_rate_v1",
     review19Status: params.review19Check?.review19Status ?? "not_performed",
-    sessions: params.sessions
-      .filter((session) =>
-        session.session.date === params.date &&
-        (session.screen === "done" || session.sessionEndReason === "auto_time_transition")
-      )
-      .map((session) =>
-        cloneDailySessionSnapshotWithDemandCycle(session, demandCycle),
-      ),
-    review19Check: params.review19Check
-      ? {
-          ...JSON.parse(JSON.stringify(params.review19Check)),
-          demandCycle,
-        } as NonNullable<NonNullable<Review19Result["daySnapshot"]>["review19Check"]>
-      : undefined,
-    areaCountRecords: cloneAreaCountRecords(
-      params.areaCountRecords.filter(
-        (record) =>
-          record.date === params.date &&
-          getAreaCountRecordDemandCycle(record) === demandCycle,
-      ),
-    ),
+    sessions,
+    review19Check,
+    areaCountRecords,
   };
 }
 
@@ -382,12 +472,28 @@ export function createReview19Snapshot(params: {
     excludedAreaIds: params.excludedAreaIds,
     demandCycle,
   });
+  const calendarContext = buildSessionAnalysisCalendarContext({
+    date: params.session.date,
+    weekday: params.session.weekday,
+    discountTime: params.session.discountTime,
+    sessionStartedAt: params.session.startedAt,
+    manualWeekdayOverride: params.session.manualWeekdayOverride,
+    areaDecisionBases: DONE_SUMMARY_ROUTE.map((areaId) => ({
+      areaId,
+      basis: params.areaProgressMap[areaId]?.areaCountDecisionBasis,
+    })),
+  });
 
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
     demandCycle,
+    calendarContext,
+    analysisWeatherContext: buildAnalysisWeatherContext(
+      params.session.weather,
+      params.session.discountTime,
+    ),
     session: {
       dataSchemaVersion: params.session.dataSchemaVersion,
       appVersion: params.session.appVersion,
@@ -457,12 +563,22 @@ export function createReview19Reference(
     discountTime: "19",
     weather: resolvedWeather,
   });
+  const calendarContext = buildSessionAnalysisCalendarContext({
+    date: reviewDraft.date,
+    weekday: reviewDraft.weekday,
+    discountTime: "19",
+    sessionStartedAt: null,
+    manualWeekdayOverride: reviewDraft.manualWeekdayOverride,
+    areaDecisionBases: [],
+  });
 
   return {
     date: reviewDraft.date,
     weekday: reviewDraft.weekday,
     discountTime: "19",
     demandCycle,
+    calendarContext,
+    analysisWeatherContext: buildAnalysisWeatherContext(reviewDraft.weather, "19"),
     weather: JSON.parse(JSON.stringify(reviewDraft.weather)) as WeatherInput,
     resolvedWeather: JSON.parse(JSON.stringify(resolvedWeather)),
     basis: {

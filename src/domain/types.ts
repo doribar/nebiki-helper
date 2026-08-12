@@ -4,6 +4,11 @@ import type {
   AreaCountRecord,
 } from "./areaCountHistory.ts";
 import type { PendingSupabaseSyncErrorDetails } from "./supabaseSyncDiagnostics.ts";
+import type {
+  AnalysisCalendarContext,
+  AnalysisWeatherContext,
+  ProductionAnalysis,
+} from "./analysisMetadata.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 export type DemandCycle = "normal" | "summer";
 
@@ -527,6 +532,8 @@ export type Review19Reference = {
   demandCycle?: DemandCycle;
   weather: WeatherInput;
   resolvedWeather: ResolvedWeatherInput;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
   basis: {
     rateLogicVersion?: RateLogicVersion;
     /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
@@ -554,6 +561,8 @@ export type Review19Snapshot = {
   buildId?: string;
   capturedAt: string;
   demandCycle?: DemandCycle;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
   session: {
     dataSchemaVersion?: number;
     appVersion?: string;
@@ -600,6 +609,8 @@ export type DailySessionSnapshot = {
   buildId?: string;
   capturedAt: string;
   demandCycle?: DemandCycle;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
   basisCapturedAt?: string;
   sessionEndReason?: "completed" | "auto_time_transition";
   rateLogicVersion?: RateLogicVersion;
@@ -645,6 +656,9 @@ export type Review19DayCheckSnapshot = {
   appVersion?: string;
   buildId?: string;
   demandCycle?: DemandCycle;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
+  productionAnalysis?: ProductionAnalysis;
   review19Status: Exclude<Review19Status, "not_performed">;
   recordedAt: string;
   sessionStartedAt: string;
@@ -674,6 +688,9 @@ export type Review19DaySnapshot = {
   capturedAt: string;
   date: string;
   demandCycle?: DemandCycle;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
+  productionAnalysis?: ProductionAnalysis;
   rateLogicVersion?: RateLogicVersion;
   review19Status: Review19Status;
   /** その日の通常値引セッションログ。19:00チェックはreview19Checkへ分けて保存する。 */
@@ -691,6 +708,9 @@ export type Review19Result = {
   review19Status: Exclude<Review19Status, "not_performed">;
   date: string;
   demandCycle?: DemandCycle;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
+  productionAnalysis?: ProductionAnalysis;
   sessionStartedAt: string;
   reviewStartedAt?: string;
   reviewCompletedAt?: string;

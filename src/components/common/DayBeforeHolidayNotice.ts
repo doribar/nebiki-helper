@@ -1,13 +1,13 @@
 import { createElement, type CSSProperties } from "react";
 
 export const DAY_BEFORE_HOLIDAY_NOTICE_TEXT =
-  "ただし明日は祝日なので、夜の来客を考慮した上で判断してください。";
+  "明日は祝日のため、金曜日・土曜日と同じ基準になっています。";
 
 export const THREE_DAY_HOLIDAY_MIDDLE_NOTICE_TEXT =
-  "今日は三連休の中日です。通常の日曜夜より来客を見込みつつ、金曜・土曜ほどではない前提で判断してください。";
+  "今日は三連休の中日のため、通常の日曜夜と金曜・土曜夜の中間の基準になっています。";
 
 export const HOLIDAY_BEFORE_NORMAL_WEEKDAY_NOTICE_TEXT =
-  "今日は祝日で、明日は平日です。日曜日と同じ基準で判断してください。";
+  "今日は祝日で明日は平日のため、日曜日と同じ基準になっています。";
 
 const noticeStyle: CSSProperties = {
   margin: "0 0 14px",

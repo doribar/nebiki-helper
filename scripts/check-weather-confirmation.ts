@@ -677,6 +677,7 @@ test("修正操作は入力値を消去せず、最後の入力だけ再確定�
 test("確認画面は時刻列と天候・気温・風速行を固定表で揃える", () => {
   const panelSource = source("src/components/screens/WeatherConfirmationPanel.tsx");
   assert.ok(panelSource.includes("入力した天候を確認してください"));
+  assert.ok(panelSource.includes("天気"));
   assert.ok(panelSource.includes("<table"));
   assert.ok(panelSource.includes("<thead>"));
   assert.ok(panelSource.includes("<tbody>"));
@@ -703,7 +704,7 @@ test("対象時刻と天候・気温・風速は同じhours順で列を作る", 
     panelSource.indexOf("</table>") + "</table>".length,
   );
   const weatherRow = tableBlock.slice(
-    tableBlock.indexOf("天候"),
+    tableBlock.indexOf("天気"),
     tableBlock.indexOf("気温"),
   );
   const temperatureRow = tableBlock.slice(

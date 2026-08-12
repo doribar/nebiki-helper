@@ -112,14 +112,16 @@ import {
   type StoredFinalizedDayData,
 } from "../domain/finalizedDayData.ts";
 import {
-  buildAllFinalizedDayDataExportPayload,
-  buildAllReview19DataExportPayload,
+  buildAllFinalizedDayDataExportPayloadsByDemandCycle,
+  buildAllReview19DataExportPayloadsByDemandCycle,
   buildDirectFinalizedDayDataExportPayload,
   buildDirectReview19DataExportPayload,
   buildLatestFinalizedDayDataExportPayload,
   buildLatestReview19DataExportPayload,
+  getDemandCycleAllExportFilename,
   selectAllReview19Data,
 } from "../domain/separateDataExport.ts";
+import { downloadJsonFiles } from "../domain/jsonDownload.ts";
 import { getPreviousJstCalendarDate } from "../domain/jstCalendar.ts";
 import type {
   AreaCountDecisionBasis,
@@ -274,6 +276,10 @@ import {
   resolveHumanEvaluationDetails,
   resolveHumanEvaluationForDiscount,
 } from "../domain/humanEvaluation.ts";
+import {
+  buildAnalysisWeatherContext,
+  buildSessionAnalysisCalendarContext,
+} from "../domain/analysisMetadata.ts";
 
 export { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
 
@@ -298,18 +304,8 @@ export {
   startAutoSkippedCountOnlyProgress,
 } from "./nebikiApp/autoSkipFlow.ts";
 
-function downloadJsonFile(payload: unknown, filename: string): void {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+function downloadJsonFile(payload: unknown, filename: string): boolean {
+  return downloadJsonFiles([{ payload, filename }]);
 }
 
 export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppResult {
@@ -2592,7 +2588,10 @@ const lateSkipNotice = useMemo(() => {
       demandCycle: session.demandCycle,
       areaCountRecords: params.nextAreaCountRecords,
       sessions,
-      review19Check: getLatestReview19DayCheck(session.date),
+      review19Check: getLatestReview19DayCheck(
+        session.date,
+        session.demandCycle,
+      ),
     });
     const result = params.nextState.finalizedDayRecordId
       ? replaceFinalizedDayDataCore({
@@ -2734,6 +2733,24 @@ const lateSkipNotice = useMemo(() => {
         areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
         evaluationSource: areaCountEvaluationSource,
         decisionBasis: areaCountDecisionBasis,
+        calendarContext: buildSessionAnalysisCalendarContext({
+          scope: "area_count",
+          date: state.session.date,
+          weekday: state.session.weekday,
+          discountTime: state.session.discountTime,
+          sessionStartedAt: state.session.startedAt,
+          manualWeekdayOverride: state.session.manualWeekdayOverride,
+          areaDecisionBases: [
+            {
+              areaId: state.currentAreaId,
+              basis: areaCountDecisionBasis,
+            },
+          ],
+        }),
+        analysisWeatherContext: buildAnalysisWeatherContext(
+          state.session.weather,
+          state.session.discountTime,
+        ),
       };
 
       nextAreaCountRecords = persistAreaCountRecordLocalFirst(nextRecord);
@@ -3249,6 +3266,19 @@ const lateSkipNotice = useMemo(() => {
           date: state.session.date,
         }),
         count: roundedCount,
+        calendarContext: buildSessionAnalysisCalendarContext({
+          scope: "area_count",
+          date: state.session.date,
+          weekday: state.session.weekday,
+          discountTime: state.session.discountTime,
+          sessionStartedAt: state.session.startedAt,
+          manualWeekdayOverride: state.session.manualWeekdayOverride,
+          areaDecisionBases: [{ areaId: currentAreaId }],
+        }),
+        analysisWeatherContext: buildAnalysisWeatherContext(
+          state.session.weather,
+          state.session.discountTime,
+        ),
       };
       const nextAreaCountRecords = persistAreaCountRecordLocalFirst(nextRecord);
       setAreaCountRecords(nextAreaCountRecords);
@@ -3723,6 +3753,11 @@ const lateSkipNotice = useMemo(() => {
         excludedAreaIds,
         excludeReasons,
         dataQuality,
+        reference: state.review19.reference
+          ? JSON.parse(JSON.stringify(state.review19.reference))
+          : undefined,
+        calendarContext: state.review19.reference?.calendarContext,
+        analysisWeatherContext: state.review19.reference?.analysisWeatherContext,
         snapshot,
       },
     });
@@ -3748,6 +3783,11 @@ const lateSkipNotice = useMemo(() => {
       recordedAt,
       snapshot,
       daySnapshot,
+      calendarContext: daySnapshot.calendarContext,
+      analysisWeatherContext:
+        state.review19.reference?.analysisWeatherContext ??
+        daySnapshot.analysisWeatherContext,
+      productionAnalysis: daySnapshot.productionAnalysis,
     };
   }
 
@@ -4084,8 +4124,19 @@ const lateSkipNotice = useMemo(() => {
       cloneAreaCountRecords(areaCountRecords),
     );
     const legacy = legacyDates.map((date) => {
-      const sessions = sessionSnapshots.filter(
+      const sameDateSessions = sessionSnapshots.filter(
         (snapshot) => snapshot.session.date === date,
+      );
+      const demandCycle = normalizeDemandCycle(
+        sameDateSessions[0]?.demandCycle ??
+          sameDateSessions[0]?.session.demandCycle ??
+          mergedAreaCountRecords.find((record) => record.date === date)?.demandCycle,
+      );
+      const sessions = sameDateSessions.filter(
+        (snapshot) =>
+          normalizeDemandCycle(
+            snapshot.demandCycle ?? snapshot.session.demandCycle,
+          ) === demandCycle,
       );
       return createReview19DaySnapshot({
         capturedAt:
@@ -4093,13 +4144,10 @@ const lateSkipNotice = useMemo(() => {
             .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
             .at(-1)?.capturedAt ?? getRuntimeNow().toISOString(),
         date,
-        demandCycle:
-          sessions[0]?.demandCycle ??
-          sessions[0]?.session.demandCycle ??
-          mergedAreaCountRecords.find((record) => record.date === date)?.demandCycle,
+        demandCycle,
         areaCountRecords: mergedAreaCountRecords,
         sessions,
-        review19Check: getLatestReview19DayCheck(date),
+        review19Check: getLatestReview19DayCheck(date, demandCycle),
       });
     });
     return [...finalized, ...legacy];
@@ -4109,11 +4157,20 @@ const lateSkipNotice = useMemo(() => {
     const records = selectAllReview19Data(loadReview19Records());
     if (records.length === 0) return false;
     const exportedAt = getRuntimeNow().toISOString();
-    downloadJsonFile(
-      buildAllReview19DataExportPayload({ records, exportedAt }),
-      `nebiki-review19-all-${formatLocalDate(getRuntimeNow())}.json`,
+    const exports = buildAllReview19DataExportPayloadsByDemandCycle({
+      records,
+      exportedAt,
+    });
+    return downloadJsonFiles(
+      exports.map(({ demandCycle, payload }) => ({
+        payload,
+        filename: getDemandCycleAllExportFilename({
+          dataKind: "review19",
+          demandCycle,
+          exportedAt,
+        }),
+      })),
     );
-    return true;
   }
 
   function exportLatestReview19Data(): boolean {
@@ -4123,19 +4180,30 @@ const lateSkipNotice = useMemo(() => {
       exportedAt,
     });
     if (!payload || payload.records.length === 0) return false;
-    downloadJsonFile(payload, `nebiki-review19-${payload.records[0].date}.json`);
-    return true;
+    return downloadJsonFile(
+      payload,
+      `nebiki-review19-${payload.records[0].date}.json`,
+    );
   }
 
   async function exportAllDailyData(): Promise<boolean> {
     const records = await getExportableDailyData();
     if (records.length === 0) return false;
     const exportedAt = getRuntimeNow().toISOString();
-    downloadJsonFile(
-      buildAllFinalizedDayDataExportPayload({ records, exportedAt }),
-      `nebiki-day-all-${formatLocalDate(getRuntimeNow())}.json`,
+    const exports = buildAllFinalizedDayDataExportPayloadsByDemandCycle({
+      records,
+      exportedAt,
+    });
+    return downloadJsonFiles(
+      exports.map(({ demandCycle, payload }) => ({
+        payload,
+        filename: getDemandCycleAllExportFilename({
+          dataKind: "daily",
+          demandCycle,
+          exportedAt,
+        }),
+      })),
     );
-    return true;
   }
 
   async function exportLatestDailyData(): Promise<boolean> {
@@ -4146,8 +4214,10 @@ const lateSkipNotice = useMemo(() => {
       exportedAt,
     });
     if (!payload) return false;
-    downloadJsonFile(payload, getAutomaticDayExportFilename(payload.date));
-    return true;
+    return downloadJsonFile(
+      payload,
+      getAutomaticDayExportFilename(payload.date),
+    );
   }
 
   function exportCompletedReview19Data(): boolean {
@@ -4164,8 +4234,10 @@ const lateSkipNotice = useMemo(() => {
       record: state.review19,
       exportedAt,
     });
-    downloadJsonFile(payload, `nebiki-review19-${state.review19.date}.json`);
-    return true;
+    return downloadJsonFile(
+      payload,
+      `nebiki-review19-${state.review19.date}.json`,
+    );
   }
 
   function exportCompletedDailyData(memo: string | null): boolean {
@@ -4174,11 +4246,10 @@ const lateSkipNotice = useMemo(() => {
     const record = persistFinalizedDayMemo(recordId, memo);
     if (!record || record.recordId !== recordId) return false;
     const exportedAt = getRuntimeNow().toISOString();
-    downloadJsonFile(
+    return downloadJsonFile(
       buildDirectFinalizedDayDataExportPayload({ record, exportedAt }),
       getAutomaticDayExportFilename(record.date),
     );
-    return true;
   }
 
   async function exportAllData() {
@@ -4199,27 +4270,33 @@ const lateSkipNotice = useMemo(() => {
       (records, record) => upsertAreaCountRecord(records, record),
       cloneAreaCountRecords(areaCountRecords),
     );
-    const dailyData = dailyDates.map((date) =>
-      createReview19DaySnapshot({
+    const dailyData = dailyDates.map((date) => {
+      const sameDateSessions = sessionSnapshots.filter(
+        (snapshot) => snapshot.session.date === date,
+      );
+      const demandCycle = normalizeDemandCycle(
+        sameDateSessions[0]?.demandCycle ??
+          sameDateSessions[0]?.session.demandCycle ??
+          mergedAreaCountRecords.find((record) => record.date === date)?.demandCycle,
+      );
+      const sessions = sameDateSessions.filter(
+        (snapshot) =>
+          normalizeDemandCycle(
+            snapshot.demandCycle ?? snapshot.session.demandCycle,
+          ) === demandCycle,
+      );
+      return createReview19DaySnapshot({
         capturedAt:
-          sessionSnapshots
-            .filter((snapshot) => snapshot.session.date === date)
+          sessions
             .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
             .at(-1)?.capturedAt ?? exportedAt,
         date,
-        demandCycle:
-          sessionSnapshots.find((snapshot) => snapshot.session.date === date)
-            ?.demandCycle ??
-          sessionSnapshots.find((snapshot) => snapshot.session.date === date)
-            ?.session.demandCycle ??
-          mergedAreaCountRecords.find((record) => record.date === date)?.demandCycle,
+        demandCycle,
         areaCountRecords: mergedAreaCountRecords,
-        sessions: sessionSnapshots.filter(
-          (snapshot) => snapshot.session.date === date,
-        ),
-        review19Check: getLatestReview19DayCheck(date),
-      })
-    );
+        sessions,
+        review19Check: getLatestReview19DayCheck(date, demandCycle),
+      });
+    });
     const payload = buildAllDataExportPayload({
       dailyData,
       review19Data: loadReview19Records(),

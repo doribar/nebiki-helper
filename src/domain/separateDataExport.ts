@@ -3,6 +3,7 @@ import {
   buildAutomaticDayExportPayload,
 } from "./dayExport.ts";
 import { getCurrentDataVersionInfo } from "./dataVersion.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
 import {
   selectAllFinalizedDayData,
   selectLatestFinalizedDayData,
@@ -14,7 +15,28 @@ import {
   cloneReview19Records,
   materializeReview19DaySnapshotHumanEvaluationsForExport,
 } from "./review19.ts";
-import type { Review19Result } from "./types.ts";
+import type { DemandCycle, Review19Result } from "./types.ts";
+
+const DEMAND_CYCLES: readonly DemandCycle[] = ["normal", "summer"];
+const JST_TIME_ZONE = "Asia/Tokyo";
+
+export type DemandCycleExportFilter = {
+  demandCycle: DemandCycle;
+};
+
+export type DemandCycleExportBundle<T> = {
+  demandCycle: DemandCycle;
+  payload: T;
+};
+
+function withDemandCycleExportFilter<T extends object>(
+  payload: T,
+  demandCycle?: DemandCycle,
+): T & { exportFilter?: DemandCycleExportFilter } {
+  return demandCycle
+    ? { ...payload, exportFilter: { demandCycle } }
+    : payload;
+}
 
 function getTimestamp(value: string | undefined): number {
   const parsed = Date.parse(value ?? "");
@@ -59,10 +81,26 @@ export function selectLatestReview19Data(
 export function buildAllReview19DataExportPayload(params: {
   records: readonly Review19Result[];
   exportedAt: string;
+  demandCycle?: DemandCycle;
 }) {
-  return buildReview19ExportPayload({
-    records: selectAllReview19Data(params.records),
+  const records = selectAllReview19Data(params.records).filter(
+    (record) =>
+      !params.demandCycle ||
+      normalizeDemandCycle(record.demandCycle) === params.demandCycle,
+  );
+  return withDemandCycleExportFilter(buildReview19ExportPayload({
+    records,
     exportedAt: params.exportedAt,
+  }), params.demandCycle);
+}
+
+export function buildAllReview19DataExportPayloadsByDemandCycle(params: {
+  records: readonly Review19Result[];
+  exportedAt: string;
+}) {
+  return DEMAND_CYCLES.flatMap((demandCycle) => {
+    const payload = buildAllReview19DataExportPayload({ ...params, demandCycle });
+    return payload.count > 0 ? [{ demandCycle, payload }] : [];
   });
 }
 
@@ -86,6 +124,7 @@ export type FinalizedDayDataExportPayload = {
   appVersion: string;
   buildId: string;
   exportedAt: string;
+  exportFilter?: DemandCycleExportFilter;
   count: number;
   dataQuality: {
     completeDayCount: number;
@@ -99,10 +138,15 @@ export type FinalizedDayDataExportPayload = {
 export function buildAllFinalizedDayDataExportPayload(params: {
   records: readonly FinalizedDayData[];
   exportedAt: string;
+  demandCycle?: DemandCycle;
 }): FinalizedDayDataExportPayload {
-  const records = selectAllFinalizedDayData(params.records).map(
-    materializeReview19DaySnapshotHumanEvaluationsForExport,
-  );
+  const records = selectAllFinalizedDayData(params.records)
+    .filter(
+      (record) =>
+        !params.demandCycle ||
+        normalizeDemandCycle(record.demandCycle) === params.demandCycle,
+    )
+    .map(materializeReview19DaySnapshotHumanEvaluationsForExport);
   const incompleteDates = records
     .filter(
       (record) =>
@@ -118,6 +162,9 @@ export function buildAllFinalizedDayDataExportPayload(params: {
     version: 1,
     ...getCurrentDataVersionInfo(),
     exportedAt: params.exportedAt,
+    ...(params.demandCycle
+      ? { exportFilter: { demandCycle: params.demandCycle } }
+      : {}),
     count: records.length,
     dataQuality: {
       completeDayCount: records.length - incompleteDates.length,
@@ -126,6 +173,53 @@ export function buildAllFinalizedDayDataExportPayload(params: {
     },
     records,
   };
+}
+
+export function buildAllFinalizedDayDataExportPayloadsByDemandCycle(params: {
+  records: readonly FinalizedDayData[];
+  exportedAt: string;
+}): Array<DemandCycleExportBundle<FinalizedDayDataExportPayload>> {
+  return DEMAND_CYCLES.flatMap((demandCycle) => {
+    const payload = buildAllFinalizedDayDataExportPayload({
+      ...params,
+      demandCycle,
+    });
+    return payload.count > 0 ? [{ demandCycle, payload }] : [];
+  });
+}
+
+function formatJstExportTimestamp(exportedAt: string): string | null {
+  const date = new Date(exportedAt);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: JST_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value;
+  const year = value("year");
+  const month = value("month");
+  const day = value("day");
+  const hour = value("hour");
+  const minute = value("minute");
+  return year && month && day && hour && minute
+    ? `${year}${month}${day}-${hour}${minute}`
+    : null;
+}
+
+export function getDemandCycleAllExportFilename(params: {
+  dataKind: "review19" | "daily";
+  demandCycle: DemandCycle;
+  exportedAt: string;
+}): string {
+  const timestamp = formatJstExportTimestamp(params.exportedAt);
+  const suffix = timestamp ? `-${timestamp}` : "";
+  return `nebiki-${params.dataKind}-${params.demandCycle}${suffix}.json`;
 }
 
 /** 設定の最新出力と20:30完了画面の直接出力で共有する1件payload。 */

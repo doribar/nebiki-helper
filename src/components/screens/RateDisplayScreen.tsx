@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   AreaId,
+  DemandCycle,
   DiscountTime,
   EditableAreaCountItem,
   FinalGuideData,
@@ -30,6 +31,7 @@ type RateDisplayScreenProps = {
   weekdayText: string;
   timeText: string;
   areaName: string;
+  demandCycle?: DemandCycle;
   basisGuide: {
     noticeText?: string;
     weekdaySummaryText?: string;
@@ -260,6 +262,7 @@ export function RateDisplayScreen({
   weekdayText,
   timeText,
   areaName,
+  demandCycle = "normal",
   basisGuide,
   timeSwitchNotice,
   lateSkipNotice,
@@ -295,10 +298,9 @@ export function RateDisplayScreen({
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
   const normalColor = "#008000";
-  const productAmountReferenceText = basisGuide.referenceText.replace(
-    /を基準に考えて$/,
-    "",
-  );
+  const productAmountReferenceText = `${
+    demandCycle === "summer" ? "夏の" : ""
+  }${basisGuide.referenceText.replace(/を基準に考えて$/, "")}`;
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",

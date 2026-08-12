@@ -23,6 +23,14 @@ import {
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 import { normalizeHumanEvaluationDetails } from "./humanEvaluation.ts";
+import {
+  normalizeAnalysisCalendarContext,
+  normalizeAnalysisWeatherContext,
+} from "./analysisMetadata.ts";
+import type {
+  AnalysisCalendarContext,
+  AnalysisWeatherContext,
+} from "./analysisMetadata.ts";
 
 export type AreaCountDiscountTime = DiscountTime;
 
@@ -42,6 +50,7 @@ export type AreaCountDecisionBasis = {
   actualWeekday?: ActualWeekdayLabel;
   actualWeekdayGroup?: ActualWeekdayGroup;
   comparisonMode?: AreaCountComparisonMode;
+  threeDayHolidayMiddleReference?: AreaCountRecommendation["threeDayHolidayMiddleReference"];
   sampleSize: number;
   requiredSampleSize: number;
   medianCount?: number;
@@ -87,6 +96,8 @@ export type AreaCountRecord = {
   actualWeekday?: ActualWeekdayLabel;
   /** fallback/legacy: 実曜日の記録が足りない時の暫定グループ。 */
   actualWeekdayGroup: ActualWeekdayGroup;
+  calendarContext?: AnalysisCalendarContext;
+  analysisWeatherContext?: AnalysisWeatherContext;
   count: number;
   /** 手動で選んだ5段階のエリア判定。自動判定時は保存しない。 */
   userJudge?: AreaCountEvaluation;
@@ -274,6 +285,7 @@ export function getAreaCountSameItemLimit(_params: {
   weekday?: number;
   discountTime?: AreaCountDiscountTime;
 }): number {
+  void _params;
   // エリア残数入力の「同じ商品は〇個まで」は、曜日・時刻に関係なく常に10個に固定する。
   return 10;
 }
@@ -331,6 +343,12 @@ function cloneAreaCountRecord(record: AreaCountRecord): AreaCountRecord {
     weekdayBase: record.weekdayBase,
     actualWeekday: record.actualWeekday,
     actualWeekdayGroup: record.actualWeekdayGroup,
+    calendarContext: record.calendarContext
+      ? JSON.parse(JSON.stringify(record.calendarContext)) as AnalysisCalendarContext
+      : undefined,
+    analysisWeatherContext: record.analysisWeatherContext
+      ? JSON.parse(JSON.stringify(record.analysisWeatherContext)) as AnalysisWeatherContext
+      : undefined,
     count: record.count,
     userJudge: record.userJudge,
     humanEvaluationDetails: record.humanEvaluationDetails
@@ -371,6 +389,8 @@ const AREA_COUNT_RECORD_DETAIL_FIELDS = [
   "buildId",
   "weekdayBase",
   "actualWeekday",
+  "calendarContext",
+  "analysisWeatherContext",
   "userJudge",
   "humanEvaluationDetails",
   "suggestedEvaluation",
@@ -579,6 +599,42 @@ function normalizeNonNegativeNumber(value: unknown): number | undefined {
   return numberValue === undefined || numberValue < 0 ? undefined : numberValue;
 }
 
+function normalizeThreeDayHolidayMiddleReference(
+  raw: unknown,
+): AreaCountDecisionBasis["threeDayHolidayMiddleReference"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const source = raw as NonNullable<
+    AreaCountDecisionBasis["threeDayHolidayMiddleReference"]
+  >;
+  const fireThursdaySundaySampleSize = normalizeNonNegativeInteger(
+    source.fireThursdaySundaySampleSize,
+  );
+  const fridaySaturdaySampleSize = normalizeNonNegativeInteger(
+    source.fridaySaturdaySampleSize,
+  );
+  if (
+    fireThursdaySundaySampleSize === undefined ||
+    fridaySaturdaySampleSize === undefined ||
+    (source.adoptedSource !== "both" &&
+      source.adoptedSource !== "火木日" &&
+      source.adoptedSource !== "金土" &&
+      source.adoptedSource !== "none")
+  ) {
+    return undefined;
+  }
+  return {
+    fireThursdaySundaySampleSize,
+    fridaySaturdaySampleSize,
+    fireThursdaySundayMedianCount: normalizeNonNegativeNumber(
+      source.fireThursdaySundayMedianCount,
+    ),
+    fridaySaturdayMedianCount: normalizeNonNegativeNumber(
+      source.fridaySaturdayMedianCount,
+    ),
+    adoptedSource: source.adoptedSource,
+  };
+}
+
 export function normalizeAreaCountDecisionBasis(
   raw: unknown,
   fallbackDemandCycle?: DemandCycle,
@@ -630,6 +686,9 @@ export function normalizeAreaCountDecisionBasis(
       ? basis.actualWeekdayGroup
       : undefined,
     comparisonMode: isComparisonMode(basis.comparisonMode) ? basis.comparisonMode : undefined,
+    threeDayHolidayMiddleReference: normalizeThreeDayHolidayMiddleReference(
+      basis.threeDayHolidayMiddleReference,
+    ),
     sampleSize,
     requiredSampleSize,
     medianCount: normalizeNonNegativeNumber(basis.medianCount),
@@ -675,6 +734,14 @@ export function buildAreaCountDecisionBasis(params: {
     actualWeekday: params.recommendation.actualWeekday,
     actualWeekdayGroup: params.recommendation.actualWeekdayGroup,
     comparisonMode: params.recommendation.comparisonMode,
+    threeDayHolidayMiddleReference:
+      params.recommendation.threeDayHolidayMiddleReference
+        ? JSON.parse(
+            JSON.stringify(params.recommendation.threeDayHolidayMiddleReference),
+          ) as NonNullable<
+            AreaCountDecisionBasis["threeDayHolidayMiddleReference"]
+          >
+        : undefined,
     sampleSize: params.recommendation.sampleSize,
     requiredSampleSize: params.recommendation.requiredSampleSize,
     medianCount: params.recommendation.medianCount,
@@ -821,6 +888,12 @@ export function normalizeAreaCountRecords(
         weekdayBase: legacyWeekdayBase,
         actualWeekday,
         actualWeekdayGroup,
+        calendarContext: normalizeAnalysisCalendarContext(
+          record.calendarContext,
+        ),
+        analysisWeatherContext: normalizeAnalysisWeatherContext(
+          record.analysisWeatherContext,
+        ),
         count: Math.round(record.count),
         userJudge,
         humanEvaluationDetails: hasMatchingHumanEvaluationDemandCycle

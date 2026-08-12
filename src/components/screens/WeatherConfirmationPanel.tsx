@@ -156,7 +156,7 @@ export function WeatherConfirmationPanel({
             <tbody>
               <tr>
                 <th scope="row" style={rowHeaderStyle}>
-                  天候
+                  天気
                 </th>
                 {rows.map((row) => (
                   <td key={row.hour} style={getValueCellStyle(row.isPast)}>

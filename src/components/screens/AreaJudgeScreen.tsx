@@ -3,13 +3,13 @@ import type {
   AreaCountEvaluation,
   AreaId,
   AreaJudge,
+  DemandCycle,
   EditableAreaCountItem,
   HumanEvaluationSelection,
   SkipTargetOption,
 } from "../../domain/types";
 import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
-import { JudgeHintDialog } from "../common/JudgeHintDialog";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
@@ -27,8 +27,7 @@ type AreaJudgeScreenProps = {
   areaId: AreaId;
   areaName: string;
   calculatorDraftScope: string;
-  showJudgeGuide?: boolean;
-  showSummerModeJudgeHint?: boolean;
+  demandCycle?: DemandCycle;
   basisGuide: {
     noticeText?: string;
     weekdaySummaryText?: string;
@@ -63,7 +62,6 @@ type AreaJudgeScreenProps = {
   canChooseSkipTarget?: boolean;
   skipTargetOptions?: SkipTargetOption[];
   onChooseSkipTarget?: (areaId: SkipTargetOption["areaId"]) => void;
-  onJudgeGuideShown?: () => void;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -228,7 +226,7 @@ export function AreaJudgeScreen({
   areaId,
   areaName,
   calculatorDraftScope,
-  showSummerModeJudgeHint = false,
+  demandCycle = "normal",
   basisGuide,
   timeSwitchNotice,
   areaCountAssistEnabled = false,
@@ -248,7 +246,6 @@ export function AreaJudgeScreen({
   onChooseSkipTarget,
 }: AreaJudgeScreenProps) {
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
-  const [showJudgeHint, setShowJudgeHint] = useState(false);
   const [areaCountText, setAreaCountText] = useState("");
   const [areaCountSubmitted, setAreaCountSubmitted] = useState(false);
   const [areaCountCalculatorText, setAreaCountCalculatorText] = useState("");
@@ -285,7 +282,6 @@ export function AreaJudgeScreen({
     const calculatorDraft = loadCalculatorDraft(areaCountCalculatorDraftKey);
 
     setShowSkipTargetPicker(false);
-    setShowJudgeHint(false);
     setAreaCountText("");
     setAreaCountSubmitted(false);
     setAreaCountCalculatorText(
@@ -798,26 +794,23 @@ export function AreaJudgeScreen({
           parsedAreaCount ===
             null ? null : isAreaCountReady ? null : areaCountAssistEnabled ? (
           <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  onClick={() => setShowJudgeHint(true)}
+              {demandCycle === "summer" ? (
+                <div
+                  role="note"
                   style={{
-                    border: 0,
-                    background: "transparent",
-                    color: "#555",
-                    fontSize: 14,
-                    fontWeight: 700,
-                    textDecoration: "underline",
-                    textUnderlineOffset: 3,
-                    cursor: "pointer",
-                    padding: "4px 0",
-                    whiteSpace: "nowrap",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #f59e0b",
+                    background: "#fffbeb",
+                    color: "#78350f",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    lineHeight: 1.6,
                   }}
                 >
-                  迷ったら…
-                </button>
-              </div>
+                  夏季モード基準：夏の残数基準で手動判定します。
+                </div>
+              ) : null}
               <BasisTimeMiniPanel
                 weekdayText={weekdayText}
                 timeText={timeText}
@@ -961,13 +954,6 @@ export function AreaJudgeScreen({
         </button>
       </div>
 
-      {showJudgeHint ? (
-        <JudgeHintDialog
-          compact
-          showSummerModeJudgeHint={showSummerModeJudgeHint}
-          onClose={() => setShowJudgeHint(false)}
-        />
-      ) : null}
     </main>
   );
 }

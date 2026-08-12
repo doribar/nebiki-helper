@@ -394,7 +394,7 @@ test("注意11. 既存文言・表示位置・注意デザインを維持", () =
   assert.equal(guide.referenceText, "通常の日曜夜と金曜・土曜夜の中間を基準に考えて");
   assert.equal(
     DAY_BEFORE_HOLIDAY_NOTICE_TEXT,
-    "ただし明日は祝日なので、夜の来客を考慮した上で判断してください。",
+    "明日は祝日のため、金曜日・土曜日と同じ基準になっています。",
   );
   const middleMarkup = renderToStaticMarkup(
     createElement(ThreeDayHolidayMiddleNotice, { visible: true }),

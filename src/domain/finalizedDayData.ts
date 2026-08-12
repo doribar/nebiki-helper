@@ -5,6 +5,16 @@ import type {
   Review19Snapshot,
 } from "./types.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
+import { getNormalRoute } from "./area.ts";
+import {
+  buildAnalysisWeatherContext,
+  buildDayAnalysisCalendarContext,
+  buildProductionAnalysis,
+  buildSessionCalendarContextFromSnapshot,
+  chooseBestAnalysisWeatherContext,
+  mergeProductionAnalyses,
+  normalizeAnalysisCalendarContext,
+} from "./analysisMetadata.ts";
 
 export const FINALIZED_DAY_DATA_STORAGE_KEY =
   "nebiki-helper/finalized-day-data" as const;
@@ -85,6 +95,16 @@ export function normalizeReview19DaySnapshotDemandCycle(
     if (session.session && typeof session.session === "object") {
       session.session.demandCycle = demandCycle;
     }
+    session.calendarContext =
+      normalizeAnalysisCalendarContext(session.calendarContext) ??
+      buildSessionCalendarContextFromSnapshot(session);
+    session.analysisWeatherContext = chooseBestAnalysisWeatherContext([
+      session.analysisWeatherContext,
+      buildAnalysisWeatherContext(
+        session.session.weather,
+        session.session.discountTime,
+      ),
+    ]);
     applyAreaSnapshotDemandCycle(session.areas, demandCycle);
   }
 
@@ -127,6 +147,52 @@ export function normalizeReview19DaySnapshotDemandCycle(
         demandCycle,
       );
     }
+    review19Check.calendarContext =
+      normalizeAnalysisCalendarContext(review19Check.calendarContext) ??
+      normalizeAnalysisCalendarContext(review19Check.reference?.calendarContext) ??
+      normalizeAnalysisCalendarContext(review19Check.snapshot?.calendarContext);
+    review19Check.analysisWeatherContext = chooseBestAnalysisWeatherContext([
+      review19Check.analysisWeatherContext,
+      review19Check.reference?.analysisWeatherContext,
+      review19Check.snapshot?.analysisWeatherContext,
+    ]);
+  }
+
+  cloned.calendarContext = buildDayAnalysisCalendarContext({
+    date: cloned.date,
+    sessionContexts: [
+      normalizeAnalysisCalendarContext(cloned.calendarContext),
+      ...cloned.sessions.map((session) => session.calendarContext),
+      review19Check?.reference?.calendarContext,
+      review19Check?.snapshot?.calendarContext,
+    ],
+    areaRecordContexts: cloned.areaCountRecords.map(
+      (record) => record.calendarContext,
+    ),
+  });
+  cloned.analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    cloned.analysisWeatherContext,
+    review19Check?.analysisWeatherContext,
+    ...cloned.sessions
+      .slice()
+      .reverse()
+      .map((session) => session.analysisWeatherContext),
+  ]);
+  const rebuiltProductionAnalysis = buildProductionAnalysis({
+    date: cloned.date,
+    demandCycle,
+    areaIds: getNormalRoute(cloned.date),
+    areaCountRecords: cloned.areaCountRecords,
+    sessions: cloned.sessions,
+    review19Check,
+  });
+  cloned.productionAnalysis = mergeProductionAnalyses({
+    persisted: cloned.productionAnalysis,
+    rebuilt: rebuiltProductionAnalysis,
+    areaIds: getNormalRoute(cloned.date),
+  });
+  if (review19Check) {
+    review19Check.productionAnalysis = cloned.productionAnalysis;
   }
 
   return cloned;

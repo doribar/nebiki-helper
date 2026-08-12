@@ -31,6 +31,17 @@ import type {
   Review19DaySnapshot,
 } from "./types.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
+import {
+  buildAnalysisWeatherContext,
+  buildDayAnalysisCalendarContext,
+  buildProductionAnalysis,
+  buildSessionAnalysisCalendarContext,
+  buildSessionCalendarContextFromSnapshot,
+  chooseBestAnalysisWeatherContext,
+  mergeProductionAnalyses,
+  normalizeAnalysisCalendarContext,
+  normalizeProductionAnalysis,
+} from "./analysisMetadata.ts";
 
 export const REVIEW19_RATINGS: Array<{
   value: Review19Rating;
@@ -510,7 +521,19 @@ function normalizeReview19Snapshot(
     cloned.reviewReference,
     demandCycle,
   );
-  if (!cloned.areas || typeof cloned.areas !== "object") return cloned;
+  cloned.analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    cloned.analysisWeatherContext,
+    buildAnalysisWeatherContext(
+      cloned.session?.weather,
+      cloned.session?.discountTime,
+    ),
+  ]);
+  if (!cloned.areas || typeof cloned.areas !== "object") {
+    cloned.calendarContext = normalizeAnalysisCalendarContext(
+      cloned.calendarContext,
+    );
+    return cloned;
+  }
 
   for (const areaId of Object.keys(cloned.areas) as AreaId[]) {
     cloned.areas[areaId] = normalizeReview19AreaSnapshot(
@@ -518,6 +541,21 @@ function normalizeReview19Snapshot(
       demandCycle,
     );
   }
+  cloned.calendarContext =
+    normalizeAnalysisCalendarContext(cloned.calendarContext) ??
+    (cloned.session
+      ? buildSessionAnalysisCalendarContext({
+          date: cloned.session.date,
+          weekday: cloned.session.weekday,
+          discountTime: cloned.session.discountTime,
+          sessionStartedAt: cloned.session.startedAt,
+          manualWeekdayOverride: cloned.session.manualWeekdayOverride,
+          areaDecisionBases: Object.values(cloned.areas).map((area) => ({
+            areaId: area.areaId,
+            basis: area.areaCountDecisionBasis,
+          })),
+        })
+      : undefined);
 
   return cloned;
 }
@@ -613,11 +651,29 @@ function normalizeReview19DayCheckSnapshot(
   for (const areaId of excludedAreaIds) {
     delete areaEvaluations[areaId];
   }
+  const reference = cloneReview19Reference(raw.reference, demandCycle);
+  const snapshot = normalizeReview19Snapshot(raw.snapshot, demandCycle);
+  const calendarContext =
+    normalizeAnalysisCalendarContext(raw.calendarContext) ??
+    normalizeAnalysisCalendarContext(reference?.calendarContext) ??
+    normalizeAnalysisCalendarContext(snapshot?.calendarContext);
+  const analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    raw.analysisWeatherContext,
+    reference?.analysisWeatherContext,
+    snapshot?.analysisWeatherContext,
+  ]);
+  const productionAnalysis = normalizeProductionAnalysis(
+    raw.productionAnalysis,
+    getNormalRoute(date),
+  );
 
   return JSON.parse(JSON.stringify({
     ...raw,
     ...dataVersion,
     demandCycle,
+    calendarContext,
+    analysisWeatherContext,
+    productionAnalysis,
     review19Status,
     ...ratingData,
     reviewStartedAt:
@@ -640,8 +696,8 @@ function normalizeReview19DayCheckSnapshot(
       excludedAreaIds,
       review19Status,
     }),
-    reference: cloneReview19Reference(raw.reference, demandCycle),
-    snapshot: normalizeReview19Snapshot(raw.snapshot, demandCycle),
+    reference,
+    snapshot,
   })) as Review19DayCheckSnapshot;
 }
 
@@ -665,6 +721,16 @@ function normalizeDailySessionSnapshotDemandCycle(
       );
     }
   }
+  cloned.calendarContext =
+    normalizeAnalysisCalendarContext(cloned.calendarContext) ??
+    buildSessionCalendarContextFromSnapshot(cloned);
+  cloned.analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    cloned.analysisWeatherContext,
+    buildAnalysisWeatherContext(
+      cloned.session?.weather,
+      cloned.session?.discountTime,
+    ),
+  ]);
   return cloned;
 }
 
@@ -708,18 +774,58 @@ function normalizeReview19DaySnapshot(
     raw.review19Status === "not_applicable"
       ? raw.review19Status
       : review19Check?.review19Status ?? "not_performed";
+  const areaCountRecords = normalizeAreaCountRecords(
+    raw.areaCountRecords,
+    demandCycle,
+  );
+  const calendarContext = buildDayAnalysisCalendarContext({
+    date: raw.date,
+    sessionContexts: [
+      normalizeAnalysisCalendarContext(raw.calendarContext),
+      ...sessions.map((session) => session.calendarContext),
+      review19Check?.reference?.calendarContext,
+      review19Check?.snapshot?.calendarContext,
+    ],
+    areaRecordContexts: areaCountRecords.map(
+      (record) => record.calendarContext,
+    ),
+  });
+  const analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    raw.analysisWeatherContext,
+    review19Check?.analysisWeatherContext,
+    ...sessions
+      .slice()
+      .reverse()
+      .map((session) => session.analysisWeatherContext),
+  ]);
+  const rebuiltProductionAnalysis = buildProductionAnalysis({
+    date: raw.date,
+    demandCycle,
+    areaIds: getNormalRoute(raw.date),
+    areaCountRecords,
+    sessions,
+    review19Check,
+  });
+  const productionAnalysis = mergeProductionAnalyses({
+    persisted: raw.productionAnalysis,
+    rebuilt: rebuiltProductionAnalysis,
+    areaIds: getNormalRoute(raw.date),
+  });
+  if (review19Check) {
+    review19Check.productionAnalysis = productionAnalysis;
+  }
 
   return JSON.parse(JSON.stringify({
     ...raw,
     ...normalizeDataVersionInfo(raw),
     demandCycle,
+    calendarContext,
+    analysisWeatherContext,
+    productionAnalysis,
     sessions,
     review19Status,
     review19Check,
-    areaCountRecords: normalizeAreaCountRecords(
-      raw.areaCountRecords,
-      demandCycle,
-    ),
+    areaCountRecords,
   })) as Review19DaySnapshot;
 }
 
@@ -739,6 +845,11 @@ function cloneReview19Reference(
   return {
     ...JSON.parse(JSON.stringify(raw)),
     demandCycle: normalizeDemandCycle(raw.demandCycle ?? fallbackDemandCycle),
+    calendarContext: normalizeAnalysisCalendarContext(raw.calendarContext),
+    analysisWeatherContext: chooseBestAnalysisWeatherContext([
+      raw.analysisWeatherContext,
+      buildAnalysisWeatherContext(raw.weather, "19"),
+    ]),
   } as Review19Reference;
 }
 
@@ -840,6 +951,32 @@ export function normalizeReview19Result(
     delete areaEvaluations[areaId];
   }
   const recordedAt = typeof raw.recordedAt === "string" ? raw.recordedAt : undefined;
+  const reference = cloneReview19Reference(raw.reference, demandCycle);
+  const snapshot = normalizeReview19Snapshot(raw.snapshot, demandCycle);
+  const daySnapshot = normalizeReview19DaySnapshot(
+    raw.daySnapshot,
+    demandCycle,
+  );
+  const calendarContext = buildDayAnalysisCalendarContext({
+    date: raw.date,
+    sessionContexts: [
+      daySnapshot?.calendarContext,
+      normalizeAnalysisCalendarContext(raw.calendarContext),
+      reference?.calendarContext,
+      snapshot?.calendarContext,
+    ],
+  });
+  const analysisWeatherContext = chooseBestAnalysisWeatherContext([
+    reference?.analysisWeatherContext,
+    raw.analysisWeatherContext,
+    daySnapshot?.analysisWeatherContext,
+    snapshot?.analysisWeatherContext,
+  ]);
+  const productionAnalysis = mergeProductionAnalyses({
+    persisted: raw.productionAnalysis,
+    rebuilt: daySnapshot?.productionAnalysis,
+    areaIds: getNormalRoute(raw.date),
+  });
 
   return {
     ...base,
@@ -847,6 +984,9 @@ export function normalizeReview19Result(
     ...ratingData,
     review19Status: legacyReview19Status,
     demandCycle,
+    calendarContext,
+    analysisWeatherContext,
+    productionAnalysis,
     reviewStartedAt:
       typeof raw.reviewStartedAt === "string" ? raw.reviewStartedAt : undefined,
     reviewCompletedAt:
@@ -866,9 +1006,9 @@ export function normalizeReview19Result(
     }),
     recordedAt,
     exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : undefined,
-    reference: cloneReview19Reference(raw.reference, demandCycle),
-    snapshot: normalizeReview19Snapshot(raw.snapshot, demandCycle),
-    daySnapshot: normalizeReview19DaySnapshot(raw.daySnapshot, demandCycle),
+    reference,
+    snapshot,
+    daySnapshot,
   };
 }
 
