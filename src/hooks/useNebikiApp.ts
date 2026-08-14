@@ -175,6 +175,7 @@ import {
   type WeatherConfirmationPending,
 } from "../domain/weatherConfirmation.ts";
 import { getCurrentDataVersionInfo } from "../domain/dataVersion.ts";
+import { supportsObonCalendarRule } from "../domain/obon.ts";
 import {
   buildCurrentNormalRateDisplay,
   buildCompletedRateSnapshot,
@@ -922,6 +923,11 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }, [state.sessionDraft]);
 
   const sessionSource = state.session ?? state.sessionDraft;
+  // A restored pre-Obon-rule session must retain the basis chosen when it was
+  // started. A new draft belongs to the running application and enables it.
+  const applyObonRule = state.session
+    ? supportsObonCalendarRule(state.session.appVersion)
+    : true;
   const sessionSourceResolvedWeather = useMemo(() => {
     if (!state.session) {
       return resolveWeatherInputForDiscount(
@@ -1040,6 +1046,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       weekday: state.session.weekday,
       discountTime: targetDiscountTime,
       weather: resolvedWeather,
+      applyObonRule,
     });
 
     return {
@@ -1054,6 +1061,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     nowMs,
     lastSessionWeather,
     isTestMode,
+    applyObonRule,
   ]);
 
   useEffect(() => {
@@ -1172,6 +1180,7 @@ const lateSkipNotice = useMemo(() => {
     weekday: sessionSource.weekday,
     discountTime: sessionSource.discountTime,
     weather: sessionSourceResolvedWeather,
+    applyObonRule,
   });
 
   if (!lateTimeBonusNotice) {
@@ -1194,6 +1203,7 @@ const lateSkipNotice = useMemo(() => {
   lateTimeBonus,
   weekdayBaseInfo.baseRateBonus,
   sessionSource.date,
+  applyObonRule,
   earlyNextMinus5Info,
 ]);
 
@@ -2456,6 +2466,7 @@ const lateSkipNotice = useMemo(() => {
       weekday: state.session?.weekday,
       date: state.session?.date,
       demandCycle: state.session?.demandCycle,
+      applyObonRule,
       count,
     });
   }
@@ -2725,6 +2736,7 @@ const lateSkipNotice = useMemo(() => {
           weekday: state.session.weekday,
           discountTime: state.session.discountTime,
           date: state.session.date,
+          applyObonRule,
         }),
         count: roundedAreaCount,
         userJudge: resolvedManualEvaluation,
@@ -2740,6 +2752,7 @@ const lateSkipNotice = useMemo(() => {
           discountTime: state.session.discountTime,
           sessionStartedAt: state.session.startedAt,
           manualWeekdayOverride: state.session.manualWeekdayOverride,
+          applyObonRule,
           areaDecisionBases: [
             {
               areaId: state.currentAreaId,
@@ -3264,6 +3277,7 @@ const lateSkipNotice = useMemo(() => {
           weekday: state.session.weekday,
           discountTime: state.session.discountTime,
           date: state.session.date,
+          applyObonRule,
         }),
         count: roundedCount,
         calendarContext: buildSessionAnalysisCalendarContext({
@@ -3273,6 +3287,7 @@ const lateSkipNotice = useMemo(() => {
           discountTime: state.session.discountTime,
           sessionStartedAt: state.session.startedAt,
           manualWeekdayOverride: state.session.manualWeekdayOverride,
+          applyObonRule,
           areaDecisionBases: [{ areaId: currentAreaId }],
         }),
         analysisWeatherContext: buildAnalysisWeatherContext(
@@ -3431,6 +3446,7 @@ const lateSkipNotice = useMemo(() => {
           reference: createReview19Reference(
             reviewDraft,
             reviewTemperatureComfort,
+            supportsObonCalendarRule(session.appVersion),
           ),
         },
       };
@@ -3466,6 +3482,7 @@ const lateSkipNotice = useMemo(() => {
           reference: createReview19Reference(
             prev.sessionDraft,
             reviewTemperatureComfort,
+            supportsObonCalendarRule(prev.session.appVersion),
           ),
         },
       };
@@ -3522,6 +3539,7 @@ const lateSkipNotice = useMemo(() => {
               prev.session?.weekday ??
               prev.sessionDraft.weekday,
             demandCycle,
+            applyObonRule,
             historicalRecords,
           }),
         };
@@ -3659,6 +3677,7 @@ const lateSkipNotice = useMemo(() => {
               state.session?.weekday ??
               state.sessionDraft.weekday,
             demandCycle,
+            applyObonRule,
             historicalRecords: isTestMode
               ? []
               : mergeReview19MedianHistory({

@@ -42,6 +42,7 @@ import {
   normalizeAnalysisCalendarContext,
   normalizeProductionAnalysis,
 } from "./analysisMetadata.ts";
+import { supportsObonCalendarRule } from "./obon.ts";
 
 export const REVIEW19_RATINGS: Array<{
   value: Review19Rating;
@@ -550,6 +551,9 @@ function normalizeReview19Snapshot(
           discountTime: cloned.session.discountTime,
           sessionStartedAt: cloned.session.startedAt,
           manualWeekdayOverride: cloned.session.manualWeekdayOverride,
+          // Rebuild a missing context from the session's own rule generation,
+          // not from the version that happens to be loading it now.
+          applyObonRule: supportsObonCalendarRule(cloned.session.appVersion),
           areaDecisionBases: Object.values(cloned.areas).map((area) => ({
             areaId: area.areaId,
             basis: area.areaCountDecisionBasis,

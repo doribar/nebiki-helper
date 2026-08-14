@@ -27,6 +27,7 @@ npm run check:review19-remote-storage
 npm run check:supabase-cloud-sync-sql
 npm run check:cycle-separated-export
 npm run check:analysis-metadata-ui
+npm run check:obon-calendar
 npm run build
 ```
 
@@ -79,7 +80,11 @@ npm run build
 
 ## 判断基準と分析メタデータ
 
-- 個別量判断の曜日基準は、三連休中日の既存特殊基準（17時以降）→非祝日の祝日前日→祝日当日→通常曜日の順で選びます。三連休中日の15時は従来どおり実曜日基準です。
+- 毎年8月13日〜16日はお盆です。法定祝日とは別の事実として `isObon: true`、`calendarCondition: "obon"` を保存し、現時点の個別量判断・エリア残数自動判定では祝日当日相当の基準を使います。お盆期間の中日というだけで三連休中日にはせず、8月12日を祝日前日扱いにもしません。
+- お盆日の判断基準表示は「今日はお盆のため、祝日と同じ基準になっています。」と示し、個別量は日曜基準を表示します。夏季モードの既存接頭辞と組み合わせる場合も「夏の日曜日の…」を維持します。
+- お盆と `demandCycle` は独立しており、通常は `demandCycle: "summer"` と `calendarCondition: "obon"` を併記します。天気・気温・製造不足疑いも別軸のままで、お盆を理由に補正値や `productionShortageSuspicion` を変えません。
+- お盆対応導入前に保存された8月13日等の `calendarContext` と判断referenceは履歴の正本です。読み込み、日次統合、export、cloud mergeで日付だけからお盆へ遡及変換しません。
+- 個別量判断の曜日基準は、三連休中日の既存特殊基準（17時以降）→お盆→非祝日の祝日前日→祝日当日→通常曜日の順で選びます。三連休中日の15時は従来どおり実曜日基準です。
 - 非祝日の祝日前日は個別量判断を金土基準、祝日当日は日曜基準とし、表示文もアプリが採用済みの基準として示します。エリア残数判定は既存の履歴選択を変更せず、実際に採用した同曜日・曜日グループ・特殊比較を保存します。
 - `calendarContext` は実曜日と採用基準を分けて保持します。日付、`actualWeekday`、祝日／祝日前日／三連休等の条件、個別量基準、セッション・エリアごとの残数比較基準、理由、比較モードを含みます。15時と17時、またはエリア間で基準が異なる場合も表示文の解析なしで追跡できます。
 - `analysisWeatherContext` は各値引セッションで既存入力対象となる時間別予報（15時は16〜21時、17時は18〜21時、18時30分は19〜21時、19時30分は20〜21時、20時30分は21時）から `dry / rain / snow / mixed / unknown` を要約します。`weatherDataSource` は `entered_hourly_forecast` であり、実測天候を表しません。元の `hourlyForecasts`、解決済み天候、天候点・降水補正はそのまま残します。
@@ -197,10 +202,10 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回の `calendarContext`、`analysisWeatherContext`、`productionAnalysis`、`exportFilter` はすべてoptionalな後方互換追加であり、既存JSONBへ保存できるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回の `isObon`／`calendarCondition: "obon"` を含むanalysis metadataはoptionalな後方互換追加であり、既存JSONBへ保存できるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-5`
+- `appVersion`: `2026.8.9-6`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260812-082404-jst`
+- `buildId`: `build-20260813-231309-jst`

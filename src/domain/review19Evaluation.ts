@@ -6,7 +6,12 @@ import {
   type AreaCountDecisionBasis,
   type AreaCountRecord,
 } from "./areaCountHistory.ts";
+import {
+  normalizeAnalysisCalendarContext,
+  type AnalysisCalendarContext,
+} from "./analysisMetadata.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
+import { supportsObonCalendarRule } from "./obon.ts";
 import type {
   AreaId,
   DemandCycle,
@@ -80,6 +85,24 @@ function resolveAreaCountRecordedAt(
   return null;
 }
 
+function resolveReview19RecordCalendarContext(
+  record: Review19Result,
+): AnalysisCalendarContext | undefined {
+  const candidates = [
+    record.calendarContext,
+    record.daySnapshot?.calendarContext,
+    record.daySnapshot?.review19Check?.calendarContext,
+    record.reference?.calendarContext,
+    record.snapshot?.calendarContext,
+    record.snapshot?.reviewReference?.calendarContext,
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeAnalysisCalendarContext(candidate);
+    if (normalized) return normalized;
+  }
+  return undefined;
+}
+
 function buildHistoricalReview19AreaCountRecords(params: {
   areaId: AreaId;
   date: string;
@@ -102,6 +125,11 @@ function buildHistoricalReview19AreaCountRecords(params: {
     const weekday = resolveReview19RecordWeekday(record);
     const recordedAt = resolveAreaCountRecordedAt(record, params.areaId);
     if (weekday === null || recordedAt === null) return [];
+    const calendarContext = resolveReview19RecordCalendarContext(record);
+    const applyObonRule = calendarContext
+      ? calendarContext.isObon === true ||
+        calendarContext.calendarCondition === "obon"
+      : supportsObonCalendarRule(record.appVersion);
 
     return [
       {
@@ -119,7 +147,9 @@ function buildHistoricalReview19AreaCountRecords(params: {
           weekday,
           discountTime: REVIEW19_DISCOUNT_TIME,
           date: record.date,
+          applyObonRule,
         }),
+        calendarContext,
         count: Math.max(0, Math.round(count)),
       },
     ];
@@ -139,6 +169,7 @@ export function buildReview19AutomaticEvaluation(params: {
   weekday: number;
   demandCycle: DemandCycle;
   historicalRecords: readonly Review19Result[];
+  applyObonRule?: boolean;
 }): Review19AutomaticEvaluation & {
   autoEvaluationBasis: AreaCountDecisionBasis;
 } {
@@ -156,6 +187,7 @@ export function buildReview19AutomaticEvaluation(params: {
     weekday: params.weekday,
     date: params.date,
     demandCycle,
+    applyObonRule: params.applyObonRule,
     count: params.count,
   });
 

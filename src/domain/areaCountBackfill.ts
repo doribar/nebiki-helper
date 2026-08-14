@@ -7,6 +7,11 @@ import {
   normalizeAreaCountRecords,
   type AreaCountRecord,
 } from "./areaCountHistory.ts";
+import {
+  normalizeAnalysisCalendarContext,
+  type AnalysisCalendarContext,
+} from "./analysisMetadata.ts";
+import { supportsObonCalendarRule } from "./obon.ts";
 import type { AreaId, DemandCycle } from "./types.ts";
 
 export type AreaCountBackfillSources = {
@@ -150,6 +155,18 @@ function getVersionField(
   return undefined;
 }
 
+function getCapturedCalendarContext(
+  ...values: readonly Record<string, unknown>[]
+): AnalysisCalendarContext | undefined {
+  for (const value of values) {
+    const calendarContext = normalizeAnalysisCalendarContext(
+      value.calendarContext,
+    );
+    if (calendarContext) return calendarContext;
+  }
+  return undefined;
+}
+
 function reconstructAreaRecord(params: {
   areaId: AreaId;
   area: Record<string, unknown>;
@@ -176,6 +193,21 @@ function reconstructAreaRecord(params: {
 
   const evaluationSource = params.area.areaCountEvaluationSource;
   const evaluation = params.area.areaCountEvaluation;
+  const appVersion = getVersionField(
+    "appVersion",
+    params.area,
+    params.container,
+    params.session,
+  );
+  const calendarContext = getCapturedCalendarContext(
+    params.area,
+    params.container,
+    params.session,
+  );
+  const applyObonRule = calendarContext
+    ? calendarContext.isObon === true ||
+      calendarContext.calendarCondition === "obon"
+    : supportsObonCalendarRule(appVersion);
   const normalized = normalizeAreaCountRecords([
     {
       dataSchemaVersion: getVersionField(
@@ -184,12 +216,7 @@ function reconstructAreaRecord(params: {
         params.container,
         params.session,
       ),
-      appVersion: getVersionField(
-        "appVersion",
-        params.area,
-        params.container,
-        params.session,
-      ),
+      appVersion,
       buildId: getVersionField(
         "buildId",
         params.area,
@@ -207,7 +234,9 @@ function reconstructAreaRecord(params: {
         weekday: params.weekday,
         discountTime: params.discountTime,
         date: params.date,
+        applyObonRule,
       }),
+      calendarContext,
       count,
       userJudge: evaluationSource === "manual" ? evaluation : undefined,
       humanEvaluationDetails: params.area.humanEvaluationDetails,

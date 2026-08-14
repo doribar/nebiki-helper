@@ -30,6 +30,7 @@ import {
 } from "../../domain/areaCountHistory.ts";
 import { getCurrentDataVersionInfo } from "../../domain/dataVersion.ts";
 import { normalizeDemandCycle } from "../../domain/demandCycle.ts";
+import { supportsObonCalendarRule } from "../../domain/obon.ts";
 import { getAreaJudgeText } from "./ratePresentation.ts";
 import {
   buildAnalysisWeatherContext,
@@ -183,6 +184,7 @@ export function createDailySessionSnapshot(params: {
     discountTime: session.discountTime,
     sessionStartedAt: session.startedAt,
     manualWeekdayOverride: session.manualWeekdayOverride,
+    applyObonRule: supportsObonCalendarRule(session.appVersion),
     areaDecisionBases: DONE_SUMMARY_ROUTE.map((areaId) => ({
       areaId,
       basis: params.state.areaProgressMap[areaId]?.areaCountDecisionBasis,
@@ -478,6 +480,7 @@ export function createReview19Snapshot(params: {
     discountTime: params.session.discountTime,
     sessionStartedAt: params.session.startedAt,
     manualWeekdayOverride: params.session.manualWeekdayOverride,
+    applyObonRule: supportsObonCalendarRule(params.session.appVersion),
     areaDecisionBases: DONE_SUMMARY_ROUTE.map((areaId) => ({
       areaId,
       basis: params.areaProgressMap[areaId]?.areaCountDecisionBasis,
@@ -536,6 +539,7 @@ export function createReview19Snapshot(params: {
 export function createReview19Reference(
   draft: SessionDraft,
   temperatureComfortAnalysis?: TemperatureComfortAnalysis,
+  applyObonRule = true,
 ): Review19Reference {
   const demandCycle = normalizeDemandCycle(draft.demandCycle);
   const reviewDraft: SessionDraft = {
@@ -562,6 +566,7 @@ export function createReview19Reference(
     weekday: reviewDraft.weekday,
     discountTime: "19",
     weather: resolvedWeather,
+    applyObonRule,
   });
   const calendarContext = buildSessionAnalysisCalendarContext({
     date: reviewDraft.date,
@@ -569,6 +574,7 @@ export function createReview19Reference(
     discountTime: "19",
     sessionStartedAt: null,
     manualWeekdayOverride: reviewDraft.manualWeekdayOverride,
+    applyObonRule,
     areaDecisionBases: [],
   });
 

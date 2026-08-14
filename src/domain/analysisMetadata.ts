@@ -6,6 +6,7 @@ import type {
 import { normalizeDemandCycle } from "./demandCycle.ts";
 import { getWeatherInputForecastHours } from "./hourlyWeather.ts";
 import { normalizeHumanEvaluationDetails } from "./humanEvaluation.ts";
+import { isObonDate, supportsObonCalendarRule } from "./obon.ts";
 import {
   getIndividualAmountReferenceContext,
   type IndividualAmountReferenceContext,
@@ -77,10 +78,17 @@ export type AnalysisCalendarContext = {
   actualWeekday: ActualWeekdayLabel;
   isHoliday: boolean;
   isDayBeforeHoliday: boolean;
+  /**
+   * Optional for backward compatibility. A missing value means that the
+   * persisted context predates explicit Obon capture; normalizers must not
+   * infer it from the date and thereby rewrite the rule used at the time.
+   */
+  isObon?: boolean;
   calendarCondition:
     | "ordinary"
     | "day_before_holiday"
     | "holiday"
+    | "obon"
     | "holiday_before_normal_weekday"
     | "three_day_holiday_middle";
   manualWeekdayOverride: boolean;
@@ -261,13 +269,34 @@ function getActualWeekdayFromDate(date: string): ActualWeekdayLabel | null {
   return ACTUAL_WEEKDAYS[parsed.getUTCDay()] ?? null;
 }
 
-function getCalendarCondition(date: string): Pick<
+type AnalysisCalendarFacts = Pick<
   AnalysisCalendarContext,
-  "isHoliday" | "isDayBeforeHoliday" | "calendarCondition"
-> {
+  "isHoliday" | "isDayBeforeHoliday" | "isObon" | "calendarCondition"
+>;
+
+function isCalendarCondition(
+  value: unknown,
+): value is AnalysisCalendarContext["calendarCondition"] {
+  return (
+    value === "ordinary" ||
+    value === "day_before_holiday" ||
+    value === "holiday" ||
+    value === "obon" ||
+    value === "holiday_before_normal_weekday" ||
+    value === "three_day_holiday_middle"
+  );
+}
+
+function getCalendarCondition(
+  date: string,
+  applyObonRule: boolean,
+): AnalysisCalendarFacts {
   const isHoliday = isJapaneseHolidayOrObserved(date);
   const isDayBeforeHoliday = isDayBeforeJapaneseHoliday(date);
-  const calendarCondition = isThreeDayHolidayMiddle(date)
+  const isObon = applyObonRule ? isObonDate(date) : undefined;
+  const calendarCondition = isObon
+    ? "obon" as const
+    : isThreeDayHolidayMiddle(date)
     ? "three_day_holiday_middle" as const
     : isHolidayBeforeNormalWeekday(date)
       ? "holiday_before_normal_weekday" as const
@@ -276,7 +305,12 @@ function getCalendarCondition(date: string): Pick<
         : !isHoliday && isDayBeforeHoliday
           ? "day_before_holiday" as const
           : "ordinary" as const;
-  return { isHoliday, isDayBeforeHoliday, calendarCondition };
+  return {
+    isHoliday,
+    isDayBeforeHoliday,
+    ...(isObon !== undefined ? { isObon } : {}),
+    calendarCondition,
+  };
 }
 
 function normalizeIndividualAmountReference(
@@ -288,6 +322,7 @@ function normalizeIndividualAmountReference(
     kind === "three_day_holiday_middle" ||
     kind === "day_before_holiday" ||
     kind === "holiday" ||
+    kind === "obon" ||
     kind === "actual_weekday";
   const comparisonMode = raw.comparisonMode;
   const validComparisonMode =
@@ -443,13 +478,38 @@ export function normalizeAnalysisCalendarContext(
     .map(normalizeAreaCountReference)
     .filter((value): value is CalendarAreaCountReference => value !== null)
     .sort(compareCalendarEntry);
+  // Calendar facts are part of the historical decision evidence. In
+  // particular, a context saved on an Obon date before the Obon rule existed
+  // must remain `ordinary`; the normalizer must not apply today's rules to it.
+  const legacyFacts = getCalendarCondition(raw.date, false);
+  const hasExplicitObonFact = raw.isObon === true ||
+    raw.calendarCondition === "obon";
+  const calendarCondition = hasExplicitObonFact
+    ? "obon"
+    : isCalendarCondition(raw.calendarCondition)
+      ? raw.calendarCondition
+      : legacyFacts.calendarCondition;
+  const isHoliday = typeof raw.isHoliday === "boolean"
+    ? raw.isHoliday
+    : legacyFacts.isHoliday;
+  const isDayBeforeHoliday = typeof raw.isDayBeforeHoliday === "boolean"
+    ? raw.isDayBeforeHoliday
+    : legacyFacts.isDayBeforeHoliday;
+  const isObon = hasExplicitObonFact
+    ? true
+    : raw.isObon === false
+      ? false
+      : undefined;
 
   return {
     version: 1,
     scope: raw.scope,
     date: raw.date,
     actualWeekday,
-    ...getCalendarCondition(raw.date),
+    isHoliday,
+    isDayBeforeHoliday,
+    ...(isObon !== undefined ? { isObon } : {}),
+    calendarCondition,
     manualWeekdayOverride: raw.manualWeekdayOverride === true,
     individualAmountReference: dedupeCalendarEntries(
       individualAmountReference,
@@ -588,6 +648,8 @@ export function buildSessionAnalysisCalendarContext(params: {
   discountTime: DiscountTime;
   sessionStartedAt: string | null;
   manualWeekdayOverride: boolean;
+  /** False is reserved for reconstructing a persisted legacy snapshot. */
+  applyObonRule?: boolean;
   areaDecisionBases: readonly {
     areaId: AreaId;
     basis?: AreaCountDecisionBasis;
@@ -595,10 +657,12 @@ export function buildSessionAnalysisCalendarContext(params: {
 }): AnalysisCalendarContext | undefined {
   const actualWeekday = getActualWeekdayFromDate(params.date);
   if (!actualWeekday) return undefined;
+  const applyObonRule = params.applyObonRule !== false;
   const individual = getIndividualAmountReferenceContext({
     date: params.date,
     weekday: params.weekday,
     discountTime: params.discountTime,
+    applyObonRule,
   });
   const individualAmountReference: CalendarIndividualAmountReference[] = [
     { ...individual, sessionStartedAt: params.sessionStartedAt },
@@ -623,7 +687,7 @@ export function buildSessionAnalysisCalendarContext(params: {
     scope: params.scope ?? "session",
     date: params.date,
     actualWeekday,
-    ...getCalendarCondition(params.date),
+    ...getCalendarCondition(params.date, applyObonRule),
     manualWeekdayOverride: params.manualWeekdayOverride,
     individualAmountReference,
     areaCountReference,
@@ -648,13 +712,30 @@ export function buildDayAnalysisCalendarContext(params: {
   const areaCountReference = dedupeCalendarEntries(
     contexts.flatMap((context) => context.areaCountReference),
   ).sort(compareCalendarEntry);
+  // Prefer explicitly captured rules over legacy contexts. A true Obon fact
+  // wins when a day contains sessions from both before and after the feature
+  // was introduced. With legacy-only evidence, keep the persisted ordinary
+  // condition rather than deriving Obon from the calendar date.
+  const factContext = contexts.find((context) => context.isObon === true) ??
+    contexts.find((context) => context.isObon !== undefined) ??
+    contexts[0];
+  const calendarFacts: AnalysisCalendarFacts = factContext
+    ? {
+        isHoliday: factContext.isHoliday,
+        isDayBeforeHoliday: factContext.isDayBeforeHoliday,
+        ...(factContext.isObon !== undefined
+          ? { isObon: factContext.isObon }
+          : {}),
+        calendarCondition: factContext.calendarCondition,
+      }
+    : getCalendarCondition(params.date, false);
 
   return {
     version: 1,
     scope: "day",
     date: params.date,
     actualWeekday,
-    ...getCalendarCondition(params.date),
+    ...calendarFacts,
     manualWeekdayOverride: contexts.some(
       (context) => context.manualWeekdayOverride,
     ),
@@ -1434,6 +1515,9 @@ export function buildSessionCalendarContextFromSnapshot(
     discountTime: snapshot.session.discountTime,
     sessionStartedAt: snapshot.session.startedAt,
     manualWeekdayOverride: snapshot.session.manualWeekdayOverride,
+    // A persisted snapshot without context is reconstructed according to the
+    // app version that created its session, never from today's app version.
+    applyObonRule: supportsObonCalendarRule(snapshot.session.appVersion),
     areaDecisionBases,
   });
 }

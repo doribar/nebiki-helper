@@ -15,6 +15,7 @@ import {
   isJapaneseHolidayOrWeekend,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
+import { isObonDate } from "./obon.ts";
 import { getBaseRate } from "./discount.ts";
 import {
   getTemperaturePoint,
@@ -70,6 +71,7 @@ function getActualWeekdayText(weekday: number): string {
 export type IndividualAmountReferenceKind =
   | "three_day_holiday_middle"
   | "day_before_holiday"
+  | "obon"
   | "holiday"
   | "actual_weekday";
 
@@ -90,13 +92,14 @@ export type IndividualAmountReferenceContext = {
 
 /**
  * 個別量判断で表示・保存する曜日基準を、同じ優先順位で解決する。
- * 三連休中日（17時以降）→非祝日の祝日前日→祝日当日→実曜日の順。
+ * 三連休中日（17時以降）→お盆→非祝日の祝日前日→祝日当日→実曜日の順。
  * 三連休中日の15時は、従来どおり実曜日を使う。
  */
 export function getIndividualAmountReferenceContext(params: {
   date?: string;
   weekday: number;
   discountTime: DiscountTime;
+  applyObonRule?: boolean;
 }): IndividualAmountReferenceContext {
   const timeText = getBasisTimeText(params.discountTime);
   const isThreeDayHolidayMiddleDate =
@@ -104,6 +107,10 @@ export function getIndividualAmountReferenceContext(params: {
   const useThreeDayHolidayMiddleReference =
     params.discountTime !== "15" &&
     isThreeDayHolidayMiddleDate;
+  const useObonRule =
+    params.applyObonRule !== false &&
+    typeof params.date === "string" &&
+    isObonDate(params.date);
 
   if (useThreeDayHolidayMiddleReference) {
     return {
@@ -114,6 +121,18 @@ export function getIndividualAmountReferenceContext(params: {
       referenceDiscountTime: params.discountTime,
       reason: "three_day_holiday_middle",
       referenceText: "通常の日曜夜と金曜・土曜夜の中間を基準に考えて",
+    };
+  }
+
+  if (useObonRule) {
+    return {
+      kind: "obon",
+      comparisonMode: "weekday",
+      referenceWeekday: 0,
+      referenceWeekdayGroup: null,
+      referenceDiscountTime: params.discountTime,
+      reason: "obon",
+      referenceText: `日曜日の${timeText}を基準に考えて`,
     };
   }
 
@@ -376,12 +395,14 @@ function getWindShiftTerm(
 }
 
 function getAfterRainRecoveryShift(_weather: ResolvedWeatherInput): number {
+  void _weather;
   return 0;
 }
 
 function getAfterRainRecoveryShiftTerm(
   _weather: ResolvedWeatherInput,
 ): ShiftTerm | undefined {
+  void _weather;
   return undefined;
 }
 
@@ -557,6 +578,7 @@ function rankToWeekdayBase(rank: number): WeekdayBaseLabel {
 }
 
 function getRelaxFloor(_discountTime: DiscountTime): WeekdayBaseLabel {
+  void _discountTime;
   return "金土";
 }
 
@@ -892,12 +914,22 @@ export function getBasisGuideDisplay(params: {
   weekday: number;
   discountTime: DiscountTime;
   weather: ResolvedWeatherInput;
+  applyObonRule?: boolean;
 }): BasisGuideDisplay {
   const resolved = resolveWeatherEffect(params);
   const individualAmountReference = getIndividualAmountReferenceContext(params);
+  const showObonNotice =
+    params.applyObonRule !== false &&
+    typeof params.date === "string" &&
+    isObonDate(params.date);
 
   return {
-    noticeText: resolved.noticeText,
+    noticeText:
+      showObonNotice
+        ? individualAmountReference.kind === "three_day_holiday_middle"
+          ? "今日はお盆です。三連休中日の基準を優先しています。"
+          : "今日はお盆のため、祝日と同じ基準になっています。"
+        : resolved.noticeText,
     weekdaySummaryText: resolved.weekdaySummaryText,
     weekdayDetailLines: resolved.weekdayDetailLines,
     weekdayCalcText: resolved.weekdayCalcText,

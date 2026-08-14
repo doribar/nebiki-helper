@@ -20,9 +20,11 @@ import {
   isDayBeforeJapaneseHoliday,
   isHolidayBeforeNormalWeekday,
   isJapaneseHolidayOrObserved,
+  isNormalWeekday,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 import { normalizeHumanEvaluationDetails } from "./humanEvaluation.ts";
+import { isObonDate, supportsObonCalendarRule } from "./obon.ts";
 import {
   normalizeAnalysisCalendarContext,
   normalizeAnalysisWeatherContext,
@@ -224,6 +226,7 @@ export function getAreaCountFallbackWeekdayGroup(params: {
   weekday: number;
   discountTime: AreaCountDiscountTime;
   date?: string | null;
+  applyObonRule?: boolean;
 }): ActualWeekdayGroup {
   const dateString = typeof params.date === "string" ? params.date : null;
   if (
@@ -234,7 +237,20 @@ export function getAreaCountFallbackWeekdayGroup(params: {
     return "三連休中日";
   }
 
-  if (dateString !== null && isHolidayBeforeNormalWeekday(dateString)) {
+  const nextDate = dateString === null
+    ? null
+    : addDaysToDateString(dateString, 1);
+  const isObonBeforeNormalWeekday =
+    dateString !== null &&
+    params.applyObonRule !== false &&
+    isObonDate(dateString) &&
+    nextDate !== null &&
+    !isObonDate(nextDate) &&
+    isNormalWeekday(nextDate);
+  if (
+    dateString !== null &&
+    (isHolidayBeforeNormalWeekday(dateString) || isObonBeforeNormalWeekday)
+  ) {
     return "翌日平日祝日";
   }
 
@@ -249,6 +265,7 @@ export function getAreaCountComparisonWeekdayGroup(params: {
   weekday: number;
   discountTime: AreaCountDiscountTime;
   date?: string | null;
+  applyObonRule?: boolean;
 }): ActualWeekdayGroup {
   const recordGroup = getAreaCountFallbackWeekdayGroup(params);
   if (recordGroup !== "翌日平日祝日") return recordGroup;
@@ -258,11 +275,14 @@ export function getAreaCountComparisonWeekdayGroup(params: {
 export function shouldForceAreaCountFallbackWeekdayGroup(params: {
   weekday: number;
   date?: string | null;
+  applyObonRule?: boolean;
 }): boolean {
   const dateString = typeof params.date === "string" ? params.date : null;
   if (dateString === null) return false;
 
-  const isHoliday = isJapaneseHolidayOrObserved(dateString);
+  const isHoliday =
+    isJapaneseHolidayOrObserved(dateString) ||
+    (params.applyObonRule !== false && isObonDate(dateString));
   const isDayBeforeHoliday = isJapaneseHolidayOrObserved(addDaysToDateString(dateString, 1));
 
   // 祝日前日は通常曜日より翌日休みの影響を優先する。
@@ -826,6 +846,16 @@ export function normalizeAreaCountRecords(
     const actualWeekday = isActualWeekdayLabel(record.actualWeekday)
       ? record.actualWeekday
       : inferWeekdayLabelFromDate(record.date);
+    const calendarContext = normalizeAnalysisCalendarContext(
+      record.calendarContext,
+    );
+    // A captured calendar context is the immutable evidence of the rule that
+    // was actually used. This matters when a pre-Obon session is resumed and
+    // its new record is stamped with the currently running appVersion.
+    const applyObonRule = calendarContext
+      ? calendarContext.isObon === true ||
+        calendarContext.calendarCondition === "obon"
+      : supportsObonCalendarRule(record.appVersion);
     // 旧レコードの保存済みグループ名は時刻別仕様と一致しない場合があるため、
     // 解決済みの実曜日・日付・値引時刻から現行仕様へ読み替える。
     const actualWeekdayGroup = actualWeekday
@@ -833,6 +863,7 @@ export function normalizeAreaCountRecords(
           weekday: actualWeekdayLabelToNumber(actualWeekday),
           discountTime: record.discountTime,
           date: record.date,
+          applyObonRule,
         })
       : isActualWeekdayGroup(record.actualWeekdayGroup)
         ? record.actualWeekdayGroup
@@ -888,9 +919,7 @@ export function normalizeAreaCountRecords(
         weekdayBase: legacyWeekdayBase,
         actualWeekday,
         actualWeekdayGroup,
-        calendarContext: normalizeAnalysisCalendarContext(
-          record.calendarContext,
-        ),
+        calendarContext,
         analysisWeatherContext: normalizeAnalysisWeatherContext(
           record.analysisWeatherContext,
         ),
@@ -1512,6 +1541,7 @@ export function getAreaCountRecommendation(params: {
   weekday: number | null | undefined;
   date: string | null | undefined;
   demandCycle?: DemandCycle | null;
+  applyObonRule?: boolean;
   count: number;
 }): AreaCountRecommendation {
   const requiredSampleSize = REQUIRED_SAMPLE_SIZE;
@@ -1547,17 +1577,22 @@ export function getAreaCountRecommendation(params: {
     weekday: params.weekday,
     discountTime,
     date,
+    applyObonRule: params.applyObonRule,
   });
   const comparisonWeekdayGroup = getAreaCountComparisonWeekdayGroup({
     weekday: params.weekday,
     discountTime,
     date,
+    applyObonRule: params.applyObonRule,
   });
   const useHolidayBeforeNormalWeekdayReference =
     actualWeekdayGroup === "翌日平日祝日";
+  const useObonReference =
+    params.applyObonRule !== false && isObonDate(date);
   const forceFallbackWeekdayGroup = shouldForceAreaCountFallbackWeekdayGroup({
     weekday: params.weekday,
     date,
+    applyObonRule: params.applyObonRule,
   });
   // エリア判定の比較サンプルは「今日より前」の履歴だけを使う。
   // 同じ日・同じエリア・同じ時刻で複数記録がある場合は、最新の1件だけを採用する。
@@ -1659,9 +1694,13 @@ export function getAreaCountRecommendation(params: {
             `${isSummerCycle ? "今年の夏季モード・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
             `${isSummerCycle ? "今年の夏季モード・" : ""}暫定グループ（${comparisonWeekdayGroup}）の記録：${reference.fallbackSampleSize}/${requiredSampleSize}件`,
             useHolidayBeforeNormalWeekdayReference
-              ? "今日は祝日で明日は平日のため、日曜日と同じ残数基準で判定します。"
+              ? useObonReference
+                ? "今日はお盆で明日は平日のため、日曜日と同じ残数基準で判定します。"
+                : "今日は祝日で明日は平日のため、日曜日と同じ残数基準で判定します。"
               : reference.forceFallbackWeekdayGroup
-                ? "祝日まわりのため、通常曜日データではなく暫定グループで判定します。"
+                ? useObonReference
+                  ? "お盆のため、通常曜日データではなく暫定グループで判定します。"
+                  : "祝日まわりのため、通常曜日データではなく暫定グループで判定します。"
                 : "同じエリア・同じ時刻・同じ曜日の記録を優先し、足りない時だけ暫定グループで判定します。",
             ...(isSummerCycle ? ["履歴不足のため手動判定"] : []),
             `今回の${count}個も、判定後に履歴へ保存されます。`,
@@ -1704,9 +1743,13 @@ export function getAreaCountRecommendation(params: {
     : [
         `${isSummerCycle ? "今年の夏季モード・" : ""}同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
         useHolidayBeforeNormalWeekdayReference
-          ? "今日は祝日で明日は平日のため、日曜日と同じ残数基準を採用。"
+          ? useObonReference
+            ? "今日はお盆で明日は平日のため、日曜日と同じ残数基準を採用。"
+            : "今日は祝日で明日は平日のため、日曜日と同じ残数基準を採用。"
           : reference.forceFallbackWeekdayGroup
-            ? "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
+            ? useObonReference
+              ? "お盆のため、通常曜日データではなく暫定グループを採用。"
+              : "祝日まわりのため、通常曜日データではなく暫定グループを採用。"
             : "通常日は同じ曜日の記録を優先し、足りない時だけ暫定グループを採用。",
         comparisonMode === "weekday"
           ? `${isSummerCycle ? "今年の夏短期" : "短期"}中央値：${referenceMedian.shortMedianCount}個（直近${matchedRecords.length}件）`

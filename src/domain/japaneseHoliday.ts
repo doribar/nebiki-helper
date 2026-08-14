@@ -4,6 +4,10 @@ type DateParts = {
   day: number;
 };
 
+// Obon is deliberately separate from Japanese legal holidays. Re-exporting
+// only the predicate keeps existing holiday-set semantics unchanged.
+export { isObonDate } from "./obon.ts";
+
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
