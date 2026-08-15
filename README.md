@@ -28,6 +28,7 @@ npm run check:supabase-cloud-sync-sql
 npm run check:cycle-separated-export
 npm run check:analysis-metadata-ui
 npm run check:obon-calendar
+npm run check:review19-completion-safety
 npm run build
 ```
 
@@ -42,6 +43,17 @@ npm run build
 - 個別商品の「10個以上＋5％」は廃止しています。
 - 広告商品は当日の売れ方にかかわらず、表示値引率から常に−10％です。
 - 定番商品−10％、夜によく売れる商品−10％、見た目が悪い商品＋10％、不人気商品＋10％は従来どおりです。
+
+## スキップ遷移と19:00チェック完了時の保存安全性
+
+- 「スキップ先を選ぶ」で移動したエリアをさらに「今はスキップ」しても、その操作直後に同じエリア自身を次候補として再選択しません。候補選択では現在エリアを先に除外してからmanual／fewの優先順位と経路方向を評価します。
+- スキップしたstatusは消さないため、別エリアを処理した後に後回しエリアへ戻る既存動作は維持します。現在エリア以外のpendingがなければ、既存の通常フロー候補へ進み、通常候補もなければ完了画面へ進みます。
+- skip recordは永続化用と純粋なin-memory用の2経路で、それぞれ同じidentityを1件へまとめます。コード上の2つの `cloneSkipRecord` 追加は別関数であり、同一操作を2回記録する重複バグではありません。
+- 19:00チェックは、12エリアの完成recordを `nebiki-helper/review19-records` へ保存してからSupabase outboxを準備し、その後に `review19_done` へ遷移します。端末正本を保存できなければ完了扱いにせず、空き容量を確認して再試行できる案内を出します。
+- `localStorage.setItem()`／`removeItem()` の失敗は、key・操作・例外名・quota該当有無だけを構造化して扱います。record本文やcredentialはログへ出しません。補助保存の失敗を未処理例外としてReactまで伝播させず、画面全体の白画面化を防ぎます。
+- 容量不足時の保存優先順位は、完成Review19本体 → cloud pending → 完了済みcurrent-session → navigation/debug用runtimeと重複checkpointです。Review19本体またはpendingの保存がquotaで失敗した場合だけ、補助的なruntime historyとwork-session checkpointを解放して1回再試行します。通常容量では従来の復元情報を保存します。
+- Review19本体の保存後にcloud outboxだけ準備できなかった場合も、完成recordは保持し、管理設定の「端末内データをSupabaseへ同期」で再送できることを案内します。local-first、pending、retry、CAS、fixed-time隔離は変更しません。
+- 実端末の白画面発生時の例外ログとlocalStorage実使用量は取得できていません。未処理storage writeがReact更新後に発生し得たことはコード上の確定事実ですが、実端末で `QuotaExceededError` が発生したこと自体は高い整合性を持つ推定であり、確定診断とは区別します。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -202,10 +214,10 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回の `isObon`／`calendarCondition: "obon"` を含むanalysis metadataはoptionalな後方互換追加であり、既存JSONBへ保存できるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回のスキップ候補選択とstorage失敗時の制御は保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。Obon、productionAnalysis、20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-6`
+- `appVersion`: `2026.8.9-7`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260813-231309-jst`
+- `buildId`: `build-20260815-173057-jst`

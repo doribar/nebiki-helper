@@ -128,9 +128,14 @@ export function getNextPendingCandidate(params: {
   preferredReason?: PendingReason | null;
 }): PendingAreaCandidate | null {
   const deferredSet = new Set(params.deferredAreaIds ?? []);
-  const allPending = Object.values(params.areaProgressMap).filter((p) => {
+  const allPendingWithCurrent = Object.values(params.areaProgressMap).filter((p) => {
     return p.status === "skipped_manual" || p.status === "postponed_few";
   });
+  // 「今はスキップ」の直後だけ現在エリアを候補から外す。
+  // status自体は変えないため、別エリアへ進んだ後は通常どおり再訪できる。
+  const allPending = allPendingWithCurrent.filter(
+    (progress) => progress.areaId !== params.referenceAreaId
+  );
 
   if (allPending.length === 0) return null;
 
@@ -156,7 +161,9 @@ export function getNextPendingCandidate(params: {
     referenceAreaId: params.referenceAreaId,
     deferredAreaIds: params.deferredAreaIds ?? [],
     allCandidatesAreDeferred,
-    allRouteAreasArePending: manualAll.length === NORMAL_ROUTE.length,
+    allRouteAreasArePending:
+      allPendingWithCurrent.filter((progress) => progress.status === "skipped_manual").length ===
+      NORMAL_ROUTE.length,
   });
   if (!picked) return null;
 

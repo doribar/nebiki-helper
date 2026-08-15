@@ -1414,6 +1414,39 @@ try {
 }
 
 try {
+  const records = appendSkipRecordsInMemory({
+    currentRecords: [
+      { date: '2026-05-09', targetDiscountTime: '18', areaId: 'bento_men' },
+      { date: '2026-05-09', targetDiscountTime: '19', areaId: 'tempura' },
+    ],
+    recordsToAdd: [
+      { date: '2026-05-09', targetDiscountTime: '18', areaId: 'bento_men' },
+      { date: '2026-05-09', targetDiscountTime: '18', areaId: 'croquette' },
+      { date: '2026-05-09', targetDiscountTime: '18', areaId: 'croquette' },
+    ],
+  });
+  const consumed = consumeSkipRecordsInMemory({
+    currentRecords: records,
+    date: '2026-05-09',
+    targetDiscountTime: '18',
+  });
+
+  assert.deepEqual(records.map((record) => record.areaId), [
+    'bento_men',
+    'tempura',
+    'croquette',
+  ]);
+  assert.deepEqual(consumed.skippedAreaIds, ['bento_men', 'croquette']);
+  assert.deepEqual(consumed.remainingRecords.map((record) => record.areaId), ['tempura']);
+  console.log('PASS: skip予約は同一identityを重複追加せず順序と復元対象を維持する');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: skip予約は同一identityを重複追加せず順序と復元対象を維持する');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
   const rawReview19 = {
     date: '2026-05-09',
     sessionStartedAt: '2026-05-09T08:00:00.000Z',
@@ -1888,6 +1921,76 @@ try {
       ...makeState({}).areaProgressMap,
       croquette: { areaId: 'croquette', status: 'postponed_few', areaJudge: 'few' },
       tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+      bento_men: { areaId: 'bento_men', status: 'postponed_few', areaJudge: 'few' },
+    },
+    referenceAreaId: 'tempura',
+    deferredAreaIds: ['croquette', 'tempura'],
+  });
+
+  assert.equal(candidate?.areaId, 'bento_men');
+  assert.notEqual(candidate?.areaId, 'tempura');
+  console.log('PASS: スキップ先へ移動後の再スキップは現在エリア自身を即時再選択しない');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: スキップ先へ移動後の再スキップは現在エリア自身を即時再選択しない');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...Object.fromEntries(
+        AREA_MASTERS.map((area) => [
+          area.id,
+          { areaId: area.id, status: 'completed' as const, areaJudge: 'normal' as const },
+        ]),
+      ),
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'tempura',
+    deferredAreaIds: ['tempura'],
+  });
+
+  assert.equal(candidate, null);
+  console.log('PASS: 現在エリアだけがpendingでも同じエリアへ即時自己ループしない');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: 現在エリアだけがpendingでも同じエリアへ即時自己ループしない');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...Object.fromEntries(
+        AREA_MASTERS.map((area) => [
+          area.id,
+          { areaId: area.id, status: 'completed' as const, areaJudge: 'normal' as const },
+        ]),
+      ),
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
+    },
+    referenceAreaId: 'croquette',
+    deferredAreaIds: ['tempura'],
+  });
+
+  assert.equal(candidate?.areaId, 'tempura');
+  console.log('PASS: スキップ直後だけ除外し、別エリアからは後回しエリアへ再訪できる');
+  passed += 1;
+} catch (error) {
+  console.error('FAIL: スキップ直後だけ除外し、別エリアからは後回しエリアへ再訪できる');
+  console.error(error);
+  process.exitCode = 1;
+}
+
+try {
+  const candidate = getNextPendingCandidate({
+    areaProgressMap: {
+      ...makeState({}).areaProgressMap,
+      croquette: { areaId: 'croquette', status: 'postponed_few', areaJudge: 'few' },
+      tempura: { areaId: 'tempura', status: 'skipped_manual', areaJudge: null },
       sushi: { areaId: 'sushi', status: 'postponed_few', areaJudge: 'few' },
     },
     referenceAreaId: 'fry_chicken',
@@ -2238,7 +2341,7 @@ try {
   process.exitCode = 1;
 }
 
-const totalChecks = 87;
+const totalChecks = 91;
 
 
 {

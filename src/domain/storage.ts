@@ -57,6 +57,81 @@ export type PersistedNebikiState = {
   dailyMessageState: DailyMessageState;
 };
 
+export type StorageOperationResult =
+  | {
+      ok: true;
+      key: string;
+      operation: "set" | "remove";
+    }
+  | {
+      ok: false;
+      key: string;
+      operation: "set" | "remove";
+      errorName: string;
+      quotaExceeded: boolean;
+    };
+
+function isQuotaExceededStorageError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; code?: unknown };
+  return (
+    candidate.name === "QuotaExceededError" ||
+    candidate.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    candidate.code === 22 ||
+    candidate.code === 1014
+  );
+}
+
+export function attemptStorageOperation(params: {
+  key: string;
+  operation: "set" | "remove";
+  run: () => void;
+}): StorageOperationResult {
+  try {
+    params.run();
+    return {
+      ok: true,
+      key: params.key,
+      operation: params.operation,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      key: params.key,
+      operation: params.operation,
+      errorName:
+        error && typeof error === "object" && "name" in error
+          ? String((error as { name?: unknown }).name ?? "Error")
+          : "Error",
+      quotaExceeded: isQuotaExceededStorageError(error),
+    };
+  }
+}
+
+/**
+ * record本文やcredentialを出さず、失敗した保存領域だけを診断へ残す。
+ */
+export function reportStorageOperationFailures(
+  context: string,
+  results: readonly StorageOperationResult[],
+): void {
+  const failures = results.filter(
+    (result): result is Extract<StorageOperationResult, { ok: false }> =>
+      !result.ok,
+  );
+  if (failures.length === 0) return;
+
+  console.warn("[nebiki-helper] storage operation failed", {
+    context,
+    failures: failures.map(({ key, operation, errorName, quotaExceeded }) => ({
+      key,
+      operation,
+      errorName,
+      quotaExceeded,
+    })),
+  });
+}
+
 function cloneSkipRecord(record: NextSessionSkipRecord): NextSessionSkipRecord {
   const cloned: NextSessionSkipRecord = {
     date: record.date,
@@ -356,6 +431,16 @@ export function appendReview19Record(record: Review19Result): void {
   );
 }
 
+export function appendReview19RecordSafely(
+  record: Review19Result,
+): StorageOperationResult {
+  return attemptStorageOperation({
+    key: STORAGE_KEYS.review19Records,
+    operation: "set",
+    run: () => appendReview19Record(record),
+  });
+}
+
 
 export function loadReview19SourceState(): AppState | null {
   const raw = localStorage.getItem(STORAGE_KEYS.review19SourceState);
@@ -601,6 +686,151 @@ export function savePersistedNebikiState(state: PersistedNebikiState): void {
   }
 
   saveDailyMessageState(state.dailyMessageState);
+}
+
+function buildPersistedAuxiliaryStateOperations(
+  state: PersistedNebikiState,
+): Array<{
+    key: string;
+    operation: "set" | "remove";
+    run: () => void;
+  }> {
+  return [
+    {
+      key: STORAGE_KEYS.nextSessionSkipRecords,
+      operation: "set",
+      run: () => saveNextSessionSkipRecords(state.nextSessionSkipRecords),
+    },
+    state.lastSessionWeather
+      ? {
+          key: STORAGE_KEYS.lastSessionWeather,
+          operation: "set",
+          run: () => saveLastSessionWeather(state.lastSessionWeather!),
+        }
+      : {
+          key: STORAGE_KEYS.lastSessionWeather,
+          operation: "remove",
+          run: clearLastSessionWeather,
+        },
+    state.lastUsedSessionDraft
+      ? {
+          key: STORAGE_KEYS.lastUsedSessionDraft,
+          operation: "set",
+          run: () => saveLastUsedSessionDraft(state.lastUsedSessionDraft!),
+        }
+      : {
+          key: STORAGE_KEYS.lastUsedSessionDraft,
+          operation: "remove",
+          run: clearLastUsedSessionDraft,
+        },
+    {
+      key: STORAGE_KEYS.dailyMessageState,
+      operation: "set",
+      run: () => saveDailyMessageState(state.dailyMessageState),
+    },
+  ];
+}
+
+export function savePersistedNebikiStateSafely(
+  state: PersistedNebikiState,
+): StorageOperationResult[] {
+  const currentSessionOperation = state.currentSession
+    ? {
+        key: STORAGE_KEYS.currentSession,
+        operation: "set" as const,
+        run: () => saveCurrentSession(state.currentSession!),
+      }
+    : {
+        key: STORAGE_KEYS.currentSession,
+        operation: "remove" as const,
+        run: clearCurrentSession,
+      };
+
+  return [
+    attemptStorageOperation(currentSessionOperation),
+    ...buildPersistedAuxiliaryStateOperations(state).map(attemptStorageOperation),
+  ];
+}
+
+export function savePersistedNebikiStateWithAuxiliaryRecovery(
+  state: PersistedNebikiState,
+): StorageOperationResult[] {
+  const currentSessionResult = attemptStorageOperation(
+    state.currentSession
+      ? {
+          key: STORAGE_KEYS.currentSession,
+          operation: "set",
+          run: () => saveCurrentSession(state.currentSession!),
+        }
+      : {
+          key: STORAGE_KEYS.currentSession,
+          operation: "remove",
+          run: clearCurrentSession,
+        },
+  );
+  const results = [currentSessionResult];
+
+  if (
+    state.currentSession &&
+    !currentSessionResult.ok &&
+    currentSessionResult.quotaExceeded
+  ) {
+    // 完成recordとcloud outboxに続いてcurrent-sessionを優先し、
+    // navigation/debug runtimeと重複checkpointだけを解放して1回再試行する。
+    results.push(...releaseAuxiliaryStorageForReview19());
+    results.push(
+      attemptStorageOperation({
+        key: STORAGE_KEYS.currentSession,
+        operation: "set",
+        run: () => saveCurrentSession(state.currentSession!),
+      }),
+    );
+  }
+
+  // 小さい補助設定はcurrent-sessionの保存可否を確定した後にだけ書く。
+  results.push(
+    ...buildPersistedAuxiliaryStateOperations(state).map(attemptStorageOperation),
+  );
+  return results;
+}
+
+export function saveWorkSessionCheckpointSafely(
+  state: AppState,
+): StorageOperationResult {
+  return attemptStorageOperation({
+    key: STORAGE_KEYS.workSessionCheckpoint,
+    operation: "set",
+    run: () => saveWorkSessionCheckpoint(state),
+  });
+}
+
+export function saveRuntimeStateSafely(
+  state: PersistedRuntimeState,
+): StorageOperationResult {
+  return attemptStorageOperation({
+    key: STORAGE_KEYS.runtimeState,
+    operation: "set",
+    run: () => saveRuntimeState(state),
+  });
+}
+
+/**
+ * Review19正本の保存容量を確保するため、復元の補助情報だけを優先順に解放する。
+ * current-session、Review19履歴、cloud outboxには触れない。
+ */
+export function releaseAuxiliaryStorageForReview19(): StorageOperationResult[] {
+  return [
+    attemptStorageOperation({
+      key: STORAGE_KEYS.runtimeState,
+      operation: "remove",
+      run: clearRuntimeState,
+    }),
+    attemptStorageOperation({
+      key: STORAGE_KEYS.workSessionCheckpoint,
+      operation: "remove",
+      run: clearWorkSessionCheckpoint,
+    }),
+  ];
 }
 
 export function appendSkipRecordsInMemory(params: {

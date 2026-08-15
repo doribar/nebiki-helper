@@ -51,12 +51,14 @@ import {
   consumeSkipRecordsInMemory,
   loadPersistedNebikiStateForDate,
   normalizeDailyMessageState,
-  savePersistedNebikiState,
-  saveWorkSessionCheckpoint,
+  savePersistedNebikiStateWithAuxiliaryRecovery,
+  saveWorkSessionCheckpointSafely,
   clearWorkSessionCheckpoint,
-  saveRuntimeState,
+  saveRuntimeStateSafely,
   clearRuntimeState,
-  appendReview19Record,
+  attemptStorageOperation,
+  reportStorageOperationFailures,
+  STORAGE_KEYS,
   loadReview19Records,
   saveReview19Records,
   loadReview19SourceState,
@@ -158,8 +160,12 @@ import {
   getCloudSyncStatus,
   persistAreaCountRecordLocalFirst,
 } from "../domain/cloudSync.ts";
-import { loadPendingSupabaseSyncQueue } from "../domain/supabaseSyncQueue.ts";
+import {
+  loadPendingSupabaseSyncQueue,
+  PENDING_SUPABASE_SYNC_STORAGE_KEY,
+} from "../domain/supabaseSyncQueue.ts";
 import { buildPendingSupabaseSyncErrorDetails } from "../domain/supabaseSyncDiagnostics.ts";
+import { persistCompletedReview19LocalFirst } from "../domain/review19CompletionStorage.ts";
 import {
   loadRemoteReview19Records,
   mergeReview19MedianHistory,
@@ -468,6 +474,27 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       }
       setCloudSyncVersion((version) => version + 1);
       return result;
+    } catch (error) {
+      const failure = attemptStorageOperation({
+        key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
+        operation: "set",
+        run: () => {
+          throw error;
+        },
+      });
+      reportStorageOperationFailures("cloud-sync-retry", [failure]);
+      let retained = 0;
+      try {
+        retained = loadPendingSupabaseSyncQueue().length;
+      } catch {
+        // getItem自体が使えない場合もReact側へ例外を戻さない。
+      }
+      return {
+        attempted: 0,
+        succeeded: 0,
+        failed: 0,
+        retained,
+      };
     } finally {
       setCloudSyncing(false);
     }
@@ -610,7 +637,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     // 残数入力の確認で、本番用のセッション状態を汚さないため。
     if (isTestMode) return;
 
-    savePersistedNebikiState(
+    const persistenceResults = savePersistedNebikiStateWithAuxiliaryRecovery(
       clonePersistedNebikiStateSnapshot({
         currentSession: state,
         nextSessionSkipRecords,
@@ -621,8 +648,11 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     );
 
     if (state.session) {
-      saveWorkSessionCheckpoint(cloneAppState(state));
+      persistenceResults.push(
+        saveWorkSessionCheckpointSafely(cloneAppState(state)),
+      );
     }
+    reportStorageOperationFailures("app-state-effect", persistenceResults);
   }, [
     isTestMode,
     state,
@@ -645,7 +675,16 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     const fingerprint = JSON.stringify(state.review19);
     if (review19CloudFingerprintRef.current === fingerprint) return;
     review19CloudFingerprintRef.current = fingerprint;
-    if (enqueueReview19RecordForCloud(state.review19)) {
+    let queued = false;
+    const enqueueResult = attemptStorageOperation({
+      key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
+      operation: "set",
+      run: () => {
+        queued = enqueueReview19RecordForCloud(state.review19!);
+      },
+    });
+    reportStorageOperationFailures("review19-cloud-effect", [enqueueResult]);
+    if (enqueueResult.ok && queued) {
       setCloudSyncVersion((version) => version + 1);
       void retryPendingCloudSync();
     }
@@ -679,14 +718,15 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     // 動作確認モードでは画面遷移状態もlocalStorageへ保存しない。
     if (isTestMode) return;
 
-    saveRuntimeState({
-      areaJudgeSelection,
-      resumeTargetScreen,
-      timeSwitchTarget,
-      undoSnapshot,
-      screenHistory: screenHistoryRef.current,
-      weatherConfirmationPending,
-    });
+    const runtimeResult = saveRuntimeStateSafely({
+        areaJudgeSelection,
+        resumeTargetScreen,
+        timeSwitchTarget,
+        undoSnapshot,
+        screenHistory: screenHistoryRef.current,
+        weatherConfirmationPending,
+      });
+    reportStorageOperationFailures("runtime-state-effect", [runtimeResult]);
   }, [
     isTestMode,
     state,
@@ -3823,11 +3863,31 @@ const lateSkipNotice = useMemo(() => {
     if (!recordedReview?.dataQuality.complete) return;
 
     if (!isTestMode) {
-      appendReview19Record(recordedReview);
-      enqueueReview19RecordForCloud(recordedReview);
-      setCloudSyncVersion((version) => version + 1);
-      void retryPendingCloudSync();
-      clearReview19SourceState();
+      const persistenceResult = persistCompletedReview19LocalFirst(recordedReview);
+      if (!persistenceResult.localSaved) {
+        window.alert(
+          "19時チェックを端末へ保存できませんでした。端末の空き容量を確認して、もう一度「完了」を押してください。",
+        );
+        return;
+      }
+
+      if (persistenceResult.cloudQueuePrepared) {
+        if (persistenceResult.cloudQueueChanged) {
+          setCloudSyncVersion((version) => version + 1);
+        }
+        void retryPendingCloudSync();
+      } else {
+        window.alert(
+          "19時チェックは端末に保存しましたが、クラウド同期の準備に失敗しました。管理設定の「端末内データをSupabaseへ同期」から再送してください。",
+        );
+      }
+
+      const clearSourceResult = attemptStorageOperation({
+        key: STORAGE_KEYS.review19SourceState,
+        operation: "remove",
+        run: clearReview19SourceState,
+      });
+      reportStorageOperationFailures("review19-source-cleanup", [clearSourceResult]);
       setReview19RecordsVersion((version) => version + 1);
     }
 

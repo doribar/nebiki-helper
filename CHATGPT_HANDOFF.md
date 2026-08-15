@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-13（日本時間）
+最終更新: 2026-08-15（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,11 +11,11 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260812-0827.zip`
-- `appVersion`: `2026.8.9-6`
+- 作業基準ZIP: `nebiki-helper-20260813-2321.zip`
+- `appVersion`: `2026.8.9-7`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260813-231309-jst`
-- リリースZIP: `nebiki-helper-20260813-2321.zip`。確定した識別情報で再生成した `dist` を収録する。
+- `buildId`: `build-20260815-173057-jst`
+- リリースZIP: `nebiki-helper-20260815-1755.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
 
@@ -27,6 +27,24 @@
 - 20時30分は従来の最終残数入力と1個・2個・3個以上ルールを維持する。既存5択の人間評価UIがないため、今回の9段階入力は適用しない。
 - 天候確認表の天気記号行は「天気」と表示する。見出しや他画面を一括置換せず、内部のweather field・計算・保存形式は変更しない。
 - エリア残数判定側の「迷ったら…」は削除済み。個別商品の量判断側の「迷ったら…」は維持する。
+
+## スキップ自己ループ修正
+
+- 「スキップ先を選ぶ」で移動した後、そのエリアを「今はスキップ」した直後は、現在エリア自身をpending候補から除外してからmanual／few優先順位と経路方向を評価する。同じエリアへの即時自己ループは行わない。
+- 現在以外にpendingがあればそこへ進む。なければ既存の通常フロー候補、通常候補もなければdoneへ進む。status自体は `skipped_manual`／`postponed_few` のままなので、別エリア処理後の後回しエリア再訪は維持する。
+- `storage.ts` にあるskip recordのpushは、永続化を行う関数と純粋なin-memory関数に各1回ある。連続した同一pushではなく、両経路ともidentity dedupeするためduplicate bugではない。今回この2つのpushは削除していない。
+- 通常の「次へ」、スキップ先選択、先取りスキップ、session resume、navigation history、doneSummary、Review19 excluded、fixed-time隔離は変更しない。
+
+## Review19完了とstorage失敗の安全化
+
+- 最後の人間評価はReact state反映待ちに依存せずfinal buildへ明示的に渡し、12/12の `areaCounts` と `areaEvaluations` が揃った完成recordを1件だけ作る。
+- 完了順序は、完成Review19本体のlocal保存 → Supabase pending準備 → source cleanup → `screen: "review19_done"`。完成recordのlocal保存に成功しない限りdoneへ進まず、再試行可能な案内を出す。
+- 容量不足時は、完成Review19本体、cloud pending、完了済みcurrent-sessionを優先する。navigation/debug用の `runtime-state` と重複した `work-session-checkpoint` だけを解放し、対象の正本保存を1回再試行する。通常時は補助stateを従来どおり維持する。
+- state／checkpoint／runtime／Review19／cloud enqueue／source cleanupのstorage操作は例外を構造化して受け止め、補助write failureをReactへthrowしない。diagnosticはkey、set/remove、error name、quota該当有無だけで、record本文やcredentialを出さない。
+- current-sessionがquotaで失敗した場合も補助領域を解放して1回再試行するため、reload後に完了前stateへ戻る危険を抑える。Review19完成recordは独立した正本として残り、同一identityの再保存は1件へ統合する。
+- Review19本体は保存済みだがpending準備だけに失敗した場合、完成recordを捨てず、管理設定の手動backfillで再送するよう案内する。local-first、pending queue、retry、CAS、merge、partial/final、RLSは変更しない。
+- 確認済み事実: 基準版ではstate、checkpoint、runtime等の `localStorage` writeが未処理例外になり得た。`review19_done` component／routerと完成record shapeに直接のrender異常は確認されていない。実運用exportには12/12・completeのrecordが残っていた。
+- 実端末原因の扱い: 完成record保存後の補助writeでquota等がthrowし、Reactを白画面化させた経路は症状と強く整合する。ただし実端末の例外ログ／正確な使用量がないため、`QuotaExceededError` 発生自体は高確度の推定であり確定事実とはしない。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -224,4 +242,4 @@
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:analysis-metadata`、`check:analysis-metadata-ui`、`check:cycle-separated-export`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の実行結果は `CHANGE_REPORT_20260812_PRODUCTION_CHECKPOINT.md` を参照する。
+README記載の全 `check:*`（特に `check:logic`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の結果は `CHANGE_REPORT_20260815_SKIP_REVIEW19_WHITE_SCREEN.md` を参照する。
