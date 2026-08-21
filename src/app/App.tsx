@@ -259,6 +259,33 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
         testNow={props.testMode?.now ?? null}
         onOpenSettings={() => setSettingsOpen(true)}
       />
+      {app.derived.undoNotice ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            left: 16,
+            right: 16,
+            bottom: 18,
+            zIndex: 10000,
+            maxWidth: 480,
+            margin: "0 auto",
+            padding: "11px 14px",
+            borderRadius: 12,
+            background: "#1f2937",
+            color: "#fff",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.2)",
+            fontSize: 14,
+            fontWeight: 800,
+            lineHeight: 1.5,
+            textAlign: "center",
+            pointerEvents: "none",
+          }}
+        >
+          {app.derived.undoNotice}
+        </div>
+      ) : null}
       {settingsOpen ? (
         <AdminSettingsDialog
           review19Count={app.derived.dataExport.review19Count}

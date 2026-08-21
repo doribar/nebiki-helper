@@ -27,6 +27,7 @@ import { getDailySessionSnapshotsForDate } from "../../domain/storage";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { WeatherConfirmationPanel } from "./WeatherConfirmationPanel";
+import { APP_VERSION } from "../../domain/dataVersion.ts";
 
 type StartScreenProps = {
   sessionDraft: SessionDraft;
@@ -408,7 +409,6 @@ export function StartScreen({
   sessionDraft,
   previousSession,
   isFixedTimeMode,
-  weatherGuideText: _weatherGuideText,
   onChangeSessionDraft,
   weatherConfirmationPending,
   weatherCorrectionRequestId,
@@ -782,7 +782,28 @@ export function StartScreen({
         titleFontSize={16}
         titleContent={
           <>
-            <div style={{ fontWeight: 700 }}>値引ヘルパー</div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 8,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ fontWeight: 700, minWidth: 0 }}>値引ヘルパー</div>
+              <div
+                aria-label="アプリバージョン"
+                style={{
+                  color: "#64748b",
+                  flexShrink: 0,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {APP_VERSION}
+              </div>
+            </div>
             <div style={{ fontSize: 13, fontWeight: 400 }}>
               （アプリ「ウェザーニュース」を見て入力）
             </div>

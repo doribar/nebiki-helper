@@ -33,6 +33,10 @@ npm run check:session-completion-storage-safety
 npm run check:storage-write-boundary
 npm run check:daily-session-snapshot-storage
 npm run check:long-run-storage-safety
+npm run check:median-version-ui
+npm run check:last-area-skip
+npm run check:fixed-time-supabase-read
+npx tsc -b --pretty false
 npm run build
 ```
 
@@ -48,10 +52,17 @@ npm run build
 - 広告商品は当日の売れ方にかかわらず、表示値引率から常に−10％です。
 - 定番商品−10％、夜によく売れる商品−10％、見た目が悪い商品＋10％、不人気商品＋10％は従来どおりです。
 
+## 中央値自動判定の表示
+
+- 残数入力と人間判定を終えた値引率表示画面では、20時30分を除き、履歴中央値から得た上書き前のrecommendationを `中央値判定：普通` 等として表示します。
+- 人間が判定を変更した場合も、`humanEvaluationDetails.automaticEvaluation` を表示の正本とし、採用判定／`finalEvaluation` を中央値判定として表示しません。表示値を値引率計算へ再適用することもありません。
+- `recommendationStatus: "insufficient"` 等で自動判定が成立していない場合は `中央値判定：履歴不足`、成立状態と値が矛盾する場合は `中央値判定：取得できません` とし、「普通」へ偽装しません。
+- トップ画面は正規の `APP_VERSION` を「値引ヘルパー」と同じ行の右側へ表示します。build IDとdata schema versionは常時表示しません。
+
 ## スキップ遷移と業務中storage保存の安全性
 
 - 「スキップ先を選ぶ」で移動したエリアをさらに「今はスキップ」しても、その操作直後に同じエリア自身を次候補として再選択しません。候補選択では現在エリアを先に除外してからmanual／fewの優先順位と経路方向を評価します。
-- スキップしたstatusは消さないため、別エリアを処理した後に後回しエリアへ戻る既存動作は維持します。現在エリア以外のpendingがなければ、既存の通常フロー候補へ進み、通常候補もなければ完了画面へ進みます。
+- スキップしたstatusは消さないため、別エリアを処理した後に後回しエリアへ戻る既存動作は維持します。現在エリア以外に処理可能な未完了候補がない場合は `他にスキップできるエリアがありません` と通知し、現在エリアを未完了のまま表示します。skipをcompletedやdoneへ変換しません。
 - skip recordは永続化用と純粋なin-memory用の2経路で、それぞれ同じidentityを1件へまとめます。コード上の2つの `cloneSkipRecord` 追加は別関数であり、同一操作を2回記録する重複バグではありません。
 - 通常sessionの完了、`daily-session-snapshots` 保存、15時→17時などの自動時刻遷移、20時30分の最終確定、AreaCount／Review19、Supabase pending、backfill、起動時mergeを含む業務中のstorage writeは、失敗を構造化結果として受け止めます。補助writeの例外をReact rootへ漏らして白画面化させません。
 - 自動時刻遷移では、補助的なdaily snapshotを安全に保存した後、その成否だけを理由に時刻到達通知と次session開始を中止しません。15時完了後もappのtimer／effectを維持し、17時到達時の既存ダイアログを表示できる構造です。
@@ -72,7 +83,7 @@ npm run build
 - 長押し成立後の `pointerup` と後続ghost clickは抑止します。移動、`pointercancel`、pointer capture喪失、画面blur・非表示でもgestureを安全に終了し、長押しと画面左スワイプが競合しないようにしています。
 - 新規入力は `humanEvaluationDetails` に `humanEvaluationScale: 9`、`humanEvaluationScore9`、`humanEvaluationSelections` と解決条件を保存します。raw score・選択順を変更せず、値引運用に必要な既存5段階値だけを別途解決します。
 - 通常サイクルの偶数scoreは15時なら少ない側、17時以降なら多い側へ解決します。夏季モードの偶数scoreはJST 18:00未満なら少ない側、18:00以降なら多い側へ解決します。奇数scoreは選んだ基準項目のままです。
-- 夏季境界は固定時間を含むruntime clockと `evaluatedAt` で検証します。時間固定モードの時計・履歴・保存先は引き続き本番運用から隔離します。
+- 夏季境界は固定時間を含むruntime clockと `evaluatedAt` で検証します。時間固定モードの時計と保存先は引き続き本番運用から隔離し、中央値履歴だけを本番SupabaseからREAD ONLYで参照します。
 - 旧5段階値は保存済みデータを書き換えず、読み込み・分析・出力時に奇数scoreと `humanEvaluationScale: 5` へ論理的に読み替えます。
 
 ## 夏季モード
@@ -80,7 +91,7 @@ npm run build
 - ユーザー向け名称は「夏季モード」です。内部互換のため、保存値とJSONは従来どおり `demandCycle: "normal" | "summer"` を維持します。
 - 夏季モードはJSTの営業日が7月1日〜9月30日の場合だけ開始画面に表示し、ユーザーがON/OFFします。期間外は自動的にOFFとなり、翌年7月に勝手にONへ戻りません。
 - 夏季モードは営業日全体へ適用し、当日の運用開始後は固定します。期間内の選択状態は翌日以降へ引き継ぎます。
-- 時間固定モードでは固定したJST営業日を基準に期間判定し、本番設定とは別の `nebiki-helper/fixed-time-demand-cycle-state-v1` に選択と当日ロックを保存します。本番の残数履歴は読み書きしません。
+- 時間固定モードでは固定したJST営業日を基準に期間判定し、本番設定とは別の `nebiki-helper/fixed-time-demand-cycle-state-v1` に選択と当日ロックを保存します。中央値の入力に限り、本番SupabaseのAreaCount履歴をcycle別にREAD ONLYで参照します。固定モード由来の残数を本番local履歴・Supabase・pending・Review19・learning populationへ書きません。
 - ON時の17:59までは、9段階の中間値を少ない側へ解決する案内を表示します。18:00以降は中間値を多い側へ解決します。単独の5基準項目は時刻で変更しません。
 - 個別商品の量判断は、ON時だけ基準文の先頭へ「夏の」を付けます。手動エリア残数判定にも「夏季モード基準：夏の残数基準」を表示し、現在summer基準であることを明示します。
 - エリア残数判定側の「迷ったら…」は廃止しました。個別商品の量判断にある「迷ったら…」は従来どおり維持します。
@@ -202,7 +213,7 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 - 確定済みの現在session state
 - `nebiki-helper/review19-records` のcomplete・final 19:00記録
 
-未来日／未来時刻、不正なarea・count・cycle、未測定、確定前UI入力、固定時間モードのデータは除外します。同じ操作を繰り返してもunique upsertで件数は増えず、端末データは削除しません。画面には検出件数、送信対象、成功、失敗、pendingを表示し、pending 0だけを「すべて同期済み」とみなします。時間固定モードではremote読込、write、retry、backfillのすべてを行いません。
+未来日／未来時刻、不正なarea・count・cycle、未測定、確定前UI入力、固定時間モードのデータは除外します。同じ操作を繰り返してもunique upsertで件数は増えず、端末データは削除しません。画面には検出件数、送信対象、成功、失敗、pendingを表示し、pending 0だけを「すべて同期済み」とみなします。時間固定モードでは中央値用のAreaCount SELECTだけを許可し、remote mutation、production local write、retry、backfillは行いません。
 
 ### SQL適用手順
 
@@ -223,10 +234,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のstorage境界、quota recovery、daily snapshot retentionは保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。Obon、productionAnalysis、20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回の表示、skip guard、fixed-time READ ONLY sourceは保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。Obon、productionAnalysis、20時30分の中央値5段階判定と最終値引tier、storage safety、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-8`
+- `appVersion`: `2026.8.9-9`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260821-091629-jst`
+- `buildId`: `build-20260822-031104-jst`
+
+今回の実装・検証結果は `CHANGE_REPORT_20260822_MEDIAN_SKIP_FIXED_READ_VERSION.md` を参照してください。

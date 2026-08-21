@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-21（日本時間）
+最終更新: 2026-08-22（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,11 +11,11 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260815-1755.zip`
-- `appVersion`: `2026.8.9-8`
+- 作業基準ZIP: `nebiki-helper-20260821-0918.zip`
+- `appVersion`: `2026.8.9-9`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260821-091629-jst`
-- リリースZIP: `nebiki-helper-20260821-0918.zip`。確定した識別情報で再生成した `dist` を収録する。
+- `buildId`: `build-20260822-031104-jst`
+- リリースZIP: この文書と同梱された `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
 
@@ -28,10 +28,38 @@
 - 天候確認表の天気記号行は「天気」と表示する。見出しや他画面を一括置換せず、内部のweather field・計算・保存形式は変更しない。
 - エリア残数判定側の「迷ったら…」は削除済み。個別商品の量判断側の「迷ったら…」は維持する。
 
+## 中央値判定表示とバージョンUI
+
+- 値引率表示画面では、履歴中央値による上書き前の `autoEvaluation` を `中央値判定：○○` として表示する。manual／final evaluationとは別情報であり、表示値を値引率計算へ再適用しない。
+- manual変更時は `humanEvaluationDetails.automaticEvaluation`、history採用時はhistory由来の自動判定を表示する。履歴不足は `中央値判定：履歴不足` とし、「普通」へfallbackしない。
+- トップ画面は正規sourceの `APP_VERSION` を「値引ヘルパー」の右側へ同一行表示する。build IDとdata schema versionは常時表示しない。
+
+## 2026.8.9-9 handoff summary
+
+Median display:
+
+値引率表示画面で、履歴中央値によるautoEvaluationを「中央値判定：○○」として表示する。manual/final evaluationとは別情報で、履歴不足は「履歴不足」と表示する。
+
+Last-area skip:
+
+最後の未完了エリアで「今はスキップ」を押してもdoneへ進まない。他候補がない旨を通知し、現在エリアを未完了のまま維持する。
+
+Fixed-time Supabase:
+
+時刻固定モードは本番Supabase AreaCount履歴をREAD ONLYで利用し、通常モードと同じ中央値自動判定を利用できる。ただし固定モードから本番Supabase WRITE、production pending、production local history、Review19、learning populationへのWRITEは一切禁止する。
+
+Version UI:
+
+トップ画面の「値引ヘルパー」右側にappVersionを表示する。buildIdは常時表示しない。
+
+Storage:
+
+2026.8.9-8のstorage safety、quota recovery、15→17自動遷移、daily snapshot retentionを維持する。
+
 ## スキップ自己ループ修正
 
 - 「スキップ先を選ぶ」で移動した後、そのエリアを「今はスキップ」した直後は、現在エリア自身をpending候補から除外してからmanual／few優先順位と経路方向を評価する。同じエリアへの即時自己ループは行わない。
-- 現在以外にpendingがあればそこへ進む。なければ既存の通常フロー候補、通常候補もなければdoneへ進む。status自体は `skipped_manual`／`postponed_few` のままなので、別エリア処理後の後回しエリア再訪は維持する。
+- 現在以外に処理可能な未完了候補があればそこへ進む。現在の1エリアしか残っていない場合は `他にスキップできるエリアがありません` と通知し、現在エリアを未完了のまま維持する。skipをcompleted／doneへ変換せず、別エリア処理後の後回しエリア再訪も維持する。
 - `storage.ts` にあるskip recordのpushは、永続化を行う関数と純粋なin-memory関数に各1回ある。連続した同一pushではなく、両経路ともidentity dedupeするためduplicate bugではない。今回この2つのpushは削除していない。
 - 通常の「次へ」、スキップ先選択、先取りスキップ、session resume、navigation history、doneSummary、Review19 excluded、fixed-time隔離は変更しない。
 
@@ -82,7 +110,7 @@
 - 期間外は保存済み `summer` も `normal` へ正規化し、翌年7月に勝手にONへ戻さない。
 - モードは15時、17時、18時30分、19時30分、20時30分、19時チェックを含む営業日全体へ適用する。
 - 当日の運用開始後は変更できない。期間内の選択状態は翌日以降へ引き継ぐ。
-- 時間固定モードは固定したJST日時で期間判定し、本番とは独立した選択・日次ロックを使用する。固定モードでは本番の残数履歴を読み書きしない。
+- 時間固定モードは固定したJST日時で期間判定し、本番とは独立した選択・日次ロックを使用する。中央値判定の入力に限り、本番Supabase AreaCount履歴をREAD ONLYで参照する。固定モード由来のrecordは本番local履歴・Supabase・pending・Review19・learning populationへ書かない。
 - ONかつ17:59までは、9段階の中間値を少ない側へ解決する案内を表示する。18:00以降は中間値を多い側へ解決し、単独の5基準項目は変更しない。
 - 通常履歴と夏履歴は混ぜない。旧データで `demandCycle` が欠ける場合は `normal` として扱う。
 - `summer` の短期中央値は対象年と同じ年の夏データだけ、長期中央値は対象年より前の年の夏データだけを使用する。
@@ -99,7 +127,8 @@
 - 統合端末cacheは `nebiki-helper/area-count-records-v2`。旧normalの `nebiki-helper/area-count-records` と旧summerの `nebiki-helper/summer-area-count-records-v1` は読込互換を維持し、summer keyは旧版互換のためdual-writeする。同期成功後も端末データを削除しない。
 - Supabaseの `area_count_records.demand_cycle` へ `normal` / `summer` を正式保存する。remote queryも必ずcycleで分離し、normalとsummerを同じ中央値・減少率・20時30分判定の母集団へ混ぜない。
 - サイクル選択と当日ロックのキーは `nebiki-helper/demand-cycle-state-v1`。時間固定モード側は `nebiki-helper/fixed-time-demand-cycle-state-v1` で、本番設定と相互に変更しない。
-- 固定時間モードは本番local history、Supabase、pending queue、Review19、日次データを読み書きせず、手動backfillも `fixed_time_mode` として実行しない。
+- 固定時間モードのhistory sourceは本番Supabase AreaCountのREAD ONLY、persistence destinationはfixed-time隔離領域である。normal／summerを別queryで読み、通常モードと同じ曜日・holiday・Obon referenceと中央値engineを使う。通信失敗時は履歴なしで固定モードを続行する。
+- 固定時間モードから本番Supabase mutation、pending queue、AreaCount local history、Review19、finalized day、learning populationへのwriteは行わず、手動backfillも `fixed_time_mode` として実行しない。
 - 完了済み日の通常・夏季履歴は日次JSONにも含まれ、JSON exportは引き続き分析・監査・可搬backupとして維持する。
 - `dataSchemaVersion` はJSON schemaのversionであり、今回のJSON側追加はoptionalかつ後方互換なため `3` のまま。Supabase schema migrationは別管理とする。
 
@@ -166,7 +195,7 @@
 - エリア別の正本は `areaEvaluations[areaId]`。`humanEvaluationDetails`、互換 `humanEvaluation`、`autoEvaluation`、`autoEvaluationStatus`、`autoEvaluationBasis` を19:00個別出力、日次スナップショット、統合JSONから追跡できる。
 - 自動5段階評価、中央値、件数、基準は入力画面にも完了画面にも表示しない。Work/Data Analyticsで human raw evaluation / median-based five-level evaluation / later outcome・discard を比較するためのデータである。
 - 旧 `ratingStatus` / `ratings` / `ratingScores` は「減りすぎ／残りすぎ」の旧評価で意味が異なるため再利用しない。これら旧rating系から人間評価を推測・補完しない。
-- 時間固定モードは本番19:00履歴を読み込まず、本番履歴・Supabase・本番日次データへ保存しないため、自動評価は履歴不足になる。
+- 時間固定モードのReview19は本番19:00履歴を読み込まず、本番Review19履歴・Supabase・本番日次データへ保存しないため、Review19側の自動評価は履歴不足になる。これは固定モードの通常値引で許可するAreaCount Supabase READ ONLYとは別経路である。
 
 ## 先取り値引済みエリア
 
@@ -260,4 +289,4 @@
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260816_STORAGE_SAFETY.md` を参照する。
+README記載の全 `check:*`（特に `check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260822_MEDIAN_SKIP_FIXED_READ_VERSION.md` を参照する。

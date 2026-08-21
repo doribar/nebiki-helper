@@ -79,6 +79,7 @@ import {
 } from "../domain/navigationHistory";
 import type { NavigationSnapshot } from "../domain/navigationHistory";
 import {
+  getCurrentAreaSkipDecision,
   getNextPendingCandidate,
   getPendingRemainingCount,
   getPendingResumeScreen,
@@ -146,6 +147,7 @@ import {
 import {
   loadRemoteAreaCountRecords,
 } from "../domain/areaCountRemoteStorage.ts";
+import { resolveAreaCountHistorySource } from "../domain/areaCountHistorySource.ts";
 import {
   AREA_COUNT_LOCAL_STORAGE_KEY,
   loadLegacySummerAreaCountRecords,
@@ -663,8 +665,23 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     let cancelled = false;
 
     if (isTestMode) {
-      setAreaCountRemoteLoadStatus("disabled");
+      // Fixed-time observations stay isolated, but the production Supabase
+      // AreaCount population is a read-only history source. Keep it only in
+      // memory: do not merge it into production localStorage and do not load
+      // Review19, whose fixed-time behavior remains fully isolated.
       setAreaCountRecords([]);
+      void Promise.all([
+        loadRemoteAreaCountRecords("normal"),
+        loadRemoteAreaCountRecords("summer"),
+      ]).then((areaResults) => {
+        if (cancelled) return;
+        const historySource = resolveAreaCountHistorySource({
+          mode: "fixed_time_readonly",
+          remoteResults: areaResults,
+        });
+        setAreaCountRemoteLoadStatus(historySource.remoteStatus);
+        setAreaCountRecords(cloneAreaCountRecords(historySource.records));
+      });
       return () => {
         cancelled = true;
       };
@@ -679,22 +696,14 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       if (cancelled) return;
 
       const areaResults = [normalArea, summerArea];
-      setAreaCountRemoteLoadStatus(
-        areaResults.some((result) => result.status === "error")
-          ? "error"
-          : areaResults.every((result) => result.status === "disabled")
-            ? "disabled"
-            : "ready",
-      );
-
-      const remoteAreaRecords = areaResults.flatMap((result) =>
-        result.status === "ready" ? result.records : [],
-      );
       const localAreaRecords = loadLocalAreaCountRecords();
-      const mergedAreaRecords = mergeAreaCountRecordCollections(
-        localAreaRecords,
-        remoteAreaRecords,
-      );
+      const historySource = resolveAreaCountHistorySource({
+        mode: "production",
+        localRecords: localAreaRecords,
+        remoteResults: areaResults,
+      });
+      setAreaCountRemoteLoadStatus(historySource.remoteStatus);
+      const mergedAreaRecords = historySource.records;
       const areaMergeSave = attemptStorageOperationWithAuxiliaryRecovery({
         key: AREA_COUNT_LOCAL_STORAGE_KEY,
         operation: "set",
@@ -3094,6 +3103,17 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function skipCurrentArea() {
+    if (!state.currentAreaId) return;
+
+    const skipDecision = getCurrentAreaSkipDecision({
+      areaProgressMap: state.areaProgressMap,
+      currentAreaId: state.currentAreaId,
+    });
+    if (!skipDecision.canSkip) {
+      setUndoNotice("他にスキップできるエリアがありません");
+      return;
+    }
+
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 

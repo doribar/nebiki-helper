@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-8",
+  "version": "2026.8.9-9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -43,7 +43,10 @@
     "check:session-completion-storage-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-session-completion-storage-safety.ts",
     "check:storage-write-boundary": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-storage-write-boundary.ts",
     "check:daily-session-snapshot-storage": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daily-session-snapshot-storage.ts",
-    "check:long-run-storage-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-long-run-storage-safety.ts"
+    "check:long-run-storage-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-long-run-storage-safety.ts",
+    "check:median-version-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-median-version-ui.ts",
+    "check:last-area-skip": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-last-area-skip.ts",
+    "check:fixed-time-supabase-read": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-fixed-time-supabase-read.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

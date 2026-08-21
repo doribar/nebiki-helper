@@ -26,6 +26,7 @@ import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx
 import { evaluationText } from "../../domain/areaCountHistory.ts";
 import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
 import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
+import type { MedianEvaluationDisplay } from "../../domain/medianEvaluationPresentation.ts";
 
 type RateDisplayScreenProps = {
   weekdayText: string;
@@ -48,6 +49,7 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
+  medianEvaluationDisplay?: MedianEvaluationDisplay | null;
   humanEvaluationDetails?: HumanEvaluationDetails;
   canOverrideAreaCountEvaluation?: boolean;
   onOverrideAreaCountEvaluation?: (selection: HumanEvaluationSelection) => void;
@@ -268,6 +270,7 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
+  medianEvaluationDisplay = null,
   humanEvaluationDetails,
   canOverrideAreaCountEvaluation = false,
   onOverrideAreaCountEvaluation,
@@ -332,6 +335,8 @@ export function RateDisplayScreen({
   ].join("|");
 
   useEffect(() => {
+    // Existing screen-change reset: keep the three related UI states in sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowSkipTargetPicker(false);
     setShowManualEvaluationOverride(false);
     setRateInstructionStepIndex(0);
@@ -439,6 +444,24 @@ export function RateDisplayScreen({
           }}
         >
           <div>{timeSwitchNotice}</div>
+        </section>
+      ) : null}
+
+      {!isFinalTime && medianEvaluationDisplay ? (
+        <section
+          aria-label="履歴中央値による自動判定"
+          style={{
+            border: "1px solid #bfdbfe",
+            borderRadius: 10,
+            padding: "9px 11px",
+            marginBottom: 12,
+            background: "#eff6ff",
+            color: "#1e3a8a",
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          中央値判定：<strong>{medianEvaluationDisplay.text}</strong>
         </section>
       ) : null}
 

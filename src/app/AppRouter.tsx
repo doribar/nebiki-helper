@@ -9,6 +9,7 @@ import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
 import { Review19Screen } from "../components/screens/Review19Screen";
 import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
+import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresentation.ts";
 import {
   isSummerModeAvailable,
   shouldShowSummerModeJudgeHint,
@@ -166,6 +167,11 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
+          medianEvaluationDisplay={buildMedianEvaluationDisplay(
+            state.currentAreaId
+              ? state.areaProgressMap[state.currentAreaId]
+              : undefined,
+          )}
           humanEvaluationDetails={
             state.currentAreaId
               ? state.areaProgressMap[state.currentAreaId]?.humanEvaluationDetails

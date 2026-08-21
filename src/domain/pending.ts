@@ -215,3 +215,43 @@ export function getSkipTargetOptions(params: {
       status: progress.status,
     }));
 }
+
+export type CurrentAreaSkipDecision =
+  | {
+      canSkip: true;
+      reason: "alternative_available";
+      alternatives: SkipTargetOption[];
+    }
+  | {
+      canSkip: false;
+      reason: "no_alternative_area";
+      alternatives: [];
+    };
+
+/**
+ * 「今はスキップ」が完了扱いにならないための事前判定。
+ *
+ * 現在エリア以外に未完了の移動先がある場合だけスキップを許可する。
+ * stateを変更しないpure decisionなので、呼び出し側はcanSkip=falseなら
+ * 現在画面に留まり、通知だけを表示できる。
+ */
+export function getCurrentAreaSkipDecision(params: {
+  areaProgressMap: Record<AreaId, AreaProgress>;
+  currentAreaId: AreaId;
+}): CurrentAreaSkipDecision {
+  const alternatives = getSkipTargetOptions(params);
+
+  if (alternatives.length === 0) {
+    return {
+      canSkip: false,
+      reason: "no_alternative_area",
+      alternatives: [],
+    };
+  }
+
+  return {
+    canSkip: true,
+    reason: "alternative_available",
+    alternatives,
+  };
+}
