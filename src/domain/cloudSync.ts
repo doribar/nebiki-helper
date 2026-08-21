@@ -3,7 +3,13 @@ import {
   normalizeAreaCountRecords,
   type AreaCountRecord,
 } from "./areaCountHistory.ts";
-import { upsertLocalAreaCountRecord } from "./areaCountLocalStorage.ts";
+import {
+  AREA_COUNT_LOCAL_STORAGE_KEY,
+  LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+  saveLegacySummerAreaCountRecordsMirror,
+  saveUnifiedAreaCountRecords,
+  upsertLocalAreaCountRecord,
+} from "./areaCountLocalStorage.ts";
 import { upsertRemoteAreaCountRecord } from "./areaCountRemoteStorage.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
 import {
@@ -15,15 +21,30 @@ import {
   enqueuePendingSupabaseSync,
   flushPendingSupabaseSyncQueue,
   loadPendingSupabaseSyncQueue,
+  PENDING_SUPABASE_SYNC_STORAGE_KEY,
   type FlushPendingSupabaseSyncResult,
   type PendingSupabaseSyncItem,
 } from "./supabaseSyncQueue.ts";
+import {
+  attemptStorageOperation,
+  attemptStorageOperationWithAuxiliaryRecovery,
+  reportStorageOperationFailures,
+  type StorageOperationResult,
+} from "./storage.ts";
 import type { Review19Result } from "./types.ts";
 
 export type CloudSyncStatus = {
   pendingCount: number;
   areaCountPendingCount: number;
   review19PendingCount: number;
+};
+
+export type AreaCountLocalFirstStorageResult = {
+  localSaved: boolean;
+  cloudQueuePrepared: boolean;
+  records: AreaCountRecord[];
+  localAttempts: StorageOperationResult[];
+  cloudQueueAttempts: StorageOperationResult[];
 };
 
 export function getReview19CloudIdentity(
@@ -61,6 +82,91 @@ export function persistAreaCountRecordLocalFirst(
     payload: canonicalRecord,
   });
   return nextLocalRecords;
+}
+
+/**
+ * AreaCount正本とcloud outboxを別々に確定し、どちらの失敗かを保持する。
+ * Quota時は再構築可能なruntime/checkpointだけを解放して各段階を1回再試行する。
+ */
+export function persistAreaCountRecordLocalFirstSafely(
+  record: AreaCountRecord,
+): AreaCountLocalFirstStorageResult {
+  const [normalized] = normalizeAreaCountRecords([record]);
+  if (!normalized) {
+    return {
+      localSaved: false,
+      cloudQueuePrepared: false,
+      records: [],
+      localAttempts: [],
+      cloudQueueAttempts: [],
+    };
+  }
+
+  let records: AreaCountRecord[] = [];
+  const local = attemptStorageOperationWithAuxiliaryRecovery({
+    key: AREA_COUNT_LOCAL_STORAGE_KEY,
+    operation: "set",
+    run: () => {
+      records = saveUnifiedAreaCountRecords([normalized]);
+    },
+  });
+  reportStorageOperationFailures("area-count-local-save", local.attempts);
+  if (!local.ok) {
+    return {
+      localSaved: false,
+      cloudQueuePrepared: false,
+      records,
+      localAttempts: local.attempts,
+      cloudQueueAttempts: [],
+    };
+  }
+
+  // v1 summer storage is a derived compatibility mirror. Its failure must not
+  // roll back a successful unified-v2 authoritative write or block the outbox.
+  const legacySummerMirror = attemptStorageOperation({
+    key: LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+    operation: "set",
+    run: () => saveLegacySummerAreaCountRecordsMirror(records),
+  });
+  reportStorageOperationFailures(
+    "area-count-legacy-summer-mirror",
+    [legacySummerMirror],
+  );
+  const localAttempts = [...local.attempts, legacySummerMirror];
+
+  const identity = getAreaCountRecordIdentity(normalized);
+  const canonicalRecord = records.find(
+    (candidate) => getAreaCountRecordIdentity(candidate) === identity,
+  );
+  if (!canonicalRecord) {
+    return {
+      localSaved: true,
+      cloudQueuePrepared: false,
+      records,
+      localAttempts,
+      cloudQueueAttempts: [],
+    };
+  }
+
+  const cloudQueue = attemptStorageOperationWithAuxiliaryRecovery({
+    key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
+    operation: "set",
+    run: () => {
+      enqueuePendingSupabaseSync({
+        type: "area_count",
+        identity,
+        payload: canonicalRecord,
+      });
+    },
+  });
+  reportStorageOperationFailures("area-count-cloud-enqueue", cloudQueue.attempts);
+  return {
+    localSaved: true,
+    cloudQueuePrepared: cloudQueue.ok,
+    records,
+    localAttempts,
+    cloudQueueAttempts: cloudQueue.attempts,
+  };
 }
 
 export function enqueueAreaCountRecordsForCloud(

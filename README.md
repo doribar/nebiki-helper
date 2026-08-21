@@ -29,6 +29,10 @@ npm run check:cycle-separated-export
 npm run check:analysis-metadata-ui
 npm run check:obon-calendar
 npm run check:review19-completion-safety
+npm run check:session-completion-storage-safety
+npm run check:storage-write-boundary
+npm run check:daily-session-snapshot-storage
+npm run check:long-run-storage-safety
 npm run build
 ```
 
@@ -44,16 +48,21 @@ npm run build
 - 広告商品は当日の売れ方にかかわらず、表示値引率から常に−10％です。
 - 定番商品−10％、夜によく売れる商品−10％、見た目が悪い商品＋10％、不人気商品＋10％は従来どおりです。
 
-## スキップ遷移と19:00チェック完了時の保存安全性
+## スキップ遷移と業務中storage保存の安全性
 
 - 「スキップ先を選ぶ」で移動したエリアをさらに「今はスキップ」しても、その操作直後に同じエリア自身を次候補として再選択しません。候補選択では現在エリアを先に除外してからmanual／fewの優先順位と経路方向を評価します。
 - スキップしたstatusは消さないため、別エリアを処理した後に後回しエリアへ戻る既存動作は維持します。現在エリア以外のpendingがなければ、既存の通常フロー候補へ進み、通常候補もなければ完了画面へ進みます。
 - skip recordは永続化用と純粋なin-memory用の2経路で、それぞれ同じidentityを1件へまとめます。コード上の2つの `cloneSkipRecord` 追加は別関数であり、同一操作を2回記録する重複バグではありません。
+- 通常sessionの完了、`daily-session-snapshots` 保存、15時→17時などの自動時刻遷移、20時30分の最終確定、AreaCount／Review19、Supabase pending、backfill、起動時mergeを含む業務中のstorage writeは、失敗を構造化結果として受け止めます。補助writeの例外をReact rootへ漏らして白画面化させません。
+- 自動時刻遷移では、補助的なdaily snapshotを安全に保存した後、その成否だけを理由に時刻到達通知と次session開始を中止しません。15時完了後もappのtimer／effectを維持し、17時到達時の既存ダイアログを表示できる構造です。
+- React StrictModeで同じ自動遷移effectが再実行されても、同一session・同一遷移先の通知と開始は1回だけです。開始に失敗した場合は再試行でき、手動遷移の挙動は変更しません。
+- `daily-session-snapshots` は単なるdebug cacheではありません。Review19／productionAnalysis／finalized day作成、temperature continuity、legacy export／backfillに使う中間業務証跡であり、当日や未確定日のsnapshotは削除しません。従来の最大120件に加え、localStorageのUTF-16 key＋value概算で1 MiBのsoft budgetを設け、正式なfinalized-day recordへ封印済みの古い日付groupだけを再構築可能な重複copyとして整理します。日付groupの途中だけを削除しません。
+- 容量不足時はAreaCount正式履歴、完成Review19、finalized day、未同期pending、進行中sessionを優先します。削除可能なのはnavigation/debug用runtimeと重複checkpoint、または正式recordへ封印済みのdaily snapshotだけです。quota時の再試行は1回に限定し、同じ操作を無限に繰り返しません。
 - 19:00チェックは、12エリアの完成recordを `nebiki-helper/review19-records` へ保存してからSupabase outboxを準備し、その後に `review19_done` へ遷移します。端末正本を保存できなければ完了扱いにせず、空き容量を確認して再試行できる案内を出します。
 - `localStorage.setItem()`／`removeItem()` の失敗は、key・操作・例外名・quota該当有無だけを構造化して扱います。record本文やcredentialはログへ出しません。補助保存の失敗を未処理例外としてReactまで伝播させず、画面全体の白画面化を防ぎます。
-- 容量不足時の保存優先順位は、完成Review19本体 → cloud pending → 完了済みcurrent-session → navigation/debug用runtimeと重複checkpointです。Review19本体またはpendingの保存がquotaで失敗した場合だけ、補助的なruntime historyとwork-session checkpointを解放して1回再試行します。通常容量では従来の復元情報を保存します。
 - Review19本体の保存後にcloud outboxだけ準備できなかった場合も、完成recordは保持し、管理設定の「端末内データをSupabaseへ同期」で再送できることを案内します。local-first、pending、retry、CAS、fixed-time隔離は変更しません。
-- 実端末の白画面発生時の例外ログとlocalStorage実使用量は取得できていません。未処理storage writeがReact更新後に発生し得たことはコード上の確定事実ですが、実端末で `QuotaExceededError` が発生したこと自体は高い整合性を持つ推定であり、確定診断とは区別します。
+- 静的checkは、raw `localStorage.setItem()`／`removeItem()` をレビュー済み低レベルmoduleだけにallowlistし、App／hook／component層のraw callを0件に固定します。`sessionStorage` のcalculator draft 3操作も従来どおり各操作内で例外を捕捉します。
+- 基準版の通常done effectと自動時刻遷移には、daily snapshotのraw writeが例外を上位へ漏らす経路があり、人工的な `QuotaExceededError` で再現しました。これは確定したコード上の不具合です。一方、実端末事故時のconsole例外とlocalStorage実使用量は取得できていないため、実端末でも同じ例外が発生したという部分は高い整合性を持つ推定であり、確定診断とは区別します。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -214,10 +223,10 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のスキップ候補選択とstorage失敗時の制御は保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。Obon、productionAnalysis、20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回のstorage境界、quota recovery、daily snapshot retentionは保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。Obon、productionAnalysis、20時30分の中央値5段階判定と最終値引tier、固定時間モードの隔離、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-7`
+- `appVersion`: `2026.8.9-8`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260815-173057-jst`
+- `buildId`: `build-20260821-091629-jst`

@@ -53,10 +53,10 @@ import {
   normalizeDailyMessageState,
   savePersistedNebikiStateWithAuxiliaryRecovery,
   saveWorkSessionCheckpointSafely,
-  clearWorkSessionCheckpoint,
   saveRuntimeStateSafely,
-  clearRuntimeState,
   attemptStorageOperation,
+  attemptStorageOperationWithAuxiliaryRecovery,
+  removeStorageKeySafely,
   reportStorageOperationFailures,
   STORAGE_KEYS,
   loadReview19Records,
@@ -66,7 +66,7 @@ import {
   clearReview19SourceState,
   getDailySessionSnapshotsForDate,
   loadDailySessionSnapshots,
-  upsertDailySessionSnapshot,
+  upsertDailySessionSnapshotSafely,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
@@ -104,6 +104,7 @@ import {
 } from "../domain/allDataExport.ts";
 import { getAutomaticDayExportFilename } from "../domain/dayExport.ts";
 import {
+  FINALIZED_DAY_DATA_STORAGE_KEY,
   initializeFinalizedDayData,
   loadFinalizedDayData,
   patchFinalizedDayDataMetadata,
@@ -146,6 +147,7 @@ import {
   loadRemoteAreaCountRecords,
 } from "../domain/areaCountRemoteStorage.ts";
 import {
+  AREA_COUNT_LOCAL_STORAGE_KEY,
   loadLegacySummerAreaCountRecords,
   loadLegacyNormalAreaCountRecords,
   loadLocalAreaCountRecords,
@@ -158,7 +160,7 @@ import {
   enqueueReview19RecordForCloud,
   flushCloudSyncQueue,
   getCloudSyncStatus,
-  persistAreaCountRecordLocalFirst,
+  persistAreaCountRecordLocalFirstSafely,
 } from "../domain/cloudSync.ts";
 import {
   loadPendingSupabaseSyncQueue,
@@ -266,6 +268,7 @@ import {
   resolveDemandCycleFromEvidence,
 } from "../domain/demandCycle.ts";
 import {
+  DEMAND_CYCLE_STORAGE_KEYS,
   loadFixedTimeDemandCycleState,
   loadDemandCycleState,
   lockDemandCycleForDate,
@@ -402,6 +405,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [weatherCorrectionRequestId, setWeatherCorrectionRequestId] =
     useState(0);
   const weatherConfirmationSubmittingRef = useRef(false);
+  const autoTransitionInFlightKeyRef = useRef<string | null>(null);
   const [nowMs, setNowMs] = useState(() => getRuntimeNowMs());
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
@@ -438,12 +442,59 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [demandCycleState, setDemandCycleState] = useState<DemandCycleState>(
     initialDemandCycleState,
   );
+
+  const persistDemandCycleStateSafely = useCallback((
+    nextState: DemandCycleState,
+    context: string,
+  ): boolean => {
+    const key = isTestMode
+      ? DEMAND_CYCLE_STORAGE_KEYS.fixedTimeState
+      : DEMAND_CYCLE_STORAGE_KEYS.state;
+    const run = () => {
+      if (isTestMode) {
+        saveFixedTimeDemandCycleState(nextState);
+      } else {
+        saveDemandCycleState(nextState);
+      }
+    };
+    // fixed-time mode must never clean up or rewrite production recovery keys.
+    const result = isTestMode
+      ? (() => {
+          const attempt = attemptStorageOperation({ key, operation: "set", run });
+          return { ok: attempt.ok, attempts: [attempt] };
+        })()
+      : attemptStorageOperationWithAuxiliaryRecovery({
+          key,
+          operation: "set",
+          run,
+        });
+    reportStorageOperationFailures(context, result.attempts);
+    return result.ok;
+  }, [isTestMode]);
   const [, setAreaCountRemoteLoadStatus] = useState<
     "loading" | "ready" | "disabled" | "error"
   >("loading");
   const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
     isTestMode ? [] : loadLocalAreaCountRecords()
   );
+
+  function persistAreaCountRecordSafely(
+    record: AreaCountRecord,
+  ): AreaCountRecord[] | null {
+    const result = persistAreaCountRecordLocalFirstSafely(record);
+    if (!result.localSaved) {
+      window.alert(
+        "端末データの保存容量が不足しているため、残数を確定できませんでした。空き容量を確認して、もう一度保存してください。",
+      );
+      return null;
+    }
+    if (!result.cloudQueuePrepared) {
+      window.alert(
+        "残数は端末に保存しましたが、クラウド同期の準備に失敗しました。管理設定の「端末内データをSupabaseへ同期」から再送してください。",
+      );
+    }
+    return result.records;
+  }
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
   const [finalizedDayDataVersion, setFinalizedDayDataVersion] = useState(0);
   const [cloudSyncVersion, setCloudSyncVersion] = useState(0);
@@ -452,6 +503,52 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     useState<SupabaseBackfillResult | null>(null);
   const lastFinalizedDayDataRef = useRef<StoredFinalizedDayData | null>(null);
   const review19CloudFingerprintRef = useRef<string | null>(null);
+
+  function persistFinalizedDayOperationSafely<T>(params: {
+    context: string;
+    run: () => T;
+  }): { ok: true; value: T } | { ok: false; value: null } {
+    const holder: { value?: T } = {};
+    const result = attemptStorageOperationWithAuxiliaryRecovery({
+      key: FINALIZED_DAY_DATA_STORAGE_KEY,
+      operation: "set",
+      run: () => {
+        holder.value = params.run();
+      },
+    });
+    reportStorageOperationFailures(params.context, result.attempts);
+    if (!result.ok || !("value" in holder)) {
+      window.alert(
+        "端末データの保存容量が不足しているため、1日データを確定できませんでした。空き容量を確認して、もう一度保存してください。",
+      );
+      return { ok: false, value: null };
+    }
+    return { ok: true, value: holder.value as T };
+  }
+
+  function persistReview19SourceStateSafely(
+    sourceState: AppState,
+    context: string,
+  ): boolean {
+    const result = attemptStorageOperationWithAuxiliaryRecovery({
+      key: STORAGE_KEYS.review19SourceState,
+      operation: "set",
+      run: () => saveReview19SourceState(cloneAppState(sourceState)),
+    });
+    reportStorageOperationFailures(context, result.attempts);
+    if (result.ok) return true;
+    window.alert(
+      "19時チェック用の復元データを端末へ保存できませんでした。空き容量を確認して、もう一度操作してください。",
+    );
+    return false;
+  }
+
+  function clearAuxiliarySessionStorageSafely(context: string): void {
+    reportStorageOperationFailures(context, [
+      removeStorageKeySafely(STORAGE_KEYS.workSessionCheckpoint),
+      removeStorageKeySafely(STORAGE_KEYS.runtimeState),
+    ]);
+  }
 
   const retryPendingCloudSync = useCallback(async () => {
     if (isTestMode) {
@@ -598,7 +695,17 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
         localAreaRecords,
         remoteAreaRecords,
       );
-      saveLocalAreaCountRecords(mergedAreaRecords);
+      const areaMergeSave = attemptStorageOperationWithAuxiliaryRecovery({
+        key: AREA_COUNT_LOCAL_STORAGE_KEY,
+        operation: "set",
+        run: () => {
+          saveLocalAreaCountRecords(mergedAreaRecords);
+        },
+      });
+      reportStorageOperationFailures(
+        "remote-area-count-merge",
+        areaMergeSave.attempts,
+      );
       setAreaCountRecords(cloneAreaCountRecords(mergedAreaRecords));
 
       const remoteReview19Records = [normalReview19, summerReview19].flatMap(
@@ -609,7 +716,17 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
           localRecords: loadReview19Records(),
           remoteRecords: remoteReview19Records,
         });
-        saveReview19Records(mergedReview19Records);
+        const reviewMergeSave = attemptStorageOperationWithAuxiliaryRecovery({
+          key: STORAGE_KEYS.review19Records,
+          operation: "set",
+          run: () => {
+            saveReview19Records(mergedReview19Records);
+          },
+        });
+        reportStorageOperationFailures(
+          "remote-review19-merge",
+          reviewMergeSave.attempts,
+        );
         setReview19RecordsVersion((version) => version + 1);
       }
     });
@@ -1456,7 +1573,13 @@ const lateSkipNotice = useMemo(() => {
     });
 
     if (snapshot) {
-      upsertDailySessionSnapshot(snapshot);
+      const snapshotWriteResult = upsertDailySessionSnapshotSafely(snapshot, {
+        protectedDate: snapshot.session.date,
+      });
+      reportStorageOperationFailures(
+        "daily-session-completion",
+        snapshotWriteResult.attempts,
+      );
     }
   }, [
     isTestMode,
@@ -1698,11 +1821,10 @@ const lateSkipNotice = useMemo(() => {
     }
     // 初期化時に期間外のsummerをnormalへ正規化済みでも、保存値自体を
     // normalへ戻して翌年7月に勝手にONへ復帰しないようにする。
-    if (isTestMode) {
-      saveFixedTimeDemandCycleState(nextDemandCycleState);
-    } else {
-      saveDemandCycleState(nextDemandCycleState);
-    }
+    persistDemandCycleStateSafely(
+      nextDemandCycleState,
+      "demand-cycle-season-normalization",
+    );
 
     setState((current) => {
       const draftNeedsUpdate =
@@ -1732,6 +1854,7 @@ const lateSkipNotice = useMemo(() => {
     demandCycleDate,
     demandCycleState,
     isTestMode,
+    persistDemandCycleStateSafely,
     summerModeAvailable,
   ]);
 
@@ -1749,11 +1872,10 @@ const lateSkipNotice = useMemo(() => {
       nextDemandCycleState.lockedCycle !== demandCycleState.lockedCycle
     ) {
       setDemandCycleState(nextDemandCycleState);
-      if (isTestMode) {
-        saveFixedTimeDemandCycleState(nextDemandCycleState);
-      } else {
-        saveDemandCycleState(nextDemandCycleState);
-      }
+      persistDemandCycleStateSafely(
+        nextDemandCycleState,
+        "demand-cycle-operation-lock",
+      );
     }
 
     setState((current) => {
@@ -1789,6 +1911,7 @@ const lateSkipNotice = useMemo(() => {
     demandCycleState,
     inferredOperationDemandCycle,
     isTestMode,
+    persistDemandCycleStateSafely,
   ]);
 
 
@@ -1982,11 +2105,10 @@ const lateSkipNotice = useMemo(() => {
     );
 
     setDemandCycleState(nextDemandCycleState);
-    if (isTestMode) {
-      saveFixedTimeDemandCycleState(nextDemandCycleState);
-    } else {
-      saveDemandCycleState(nextDemandCycleState);
-    }
+    persistDemandCycleStateSafely(
+      nextDemandCycleState,
+      "demand-cycle-user-change",
+    );
     setLastUsedSessionDraft((current) => ({
       ...current,
       demandCycle: normalizedNext,
@@ -2330,11 +2452,10 @@ const lateSkipNotice = useMemo(() => {
       activeDemandCycle,
     );
     setDemandCycleState(nextDemandCycleState);
-    if (isTestMode) {
-      saveFixedTimeDemandCycleState(nextDemandCycleState);
-    } else {
-      saveDemandCycleState(nextDemandCycleState);
-    }
+    persistDemandCycleStateSafely(
+      nextDemandCycleState,
+      "demand-cycle-session-lock",
+    );
     setLastUsedSessionDraft((current) => ({
       ...current,
       demandCycle: activeDemandCycle,
@@ -2542,14 +2663,18 @@ const lateSkipNotice = useMemo(() => {
     nextState: AppState;
     nextAreaCountRecords: AreaCountRecord[];
     exportedAt: string;
-  }): StoredFinalizedDayData | null {
+  }): { record: StoredFinalizedDayData | null; storageFailed: boolean } {
     const session = params.nextState.session;
-    if (isTestMode || !session || session.discountTime !== "20") return null;
+    if (isTestMode || !session || session.discountTime !== "20") {
+      return { record: null, storageFailed: false };
+    }
 
     const allFinalCountsEntered = NORMAL_ROUTE.every(
       (areaId) => typeof params.nextState.areaProgressMap[areaId]?.areaCount === "number",
     );
-    if (!allFinalCountsEntered) return null;
+    if (!allFinalCountsEntered) {
+      return { record: null, storageFailed: false };
+    }
 
     const completedAreaProgressMap = NORMAL_ROUTE.reduce((acc, areaId) => {
       const progress = params.nextState.areaProgressMap[areaId];
@@ -2616,9 +2741,18 @@ const lateSkipNotice = useMemo(() => {
       lateTimeBonus,
       doneSummaryItems: finalDoneSummaryItems,
     });
-    if (!finalSessionSnapshot) return null;
+    if (!finalSessionSnapshot) {
+      return { record: null, storageFailed: false };
+    }
 
-    upsertDailySessionSnapshot(finalSessionSnapshot);
+    const snapshotWriteResult = upsertDailySessionSnapshotSafely(
+      finalSessionSnapshot,
+      { protectedDate: session.date },
+    );
+    reportStorageOperationFailures(
+      "final-session-snapshot",
+      snapshotWriteResult.attempts,
+    );
     const sessions = [
       ...getDailySessionSnapshotsForDate(session.date).filter((snapshot) => {
         return !(
@@ -2644,18 +2778,26 @@ const lateSkipNotice = useMemo(() => {
         session.demandCycle,
       ),
     });
-    const result = params.nextState.finalizedDayRecordId
-      ? replaceFinalizedDayDataCore({
-          daySnapshot,
-          finalizedAt: params.exportedAt,
-        })
-      : initializeFinalizedDayData({
-          daySnapshot,
-          finalizedAt: params.exportedAt,
-        });
+    const finalizedWrite = persistFinalizedDayOperationSafely({
+      context: "finalized-day-save",
+      run: () =>
+        params.nextState.finalizedDayRecordId
+          ? replaceFinalizedDayDataCore({
+              daySnapshot,
+              finalizedAt: params.exportedAt,
+            })
+          : initializeFinalizedDayData({
+              daySnapshot,
+              finalizedAt: params.exportedAt,
+            }),
+    });
+    if (!finalizedWrite.ok) {
+      return { record: null, storageFailed: true };
+    }
+    const result = finalizedWrite.value;
     lastFinalizedDayDataRef.current = result.record;
     setFinalizedDayDataVersion((version) => version + 1);
-    return result.record;
+    return { record: result.record, storageFailed: false };
   }
 
 
@@ -2806,7 +2948,9 @@ const lateSkipNotice = useMemo(() => {
         ),
       };
 
-      nextAreaCountRecords = persistAreaCountRecordLocalFirst(nextRecord);
+      const savedAreaCountRecords = persistAreaCountRecordSafely(nextRecord);
+      if (!savedAreaCountRecords) return;
+      nextAreaCountRecords = savedAreaCountRecords;
       setAreaCountRecords(nextAreaCountRecords);
       setCloudSyncVersion((version) => version + 1);
       void retryPendingCloudSync();
@@ -2828,6 +2972,7 @@ const lateSkipNotice = useMemo(() => {
       nextAreaCountRecords,
       exportedAt: actionAt,
     });
+    if (finalizedDayData.storageFailed) return;
 
     setState((prev) => {
       const nextState = applyAreaJudgeSelection(
@@ -2840,8 +2985,8 @@ const lateSkipNotice = useMemo(() => {
         humanEvaluationDetails,
         normalizedStapleItemCount,
       );
-      return finalizedDayData
-        ? { ...nextState, finalizedDayRecordId: finalizedDayData.recordId }
+      return finalizedDayData.record
+        ? { ...nextState, finalizedDayRecordId: finalizedDayData.record.recordId }
         : nextState;
     });
   }
@@ -3335,7 +3480,8 @@ const lateSkipNotice = useMemo(() => {
           state.session.discountTime,
         ),
       };
-      const nextAreaCountRecords = persistAreaCountRecordLocalFirst(nextRecord);
+      const nextAreaCountRecords = persistAreaCountRecordSafely(nextRecord);
+      if (!nextAreaCountRecords) return;
       setAreaCountRecords(nextAreaCountRecords);
       setCloudSyncVersion((version) => version + 1);
       void retryPendingCloudSync();
@@ -3978,7 +4124,7 @@ const lateSkipNotice = useMemo(() => {
       preserveCurrentSession?: boolean;
       sourceState?: AppState;
     }
-  ) {
+  ): boolean {
     weatherConfirmationSubmittingRef.current = false;
     setWeatherConfirmationPending(null);
     const now = getRuntimeNow();
@@ -3992,7 +4138,14 @@ const lateSkipNotice = useMemo(() => {
       sourceState.session?.date === currentDate &&
       sourceState.session.discountTime === "17"
     ) {
-      saveReview19SourceState(cloneAppState(sourceState));
+      if (
+        !persistReview19SourceStateSafely(
+          sourceState,
+          "review19-source-before-time-transition",
+        )
+      ) {
+        return false;
+      }
     }
 
     const baseDraft = buildStartDefaultDraft(lastUsedSessionDraft);
@@ -4025,12 +4178,11 @@ const lateSkipNotice = useMemo(() => {
       setTimeSwitchTarget(targetDiscountTime);
       setUndoSnapshot(null);
       setUndoNotice(null);
-      return;
+      return true;
     }
 
     if (!isTestMode) {
-      clearWorkSessionCheckpoint();
-      clearRuntimeState();
+      clearAuxiliarySessionStorageSafely("session-transition-cleanup");
     }
     screenHistoryRef.current = [];
     previousRenderRef.current = null;
@@ -4041,6 +4193,7 @@ const lateSkipNotice = useMemo(() => {
     setTimeSwitchTarget(null);
     setUndoSnapshot(null);
     setUndoNotice(null);
+    return true;
   }
 
   function startNextDoneSession(options?: { autoTransition?: boolean }) {
@@ -4049,6 +4202,18 @@ const lateSkipNotice = useMemo(() => {
     const previousDiscountTime = state.session.discountTime;
     const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, new Date(nowMs));
     if (!nextInfo?.canStart) return;
+    const autoTransitionKey = options?.autoTransition
+      ? [
+          state.session.date,
+          state.session.startedAt,
+          previousDiscountTime,
+          nextInfo.targetDiscountTime,
+        ].join("|")
+      : null;
+    if (autoTransitionKey) {
+      if (autoTransitionInFlightKeyRef.current === autoTransitionKey) return;
+      autoTransitionInFlightKeyRef.current = autoTransitionKey;
+    }
     const transitionedAt = getRuntimeNow().toISOString();
     const sourceState = options?.autoTransition
       ? finalizeUnmeasuredAreasForAutoTransition(state, transitionedAt)
@@ -4066,7 +4231,14 @@ const lateSkipNotice = useMemo(() => {
         sessionEndReason: "auto_time_transition",
       });
       if (!isTestMode && interruptedSnapshot) {
-        upsertDailySessionSnapshot(interruptedSnapshot);
+        const snapshotWriteResult = upsertDailySessionSnapshotSafely(
+          interruptedSnapshot,
+          { protectedDate: interruptedSnapshot.session.date },
+        );
+        reportStorageOperationFailures(
+          "auto-time-transition-snapshot",
+          snapshotWriteResult.attempts,
+        );
       }
     }
 
@@ -4114,20 +4286,22 @@ const lateSkipNotice = useMemo(() => {
       ]);
     }
 
-    if (options?.autoTransition) {
+    // 20時30分も他の値引時刻と同じく、20:25から天候入力画面へ移動する。
+    // 21時の天気・気温・風速を確認してから最終値引へ進む。
+    const transitionOpened = openNextSessionInput(nextInfo.targetDiscountTime, {
+      preserveCurrentSession: prioritizeUnfinishedAreas,
+      sourceState,
+    });
+    if (autoTransitionKey && !transitionOpened) {
+      autoTransitionInFlightKeyRef.current = null;
+    }
+    if (options?.autoTransition && transitionOpened) {
       window.alert(buildAutoTimeSwitchDialogText({
         from: previousDiscountTime,
         to: nextInfo.targetDiscountTime,
         prioritizeUnfinishedAreas,
       }));
     }
-
-    // 20時30分も他の値引時刻と同じく、20:25から天候入力画面へ移動する。
-    // 21時の天気・気温・風速を確認してから最終値引へ進む。
-    openNextSessionInput(nextInfo.targetDiscountTime, {
-      preserveCurrentSession: prioritizeUnfinishedAreas,
-      sourceState,
-    });
   }
 
   function persistFinalizedDayMemo(
@@ -4143,10 +4317,16 @@ const lateSkipNotice = useMemo(() => {
           );
     if (!current || current.recordId !== recordId) return null;
 
-    const updated = patchFinalizedDayDataMetadataByRecordId({
-      recordId,
-      patch: { memo },
+    const persisted = persistFinalizedDayOperationSafely({
+      context: "finalized-day-memo",
+      run: () =>
+        patchFinalizedDayDataMetadataByRecordId({
+          recordId,
+          patch: { memo },
+        }),
     });
+    if (!persisted.ok) return null;
+    const updated = persisted.value;
     if (!updated || updated.recordId !== recordId) return null;
     lastFinalizedDayDataRef.current = updated;
     setFinalizedDayDataVersion((version) => version + 1);
@@ -4169,10 +4349,16 @@ const lateSkipNotice = useMemo(() => {
     );
     if (!existing) return;
 
-    const updated = patchFinalizedDayDataMetadata({
-      date: previousDate,
-      patch: { discardCount: count },
+    const persisted = persistFinalizedDayOperationSafely({
+      context: "finalized-day-discard-count",
+      run: () =>
+        patchFinalizedDayDataMetadata({
+          date: previousDate,
+          patch: { discardCount: count },
+        }),
     });
+    if (!persisted.ok) return;
+    const updated = persisted.value;
     if (!updated) return;
     if (lastFinalizedDayDataRef.current?.recordId === updated.recordId) {
       lastFinalizedDayDataRef.current = updated;
@@ -4431,11 +4617,60 @@ const lateSkipNotice = useMemo(() => {
       nowMs: nowMsForBackfill,
     });
 
-    saveLocalAreaCountRecords(collectedAreaRecords);
-    const queuedAreaCount = enqueueAreaCountRecordsForCloud(collectedAreaRecords);
+    const localBackfillSave = attemptStorageOperationWithAuxiliaryRecovery({
+      key: AREA_COUNT_LOCAL_STORAGE_KEY,
+      operation: "set",
+      run: () => {
+        saveLocalAreaCountRecords(collectedAreaRecords);
+      },
+    });
+    reportStorageOperationFailures(
+      "backfill-area-count-local-save",
+      localBackfillSave.attempts,
+    );
+    if (!localBackfillSave.ok) {
+      window.alert(
+        "端末データの保存容量が不足しているため、同期準備を完了できませんでした。空き容量を確認して再試行してください。",
+      );
+      const failedResult: SupabaseBackfillResult = {
+        detectedAreaCount: collectedAreaRecords.length,
+        detectedReview19Count: localReview19Records.length,
+        queuedCount: 0,
+        attemptedCount: 0,
+        succeededCount: 0,
+        failedCount: 0,
+        pendingCount: loadPendingSupabaseSyncQueue().length,
+        allSynced: false,
+      };
+      setLastBackfillResult(failedResult);
+      return failedResult;
+    }
+
+    let queuedAreaCount = 0;
+    const areaQueueSave = attemptStorageOperationWithAuxiliaryRecovery({
+      key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
+      operation: "set",
+      run: () => {
+        queuedAreaCount = enqueueAreaCountRecordsForCloud(collectedAreaRecords);
+      },
+    });
     let queuedReview19Count = 0;
-    for (const record of localReview19Records) {
-      if (enqueueReview19RecordForCloud(record)) queuedReview19Count += 1;
+    const reviewQueueSave = attemptStorageOperationWithAuxiliaryRecovery({
+      key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
+      operation: "set",
+      run: () => {
+        queuedReview19Count = 0;
+        for (const record of localReview19Records) {
+          if (enqueueReview19RecordForCloud(record)) queuedReview19Count += 1;
+        }
+      },
+    });
+    reportStorageOperationFailures("backfill-area-count-enqueue", areaQueueSave.attempts);
+    reportStorageOperationFailures("backfill-review19-enqueue", reviewQueueSave.attempts);
+    if (!areaQueueSave.ok || !reviewQueueSave.ok) {
+      window.alert(
+        "端末データは保持されていますが、クラウド同期の準備を一部完了できませんでした。空き容量を確認して再試行してください。",
+      );
     }
     setCloudSyncVersion((version) => version + 1);
 
@@ -4464,12 +4699,13 @@ const lateSkipNotice = useMemo(() => {
       state.session?.date === currentDate &&
       state.session.discountTime === "17"
     ) {
-      saveReview19SourceState(cloneAppState(state));
+      if (!persistReview19SourceStateSafely(state, "review19-source-before-reset")) {
+        return;
+      }
     }
 
     if (!isTestMode) {
-      clearWorkSessionCheckpoint();
-      clearRuntimeState();
+      clearAuxiliarySessionStorageSafely("app-reset-cleanup");
     }
     screenHistoryRef.current = [];
     previousRenderRef.current = null;

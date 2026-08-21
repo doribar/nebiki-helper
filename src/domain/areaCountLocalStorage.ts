@@ -4,6 +4,10 @@ import {
   normalizeAreaCountRecords,
   type AreaCountRecord,
 } from "./areaCountHistory.ts";
+import {
+  attemptStorageOperation,
+  reportStorageOperationFailures,
+} from "./storage.ts";
 
 export const AREA_COUNT_LOCAL_STORAGE_KEY =
   "nebiki-helper/area-count-records-v2" as const;
@@ -28,6 +32,12 @@ function resolveStorage(
   storage: AreaCountLocalStorage | null | undefined,
 ): AreaCountLocalStorage | null {
   return storage === undefined ? getDefaultStorage() : storage;
+}
+
+export function isAreaCountLocalStorageAvailable(
+  options: AreaCountLocalStorageOptions = {},
+): boolean {
+  return resolveStorage(options.storage) !== null;
 }
 
 function parseJson(raw: string | null): unknown {
@@ -84,7 +94,11 @@ export function loadLocalAreaCountRecords(
 export const loadAreaCountRecordsFromLocalStorage =
   loadLocalAreaCountRecords;
 
-export function saveLocalAreaCountRecords(
+/**
+ * Canonical AreaCount cache write. This is the authoritative local-first stage;
+ * compatibility mirrors must never change whether this write succeeded.
+ */
+export function saveUnifiedAreaCountRecords(
   records: readonly AreaCountRecord[],
   options: AreaCountLocalStorageOptions = {},
 ): AreaCountRecord[] {
@@ -97,17 +111,48 @@ export function saveLocalAreaCountRecords(
 
   if (storage) {
     storage.setItem(AREA_COUNT_LOCAL_STORAGE_KEY, JSON.stringify(merged));
-
-    const summerRecords = mergeAreaCountRecordCollections(
-      loadLegacySummerAreaCountRecords({ storage }),
-      merged.filter((record) => record.demandCycle === "summer"),
-    );
-    storage.setItem(
-      LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
-      JSON.stringify(summerRecords),
-    );
   }
 
+  return cloneAreaCountRecords(merged);
+}
+
+/**
+ * Best-effort compatibility copy for pre-unified summer readers. The unified
+ * v2 cache remains the source of truth even when this derived mirror fails.
+ */
+export function saveLegacySummerAreaCountRecordsMirror(
+  records: readonly AreaCountRecord[],
+  options: AreaCountLocalStorageOptions = {},
+): void {
+  const storage = resolveStorage(options.storage);
+  if (!storage) return;
+
+  const summerRecords = mergeAreaCountRecordCollections(
+    loadLegacySummerAreaCountRecords({ storage }),
+    normalizeAreaCountRecords(records).filter(
+      (record) => record.demandCycle === "summer",
+    ),
+  );
+  storage.setItem(
+    LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+    JSON.stringify(summerRecords),
+  );
+}
+
+export function saveLocalAreaCountRecords(
+  records: readonly AreaCountRecord[],
+  options: AreaCountLocalStorageOptions = {},
+): AreaCountRecord[] {
+  const merged = saveUnifiedAreaCountRecords(records, options);
+  const mirrorResult = attemptStorageOperation({
+    key: LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+    operation: "set",
+    run: () => saveLegacySummerAreaCountRecordsMirror(merged, options),
+  });
+  reportStorageOperationFailures(
+    "area-count-legacy-summer-mirror",
+    [mirrorResult],
+  );
   return cloneAreaCountRecords(merged);
 }
 

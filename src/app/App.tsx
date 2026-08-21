@@ -3,6 +3,10 @@ import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
 import { getCanonicalUrlForLegacyHash } from "../domain/fullMode";
 import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
+import {
+  removeStorageKeySafely,
+  reportStorageOperationFailures,
+} from "../domain/storage";
 
 type TestModeConfig = {
   now: Date;
@@ -280,8 +284,14 @@ export default function App() {
 
   useEffect(() => {
     // 旧簡易モード設定は移行後の処理分岐に使用せず、安全に破棄する。
-    window.localStorage.removeItem("nebiki-helper/app-mode-v1");
-    window.localStorage.removeItem("nebiki-helper/simple-mode-state-v1");
+    const legacyCleanupResults = [
+      "nebiki-helper/app-mode-v1",
+      "nebiki-helper/simple-mode-state-v1",
+    ].map(removeStorageKeySafely);
+    reportStorageOperationFailures(
+      "legacy-mode-storage-cleanup",
+      legacyCleanupResults,
+    );
   }, []);
 
   useEffect(() => {

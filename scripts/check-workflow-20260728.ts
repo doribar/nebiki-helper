@@ -94,7 +94,8 @@ test("先取りcount-only修正は通常値引へ変換せずlocal-first同期�
   assert.match(startBlock, /earlyDiscountResolution === "count_only"/);
   assert.match(startBlock, /"auto_skip_count_only"/);
   assert.match(startBlock, /"auto_skip_count"/);
-  assert.match(saveBlock, /persistAreaCountRecordLocalFirst\(nextRecord\)/);
+  assert.match(saveBlock, /persistAreaCountRecordSafely\(nextRecord\)/);
+  assert.match(saveBlock, /if \(!nextAreaCountRecords\) return/);
   assert.match(saveBlock, /retryPendingCloudSync\(\)/);
   assert.match(saveBlock, /areaCountCorrection\.mode === "auto_skip_count_only"/);
   assert.match(saveBlock, /screen: correction\.returnScreen/);

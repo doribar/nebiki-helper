@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-7",
+  "version": "2026.8.9-8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -39,7 +39,11 @@
     "check:analysis-metadata-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-analysis-metadata-ui.ts",
     "check:analysis-metadata": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-analysis-metadata.ts",
     "check:obon-calendar": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-obon-calendar.ts",
-    "check:review19-completion-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-completion-safety.ts"
+    "check:review19-completion-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-completion-safety.ts",
+    "check:session-completion-storage-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-session-completion-storage-safety.ts",
+    "check:storage-write-boundary": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-storage-write-boundary.ts",
+    "check:daily-session-snapshot-storage": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daily-session-snapshot-storage.ts",
+    "check:long-run-storage-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-long-run-storage-safety.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

@@ -104,8 +104,10 @@ test("3. 起動は詳細相当の単一AppRouterだけを使用", () => {
   assert.ok(appSource.includes("<AppRouter"));
 });
 test("4. 旧モード設定は起動時に除去する", () => {
-  assert.ok(appSource.includes('removeItem("nebiki-helper/app-mode-v1")'));
-  assert.ok(appSource.includes('removeItem("nebiki-helper/simple-mode-state-v1")'));
+  assert.ok(appSource.includes('"nebiki-helper/app-mode-v1"'));
+  assert.ok(appSource.includes('"nebiki-helper/simple-mode-state-v1"'));
+  assert.ok(appSource.includes(".map(removeStorageKeySafely)"));
+  assert.equal(appSource.includes("localStorage.removeItem"), false);
 });
 
 for (const [number, hash] of [[5, "#/step1"], [6, "#/step4"], [7, "#/step8"]] as const) {

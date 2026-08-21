@@ -23,6 +23,7 @@ import {
   chooseBestAnalysisWeatherContext,
   normalizeAnalysisCalendarContext,
 } from "./analysisMetadata.ts";
+import { FINALIZED_DAY_DATA_STORAGE_KEY } from "./finalizedDayData.ts";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
@@ -71,6 +72,43 @@ export type StorageOperationResult =
       quotaExceeded: boolean;
     };
 
+export type StorageOperationRecoveryResult = {
+  ok: boolean;
+  retried: boolean;
+  attempts: StorageOperationResult[];
+  finalResult: StorageOperationResult;
+};
+
+/**
+ * DailySessionSnapshot is a rich, reconstructable copy. Keep its localStorage
+ * footprint bounded so it cannot crowd out authoritative area/review/queue data.
+ *
+ * localStorage stores DOMString values. Counting UTF-16 code units (including
+ * the key) is deterministic and intentionally conservative across browsers.
+ */
+export const DAILY_SESSION_SNAPSHOT_MAX_RECORDS = 120;
+export const DAILY_SESSION_SNAPSHOT_BYTE_BUDGET = 1024 * 1024;
+
+export type DailySessionSnapshotRetentionResult = {
+  snapshots: DailySessionSnapshot[];
+  prunedCount: number;
+  retainedCount: number;
+  retainedApproxBytes: number;
+  protectedDateExceededBudget: boolean;
+  requiredHistoryExceededBudget: boolean;
+};
+
+export type DailySessionSnapshotWriteResult = {
+  ok: boolean;
+  quotaExceeded: boolean;
+  retried: boolean;
+  prunedCount: number;
+  retainedCount: number;
+  retainedApproxBytes: number;
+  failure: StorageOperationResult | null;
+  attempts: StorageOperationResult[];
+};
+
 function isQuotaExceededStorageError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { name?: unknown; code?: unknown };
@@ -106,6 +144,65 @@ export function attemptStorageOperation(params: {
       quotaExceeded: isQuotaExceededStorageError(error),
     };
   }
+}
+
+/**
+ * UI / hookから任意keyを削除するときもDOMExceptionをReactへ漏らさない境界。
+ * payloadを読み取らず、失敗結果だけを呼び出し側へ返す。
+ */
+export function removeStorageKeySafely(key: string): StorageOperationResult {
+  return attemptStorageOperation({
+    key,
+    operation: "remove",
+    run: () => localStorage.removeItem(key),
+  });
+}
+
+/**
+ * 正本または業務継続に必要な書き込み向けの共通境界。
+ * Quota時だけnavigation runtimeと重複checkpointを解放し、同じ操作を
+ * ちょうど1回再試行する。呼び出し操作はidempotentであること。
+ */
+export function attemptStorageOperationWithAuxiliaryRecovery(params: {
+  key: string;
+  operation: "set" | "remove";
+  run: () => void;
+}): StorageOperationRecoveryResult {
+  const guardedParams = {
+    ...params,
+    run: () => {
+      // Some domain writers keep SSR-compatible no-op behavior when storage is
+      // absent. A browser business-flow boundary must not mistake that no-op
+      // for an authoritative save.
+      if (typeof localStorage === "undefined") {
+        const error = new Error("localStorage is unavailable");
+        error.name = "StorageUnavailableError";
+        throw error;
+      }
+      void localStorage;
+      params.run();
+    },
+  };
+  const firstAttempt = attemptStorageOperation(guardedParams);
+  const attempts: StorageOperationResult[] = [firstAttempt];
+  if (firstAttempt.ok || !firstAttempt.quotaExceeded) {
+    return {
+      ok: firstAttempt.ok,
+      retried: false,
+      attempts,
+      finalResult: firstAttempt,
+    };
+  }
+
+  attempts.push(...releaseAuxiliaryStorageForReview19());
+  const retryAttempt = attemptStorageOperation(guardedParams);
+  attempts.push(retryAttempt);
+  return {
+    ok: retryAttempt.ok,
+    retried: true,
+    attempts,
+    finalResult: retryAttempt,
+  };
 }
 
 /**
@@ -503,6 +600,153 @@ function cloneDailySessionSnapshot(snapshot: DailySessionSnapshot): DailySession
   return cloned;
 }
 
+function compareDailySessionSnapshots(
+  left: DailySessionSnapshot,
+  right: DailySessionSnapshot,
+): number {
+  const dateCompare = left.session.date.localeCompare(right.session.date);
+  if (dateCompare !== 0) return dateCompare;
+  return left.capturedAt.localeCompare(right.capturedAt);
+}
+
+function serializeDailySessionSnapshots(
+  snapshots: readonly DailySessionSnapshot[],
+): string {
+  return JSON.stringify(snapshots.map(cloneDailySessionSnapshot));
+}
+
+/** localStorageのDOMString key/valueをUTF-16 code unit基準で概算する。 */
+export function estimateLocalStorageEntryBytes(
+  key: string,
+  value: string,
+): number {
+  return (key.length + value.length) * 2;
+}
+
+function estimateDailySessionSnapshotStorageBytes(
+  snapshots: readonly DailySessionSnapshot[],
+): number {
+  return estimateLocalStorageEntryBytes(
+    STORAGE_KEYS.dailySessionSnapshots,
+    serializeDailySessionSnapshots(snapshots),
+  );
+}
+
+function loadFinalizedDayDatesForSnapshotRetention(): Set<string> {
+  const parsed = safeParseJSON<unknown[]>(
+    localStorage.getItem(FINALIZED_DAY_DATA_STORAGE_KEY),
+    [],
+  );
+  if (!Array.isArray(parsed)) return new Set();
+
+  return new Set(
+    parsed.flatMap((candidate) => {
+      if (!candidate || typeof candidate !== "object") return [];
+      const record = candidate as {
+        version?: unknown;
+        date?: unknown;
+        sessions?: unknown;
+        areaCountRecords?: unknown;
+      };
+      return record.version === 1 &&
+          typeof record.date === "string" &&
+          Array.isArray(record.sessions) &&
+          Array.isArray(record.areaCountRecords)
+        ? [record.date]
+        : [];
+    }),
+  );
+}
+
+/**
+ * Keep complete date groups rather than arbitrary individual records. This
+ * prevents a retained 20:30 snapshot from looking like a complete day while
+ * its earlier session snapshots have already been removed.
+ *
+ * Protected and not-yet-finalized dates are a soft exception to both limits.
+ * The running business day's recovery/temperature inputs and the only legacy
+ * export/backfill fallback must not be discarded to satisfy a cache budget.
+ * Only dates sealed into finalized-day-data are prune candidates because that
+ * authoritative record contains the same session snapshots.
+ */
+export function retainDailySessionSnapshotsWithinBudget(
+  snapshots: readonly DailySessionSnapshot[],
+  options?: {
+    protectedDates?: readonly string[];
+    finalizedDates?: ReadonlySet<string>;
+    maxRecords?: number;
+    byteBudget?: number;
+  },
+): DailySessionSnapshotRetentionResult {
+  const sorted = snapshots
+    .map(cloneDailySessionSnapshot)
+    .sort(compareDailySessionSnapshots);
+  const protectedDates = new Set(options?.protectedDates ?? []);
+  const finalizedDates = options?.finalizedDates ?? new Set<string>();
+  const maxRecords = Math.max(
+    0,
+    Math.floor(options?.maxRecords ?? DAILY_SESSION_SNAPSHOT_MAX_RECORDS),
+  );
+  const byteBudget = Math.max(
+    0,
+    Math.floor(options?.byteBudget ?? DAILY_SESSION_SNAPSHOT_BYTE_BUDGET),
+  );
+  const groupsByDate = new Map<string, DailySessionSnapshot[]>();
+
+  for (const snapshot of sorted) {
+    const date = snapshot.session.date;
+    const group = groupsByDate.get(date) ?? [];
+    group.push(snapshot);
+    groupsByDate.set(date, group);
+  }
+
+  const protectedSnapshots = [...groupsByDate.entries()]
+    .filter(([date]) => protectedDates.has(date))
+    .flatMap(([, group]) => group)
+    .sort(compareDailySessionSnapshots);
+  const requiredSnapshots = [...groupsByDate.entries()]
+    .filter(
+      ([date]) => protectedDates.has(date) || !finalizedDates.has(date),
+    )
+    .flatMap(([, group]) => group)
+    .sort(compareDailySessionSnapshots);
+  let retained = requiredSnapshots;
+  const protectedDateExceededBudget =
+    protectedSnapshots.length > maxRecords ||
+    estimateDailySessionSnapshotStorageBytes(protectedSnapshots) > byteBudget;
+  const requiredHistoryExceededBudget =
+    requiredSnapshots.length > maxRecords ||
+    estimateDailySessionSnapshotStorageBytes(requiredSnapshots) > byteBudget;
+  const remainingGroups = [...groupsByDate.entries()]
+    .filter(
+      ([date]) => !protectedDates.has(date) && finalizedDates.has(date),
+    )
+    .map(([date, group]) => ({
+      date,
+      group,
+    }))
+    .sort((left, right) => {
+      return right.date.localeCompare(left.date);
+    });
+
+  for (const candidate of remainingGroups) {
+    if (retained.length + candidate.group.length > maxRecords) continue;
+    const next = [...retained, ...candidate.group].sort(compareDailySessionSnapshots);
+    if (estimateDailySessionSnapshotStorageBytes(next) > byteBudget) continue;
+    retained = next;
+  }
+
+  const retainedApproxBytes = estimateDailySessionSnapshotStorageBytes(retained);
+  return {
+    snapshots: retained.map(cloneDailySessionSnapshot),
+    prunedCount: Math.max(0, sorted.length - retained.length),
+    retainedCount: retained.length,
+    retainedApproxBytes,
+    protectedDateExceededBudget,
+    requiredHistoryExceededBudget,
+  };
+}
+
 function getDailySessionCompletionSignature(snapshot: DailySessionSnapshot): string {
   return JSON.stringify(
     Object.values(snapshot.areas)
@@ -544,14 +788,14 @@ export function loadDailySessionSnapshots(): DailySessionSnapshot[] {
 export function saveDailySessionSnapshots(snapshots: DailySessionSnapshot[]): void {
   localStorage.setItem(
     STORAGE_KEYS.dailySessionSnapshots,
-    JSON.stringify(snapshots.map(cloneDailySessionSnapshot))
+    serializeDailySessionSnapshots(snapshots),
   );
 }
 
-export function upsertDailySessionSnapshot(snapshot: DailySessionSnapshot): void {
-  if (!isDailySessionSnapshotDateConsistent(snapshot)) return;
-
-  const current = loadDailySessionSnapshots();
+function buildUpsertedDailySessionSnapshots(
+  current: readonly DailySessionSnapshot[],
+  snapshot: DailySessionSnapshot,
+): DailySessionSnapshot[] {
   const previous = current.find((item) =>
     item.session.date === snapshot.session.date &&
     item.session.discountTime === snapshot.session.discountTime &&
@@ -582,14 +826,125 @@ export function upsertDailySessionSnapshot(snapshot: DailySessionSnapshot): void
     }),
     snapshotToStore,
   ]
-    .sort((a, b) => {
-      const dateCompare = a.session.date.localeCompare(b.session.date);
-      if (dateCompare !== 0) return dateCompare;
-      return a.capturedAt.localeCompare(b.capturedAt);
-    })
-    .slice(-120);
+    .sort(compareDailySessionSnapshots);
+  return next;
+}
 
-  saveDailySessionSnapshots(next);
+export function upsertDailySessionSnapshotSafely(
+  snapshot: DailySessionSnapshot,
+  options?: { protectedDate?: string },
+): DailySessionSnapshotWriteResult {
+  if (!isDailySessionSnapshotDateConsistent(snapshot)) {
+    return {
+      ok: true,
+      quotaExceeded: false,
+      retried: false,
+      prunedCount: 0,
+      retainedCount: 0,
+      retainedApproxBytes: 0,
+      failure: null,
+      attempts: [],
+    };
+  }
+
+  const protectedDate = options?.protectedDate ?? snapshot.session.date;
+  let upserted: DailySessionSnapshot[] = [];
+  let retained: DailySessionSnapshotRetentionResult | null = null;
+  let finalizedDates = new Set<string>();
+  const preparationAttempt = attemptStorageOperation({
+    key: STORAGE_KEYS.dailySessionSnapshots,
+    operation: "set",
+    run: () => {
+      const current = loadDailySessionSnapshots();
+      upserted = buildUpsertedDailySessionSnapshots(current, snapshot);
+      finalizedDates = loadFinalizedDayDatesForSnapshotRetention();
+      retained = retainDailySessionSnapshotsWithinBudget(upserted, {
+        protectedDates: [protectedDate],
+        finalizedDates,
+      });
+    },
+  });
+
+  if (!preparationAttempt.ok || !retained) {
+    return {
+      ok: false,
+      quotaExceeded:
+        !preparationAttempt.ok && preparationAttempt.quotaExceeded,
+      retried: false,
+      prunedCount: 0,
+      retainedCount: 0,
+      retainedApproxBytes: 0,
+      failure: preparationAttempt,
+      attempts: [preparationAttempt],
+    };
+  }
+
+  const preparedRetention = retained as DailySessionSnapshotRetentionResult;
+  const firstAttempt = attemptStorageOperation({
+    key: STORAGE_KEYS.dailySessionSnapshots,
+    operation: "set",
+    run: () => saveDailySessionSnapshots(preparedRetention.snapshots),
+  });
+  const attempts: StorageOperationResult[] = [firstAttempt];
+
+  if (firstAttempt.ok) {
+    return {
+      ok: true,
+      quotaExceeded: false,
+      retried: false,
+      prunedCount: preparedRetention.prunedCount,
+      retainedCount: preparedRetention.retainedCount,
+      retainedApproxBytes: preparedRetention.retainedApproxBytes,
+      failure: null,
+      attempts,
+    };
+  }
+
+  if (!firstAttempt.quotaExceeded) {
+    return {
+      ok: false,
+      quotaExceeded: false,
+      retried: false,
+      prunedCount: preparedRetention.prunedCount,
+      retainedCount: preparedRetention.retainedCount,
+      retainedApproxBytes: preparedRetention.retainedApproxBytes,
+      failure: firstAttempt,
+      attempts,
+    };
+  }
+
+  // Quota recovery removes only reconstructable navigation/checkpoint copies,
+  // then retries once with the running business date's snapshots only.
+  attempts.push(...releaseAuxiliaryStorageForReview19());
+  const emergency = retainDailySessionSnapshotsWithinBudget(upserted, {
+    protectedDates: [protectedDate],
+    finalizedDates,
+    maxRecords: 0,
+    byteBudget: 0,
+  });
+  const retryAttempt = attemptStorageOperation({
+    key: STORAGE_KEYS.dailySessionSnapshots,
+    operation: "set",
+    run: () => saveDailySessionSnapshots(emergency.snapshots),
+  });
+  attempts.push(retryAttempt);
+
+  return {
+    ok: retryAttempt.ok,
+    quotaExceeded: true,
+    retried: true,
+    prunedCount: emergency.prunedCount,
+    retainedCount: emergency.retainedCount,
+    retainedApproxBytes: emergency.retainedApproxBytes,
+    failure: retryAttempt.ok ? null : retryAttempt,
+    attempts,
+  };
+}
+
+/** Compatibility wrapper. Business-flow callers should inspect the safe result. */
+export function upsertDailySessionSnapshot(snapshot: DailySessionSnapshot): void {
+  const result = upsertDailySessionSnapshotSafely(snapshot);
+  reportStorageOperationFailures("daily-session-snapshot", result.attempts);
 }
 
 export function getDailySessionSnapshotsForDate(date: string): DailySessionSnapshot[] {
@@ -648,18 +1003,23 @@ export function loadPersistedNebikiState(): PersistedNebikiState {
 export function loadPersistedNebikiStateForDate(date: string): PersistedNebikiState {
   const loaded = loadPersistedNebikiState();
   const sanitized = sanitizePersistedNebikiStateForDate(loaded, date);
+  const cleanupResults: StorageOperationResult[] = [];
 
   if (loaded.currentSession && !sanitized.currentSession) {
-    clearCurrentSession();
+    cleanupResults.push(removeStorageKeySafely(STORAGE_KEYS.currentSession));
   }
 
   if (loaded.workSessionCheckpoint && !sanitized.workSessionCheckpoint) {
-    clearWorkSessionCheckpoint();
+    cleanupResults.push(
+      removeStorageKeySafely(STORAGE_KEYS.workSessionCheckpoint),
+    );
   }
 
   if (loaded.runtimeState && !sanitized.runtimeState) {
-    clearRuntimeState();
+    cleanupResults.push(removeStorageKeySafely(STORAGE_KEYS.runtimeState));
   }
+
+  reportStorageOperationFailures("stale-session-cleanup", cleanupResults);
 
   return sanitized;
 }

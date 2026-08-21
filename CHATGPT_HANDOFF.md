@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-15（日本時間）
+最終更新: 2026-08-21（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,11 +11,11 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260813-2321.zip`
-- `appVersion`: `2026.8.9-7`
+- 作業基準ZIP: `nebiki-helper-20260815-1755.zip`
+- `appVersion`: `2026.8.9-8`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260815-173057-jst`
-- リリースZIP: `nebiki-helper-20260815-1755.zip`。確定した識別情報で再生成した `dist` を収録する。
+- `buildId`: `build-20260821-091629-jst`
+- リリースZIP: `nebiki-helper-20260821-0918.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
 
@@ -35,6 +35,23 @@
 - `storage.ts` にあるskip recordのpushは、永続化を行う関数と純粋なin-memory関数に各1回ある。連続した同一pushではなく、両経路ともidentity dedupeするためduplicate bugではない。今回この2つのpushは削除していない。
 - 通常の「次へ」、スキップ先選択、先取りスキップ、session resume、navigation history、doneSummary、Review19 excluded、fixed-time隔離は変更しない。
 
+## 業務中のstorage write安全性
+
+- 2026.8.9-7基準版では、通常sessionの `done` effectが `upsertDailySessionSnapshot()` を通じてraw `localStorage.setItem()` へ到達し、storage例外をReactへ漏らす経路があった。人工的な `QuotaExceededError` でこのthrowを再現した。実端末事故のconsole例外とquota使用量は未取得なので、実端末でも同じ例外だったことまでは確定扱いにしない。
+- 未処理例外がpassive effectからReact rootを停止させると白画面になり、30秒timer／focus監視も止まるため、15時完了後に17時自動遷移ダイアログが出ない実症状と整合する。さらに自動遷移経路自体も、alertと次session開始より前のdaily snapshot raw writeがthrowすると通知を中断する独立した欠陥を持っていた。
+- 2026.8.9-8では、通常session完了、daily snapshot、15→17／17→18:30／18:30→19:30等の自動遷移、20時30分最終確定、AreaCount／Review19、pending、backfill、起動時remote merge、demand cycle保存を安全なstorage boundaryへ通す。失敗は `ok`、key、set/remove、error name、quota該当有無のmetadataとして扱い、record本文・payload・credentialをログへ出さない。
+- 補助daily snapshotの保存失敗だけで時刻到達通知と次session開始を中止しない。正式なsession／AreaCount／finalized dayを保存できない場合は偽の完了へ進まず、ユーザーへ再試行可能な案内を出す。AreaCount正本を保存できてpendingだけ失敗した場合は正本を残し、管理設定のbackfillで再送可能にする。
+- 自動遷移は `date × startedAt × 遷移元 × 遷移先` のin-flight keyでStrictModeのeffect再実行を抑止し、同じ時刻到達alert／snapshot／session開始を二重実行しない。次session開始が失敗した時だけguardを解放して再試行可能にし、手動遷移は従来どおりguard対象外とする。
+- quota recoveryは、navigation/debug用 `runtime-state` と重複した `work-session-checkpoint` だけを先に解放し、対象writeを1回だけ再試行する。AreaCount正式履歴、Review19完成record、finalized day、未同期pending、進行中current-sessionをcleanup対象にしない。無限retryは行わない。
+- raw `localStorage.setItem()`／`removeItem()` はレビュー済み低レベルmoduleだけにallowlistする。`check:storage-write-boundary` はApp／hook／component層のraw callを0件に固定する。calculator draftの `sessionStorage` 3操作は各操作内で例外を捕捉済み。
+
+### daily-session-snapshotsの役割とretention
+
+- `nebiki-helper/daily-session-snapshots` は、Review19 daySnapshot、productionAnalysis、finalized day、temperature continuity、legacy export／backfillの入力となる中間業務証跡であり、常に捨てられるdebug cacheではない。
+- retentionは従来の最大120件に、UTF-16のlocalStorage key＋value概算1 MiB soft budgetを加える。snapshotは日付group単位で保持し、最新側を優先する。ただし現在営業日と、finalized-day recordへまだ封印されていない日付は両limitのsoft exceptionとして必ず保持する。
+- 容量整理の対象は、正式なfinalized-day recordへ同じsession群が保存済みの古い日付groupだけである。normal／summer、Obon、calendarContext、productionAnalysisをretention中に書き換えない。current／unfinalized、AreaCount、Review19、pendingは削除しない。
+- anonymous rich fixtureのUTF-16概算ではdaily snapshot 1件約66.1 KiB、30件約1.94 MiB、60件約3.87 MiB、120件約7.75 MiBだった。これは設計fixtureであり、実端末の正確な使用量ではない。長期fixtureでは80 snapshotが641.6 KiB、整理後のcurrent-day snapshotが160.1 KiBだった。
+
 ## Review19完了とstorage失敗の安全化
 
 - 最後の人間評価はReact state反映待ちに依存せずfinal buildへ明示的に渡し、12/12の `areaCounts` と `areaEvaluations` が揃った完成recordを1件だけ作る。
@@ -45,6 +62,7 @@
 - Review19本体は保存済みだがpending準備だけに失敗した場合、完成recordを捨てず、管理設定の手動backfillで再送するよう案内する。local-first、pending queue、retry、CAS、merge、partial/final、RLSは変更しない。
 - 確認済み事実: 基準版ではstate、checkpoint、runtime等の `localStorage` writeが未処理例外になり得た。`review19_done` component／routerと完成record shapeに直接のrender異常は確認されていない。実運用exportには12/12・completeのrecordが残っていた。
 - 実端末原因の扱い: 完成record保存後の補助writeでquota等がthrowし、Reactを白画面化させた経路は症状と強く整合する。ただし実端末の例外ログ／正確な使用量がないため、`QuotaExceededError` 発生自体は高確度の推定であり確定事実とはしない。
+- 2026.8.9-8の共通storage安全化でも、2026.8.9-7で導入した「完成Review19正本を最優先」「pendingは別段階」「local正本失敗時はdoneへ進まない」「pendingだけ失敗なら正本を維持」「同一identity duplicate防止」「reload後complete維持」を変更しない。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -242,4 +260,4 @@
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:logic`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の結果は `CHANGE_REPORT_20260815_SKIP_REVIEW19_WHITE_SCREEN.md` を参照する。
+README記載の全 `check:*`（特に `check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260816_STORAGE_SAFETY.md` を参照する。

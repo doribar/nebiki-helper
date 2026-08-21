@@ -14,6 +14,7 @@ import {
 import { collectAreaCountBackfillRecords } from "../src/domain/areaCountBackfill.ts";
 import {
   enqueueReview19RecordForCloud,
+  persistAreaCountRecordLocalFirstSafely,
   shouldReplaceQueuedReview19Record,
 } from "../src/domain/cloudSync.ts";
 import {
@@ -23,6 +24,7 @@ import {
   loadLegacyNormalAreaCountRecords,
   loadLegacySummerAreaCountRecords,
   loadLocalAreaCountRecords,
+  loadUnifiedAreaCountRecords,
   saveLocalAreaCountRecords,
   upsertLocalAreaCountRecord,
 } from "../src/domain/areaCountLocalStorage.ts";
@@ -375,6 +377,148 @@ await test("local-first retains the record when pending storage fails", () => {
       Object.defineProperty(globalThis, "localStorage", previousDescriptor);
     } else {
       Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
+});
+
+await test("safe local-first keeps the authoritative record when outbox quota persists", () => {
+  class PendingQuotaStorage extends MemoryStorage {
+    override setItem(key: string, value: string): void {
+      if (key === PENDING_SUPABASE_SYNC_STORAGE_KEY) {
+        throw new DOMException("pending quota", "QuotaExceededError");
+      }
+      super.setItem(key, value);
+    }
+  }
+
+  const storage = new PendingQuotaStorage();
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+  try {
+    const result = persistAreaCountRecordLocalFirstSafely(makeRecord());
+    assert.equal(result.localSaved, true);
+    assert.equal(result.cloudQueuePrepared, false);
+    assert.equal(result.records.length, 1);
+    assert.equal(loadLocalAreaCountRecords({ storage }).length, 1);
+    assert.equal(loadPendingSupabaseSyncQueue({ storage }).length, 0);
+    assert.equal(result.cloudQueueAttempts.filter((item) => item.operation === "set").length, 2);
+  } finally {
+    if (previousDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", previousDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
+});
+
+await test("summer mirrorだけがquotaでもunified正本を採用してoutboxへ進む", () => {
+  class MirrorOnlyQuotaStorage extends MemoryStorage {
+    mirrorWriteAttempts = 0;
+
+    override setItem(key: string, value: string): void {
+      if (key === LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY) {
+        this.mirrorWriteAttempts += 1;
+        throw new DOMException("summer mirror quota", "QuotaExceededError");
+      }
+      super.setItem(key, value);
+    }
+  }
+
+  const storage = new MirrorOnlyQuotaStorage();
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+  try {
+    const summerRecord = makeRecord({ demandCycle: "summer" });
+    const result = persistAreaCountRecordLocalFirstSafely(summerRecord);
+
+    assert.equal(result.localSaved, true);
+    assert.equal(result.cloudQueuePrepared, true);
+    assert.equal(result.records.length, 1);
+    assert.equal(result.records[0]?.demandCycle, "summer");
+    assert.equal(storage.mirrorWriteAttempts, 1);
+    assert.equal(loadUnifiedAreaCountRecords({ storage }).length, 1);
+    assert.equal(loadLegacySummerAreaCountRecords({ storage }).length, 0);
+    assert.equal(loadPendingSupabaseSyncQueue({ storage }).length, 1);
+    assert.equal(
+      result.localAttempts.some(
+        (attempt) =>
+          attempt.key === LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY &&
+          !attempt.ok &&
+          attempt.quotaExceeded,
+      ),
+      true,
+    );
+    assert.equal(
+      warnings.some(
+        (args) =>
+          (args[1] as { context?: unknown } | undefined)?.context ===
+          "area-count-legacy-summer-mirror",
+      ),
+      true,
+    );
+  } finally {
+    console.warn = originalWarn;
+    if (previousDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", previousDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
+});
+
+await test("safe local-first never queues when the authoritative cache cannot be saved", () => {
+  class AreaQuotaStorage extends MemoryStorage {
+    override setItem(key: string, value: string): void {
+      if (key === AREA_COUNT_LOCAL_STORAGE_KEY) {
+        throw new DOMException("area quota", "QuotaExceededError");
+      }
+      super.setItem(key, value);
+    }
+  }
+
+  const storage = new AreaQuotaStorage();
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+  try {
+    const result = persistAreaCountRecordLocalFirstSafely(makeRecord());
+    assert.equal(result.localSaved, false);
+    assert.equal(result.cloudQueuePrepared, false);
+    assert.equal(result.localAttempts.filter((item) => item.operation === "set").length, 2);
+    assert.equal(loadPendingSupabaseSyncQueue({ storage }).length, 0);
+  } finally {
+    if (previousDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", previousDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
+});
+
+await test("safe local-firstはstorage不在を正本保存成功として扱わない", () => {
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Reflect.deleteProperty(globalThis, "localStorage");
+  try {
+    const result = persistAreaCountRecordLocalFirstSafely(makeRecord());
+    assert.equal(result.localSaved, false);
+    assert.equal(result.cloudQueuePrepared, false);
+    assert.equal(result.localAttempts.some((attempt) => !attempt.ok), true);
+  } finally {
+    if (previousDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", previousDescriptor);
     }
   }
 });
@@ -988,9 +1132,15 @@ await test("hook integration is local-first, fixed-isolated, and retry-safe", ()
   assert.ok(hookSource.includes('window.addEventListener("online", retry)'));
   assert.ok(hookSource.includes('window.removeEventListener("online", retry)'));
   assert.equal(
-    hookSource.match(/persistAreaCountRecordLocalFirst\(/g)?.length,
-    2,
+    hookSource.match(/persistAreaCountRecordLocalFirstSafely\(/g)?.length,
+    1,
   );
+  assert.equal(
+    hookSource.includes("persistAreaCountRecordLocalFirst(nextRecord)"),
+    false,
+  );
+  assert.ok(cloudSource.includes("cloudQueuePrepared"));
+  assert.ok(cloudSource.includes("area-count-cloud-enqueue"));
   assert.ok(settingsSource.includes("端末内データをSupabaseへ同期"));
   assert.ok(settingsSource.includes("result.allSynced"));
   assert.ok(settingsSource.includes("未同期 0件"));
