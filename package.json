@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-9",
+  "version": "2026.8.9-10",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -46,7 +46,8 @@
     "check:long-run-storage-safety": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-long-run-storage-safety.ts",
     "check:median-version-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-median-version-ui.ts",
     "check:last-area-skip": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-last-area-skip.ts",
-    "check:fixed-time-supabase-read": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-fixed-time-supabase-read.ts"
+    "check:fixed-time-supabase-read": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-fixed-time-supabase-read.ts",
+    "check:initial-weather-focus": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-initial-weather-focus.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

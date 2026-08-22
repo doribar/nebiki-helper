@@ -36,6 +36,7 @@ npm run check:long-run-storage-safety
 npm run check:median-version-ui
 npm run check:last-area-skip
 npm run check:fixed-time-supabase-read
+npm run check:initial-weather-focus
 npx tsc -b --pretty false
 npm run build
 ```
@@ -45,6 +46,7 @@ npm run build
 - 操作フローは従来の詳細モード相当の1種類です。簡易モードとモード切替はありません。
 - 15時・17時・18時30分・19時30分・20時30分の値引フロー、19時チェック、自動時刻遷移、早め次時刻−5％を維持しています。
 - 天候入力は16時〜21時です。15時値引そのものは維持し、15時専用の天候欄だけを廃止しています。
+- fresh起動直後は最初の天候欄へ自動スクロールせず、タイトル、appVersion、夏季モードを画面上部で確認できます。最初の欄を確定した後は、次の時刻へ進む既存の自動スクロールを維持します。条件編集resumeと自動時刻遷移では既存の初回スクロールを維持します。
 - 天候入力の確認表は、天気記号の行名だけを「天気」と表示します。内部の天候データ名・計算・保存形式は変更していません。
 - エリアの残数評価は5つの基準ボタンを維持し、長押し時だけ隣接項目との中間を選べる9段階入力です。曜日グループ、祝前日、三連休中日、翌日平日祝日のロジックは維持しています。
 - 20時30分は従来の最終残数入力と1個・2個・3個以上ルールを維持し、5択の人間評価UIがないため9段階入力の対象外です。
@@ -234,12 +236,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回の表示、skip guard、fixed-time READ ONLY sourceは保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。Obon、productionAnalysis、20時30分の中央値5段階判定と最終値引tier、storage safety、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回のfresh起動時scroll gateは保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値表示、last-area skip、fixed-time READ ONLY、Obon、productionAnalysis、20時30分、storage safety、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-9`
+- `appVersion`: `2026.8.9-10`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260822-031104-jst`
+- `buildId`: `build-20260822-173017-jst`
 
-今回の実装・検証結果は `CHANGE_REPORT_20260822_MEDIAN_SKIP_FIXED_READ_VERSION.md` を参照してください。
+今回の実装・検証結果は `CHANGE_REPORT_20260822_INITIAL_WEATHER_FOCUS.md` を参照してください。

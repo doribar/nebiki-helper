@@ -28,6 +28,7 @@ import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { WeatherConfirmationPanel } from "./WeatherConfirmationPanel";
 import { APP_VERSION } from "../../domain/dataVersion.ts";
+import { shouldAutoScrollWeatherInputTarget } from "../../domain/weatherInputAutoAdvance.ts";
 
 type StartScreenProps = {
   sessionDraft: SessionDraft;
@@ -463,6 +464,8 @@ export function StartScreen({
     `${isFixedTimeMode ? "fixed" : "normal"}:${sessionDraft.date}:${sessionDraft.discountTime}`,
   );
   const hourlyFieldRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const hasUserAdvancedWeatherInputRef = useRef(false);
+  const lastAutoScrolledWeatherTargetKeyRef = useRef<string | null>(null);
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
   const [discardPanelOpen, setDiscardPanelOpen] = useState(false);
   const [discardCountText, setDiscardCountText] = useState("");
@@ -553,6 +556,8 @@ export function StartScreen({
     previousWeatherCorrectionRequestIdRef.current = weatherCorrectionRequestId;
 
     if (previousRequestId === weatherCorrectionRequestId) return;
+    hasUserAdvancedWeatherInputRef.current = true;
+    lastAutoScrolledWeatherTargetKeyRef.current = null;
     setConfirmedInputs(createCorrectionConfirmationMap(fieldOrder));
   }, [fieldOrder, weatherCorrectionRequestId]);
 
@@ -560,6 +565,18 @@ export function StartScreen({
     if (!currentUnlockTarget) return;
 
     const key = `${currentUnlockTarget.field}-${currentUnlockTarget.hour}`;
+    if (
+      !shouldAutoScrollWeatherInputTarget({
+        isContinuationEntry: Boolean(startButtonLabel),
+        hasUserAdvanced: hasUserAdvancedWeatherInputRef.current,
+        targetKey: key,
+        lastScrolledTargetKey:
+          lastAutoScrolledWeatherTargetKeyRef.current,
+      })
+    ) {
+      return;
+    }
+
     const target = hourlyFieldRefs.current[key];
     if (!target) return;
 
@@ -569,10 +586,11 @@ export function StartScreen({
         block: "center",
         inline: "center",
       });
+      lastAutoScrolledWeatherTargetKeyRef.current = key;
     }, 80);
 
     return () => window.clearTimeout(timer);
-  }, [currentUnlockTarget]);
+  }, [currentUnlockTarget, startButtonLabel]);
 
   useEffect(() => {
     const wasAllRequiredInputsConfirmed =
@@ -640,6 +658,7 @@ export function StartScreen({
     }
 
     if (shouldConfirm) {
+      hasUserAdvancedWeatherInputRef.current = true;
       setConfirmedInputs((current) => ({
         ...current,
         [hour]: {

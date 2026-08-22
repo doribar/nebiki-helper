@@ -11,10 +11,10 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260821-0918.zip`
-- `appVersion`: `2026.8.9-9`
+- 作業基準ZIP: `nebiki-helper-20260822-0318.zip`
+- `appVersion`: `2026.8.9-10`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260822-031104-jst`
+- `buildId`: `build-20260822-173017-jst`
 - リリースZIP: この文書と同梱された `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
@@ -27,6 +27,21 @@
 - 20時30分は従来の最終残数入力と1個・2個・3個以上ルールを維持する。既存5択の人間評価UIがないため、今回の9段階入力は適用しない。
 - 天候確認表の天気記号行は「天気」と表示する。見出しや他画面を一括置換せず、内部のweather field・計算・保存形式は変更しない。
 - エリア残数判定側の「迷ったら…」は削除済み。個別商品の量判断側の「迷ったら…」は維持する。
+
+## Initial weather focus
+
+アプリを開いた直後は、最初の天候入力欄（現行15時準備では16時）へ自動focus／自動scrollしない。起動直後は画面上部をそのまま表示し、appVersionやsummer / normal状態をユーザーが確認できるようにする。
+
+最初の天候入力をユーザーが完了した後は、次の時刻へ従来どおり自動scrollする。
+
+```text
+起動 → focus・自動scrollなし
+16時入力 → 17時へ自動scroll
+17時入力 → 18時へ自動scroll
+以降も従来どおり
+```
+
+基準版にDOMの `autoFocus`／`.focus()` はなく、旧問題の実体はmount約80ms後の `scrollIntoView()`だった。fresh startだけを既存の `startButtonLabel` で区別して抑止し、条件編集resumeと自動時刻遷移では既存の初回scrollを維持する。値引率、中央値判定、fixed-time READ ONLY、last-area skip、storage safety等の既存仕様は変更しない。
 
 ## 中央値判定表示とバージョンUI
 
@@ -289,4 +304,4 @@ Storage:
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260822_MEDIAN_SKIP_FIXED_READ_VERSION.md` を参照する。
+README記載の全 `check:*`（特に `check:initial-weather-focus`、`check:weather-confirmation`、`check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260822_INITIAL_WEATHER_FOCUS.md` を参照する。
