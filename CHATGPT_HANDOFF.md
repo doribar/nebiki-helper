@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-22（日本時間）
+最終更新: 2026-08-24（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,10 +11,10 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260822-0318.zip`
-- `appVersion`: `2026.8.9-10`
+- 作業基準ZIP: `nebiki-helper-20260822-1736.zip`
+- `appVersion`: `2026.8.9-11`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260822-173017-jst`
+- `buildId`: `build-20260824-203336-jst`
 - リリースZIP: この文書と同梱された `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 現行フロー
@@ -106,6 +106,22 @@ Storage:
 - 確認済み事実: 基準版ではstate、checkpoint、runtime等の `localStorage` writeが未処理例外になり得た。`review19_done` component／routerと完成record shapeに直接のrender異常は確認されていない。実運用exportには12/12・completeのrecordが残っていた。
 - 実端末原因の扱い: 完成record保存後の補助writeでquota等がthrowし、Reactを白画面化させた経路は症状と強く整合する。ただし実端末の例外ログ／正確な使用量がないため、`QuotaExceededError` 発生自体は高確度の推定であり確定事実とはしない。
 - 2026.8.9-8の共通storage安全化でも、2026.8.9-7で導入した「完成Review19正本を最優先」「pendingは別段階」「local正本失敗時はdoneへ進まない」「pendingだけ失敗なら正本を維持」「同一identity duplicate防止」「reload後complete維持」を変更しない。
+
+## Review19 storage diagnostics
+
+2026.8.9-11では、Review19の端末正本保存に失敗した場合、一律に「端末の空き容量」と案内せず、storage safety layerが捕捉した実際の `errorName`、set/remove操作、quota該当有無、stage別の再試行結果を画面へ表示する。
+
+```text
+エラー：QuotaExceededError
+エラー：SecurityError
+```
+
+- 表示対象はstorage metadataだけで、Review19本文、12エリアpayload、商品本文、error message、localStorage全内容、credentialを表示・console出力しない。安全な短いerror nameとして扱えない値は `UnknownError` とする。
+- `QuotaExceededError` の場合だけ、このアプリで使えるブラウザ保存領域の上限に達した可能性を説明する。Android端末本体の空き容量不足とは断定しない。`SecurityError` もアクセス拒否という捕捉事実だけを示し、Chrome／PWA／端末設定などの原因を推測しない。
+- Review19 authoritative save失敗時は従来どおりdoneへ進まず、12/12入力、human raw9、productionAnalysis材料、daySnapshotをReact stateに保持して再試行可能とする。
+- pendingだけ失敗した場合はauthoritative local save failureと区別し、端末正本が保存済みであることとbackfill可能であることを表示する。正本を削除せず、`review19_done`への既存遷移を維持する。
+- 正本とpendingのattempt列は別々に保持し、どちらのstageでretryしたかを混同しない。2026.8.9-8のquota recovery、補助runtime/checkpointだけのcleanup、1 attempt内最大1回retry、authoritative data保護は変更しない。
+- 今回のreleaseでは実端末エラーの原因を確定扱いにせず、retention、cleanup対象、保存形式を追加変更しない。次回実端末で表示されたerrorNameを確認してから、必要な根本対策を別途判断する。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -304,4 +320,4 @@ Storage:
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:initial-weather-focus`、`check:weather-confirmation`、`check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:review19-completion-safety`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260822_INITIAL_WEATHER_FOCUS.md` を参照する。
+README記載の全 `check:*`（特に `check:review19-storage-diagnostics`、`check:review19-completion-safety`、`check:initial-weather-focus`、`check:weather-confirmation`、`check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260824_REVIEW19_STORAGE_DIAGNOSTICS.md` を参照する。

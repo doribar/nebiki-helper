@@ -178,12 +178,12 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  // 2026.8.9-9: reviewed fixed-time READ-only history branch and
-  // last-area skip guard are now part of the intentionally locked facade.
-  assert.equal(body.length, 148766);
+  // 2026.8.9-11: reviewed Review19 storage diagnostic wiring is now part of
+  // the intentionally locked facade. Save ordering and completion gates remain locked.
+  assert.equal(body.length, 149273);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "fb876fcd79f4d1e7f06e6dc4a2a5c9cc0b7f26b0ba8fa12c37a8612e61ae2eeb",
+    "be8c0f3927afc57e6546da8ff03f458d1a84605f61100ed06bc1ac34d7aea497",
   );
   assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 22);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);

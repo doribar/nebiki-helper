@@ -29,6 +29,7 @@ npm run check:cycle-separated-export
 npm run check:analysis-metadata-ui
 npm run check:obon-calendar
 npm run check:review19-completion-safety
+npm run check:review19-storage-diagnostics
 npm run check:session-completion-storage-safety
 npm run check:storage-write-boundary
 npm run check:daily-session-snapshot-storage
@@ -71,9 +72,10 @@ npm run build
 - React StrictModeで同じ自動遷移effectが再実行されても、同一session・同一遷移先の通知と開始は1回だけです。開始に失敗した場合は再試行でき、手動遷移の挙動は変更しません。
 - `daily-session-snapshots` は単なるdebug cacheではありません。Review19／productionAnalysis／finalized day作成、temperature continuity、legacy export／backfillに使う中間業務証跡であり、当日や未確定日のsnapshotは削除しません。従来の最大120件に加え、localStorageのUTF-16 key＋value概算で1 MiBのsoft budgetを設け、正式なfinalized-day recordへ封印済みの古い日付groupだけを再構築可能な重複copyとして整理します。日付groupの途中だけを削除しません。
 - 容量不足時はAreaCount正式履歴、完成Review19、finalized day、未同期pending、進行中sessionを優先します。削除可能なのはnavigation/debug用runtimeと重複checkpoint、または正式recordへ封印済みのdaily snapshotだけです。quota時の再試行は1回に限定し、同じ操作を無限に繰り返しません。
-- 19:00チェックは、12エリアの完成recordを `nebiki-helper/review19-records` へ保存してからSupabase outboxを準備し、その後に `review19_done` へ遷移します。端末正本を保存できなければ完了扱いにせず、空き容量を確認して再試行できる案内を出します。
-- `localStorage.setItem()`／`removeItem()` の失敗は、key・操作・例外名・quota該当有無だけを構造化して扱います。record本文やcredentialはログへ出しません。補助保存の失敗を未処理例外としてReactまで伝播させず、画面全体の白画面化を防ぎます。
-- Review19本体の保存後にcloud outboxだけ準備できなかった場合も、完成recordは保持し、管理設定の「端末内データをSupabaseへ同期」で再送できることを案内します。local-first、pending、retry、CAS、fixed-time隔離は変更しません。
+- 19:00チェックは、12エリアの完成recordを `nebiki-helper/review19-records` へ保存してからSupabase outboxを準備し、その後に `review19_done` へ遷移します。端末正本を保存できなければ完了扱いにせず、入力stateを保持したまま、保存先・操作・実際の `errorName`・quota該当有無・再試行結果をalertへ表示します。
+- `QuotaExceededError` のときだけ、このアプリで利用できるブラウザ保存領域の上限に達した可能性を説明し、Android端末本体の空き容量不足とは断定しません。`SecurityError` は保存領域へのアクセス拒否として表示し、それ以外や安全に表示できない名前は推測せず `UnknownError` へ正規化します。
+- `localStorage.setItem()`／`removeItem()` の失敗は、key・操作・例外名・quota該当有無だけを構造化して扱います。Review19本文、12エリアpayload、error message、credentialは画面やconsoleへ出しません。正本とpendingのattempt列を分け、どちらが再試行されたかを混同しません。
+- Review19本体の保存後にcloud outboxだけ準備できなかった場合は、端末正本失敗とは異なる保存先として診断表示し、完成recordを保持します。管理設定の「端末内データをSupabaseへ同期」からbackfillできます。local-first、pending、retry、CAS、fixed-time隔離は変更しません。
 - 静的checkは、raw `localStorage.setItem()`／`removeItem()` をレビュー済み低レベルmoduleだけにallowlistし、App／hook／component層のraw callを0件に固定します。`sessionStorage` のcalculator draft 3操作も従来どおり各操作内で例外を捕捉します。
 - 基準版の通常done effectと自動時刻遷移には、daily snapshotのraw writeが例外を上位へ漏らす経路があり、人工的な `QuotaExceededError` で再現しました。これは確定したコード上の不具合です。一方、実端末事故時のconsole例外とlocalStorage実使用量は取得できていないため、実端末でも同じ例外が発生したという部分は高い整合性を持つ推定であり、確定診断とは区別します。
 
@@ -236,12 +238,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のfresh起動時scroll gateは保存schemaを変更せず、既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値表示、last-area skip、fixed-time READ ONLY、Obon、productionAnalysis、20時30分、storage safety、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回のReview19 storage診断は完了attempt中だけの一時metadataで、正式recordやexport schemaを変更しません。既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。quota recovery、retention、中央値表示、last-area skip、initial weather scroll、fixed-time READ ONLY、Obon、productionAnalysis、20時30分、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-10`
+- `appVersion`: `2026.8.9-11`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260822-173017-jst`
+- `buildId`: `build-20260824-203336-jst`
 
-今回の実装・検証結果は `CHANGE_REPORT_20260822_INITIAL_WEATHER_FOCUS.md` を参照してください。
+今回の実装・検証結果は `CHANGE_REPORT_20260824_REVIEW19_STORAGE_DIAGNOSTICS.md` を参照してください。

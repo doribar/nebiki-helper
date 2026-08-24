@@ -16,7 +16,9 @@ export type Review19CompletionStorageResult = {
   cloudQueuePrepared: boolean;
   cloudQueueChanged: boolean;
   localResult: StorageOperationResult;
+  localAttempts: StorageOperationResult[];
   cloudQueueResult: StorageOperationResult | null;
+  cloudQueueAttempts: StorageOperationResult[];
   recoveryResults: StorageOperationResult[];
 };
 
@@ -58,9 +60,11 @@ export function persistCompletedReview19LocalFirst(
   const recoveryResults: StorageOperationResult[] = [];
 
   let localResult = dependencies.saveLocal(record);
+  const localAttempts = [localResult];
   if (!localResult.ok && localResult.quotaExceeded) {
     recoveryResults.push(...dependencies.releaseAuxiliary());
     localResult = dependencies.saveLocal(record);
+    localAttempts.push(localResult);
   }
   reportStorageOperationFailures("review19-local-save", [localResult]);
   reportStorageOperationFailures("review19-storage-recovery", recoveryResults);
@@ -71,15 +75,19 @@ export function persistCompletedReview19LocalFirst(
       cloudQueuePrepared: false,
       cloudQueueChanged: false,
       localResult,
+      localAttempts,
       cloudQueueResult: null,
+      cloudQueueAttempts: [],
       recoveryResults,
     };
   }
 
   let cloudAttempt = attemptCloudEnqueue(record, dependencies.enqueueCloud);
+  const cloudQueueAttempts = [cloudAttempt.result];
   if (!cloudAttempt.result.ok && cloudAttempt.result.quotaExceeded) {
     recoveryResults.push(...dependencies.releaseAuxiliary());
     cloudAttempt = attemptCloudEnqueue(record, dependencies.enqueueCloud);
+    cloudQueueAttempts.push(cloudAttempt.result);
   }
   reportStorageOperationFailures("review19-cloud-enqueue", [cloudAttempt.result]);
   reportStorageOperationFailures("review19-storage-recovery", recoveryResults);
@@ -89,7 +97,9 @@ export function persistCompletedReview19LocalFirst(
     cloudQueuePrepared: cloudAttempt.result.ok,
     cloudQueueChanged: cloudAttempt.result.ok && cloudAttempt.changed,
     localResult,
+    localAttempts,
     cloudQueueResult: cloudAttempt.result,
+    cloudQueueAttempts,
     recoveryResults,
   };
 }

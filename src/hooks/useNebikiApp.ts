@@ -171,6 +171,11 @@ import {
 import { buildPendingSupabaseSyncErrorDetails } from "../domain/supabaseSyncDiagnostics.ts";
 import { persistCompletedReview19LocalFirst } from "../domain/review19CompletionStorage.ts";
 import {
+  buildReview19StorageFailureAlert,
+  createReview19StorageFailureDiagnostic,
+  reportReview19StorageFailureDiagnostic,
+} from "../domain/review19StorageDiagnostics.ts";
+import {
   loadRemoteReview19Records,
   mergeReview19MedianHistory,
 } from "../domain/review19RemoteStorage.ts";
@@ -4031,9 +4036,13 @@ const lateSkipNotice = useMemo(() => {
     if (!isTestMode) {
       const persistenceResult = persistCompletedReview19LocalFirst(recordedReview);
       if (!persistenceResult.localSaved) {
-        window.alert(
-          "19時チェックを端末へ保存できませんでした。端末の空き容量を確認して、もう一度「完了」を押してください。",
-        );
+        const diagnostic = createReview19StorageFailureDiagnostic({
+          stage: "authoritative_local_save",
+          finalResult: persistenceResult.localResult,
+          attempts: persistenceResult.localAttempts,
+        });
+        reportReview19StorageFailureDiagnostic(diagnostic);
+        window.alert(buildReview19StorageFailureAlert(diagnostic));
         return;
       }
 
@@ -4043,9 +4052,13 @@ const lateSkipNotice = useMemo(() => {
         }
         void retryPendingCloudSync();
       } else {
-        window.alert(
-          "19時チェックは端末に保存しましたが、クラウド同期の準備に失敗しました。管理設定の「端末内データをSupabaseへ同期」から再送してください。",
-        );
+        const diagnostic = createReview19StorageFailureDiagnostic({
+          stage: "cloud_queue_prepare",
+          finalResult: persistenceResult.cloudQueueResult,
+          attempts: persistenceResult.cloudQueueAttempts,
+        });
+        reportReview19StorageFailureDiagnostic(diagnostic);
+        window.alert(buildReview19StorageFailureAlert(diagnostic));
       }
 
       const clearSourceResult = attemptStorageOperation({
