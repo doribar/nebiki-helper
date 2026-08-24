@@ -38,6 +38,7 @@ npm run check:median-version-ui
 npm run check:last-area-skip
 npm run check:fixed-time-supabase-read
 npm run check:initial-weather-focus
+npm run check:quota-root-fix
 npx tsc -b --pretty false
 npm run build
 ```
@@ -71,13 +72,24 @@ npm run build
 - 自動時刻遷移では、補助的なdaily snapshotを安全に保存した後、その成否だけを理由に時刻到達通知と次session開始を中止しません。15時完了後もappのtimer／effectを維持し、17時到達時の既存ダイアログを表示できる構造です。
 - React StrictModeで同じ自動遷移effectが再実行されても、同一session・同一遷移先の通知と開始は1回だけです。開始に失敗した場合は再試行でき、手動遷移の挙動は変更しません。
 - `daily-session-snapshots` は単なるdebug cacheではありません。Review19／productionAnalysis／finalized day作成、temperature continuity、legacy export／backfillに使う中間業務証跡であり、当日や未確定日のsnapshotは削除しません。従来の最大120件に加え、localStorageのUTF-16 key＋value概算で1 MiBのsoft budgetを設け、正式なfinalized-day recordへ封印済みの古い日付groupだけを再構築可能な重複copyとして整理します。日付groupの途中だけを削除しません。
-- 容量不足時はAreaCount正式履歴、完成Review19、finalized day、未同期pending、進行中sessionを優先します。削除可能なのはnavigation/debug用runtimeと重複checkpoint、または正式recordへ封印済みのdaily snapshotだけです。quota時の再試行は1回に限定し、同じ操作を無限に繰り返しません。
+- 容量不足時は完成Review19、finalized day、未同期pending、進行中session、local-only／remote未確認AreaCountを優先します。削除可能なのは完全包含を証明済みのlegacy mirror、正式recordへ封印済みのdaily snapshot、navigation/debug用runtime、重複checkpointです。quota時の再試行は1回に限定し、同じ操作を無限に繰り返しません。
 - 19:00チェックは、12エリアの完成recordを `nebiki-helper/review19-records` へ保存してからSupabase outboxを準備し、その後に `review19_done` へ遷移します。端末正本を保存できなければ完了扱いにせず、入力stateを保持したまま、保存先・操作・実際の `errorName`・quota該当有無・再試行結果をalertへ表示します。
 - `QuotaExceededError` のときだけ、このアプリで利用できるブラウザ保存領域の上限に達した可能性を説明し、Android端末本体の空き容量不足とは断定しません。`SecurityError` は保存領域へのアクセス拒否として表示し、それ以外や安全に表示できない名前は推測せず `UnknownError` へ正規化します。
 - `localStorage.setItem()`／`removeItem()` の失敗は、key・操作・例外名・quota該当有無だけを構造化して扱います。Review19本文、12エリアpayload、error message、credentialは画面やconsoleへ出しません。正本とpendingのattempt列を分け、どちらが再試行されたかを混同しません。
 - Review19本体の保存後にcloud outboxだけ準備できなかった場合は、端末正本失敗とは異なる保存先として診断表示し、完成recordを保持します。管理設定の「端末内データをSupabaseへ同期」からbackfillできます。local-first、pending、retry、CAS、fixed-time隔離は変更しません。
 - 静的checkは、raw `localStorage.setItem()`／`removeItem()` をレビュー済み低レベルmoduleだけにallowlistし、App／hook／component層のraw callを0件に固定します。`sessionStorage` のcalculator draft 3操作も従来どおり各操作内で例外を捕捉します。
 - 基準版の通常done effectと自動時刻遷移には、daily snapshotのraw writeが例外を上位へ漏らす経路があり、人工的な `QuotaExceededError` で再現しました。これは確定したコード上の不具合です。一方、実端末事故時のconsole例外とlocalStorage実使用量は取得できていないため、実端末でも同じ例外が発生したという部分は高い整合性を持つ推定であり、確定診断とは区別します。
+
+## localStorage quota root fix（2026.8.9-12）
+
+- 2026-08-24の実端末Review19では、端末正本writeと安全整理後の1回retryの両方で `QuotaExceededError` が確認されました。端末本体容量ではなく、`nebiki-helper.vercel.app` originのブラウザ保存領域上限です。
+- 最大の継続増加要因は、Supabase AreaCount全履歴を起動ごとに統合local keyへ再保存し、summer subsetをlegacy mirrorへ重複保存していたことでした。productionの全remote履歴は中央値用にメモリへ保持し、localへ全件再保存しません。summer mirrorの新規dual-writeも停止しました。
+- 旧normal／summer keyは読み込み互換を残し、統合v2だけで完全に同じmerge結果になる場合に限りstartup housekeepingで削除します。legacy側だけのrecord、新しいrevision、よりrichなrecordは削除しません。
+- Supabase AreaCountはcycle別に1,000件単位で全page取得します。remote/localを既存の5-field identity、revision、richness semanticsでdedupeし、中央値engineには同一recordを1件だけ渡します。
+- 統合AreaCount local cacheはUTF-16 key＋value概算1 MiBのsoft budgetです。remote内容を完全確認できた古いcacheだけを整理し、pending identity、current date、local-only、remote未確認recordは上限を超えても保護します。offline fallback用にcycle／area／time／曜日・fallback groupごとの最低3件を優先します。
+- 起動時はcurrent-sessionを先に読み、保護日を確定してから安全なduplicateだけを整理します。9-11のcurrent-sessionに12/12入力完備・Review19／session identity一致の未保存stateが実在すれば、翌日deployでも復元し、再度「完了」で正式保存できます。内容の推測補完はしません。
+- remote unavailable時は正式AreaCountを削除しません。local履歴と人間判定で業務を続け、安全なduplicate整理だけで容量が足りなければReview19入力を保持して既存のstorage診断を表示します。
+- anonymous rich long-run fixtureでは、UTF-16概算使用量を `5011.6 KiB` から `2516.7 KiB` へ49.8%削減しました。AreaCount 2,000件中、pending／current／local-onlyを保護しつつ897件をoffline cacheとして残しました。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -238,12 +250,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のReview19 storage診断は完了attempt中だけの一時metadataで、正式recordやexport schemaを変更しません。既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。quota recovery、retention、中央値表示、last-area skip、initial weather scroll、fixed-time READ ONLY、Obon、productionAnalysis、20時30分、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回の変更はlocal cache retention、startup housekeeping、remote paginationと未保存Review19の厳密なresume条件で、正式record／export schemaへ破壊的変更を加えません。既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、productionAnalysis、20時30分、cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-11`
+- `appVersion`: `2026.8.9-12`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260824-203336-jst`
+- `buildId`: `build-20260824-215940-jst`
 
-今回の実装・検証結果は `CHANGE_REPORT_20260824_REVIEW19_STORAGE_DIAGNOSTICS.md` を参照してください。
+今回の実装・検証結果は `CHANGE_REPORT_20260824_LOCALSTORAGE_QUOTA_ROOT_FIX.md` を参照してください。

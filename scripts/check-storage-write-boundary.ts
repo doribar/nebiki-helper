@@ -68,6 +68,7 @@ function collectStoragePrimitiveCalls(path: string): PrimitiveCall[] {
 const allowedLocalStoragePrimitiveSignatures = new Set([
   "src/domain/areaCountLocalStorage.ts|storage.setItem|AREA_COUNT_LOCAL_STORAGE_KEY",
   "src/domain/areaCountLocalStorage.ts|storage.setItem|LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY",
+  "src/domain/areaCountLocalStorage.ts|resolveStorage(options.storage)?.removeItem|key",
   "src/domain/demandCycleStorage.ts|localStorage.setItem|DEMAND_CYCLE_STORAGE_KEYS.state",
   "src/domain/demandCycleStorage.ts|localStorage.setItem|DEMAND_CYCLE_STORAGE_KEYS.fixedTimeState",
   "src/domain/demandCycleStorage.ts|localStorage.setItem|DEMAND_CYCLE_STORAGE_KEYS.summerAreaCountRecords",

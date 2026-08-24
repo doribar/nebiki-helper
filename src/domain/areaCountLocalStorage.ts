@@ -4,10 +4,6 @@ import {
   normalizeAreaCountRecords,
   type AreaCountRecord,
 } from "./areaCountHistory.ts";
-import {
-  attemptStorageOperation,
-  reportStorageOperationFailures,
-} from "./storage.ts";
 
 export const AREA_COUNT_LOCAL_STORAGE_KEY =
   "nebiki-helper/area-count-records-v2" as const;
@@ -18,7 +14,10 @@ export const LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY =
 export const LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY =
   "nebiki-helper/summer-area-count-records-v1" as const;
 
-export type AreaCountLocalStorage = Pick<Storage, "getItem" | "setItem">;
+export type AreaCountLocalStorage = Pick<
+  Storage,
+  "getItem" | "setItem" | "removeItem"
+>;
 
 export type AreaCountLocalStorageOptions = {
   storage?: AreaCountLocalStorage | null;
@@ -117,6 +116,28 @@ export function saveUnifiedAreaCountRecords(
 }
 
 /**
+ * Replaces only the unified cache with the supplied canonical collection.
+ *
+ * Unlike saveUnifiedAreaCountRecords(), this function intentionally does not
+ * merge the existing cache back in. It is reserved for a remote-confirmed,
+ * authoritative-aware cache retention decision; normal local-first writes
+ * must continue to use saveUnifiedAreaCountRecords().
+ */
+export function replaceUnifiedAreaCountRecords(
+  records: readonly AreaCountRecord[],
+  options: AreaCountLocalStorageOptions = {},
+): AreaCountRecord[] {
+  const storage = resolveStorage(options.storage);
+  const canonical = mergeAreaCountRecordCollections(
+    normalizeAreaCountRecords(records),
+  );
+  if (storage) {
+    storage.setItem(AREA_COUNT_LOCAL_STORAGE_KEY, JSON.stringify(canonical));
+  }
+  return cloneAreaCountRecords(canonical);
+}
+
+/**
  * Best-effort compatibility copy for pre-unified summer readers. The unified
  * v2 cache remains the source of truth even when this derived mirror fails.
  */
@@ -143,17 +164,11 @@ export function saveLocalAreaCountRecords(
   records: readonly AreaCountRecord[],
   options: AreaCountLocalStorageOptions = {},
 ): AreaCountRecord[] {
-  const merged = saveUnifiedAreaCountRecords(records, options);
-  const mirrorResult = attemptStorageOperation({
-    key: LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
-    operation: "set",
-    run: () => saveLegacySummerAreaCountRecordsMirror(merged, options),
-  });
-  reportStorageOperationFailures(
-    "area-count-legacy-summer-mirror",
-    [mirrorResult],
-  );
-  return cloneAreaCountRecords(merged);
+  // 9-12: v1 summer is a read/import-only compatibility source. Recreating a
+  // full duplicate after every authoritative v2 write was a principal quota
+  // pressure path. Existing mirror-only/richer rows remain readable and are
+  // never removed without a separate semantic-coverage proof.
+  return saveUnifiedAreaCountRecords(records, options);
 }
 
 export const saveAreaCountRecordsToLocalStorage =
@@ -168,3 +183,46 @@ export function upsertLocalAreaCountRecord(
 
 export const upsertAreaCountRecordInLocalStorage =
   upsertLocalAreaCountRecord;
+
+export type LegacyAreaCountStorageKey =
+  | typeof LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY
+  | typeof LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY;
+
+function getLegacyRecordsForKey(
+  key: LegacyAreaCountStorageKey,
+  storage: AreaCountLocalStorage,
+): AreaCountRecord[] {
+  return key === LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY
+    ? loadLegacySummerAreaCountRecords({ storage })
+    : loadLegacyNormalAreaCountRecords({ storage });
+}
+
+/**
+ * True only when deleting the complete legacy value cannot remove any
+ * identity, newer revision, or richer detail that is absent from unified v2.
+ */
+export function isLegacyAreaCountStorageFullyCovered(
+  key: LegacyAreaCountStorageKey,
+  options: AreaCountLocalStorageOptions = {},
+): boolean {
+  const storage = resolveStorage(options.storage);
+  if (!storage) return false;
+  const raw = storage.getItem(key);
+  if (raw === null) return false;
+
+  const legacy = getLegacyRecordsForKey(key, storage);
+  if (legacy.length === 0) return raw.trim() === "[]";
+
+  const unified = mergeAreaCountRecordCollections(
+    loadUnifiedAreaCountRecords({ storage }),
+  );
+  const withLegacy = mergeAreaCountRecordCollections(unified, legacy);
+  return JSON.stringify(withLegacy) === JSON.stringify(unified);
+}
+
+export function removeLegacyAreaCountStorage(
+  key: LegacyAreaCountStorageKey,
+  options: AreaCountLocalStorageOptions = {},
+): void {
+  resolveStorage(options.storage)?.removeItem(key);
+}

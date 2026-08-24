@@ -1,5 +1,8 @@
 import type { AreaCountRecord } from "./areaCountHistory.ts";
-import { normalizeAreaCountRecords } from "./areaCountHistory.ts";
+import {
+  mergeAreaCountRecordCollections,
+  normalizeAreaCountRecords,
+} from "./areaCountHistory.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
 import type {
   AreaCountEvaluation,
@@ -84,6 +87,7 @@ export type RemoteAreaCountSaveResult =
     };
 
 const TABLE_NAME = "area_count_records";
+export const AREA_COUNT_REMOTE_PAGE_SIZE = 1000;
 export const AREA_COUNT_REMOTE_CONFLICT_COLUMNS = [
   "date",
   "session_started_at",
@@ -259,11 +263,18 @@ async function getErrorMessage(response: Response): Promise<string> {
   }
 }
 
-export function buildRemoteAreaCountReadPath(demandCycle?: DemandCycle): string {
+export function buildRemoteAreaCountReadPath(
+  demandCycle?: DemandCycle,
+  page?: { limit: number; offset: number },
+): string {
   const cycleFilter = demandCycle
     ? `demand_cycle=eq.${encodeURIComponent(demandCycle)}`
     : "demand_cycle=in.(normal,summer)";
-  return `/rest/v1/${TABLE_NAME}?select=*&${cycleFilter}&order=recorded_at.asc`;
+  const pagination = page
+    ? `&limit=${Math.max(1, Math.floor(page.limit))}` +
+      `&offset=${Math.max(0, Math.floor(page.offset))}`
+    : "";
+  return `/rest/v1/${TABLE_NAME}?select=*&${cycleFilter}&order=recorded_at.asc${pagination}`;
 }
 
 export async function loadRemoteAreaCountRecords(
@@ -278,28 +289,47 @@ export async function loadRemoteAreaCountRecords(
   }
 
   try {
-    const response = await fetchImpl(
-      `${config.url}${buildRemoteAreaCountReadPath(demandCycle)}`,
-      {
-        method: "GET",
-        headers: buildHeaders(config),
-        signal: options?.signal,
-      },
-    );
+    let offset = 0;
+    let records: AreaCountRecord[] = [];
+    while (true) {
+      const response = await fetchImpl(
+        `${config.url}${buildRemoteAreaCountReadPath(demandCycle, {
+          limit: AREA_COUNT_REMOTE_PAGE_SIZE,
+          offset,
+        })}`,
+        {
+          method: "GET",
+          headers: buildHeaders(config),
+          signal: options?.signal,
+        },
+      );
 
-    if (!response.ok) {
-      return {
-        status: "error",
-        message: await getErrorMessage(response),
-        errorKind: classifyHttpError(response.status),
-        httpStatus: response.status,
-      };
+      if (!response.ok) {
+        return {
+          status: "error",
+          message: await getErrorMessage(response),
+          errorKind: classifyHttpError(response.status),
+          httpStatus: response.status,
+        };
+      }
+
+      const rawPage = await response.json() as unknown;
+      if (!Array.isArray(rawPage)) {
+        return {
+          status: "error",
+          message: "Invalid area_count_records response",
+          errorKind: "schema",
+        };
+      }
+      const pageRecords = normalizeRemoteAreaCountRows(rawPage).filter(
+        (record) =>
+          demandCycle === undefined ||
+          normalizeDemandCycle(record.demandCycle) === demandCycle,
+      );
+      records = mergeAreaCountRecordCollections(records, pageRecords);
+      if (rawPage.length < AREA_COUNT_REMOTE_PAGE_SIZE) break;
+      offset += AREA_COUNT_REMOTE_PAGE_SIZE;
     }
-
-    const records = normalizeRemoteAreaCountRows(await response.json()).filter(
-      (record) =>
-        demandCycle === undefined || normalizeDemandCycle(record.demandCycle) === demandCycle,
-    );
 
     return { status: "ready", records };
   } catch (error) {

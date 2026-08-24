@@ -11,7 +11,11 @@ import type {
   ScreenName,
 } from "./types";
 import type { NavigationSnapshot } from "./navigationHistory";
-import { appendReview19RecordInMemory, cloneReview19Records } from "./review19.ts";
+import {
+  appendReview19RecordInMemory,
+  buildReview19DataQuality,
+  cloneReview19Records,
+} from "./review19.ts";
 import {
   normalizeWeatherConfirmationPending,
   type WeatherConfirmationPending,
@@ -24,6 +28,13 @@ import {
   normalizeAnalysisCalendarContext,
 } from "./analysisMetadata.ts";
 import { FINALIZED_DAY_DATA_STORAGE_KEY } from "./finalizedDayData.ts";
+import {
+  LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY,
+  LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+  isLegacyAreaCountStorageFullyCovered,
+  removeLegacyAreaCountStorage,
+  type LegacyAreaCountStorageKey,
+} from "./areaCountLocalStorage.ts";
 
 export const STORAGE_KEYS = {
   currentSession: "nebiki-helper/current-session",
@@ -107,6 +118,14 @@ export type DailySessionSnapshotWriteResult = {
   retainedApproxBytes: number;
   failure: StorageOperationResult | null;
   attempts: StorageOperationResult[];
+};
+
+export type StartupStorageHousekeepingResult = {
+  attempts: StorageOperationResult[];
+  removedLegacyKeys: LegacyAreaCountStorageKey[];
+  dailySnapshotsPruned: number;
+  dailySnapshotsRetained: number;
+  dailySnapshotsRetainedApproxBytes: number;
 };
 
 function isQuotaExceededStorageError(error: unknown): boolean {
@@ -747,6 +766,107 @@ export function retainDailySessionSnapshotsWithinBudget(
   };
 }
 
+function releaseFullyCoveredLegacyAreaCountStorage(): {
+  attempts: StorageOperationResult[];
+  removedKeys: LegacyAreaCountStorageKey[];
+} {
+  const attempts: StorageOperationResult[] = [];
+  const removedKeys: LegacyAreaCountStorageKey[] = [];
+  for (const key of [
+    LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+    LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY,
+  ] as const) {
+    let removed = false;
+    const result = attemptStorageOperation({
+      key,
+      operation: "remove",
+      run: () => {
+        if (!isLegacyAreaCountStorageFullyCovered(key)) return;
+        removeLegacyAreaCountStorage(key);
+        removed = true;
+      },
+    });
+    attempts.push(result);
+    if (result.ok && removed) removedKeys.push(key);
+  }
+  return { attempts, removedKeys };
+}
+
+function compactSealedDailySessionSnapshots(params?: {
+  protectedDates?: readonly string[];
+}): {
+  attempts: StorageOperationResult[];
+  prunedCount: number;
+  retainedCount: number;
+  retainedApproxBytes: number;
+} {
+  let retention: DailySessionSnapshotRetentionResult | null = null;
+  const preparation = attemptStorageOperation({
+    key: STORAGE_KEYS.dailySessionSnapshots,
+    operation: "set",
+    run: () => {
+      retention = retainDailySessionSnapshotsWithinBudget(
+        loadDailySessionSnapshots(),
+        {
+          protectedDates: params?.protectedDates,
+          finalizedDates: loadFinalizedDayDatesForSnapshotRetention(),
+        },
+      );
+    },
+  });
+  if (!preparation.ok || !retention) {
+    return {
+      attempts: [preparation],
+      prunedCount: 0,
+      retainedCount: 0,
+      retainedApproxBytes: 0,
+    };
+  }
+
+  const prepared = retention as DailySessionSnapshotRetentionResult;
+  if (prepared.prunedCount === 0) {
+    return {
+      attempts: [],
+      prunedCount: 0,
+      retainedCount: prepared.retainedCount,
+      retainedApproxBytes: prepared.retainedApproxBytes,
+    };
+  }
+
+  const write = attemptStorageOperation({
+    key: STORAGE_KEYS.dailySessionSnapshots,
+    operation: "set",
+    run: () => saveDailySessionSnapshots(prepared.snapshots),
+  });
+  return {
+    attempts: [write],
+    prunedCount: write.ok ? prepared.prunedCount : 0,
+    retainedCount: prepared.retainedCount,
+    retainedApproxBytes: prepared.retainedApproxBytes,
+  };
+}
+
+/**
+ * Idempotent startup cleanup. It never touches current-session, active
+ * Review19 source, pending, Review19 records, finalized-day, or unsealed daily
+ * snapshots. Existing state must be loaded into memory before invoking it.
+ */
+export function runStartupStorageHousekeeping(params?: {
+  protectedDates?: readonly string[];
+}): StartupStorageHousekeepingResult {
+  const legacy = releaseFullyCoveredLegacyAreaCountStorage();
+  const daily = compactSealedDailySessionSnapshots(params);
+  const attempts = [...legacy.attempts, ...daily.attempts];
+  reportStorageOperationFailures("startup-storage-housekeeping", attempts);
+  return {
+    attempts,
+    removedLegacyKeys: legacy.removedKeys,
+    dailySnapshotsPruned: daily.prunedCount,
+    dailySnapshotsRetained: daily.retainedCount,
+    dailySnapshotsRetainedApproxBytes: daily.retainedApproxBytes,
+  };
+}
+
 function getDailySessionCompletionSignature(snapshot: DailySessionSnapshot): string {
   return JSON.stringify(
     Object.values(snapshot.areas)
@@ -963,6 +1083,25 @@ export function isAppStateSessionCurrentForDate(
 ): boolean {
   if (!state?.session) return true;
 
+  // A fully entered but not-yet-saved Review19 is authoritative in-progress
+  // evidence. Preserve that exact session across midnight/deployment so the
+  // user can retry the failed authoritative save without re-entry. This does
+  // not infer values: every checkpoint must already be complete and the
+  // Review19/session identities must agree.
+  if (
+    (state.screen === "review19" || state.screen === "review19_weather") &&
+    state.review19 &&
+    !state.review19.recordedAt &&
+    state.review19.date === state.session.date &&
+    state.review19.sessionStartedAt === state.session.startedAt &&
+    buildReview19DataQuality({
+      ...state.review19,
+      areaEvaluations: state.review19.areaEvaluations ?? {},
+    }).complete
+  ) {
+    return true;
+  }
+
   return (
     state.session.date === date &&
     formatLocalDateFromTimestamp(state.session.startedAt) === date
@@ -1175,11 +1314,17 @@ export function saveRuntimeStateSafely(
 }
 
 /**
- * Review19正本の保存容量を確保するため、復元の補助情報だけを優先順に解放する。
- * current-session、Review19履歴、cloud outboxには触れない。
+ * Review19正本の保存容量を確保するため、完全重複と確認できたlegacy
+ * AreaCount mirror、finalized-dayへ封印済みのsnapshot、復元の補助情報だけを
+ * 優先順に解放する。current-session、Review19履歴、cloud outbox、未封印の
+ * snapshotには触れない。
  */
 export function releaseAuxiliaryStorageForReview19(): StorageOperationResult[] {
+  const legacy = releaseFullyCoveredLegacyAreaCountStorage();
+  const daily = compactSealedDailySessionSnapshots();
   return [
+    ...legacy.attempts,
+    ...daily.attempts,
     attemptStorageOperation({
       key: STORAGE_KEYS.runtimeState,
       operation: "remove",

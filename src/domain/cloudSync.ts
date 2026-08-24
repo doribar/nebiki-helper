@@ -5,8 +5,6 @@ import {
 } from "./areaCountHistory.ts";
 import {
   AREA_COUNT_LOCAL_STORAGE_KEY,
-  LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
-  saveLegacySummerAreaCountRecordsMirror,
   saveUnifiedAreaCountRecords,
   upsertLocalAreaCountRecord,
 } from "./areaCountLocalStorage.ts";
@@ -26,7 +24,6 @@ import {
   type PendingSupabaseSyncItem,
 } from "./supabaseSyncQueue.ts";
 import {
-  attemptStorageOperation,
   attemptStorageOperationWithAuxiliaryRecovery,
   reportStorageOperationFailures,
   type StorageOperationResult,
@@ -121,18 +118,10 @@ export function persistAreaCountRecordLocalFirstSafely(
     };
   }
 
-  // v1 summer storage is a derived compatibility mirror. Its failure must not
-  // roll back a successful unified-v2 authoritative write or block the outbox.
-  const legacySummerMirror = attemptStorageOperation({
-    key: LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
-    operation: "set",
-    run: () => saveLegacySummerAreaCountRecordsMirror(records),
-  });
-  reportStorageOperationFailures(
-    "area-count-legacy-summer-mirror",
-    [legacySummerMirror],
-  );
-  const localAttempts = [...local.attempts, legacySummerMirror];
+  // The legacy summer mirror is read/import-only from 9-12 onward. Rewriting
+  // the complete summer population here duplicated the authoritative v2 data
+  // and could exhaust the origin's localStorage quota.
+  const localAttempts = [...local.attempts];
 
   const identity = getAreaCountRecordIdentity(normalized);
   const canonicalRecord = records.find(

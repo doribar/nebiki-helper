@@ -66,6 +66,7 @@ import {
   clearReview19SourceState,
   getDailySessionSnapshotsForDate,
   loadDailySessionSnapshots,
+  runStartupStorageHousekeeping,
   upsertDailySessionSnapshotSafely,
 } from "../domain/storage";
 import {
@@ -154,8 +155,11 @@ import {
   loadLegacyNormalAreaCountRecords,
   loadLocalAreaCountRecords,
   loadUnifiedAreaCountRecords,
-  saveLocalAreaCountRecords,
+  replaceUnifiedAreaCountRecords,
 } from "../domain/areaCountLocalStorage.ts";
+import {
+  retainAreaCountLocalCacheWithinBudget,
+} from "../domain/areaCountCache.ts";
 import { collectAreaCountBackfillRecords } from "../domain/areaCountBackfill.ts";
 import {
   enqueueAreaCountRecordsForCloud,
@@ -330,6 +334,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const isTestMode = params?.testNow instanceof Date;
   const testNowMs = params?.testNow?.getTime() ?? null;
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
+  const startupHousekeepingCompletedRef = useRef(false);
 
   if (!initialPersistenceRef.current) {
     const initialDate = formatLocalDate(getRuntimeNow());
@@ -344,6 +349,23 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
           dailyMessageState: normalizeDailyMessageState(null),
         }
       : loadPersistedNebikiStateForDate(initialDate);
+  }
+
+  if (!isTestMode && !startupHousekeepingCompletedRef.current) {
+    // Load current/checkpoint into memory first so an unfinished 12/12
+    // Review19 remains recoverable, then release only proven duplicate/sealed
+    // storage before any startup effect attempts another write.
+    const startupProtectedDates = new Set([
+      formatLocalDate(getRuntimeNow()),
+      initialPersistenceRef.current?.currentSession?.session?.date,
+      initialPersistenceRef.current?.currentSession?.review19?.date,
+      initialPersistenceRef.current?.workSessionCheckpoint?.session?.date,
+      initialPersistenceRef.current?.workSessionCheckpoint?.review19?.date,
+    ].filter((date): date is string => Boolean(date)));
+    runStartupStorageHousekeeping({
+      protectedDates: [...startupProtectedDates],
+    });
+    startupHousekeepingCompletedRef.current = true;
   }
 
   const initialToday = formatLocalDate(getRuntimeNow());
@@ -481,6 +503,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [, setAreaCountRemoteLoadStatus] = useState<
     "loading" | "ready" | "disabled" | "error"
   >("loading");
+  const remoteAreaCountHistoryRef = useRef<AreaCountRecord[]>([]);
   const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
     isTestMode ? [] : loadLocalAreaCountRecords()
   );
@@ -684,6 +707,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
           mode: "fixed_time_readonly",
           remoteResults: areaResults,
         });
+        remoteAreaCountHistoryRef.current = cloneAreaCountRecords(
+          historySource.records,
+        );
         setAreaCountRemoteLoadStatus(historySource.remoteStatus);
         setAreaCountRecords(cloneAreaCountRecords(historySource.records));
       });
@@ -702,6 +728,66 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
 
       const areaResults = [normalArea, summerArea];
       const localAreaRecords = loadLocalAreaCountRecords();
+      const remoteAreaRecords = mergeAreaCountRecordCollections(
+        ...areaResults.map((result) =>
+          result.status === "ready" ? result.records : [],
+        ),
+      );
+      remoteAreaCountHistoryRef.current = cloneAreaCountRecords(
+        remoteAreaRecords,
+      );
+
+      // Production and fixed-time share the same in-memory history engine, but
+      // production no longer writes the complete remote population back to
+      // localStorage. Keep only an authoritative-aware bounded offline cache.
+      let pendingAreaIdentities = new Set<string>();
+      let unifiedRecordsForRetention: AreaCountRecord[] | null = null;
+      try {
+        pendingAreaIdentities = new Set(
+          loadPendingSupabaseSyncQueue()
+            .filter((item) => item.type === "area_count")
+            .map((item) => item.identity),
+        );
+        unifiedRecordsForRetention = loadUnifiedAreaCountRecords();
+      } catch {
+        // If storage reads are unavailable, skip all remote-confirmed pruning.
+      }
+      const protectedDates = new Set([
+        initialToday,
+        ...(initialLoadedState?.session?.date
+          ? [initialLoadedState.session.date]
+          : []),
+        ...(initialLoadedState?.review19?.date
+          ? [initialLoadedState.review19.date]
+          : []),
+      ]);
+      const cacheRetention = unifiedRecordsForRetention
+        ? retainAreaCountLocalCacheWithinBudget({
+            localRecords: unifiedRecordsForRetention,
+            remoteRecords: remoteAreaRecords,
+            pendingIdentities: pendingAreaIdentities,
+            protectedDates,
+          })
+        : null;
+      if (
+        cacheRetention &&
+        remoteAreaRecords.length > 0 &&
+        (cacheRetention.evictedCount > 0 ||
+          cacheRetention.seededFromRemoteCount > 0)
+      ) {
+        const cacheWrite = attemptStorageOperationWithAuxiliaryRecovery({
+          key: AREA_COUNT_LOCAL_STORAGE_KEY,
+          operation: "set",
+          run: () => {
+            replaceUnifiedAreaCountRecords(cacheRetention.records);
+          },
+        });
+        reportStorageOperationFailures(
+          "remote-confirmed-area-count-cache-retention",
+          cacheWrite.attempts,
+        );
+      }
+
       const historySource = resolveAreaCountHistorySource({
         mode: "production",
         localRecords: localAreaRecords,
@@ -709,17 +795,6 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       });
       setAreaCountRemoteLoadStatus(historySource.remoteStatus);
       const mergedAreaRecords = historySource.records;
-      const areaMergeSave = attemptStorageOperationWithAuxiliaryRecovery({
-        key: AREA_COUNT_LOCAL_STORAGE_KEY,
-        operation: "set",
-        run: () => {
-          saveLocalAreaCountRecords(mergedAreaRecords);
-        },
-      });
-      reportStorageOperationFailures(
-        "remote-area-count-merge",
-        areaMergeSave.attempts,
-      );
       setAreaCountRecords(cloneAreaCountRecords(mergedAreaRecords));
 
       const remoteReview19Records = [normalReview19, summerReview19].flatMap(
@@ -748,7 +823,12 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     return () => {
       cancelled = true;
     };
-  }, [isTestMode]);
+  }, [
+    isTestMode,
+    initialToday,
+    initialLoadedState?.session?.date,
+    initialLoadedState?.review19?.date,
+  ]);
 
   useEffect(() => {
     if (isTestMode) return;
@@ -2964,8 +3044,12 @@ const lateSkipNotice = useMemo(() => {
 
       const savedAreaCountRecords = persistAreaCountRecordSafely(nextRecord);
       if (!savedAreaCountRecords) return;
-      nextAreaCountRecords = savedAreaCountRecords;
-      setAreaCountRecords(nextAreaCountRecords);
+      nextAreaCountRecords = mergeAreaCountRecordCollections(
+        areaCountRecords,
+        remoteAreaCountHistoryRef.current,
+        savedAreaCountRecords,
+      );
+      setAreaCountRecords(cloneAreaCountRecords(nextAreaCountRecords));
       setCloudSyncVersion((version) => version + 1);
       void retryPendingCloudSync();
     }
@@ -3507,7 +3591,13 @@ const lateSkipNotice = useMemo(() => {
       };
       const nextAreaCountRecords = persistAreaCountRecordSafely(nextRecord);
       if (!nextAreaCountRecords) return;
-      setAreaCountRecords(nextAreaCountRecords);
+      setAreaCountRecords((current) =>
+        mergeAreaCountRecordCollections(
+          current,
+          remoteAreaCountHistoryRef.current,
+          nextAreaCountRecords,
+        ),
+      );
       setCloudSyncVersion((version) => version + 1);
       void retryPendingCloudSync();
     }
@@ -4650,34 +4740,10 @@ const lateSkipNotice = useMemo(() => {
       nowMs: nowMsForBackfill,
     });
 
-    const localBackfillSave = attemptStorageOperationWithAuxiliaryRecovery({
-      key: AREA_COUNT_LOCAL_STORAGE_KEY,
-      operation: "set",
-      run: () => {
-        saveLocalAreaCountRecords(collectedAreaRecords);
-      },
-    });
-    reportStorageOperationFailures(
-      "backfill-area-count-local-save",
-      localBackfillSave.attempts,
-    );
-    if (!localBackfillSave.ok) {
-      window.alert(
-        "端末データの保存容量が不足しているため、同期準備を完了できませんでした。空き容量を確認して再試行してください。",
-      );
-      const failedResult: SupabaseBackfillResult = {
-        detectedAreaCount: collectedAreaRecords.length,
-        detectedReview19Count: localReview19Records.length,
-        queuedCount: 0,
-        attemptedCount: 0,
-        succeededCount: 0,
-        failedCount: 0,
-        pendingCount: loadPendingSupabaseSyncQueue().length,
-        allSynced: false,
-      };
-      setLastBackfillResult(failedResult);
-      return failedResult;
-    }
+    // Backfill sources remain authoritative in their original keys. Do not
+    // rematerialize all finalized/day-snapshot evidence into the bounded v2
+    // cache before queueing; that was another path that could recreate an
+    // unbounded duplicate population.
 
     let queuedAreaCount = 0;
     const areaQueueSave = attemptStorageOperationWithAuxiliaryRecovery({
@@ -4720,7 +4786,13 @@ const lateSkipNotice = useMemo(() => {
       allSynced: pendingCount === 0,
     };
     setLastBackfillResult(result);
-    setAreaCountRecords(loadLocalAreaCountRecords());
+    setAreaCountRecords((current) =>
+      mergeAreaCountRecordCollections(
+        current,
+        remoteAreaCountHistoryRef.current,
+        loadLocalAreaCountRecords(),
+      ),
+    );
     return result;
   }
 

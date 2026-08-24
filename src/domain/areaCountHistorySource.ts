@@ -16,9 +16,9 @@ export type AreaCountHistorySourceResult = {
   records: AreaCountRecord[];
   remoteStatus: AreaCountHistoryRemoteStatus;
   /**
-   * Only production mode may persist the local/remote merged cache.
-   * Fixed-time mode can consume production Supabase rows in memory, but must
-   * never turn them (or the fixed-time observations) into production storage.
+   * Full local/remote history is an in-memory calculation source only.
+   * A separate authoritative-aware retention decision may persist a bounded
+   * production cache; this merged population itself must never be persisted.
    */
   shouldPersistProductionCache: boolean;
 };
@@ -34,7 +34,7 @@ function resolveRemoteStatus(
 /**
  * Separates the AreaCount history input from its persistence destination.
  *
- * - production: local-first cache plus Supabase rows; caller may save the merge.
+ * - production: local-first cache plus Supabase rows, held in memory.
  * - fixed_time_readonly: Supabase rows only, held in React memory; never save.
  */
 export function resolveAreaCountHistorySource(params: {
@@ -55,6 +55,6 @@ export function resolveAreaCountHistorySource(params: {
   return {
     records,
     remoteStatus: resolveRemoteStatus(params.remoteResults),
-    shouldPersistProductionCache: params.mode === "production",
+    shouldPersistProductionCache: false,
   };
 }

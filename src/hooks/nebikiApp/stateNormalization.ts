@@ -673,8 +673,24 @@ export function normalizeLoadedState(
   const session = normalizeSessionData(loaded.session);
   const normalizedReview19 = normalizeReview19Result((loaded as Partial<AppState>).review19);
   const reviewScreens: ScreenName[] = ["review19_weather", "review19", "review19_done"];
-  const screen = reviewScreens.includes(loaded.screen) ? "start" : loaded.screen;
-  const review19 = reviewScreens.includes(loaded.screen) ? null : normalizedReview19;
+  const canResumeUnstoredReview19 = Boolean(
+    (loaded.screen === "review19" || loaded.screen === "review19_weather") &&
+      normalizedReview19 &&
+      !normalizedReview19.recordedAt &&
+      session &&
+      normalizedReview19.date === session.date &&
+      normalizedReview19.sessionStartedAt === session.startedAt,
+  );
+  // A failed authoritative save leaves the complete Review19 in
+  // current-session. Preserve only that internally consistent, not-yet-saved
+  // review so a reload can retry without re-entry. Completed or mismatched
+  // review states retain the previous start/null normalization.
+  const screen = reviewScreens.includes(loaded.screen) && !canResumeUnstoredReview19
+    ? "start"
+    : loaded.screen;
+  const review19 = reviewScreens.includes(loaded.screen) && !canResumeUnstoredReview19
+    ? null
+    : normalizedReview19;
   const normalizedSessionDraft =
     screen === "start" && !session
       ? buildStartDefaultDraft(loaded.sessionDraft)

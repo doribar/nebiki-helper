@@ -78,7 +78,7 @@ await test("2. production mode retains the existing local plus remote merge", ()
     remoteResults,
   });
   assert.equal(source.remoteStatus, "ready");
-  assert.equal(source.shouldPersistProductionCache, true);
+  assert.equal(source.shouldPersistProductionCache, false);
   assert.equal(source.records.length, 7);
   assert.equal(source.records.some((item) => item.count === 999), true);
 });

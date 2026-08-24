@@ -274,7 +274,7 @@ await test("legacy scale-5 details survive normalization and cloud roundtrip", (
   assert.equal(malformedCycle[0]?.humanEvaluationDetails, undefined);
 });
 
-await test("local cache dedupes legacy normal and preserves summer dual-write", () => {
+await test("local cache reads legacy inputs without recreating the summer mirror", () => {
   const storage = new MemoryStorage();
   const normal = makeRecord();
   const summerWithoutCycle = makeRecord({
@@ -341,7 +341,7 @@ await test("local upsert replaces a revision but never deletes other records", (
     updated.find((record) => record.areaId === "bento_men")?.count,
     14,
   );
-  assert.equal(loadLegacySummerAreaCountRecords({ storage }).length, 1);
+  assert.equal(loadLegacySummerAreaCountRecords({ storage }).length, 0);
 });
 
 await test("local-first retains the record when pending storage fails", () => {
@@ -414,7 +414,7 @@ await test("safe local-first keeps the authoritative record when outbox quota pe
   }
 });
 
-await test("summer mirrorだけがquotaでもunified正本を採用してoutboxへ進む", () => {
+await test("新規summer local-firstはlegacy mirrorを書かずunifiedとoutboxだけを確定する", () => {
   class MirrorOnlyQuotaStorage extends MemoryStorage {
     mirrorWriteAttempts = 0;
 
@@ -446,18 +446,15 @@ await test("summer mirrorだけがquotaでもunified正本を採用してoutbox�
     assert.equal(result.cloudQueuePrepared, true);
     assert.equal(result.records.length, 1);
     assert.equal(result.records[0]?.demandCycle, "summer");
-    assert.equal(storage.mirrorWriteAttempts, 1);
+    assert.equal(storage.mirrorWriteAttempts, 0);
     assert.equal(loadUnifiedAreaCountRecords({ storage }).length, 1);
     assert.equal(loadLegacySummerAreaCountRecords({ storage }).length, 0);
     assert.equal(loadPendingSupabaseSyncQueue({ storage }).length, 1);
     assert.equal(
       result.localAttempts.some(
-        (attempt) =>
-          attempt.key === LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY &&
-          !attempt.ok &&
-          attempt.quotaExceeded,
+        (attempt) => attempt.key === LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY
       ),
-      true,
+      false,
     );
     assert.equal(
       warnings.some(
@@ -465,7 +462,7 @@ await test("summer mirrorだけがquotaでもunified正本を採用してoutbox�
           (args[1] as { context?: unknown } | undefined)?.context ===
           "area-count-legacy-summer-mirror",
       ),
-      true,
+      false,
     );
   } finally {
     console.warn = originalWarn;

@@ -11,11 +11,29 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260822-1736.zip`
-- `appVersion`: `2026.8.9-11`
+- 作業基準ZIP: `nebiki-helper-20260824-2040.zip`
+- `appVersion`: `2026.8.9-12`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260824-203336-jst`
+- `buildId`: `build-20260824-215940-jst`
 - リリースZIP: この文書と同梱された `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
+
+## 値引ヘルパーの運用目的
+
+値引ヘルパーの目的は、単純に早く商品を売り切ることではない。
+
+19時時点の商品品ぞろえを確保しつつ、20時の全品半額によって翌日の廃棄を十分少なく抑えられる状態へ、15時・17時を中心とした値引判断で導くことを目的とする。
+
+翌日廃棄の目安：
+
+- 理想：5点以下
+- 許容：10点以下
+- 10点超：改善対象
+
+したがって、19時までに売れすぎて売場が極端に薄くなることと、19時に残りすぎて20時半額でも翌日へ大量に残ることのどちらも望ましくない。
+
+19時チェックは、19時時点の商品品ぞろえと残量を確認し、15時・17時の値引判断や製造量がこの最終目標に対して適切だったかを振り返るための評価地点である。
+
+18:30値引は、ユーザー本人が夜値引を担当する場合の専用運用枠。UI上は18:30画面から19時チェックへ入るが、19時チェックの主な評価対象は15時・17時の判断であり、18:30そのものを評価するための機能ではない。
 
 ## 現行フロー
 
@@ -85,7 +103,7 @@ Storage:
 - 2026.8.9-8では、通常session完了、daily snapshot、15→17／17→18:30／18:30→19:30等の自動遷移、20時30分最終確定、AreaCount／Review19、pending、backfill、起動時remote merge、demand cycle保存を安全なstorage boundaryへ通す。失敗は `ok`、key、set/remove、error name、quota該当有無のmetadataとして扱い、record本文・payload・credentialをログへ出さない。
 - 補助daily snapshotの保存失敗だけで時刻到達通知と次session開始を中止しない。正式なsession／AreaCount／finalized dayを保存できない場合は偽の完了へ進まず、ユーザーへ再試行可能な案内を出す。AreaCount正本を保存できてpendingだけ失敗した場合は正本を残し、管理設定のbackfillで再送可能にする。
 - 自動遷移は `date × startedAt × 遷移元 × 遷移先` のin-flight keyでStrictModeのeffect再実行を抑止し、同じ時刻到達alert／snapshot／session開始を二重実行しない。次session開始が失敗した時だけguardを解放して再試行可能にし、手動遷移は従来どおりguard対象外とする。
-- quota recoveryは、navigation/debug用 `runtime-state` と重複した `work-session-checkpoint` だけを先に解放し、対象writeを1回だけ再試行する。AreaCount正式履歴、Review19完成record、finalized day、未同期pending、進行中current-sessionをcleanup対象にしない。無限retryは行わない。
+- quota recoveryは、完全に統合済みと証明できるlegacy mirror、finalized-dayへ封印済みのdaily snapshot重複copy、navigation/debug用 `runtime-state`、重複した `work-session-checkpoint` の順で解放し、対象writeを1回だけ再試行する。Review19完成record、finalized day、未同期pending、進行中current-session、local-only／remote未確認AreaCountをcleanup対象にしない。無限retryは行わない。
 - raw `localStorage.setItem()`／`removeItem()` はレビュー済み低レベルmoduleだけにallowlistする。`check:storage-write-boundary` はApp／hook／component層のraw callを0件に固定する。calculator draftの `sessionStorage` 3操作は各操作内で例外を捕捉済み。
 
 ### daily-session-snapshotsの役割とretention
@@ -99,7 +117,7 @@ Storage:
 
 - 最後の人間評価はReact state反映待ちに依存せずfinal buildへ明示的に渡し、12/12の `areaCounts` と `areaEvaluations` が揃った完成recordを1件だけ作る。
 - 完了順序は、完成Review19本体のlocal保存 → Supabase pending準備 → source cleanup → `screen: "review19_done"`。完成recordのlocal保存に成功しない限りdoneへ進まず、再試行可能な案内を出す。
-- 容量不足時は、完成Review19本体、cloud pending、完了済みcurrent-sessionを優先する。navigation/debug用の `runtime-state` と重複した `work-session-checkpoint` だけを解放し、対象の正本保存を1回再試行する。通常時は補助stateを従来どおり維持する。
+- 容量不足時は、完成Review19本体、cloud pending、完了済みcurrent-sessionを優先する。証明済みlegacy duplicate、封印済みsnapshot duplicate、navigation/debug用runtime、重複checkpointだけを安全な順序で解放し、対象の正本保存を1回再試行する。
 - state／checkpoint／runtime／Review19／cloud enqueue／source cleanupのstorage操作は例外を構造化して受け止め、補助write failureをReactへthrowしない。diagnosticはkey、set/remove、error name、quota該当有無だけで、record本文やcredentialを出さない。
 - current-sessionがquotaで失敗した場合も補助領域を解放して1回再試行するため、reload後に完了前stateへ戻る危険を抑える。Review19完成recordは独立した正本として残り、同一identityの再保存は1件へ統合する。
 - Review19本体は保存済みだがpending準備だけに失敗した場合、完成recordを捨てず、管理設定の手動backfillで再送するよう案内する。local-first、pending queue、retry、CAS、merge、partial/final、RLSは変更しない。
@@ -121,7 +139,20 @@ Storage:
 - Review19 authoritative save失敗時は従来どおりdoneへ進まず、12/12入力、human raw9、productionAnalysis材料、daySnapshotをReact stateに保持して再試行可能とする。
 - pendingだけ失敗した場合はauthoritative local save failureと区別し、端末正本が保存済みであることとbackfill可能であることを表示する。正本を削除せず、`review19_done`への既存遷移を維持する。
 - 正本とpendingのattempt列は別々に保持し、どちらのstageでretryしたかを混同しない。2026.8.9-8のquota recovery、補助runtime/checkpointだけのcleanup、1 attempt内最大1回retry、authoritative data保護は変更しない。
-- 今回のreleaseでは実端末エラーの原因を確定扱いにせず、retention、cleanup対象、保存形式を追加変更しない。次回実端末で表示されたerrorNameを確認してから、必要な根本対策を別途判断する。
+- 9-11の診断導入時点では原因を推測せずretentionを変更しなかった。その後、実端末で `QuotaExceededError` が確認されたため、9-12では下記のbounded storage対策を追加した。診断表示自体は維持する。
+
+## 2026.8.9-12 localStorage quota root fix
+
+- 実端末でReview19端末正本write、safe cleanup後の1回retryとも `QuotaExceededError` になったことを確認済み。Android本体容量ではなく、origin単位のブラウザ保存領域上限である。
+- 起動時はcurrent-session／checkpointを先にメモリへ読み、保護日を確定してからhousekeepingする。進行中Review19、pending、finalized day、Review19正本、Review19 source、current／unfinalized evidenceは削除しない。
+- `nebiki-helper/summer-area-count-records-v1` と旧normal keyは、正規化・既存mergeの結果が統合v2だけの場合に限り完全duplicateと証明して削除する。mirror-only、新しいrevision、よりrichなlegacy recordは残す。新規AreaCountは統合v2だけへ保存し、summer mirrorの再生成を停止した。
+- productionの中央値sourceは `local unsynced／bounded recent cache + Supabaseの全paged remote history` をメモリ上でmergeする。同一5-field identityは既存revision／richness semanticsで1件へdedupeする。中央値engine、閾値、値引率は変更しない。
+- Supabase AreaCount GETはcycle別に1,000件単位で全pageを取得する。remote取得が全page成功した場合だけ、5-field identity一致、remote revisionがlocal以上、local detailをremoteが包含、pending identityではないrecordをremote-confirmed cacheとして整理できる。
+- 統合AreaCountのlocal cacheはUTF-16 key＋value概算1 MiBのsoft budget。pending、current date、local-only、remote未確認をbudget超過でも保護し、cycle×area×time×weekday／fallback groupごとに最低3件を優先してoffline母集団を残す。オンライン時はremote全履歴をメモリで使う。
+- remote unavailable時は正式AreaCountをpruneしない。安全なlocal duplicate整理だけで足りなければ、Review19入力を保持して9-11のQuota診断を正直に表示する。remote取得失敗で業務開始や人間判定を停止しない。
+- 9-11のcurrent-sessionに、12/12入力完備、Review19とsessionの日付／sessionStartedAt一致、未保存の `review19`／`review19_weather` stateが実在する場合だけ、翌日deployを含むreload後も復元する。日付から内容を推測せず、保存済み`review19_done`、incomplete、不一致stateは従来どおり復元しない。再度「完了」で同一Review19 identity／pending identityへdedupeして正式保存できる。
+- fixed-timeは本番Supabase AreaCountをREAD ONLYで使う既存仕様を維持し、production housekeeping／cache write／pending／Review19／finalized day／learning populationへ一切writeしない。
+- anonymous rich long-run fixture（AreaCount 2,000、pending 100、Review19複数、daily snapshot 80等）では、UTF-16概算 `5011.6 KiB` から `2516.7 KiB` へ49.8%削減し、AreaCount local cacheは2,000件から897件になった。protected dataはbyte-identicalである。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -155,7 +186,7 @@ Storage:
 ## 夏季モードとクラウド保存
 
 - 通常・夏季の残数履歴を同じlocal-first同期経路で扱う。端末保存が先、Supabase upsertは後であり、remote失敗で値引フローを止めない。
-- 統合端末cacheは `nebiki-helper/area-count-records-v2`。旧normalの `nebiki-helper/area-count-records` と旧summerの `nebiki-helper/summer-area-count-records-v1` は読込互換を維持し、summer keyは旧版互換のためdual-writeする。同期成功後も端末データを削除しない。
+- 統合端末cacheは `nebiki-helper/area-count-records-v2`。旧normalの `nebiki-helper/area-count-records` と旧summerの `nebiki-helper/summer-area-count-records-v1` は読込／import互換を維持するが、新規dual-writeは行わない。legacy keyは統合v2への完全包含を証明できた場合だけhousekeepingで除去し、local-only／pending／remote未確認の正式recordは削除しない。
 - Supabaseの `area_count_records.demand_cycle` へ `normal` / `summer` を正式保存する。remote queryも必ずcycleで分離し、normalとsummerを同じ中央値・減少率・20時30分判定の母集団へ混ぜない。
 - サイクル選択と当日ロックのキーは `nebiki-helper/demand-cycle-state-v1`。時間固定モード側は `nebiki-helper/fixed-time-demand-cycle-state-v1` で、本番設定と相互に変更しない。
 - 固定時間モードのhistory sourceは本番Supabase AreaCountのREAD ONLY、persistence destinationはfixed-time隔離領域である。normal／summerを別queryで読み、通常モードと同じ曜日・holiday・Obon referenceと中央値engineを使う。通信失敗時は履歴なしで固定モードを続行する。
