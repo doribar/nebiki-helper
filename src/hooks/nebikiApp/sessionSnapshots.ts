@@ -40,6 +40,7 @@ import {
   chooseBestAnalysisWeatherContext,
   normalizeAnalysisCalendarContext,
 } from "../../domain/analysisMetadata.ts";
+import { normalizeGlobalDiscountAdjustmentPercent } from "../../domain/globalDiscountAdjustment.ts";
 
 function getAreaCountRecordDemandCycle(record: AreaCountRecord): DemandCycle {
   return normalizeDemandCycle(
@@ -211,6 +212,10 @@ export function createDailySessionSnapshot(params: {
       dataSchemaVersion: session.dataSchemaVersion,
       appVersion: session.appVersion,
       buildId: session.buildId,
+      globalDiscountAdjustmentPercent:
+        normalizeGlobalDiscountAdjustmentPercent(
+          session.globalDiscountAdjustmentPercent,
+        ),
       date: session.date,
       weekday: session.weekday,
       discountTime: session.discountTime,
@@ -501,6 +506,10 @@ export function createReview19Snapshot(params: {
       dataSchemaVersion: params.session.dataSchemaVersion,
       appVersion: params.session.appVersion,
       buildId: params.session.buildId,
+      globalDiscountAdjustmentPercent:
+        normalizeGlobalDiscountAdjustmentPercent(
+          params.session.globalDiscountAdjustmentPercent,
+        ),
       date: params.session.date,
       weekday: params.session.weekday,
       discountTime: params.session.discountTime,

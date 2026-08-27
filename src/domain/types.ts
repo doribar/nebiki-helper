@@ -11,6 +11,8 @@ import type {
 } from "./analysisMetadata.ts";
 export type DiscountTime = "15" | "17" | "18" | "19" | "20";
 export type DemandCycle = "normal" | "summer";
+/** 通常表示値引率へ最終段で加えるpercentage points。 */
+export type GlobalDiscountAdjustmentPercent = -5 | 0 | 5;
 
 export type AutoSkipKind = "late_plus5" | "early_next_minus5";
 export type MeasurementStatus = "measured" | "not_measured";
@@ -143,6 +145,8 @@ export type SessionData = SessionDraft & {
   dataSchemaVersion?: number;
   appVersion?: string;
   buildId?: string;
+  /** このsession開始時に採用した日次全体値引補正。旧sessionの欠損は0相当。 */
+  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
   temperatureComfortAnalysis?: TemperatureComfortAnalysis;
   /** 実気温を持たない旧進行中データの集約区分を、推測せず保持するためだけの互換マーカー。 */
   legacyUnresolvedTempLevel?: "31to35";
@@ -341,6 +345,14 @@ export type RateDecisionSnapshot = {
   manyRateAfterBaseLimitsPercent: number;
   normalRatePercent: number;
   manyRatePercent: number;
+  /**
+   * 通常ロジック（先取り等を含む）完了後、全体補正を掛ける直前の表示値。
+   * 4 fieldは新形式では一組で保存し、旧snapshotではすべて欠損=補正0として読む。
+   */
+  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
+  displayedRateBeforeGlobalAdjustmentPercent?: number;
+  displayedNormalRateBeforeGlobalAdjustmentPercent?: number;
+  displayedManyRateBeforeGlobalAdjustmentPercent?: number;
   limits: {
     minimumPercent: 0;
     maximumPercent: 50;
@@ -567,6 +579,7 @@ export type Review19Snapshot = {
     dataSchemaVersion?: number;
     appVersion?: string;
     buildId?: string;
+    globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
     date: string;
     weekday: number;
     discountTime: DiscountTime;
@@ -619,6 +632,7 @@ export type DailySessionSnapshot = {
     dataSchemaVersion?: number;
     appVersion?: string;
     buildId?: string;
+    globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
     date: string;
     weekday: number;
     discountTime: DiscountTime;
@@ -752,6 +766,10 @@ export type EditableAreaCountItem = {
 export type SupabaseBackfillResult = {
   detectedAreaCount: number;
   detectedReview19Count: number;
+  /** Review19正本からfull-payload outboxを作らず直接確認・送信した件数。 */
+  directReview19AttemptedCount?: number;
+  directReview19SucceededCount?: number;
+  directReview19FailedCount?: number;
   queuedCount: number;
   attemptedCount: number;
   succeededCount: number;
@@ -802,6 +820,9 @@ export type UseNebikiAppDerived = {
   basisGuide: BasisGuideDisplay;
   weatherGuideText: WeatherGuideText;
   rateDisplay: RateDisplayData | null;
+  /** 全体値引補正だけを適用する前の表示。 */
+  rateDisplayBeforeGlobalAdjustment: RateDisplayData | null;
+  globalDiscountAdjustmentPercent: GlobalDiscountAdjustmentPercent;
   finalGuide: FinalGuideData | null;
   pendingBanner: PendingBannerInfo | null;
   timeSwitchNotice: string | null;
@@ -917,6 +938,9 @@ export type UseNebikiAppActions = {
   startReview19Manually: () => void;
   resetApp: () => void;
   changeDemandCycle: (demandCycle: DemandCycle) => boolean;
+  changeGlobalDiscountAdjustment: (
+    adjustmentPercent: GlobalDiscountAdjustmentPercent,
+  ) => void;
 };
 
 export type UseNebikiAppResult = {

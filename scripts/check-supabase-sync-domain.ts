@@ -38,6 +38,7 @@ import {
   advanceReview19SourceUpdatedAt,
   createInitialReview19Result,
 } from "../src/domain/review19.ts";
+import { normalizeReview19PendingReference } from "../src/domain/review19CloudOutbox.ts";
 import {
   PENDING_SUPABASE_SYNC_STORAGE_KEY,
   clearPendingSupabaseSyncQueue,
@@ -679,14 +680,11 @@ await test("Review19 outboxはstrict monotonicでfinalからpartialへ退行し�
 
     const queue = loadPendingSupabaseSyncQueue({ storage });
     assert.equal(queue.length, 1);
-    assert.equal(
-      (queue[0]?.payload as Partial<Review19Result>)?.recordedAt,
-      monotonicFinal.recordedAt,
-    );
-    assert.equal(
-      (queue[0]?.payload as Partial<Review19Result>)?.sourceUpdatedAt,
-      "2026-08-10T10:00:00.001Z",
-    );
+    const queuedReference = normalizeReview19PendingReference(queue[0]?.payload);
+    assert.ok(queuedReference);
+    assert.equal(queuedReference.recordedAt, monotonicFinal.recordedAt);
+    assert.equal(queuedReference.sourceUpdatedAt, "2026-08-10T10:00:00.001Z");
+    assert.equal("areaCounts" in queuedReference, false);
   } finally {
     if (originalDescriptor) {
       Object.defineProperty(globalThis, "localStorage", originalDescriptor);
@@ -743,22 +741,11 @@ await test("Review19 deletion correction advances despite clock rollback", () =>
     assert.equal(enqueueReview19RecordForCloud(correction), true);
     const queued = loadPendingSupabaseSyncQueue({ storage });
     assert.equal(queued.length, 1);
-    assert.equal(
-      (queued[0]?.payload as Partial<Review19Result>)?.sourceUpdatedAt,
-      correction.sourceUpdatedAt,
-    );
-    assert.equal(
-      (queued[0]?.payload as Partial<Review19Result>)?.areaCounts?.[
-        targetAreaId
-      ],
-      undefined,
-    );
-    assert.equal(
-      (queued[0]?.payload as Partial<Review19Result>)?.excludeReasons?.[
-        targetAreaId
-      ],
-      "manual",
-    );
+    const queuedReference = normalizeReview19PendingReference(queued[0]?.payload);
+    assert.ok(queuedReference);
+    assert.equal(queuedReference.sourceUpdatedAt, correction.sourceUpdatedAt);
+    assert.equal("areaCounts" in queuedReference, false);
+    assert.equal("excludeReasons" in queuedReference, false);
   } finally {
     if (previousDescriptor) {
       Object.defineProperty(globalThis, "localStorage", previousDescriptor);
@@ -1140,7 +1127,7 @@ await test("hook integration is local-first, fixed-isolated, and retry-safe", ()
   assert.ok(cloudSource.includes("area-count-cloud-enqueue"));
   assert.ok(settingsSource.includes("端末内データをSupabaseへ同期"));
   assert.ok(settingsSource.includes("result.allSynced"));
-  assert.ok(settingsSource.includes("未同期 0件"));
+  assert.ok(settingsSource.includes("未送信キュー 0件"));
   assert.ok(settingsSource.includes('width: "min(92vw, 520px)"'));
   assert.ok(settingsSource.includes('maxWidth: "100%"'));
   assert.ok(settingsSource.includes('boxSizing: "border-box"'));

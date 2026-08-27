@@ -4,6 +4,7 @@ import type {
   DemandCycle,
   ForecastHourKey,
   ForecastWeatherKind,
+  GlobalDiscountAdjustmentPercent,
   SessionData,
   SessionDraft,
 } from "../../domain/types";
@@ -60,6 +61,10 @@ type StartScreenProps = {
   canChangeDemandCycle: boolean;
   demandCycleChangeBlockedReason?: string | null;
   onChangeDemandCycle: (demandCycle: DemandCycle) => boolean;
+  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
+  onChangeGlobalDiscountAdjustment?: (
+    adjustmentPercent: GlobalDiscountAdjustmentPercent,
+  ) => void;
   now?: Date;
 };
 
@@ -428,6 +433,8 @@ export function StartScreen({
   canChangeDemandCycle,
   demandCycleChangeBlockedReason = null,
   onChangeDemandCycle,
+  globalDiscountAdjustmentPercent = 0,
+  onChangeGlobalDiscountAdjustment,
   now = new Date(),
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
@@ -912,6 +919,80 @@ export function StartScreen({
         </button>
       </section>
       ) : null}
+
+      <section
+        aria-label="全体値引補正"
+        style={{
+          marginBottom: 14,
+          padding: "10px 12px",
+          border: "1px solid #cbd5e1",
+          borderRadius: 12,
+          background: "#f8fafc",
+        }}
+      >
+        <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 900 }}>
+          全体値引補正
+        </div>
+        <div
+          role="group"
+          aria-label="全体値引補正を選択"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 8,
+          }}
+        >
+          {([-5, 0, 5] as const).map((adjustmentPercent) => {
+            const selected =
+              adjustmentPercent === globalDiscountAdjustmentPercent;
+            const label =
+              adjustmentPercent === 0
+                ? "なし"
+                : `${adjustmentPercent > 0 ? "+" : ""}${adjustmentPercent}%`;
+            return (
+              <button
+                key={adjustmentPercent}
+                type="button"
+                aria-pressed={selected}
+                onClick={() =>
+                  onChangeGlobalDiscountAdjustment?.(adjustmentPercent)
+                }
+                style={{
+                  minWidth: 0,
+                  minHeight: 44,
+                  padding: "8px 6px",
+                  borderRadius: 10,
+                  border: selected
+                    ? "2px solid #2563eb"
+                    : "1px solid #94a3b8",
+                  background: selected ? "#dbeafe" : "#fff",
+                  color: "#0f172a",
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: onChangeGlobalDiscountAdjustment
+                    ? "pointer"
+                    : "default",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div
+          style={{
+            marginTop: 7,
+            color: "#64748b",
+            fontSize: 11,
+            lineHeight: 1.45,
+          }}
+        >
+          {isFinalTime
+            ? "20時30分の固定値引には適用されません"
+            : "通常の値引率へ最後に5ポイント加減します"}
+          {isFixedTimeMode ? "（時刻固定モード専用）" : ""}
+        </div>
+      </section>
 
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>曜日</StartSectionLabel>

@@ -75,6 +75,12 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           canChangeDemandCycle={derived.canChangeDemandCycle}
           demandCycleChangeBlockedReason={derived.demandCycleChangeBlockedReason}
           onChangeDemandCycle={actions.changeDemandCycle}
+          globalDiscountAdjustmentPercent={
+            derived.globalDiscountAdjustmentPercent
+          }
+          onChangeGlobalDiscountAdjustment={
+            actions.changeGlobalDiscountAdjustment
+          }
         />
       );
 
@@ -167,6 +173,12 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           rateDisplay={derived.rateDisplay}
+          rateDisplayBeforeGlobalAdjustment={
+            derived.rateDisplayBeforeGlobalAdjustment
+          }
+          globalDiscountAdjustmentPercent={
+            state.session.globalDiscountAdjustmentPercent ?? 0
+          }
           medianEvaluationDisplay={buildMedianEvaluationDisplay(
             state.currentAreaId
               ? state.areaProgressMap[state.currentAreaId]

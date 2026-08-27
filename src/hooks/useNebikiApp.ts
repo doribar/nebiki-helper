@@ -22,6 +22,7 @@ import type {
   HumanEvaluationDetails,
   HumanEvaluationSelection,
   SupabaseBackfillResult,
+  GlobalDiscountAdjustmentPercent,
 } from "../domain/types";
 import {
   buildFinalRateDecisionSnapshot,
@@ -167,6 +168,8 @@ import {
   flushCloudSyncQueue,
   getCloudSyncStatus,
   persistAreaCountRecordLocalFirstSafely,
+  removeReview19PendingItemsCoveredByRecords,
+  syncAuthoritativeReview19RecordsDirectly,
 } from "../domain/cloudSync.ts";
 import {
   loadPendingSupabaseSyncQueue,
@@ -197,6 +200,7 @@ import { getCurrentDataVersionInfo } from "../domain/dataVersion.ts";
 import { supportsObonCalendarRule } from "../domain/obon.ts";
 import {
   buildCurrentNormalRateDisplay,
+  buildCurrentNormalRatePresentation,
   buildCompletedRateSnapshot,
   buildNextSessionSkipRecord,
   getAreaJudgeText,
@@ -205,6 +209,13 @@ import {
   getProgressNormalRateText,
   shouldIgnoreNormalTimeRateCap,
 } from "./nebikiApp/ratePresentation.ts";
+import {
+  loadGlobalDiscountAdjustmentState,
+  normalizeGlobalDiscountAdjustmentPercent,
+  saveGlobalDiscountAdjustmentState,
+  selectGlobalDiscountAdjustmentForDate,
+  type GlobalDiscountAdjustmentState,
+} from "../domain/globalDiscountAdjustment.ts";
 import type { CompletedRateSnapshot } from "./nebikiApp/ratePresentation.ts";
 import {
   acknowledgeAutoSkippedProgress,
@@ -373,6 +384,11 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     isTestMode ? loadFixedTimeDemandCycleState() : loadDemandCycleState(),
     initialToday,
   );
+  const initialGlobalDiscountAdjustmentState =
+    loadGlobalDiscountAdjustmentState({
+      date: initialToday,
+      fixedTime: isTestMode,
+    });
   const initialLastUsedSessionDraftBase = buildStartDefaultDraft(
     isTestMode ? null : initialPersistenceRef.current?.lastUsedSessionDraft ?? null
   );
@@ -471,6 +487,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [demandCycleState, setDemandCycleState] = useState<DemandCycleState>(
     initialDemandCycleState,
   );
+  const [globalDiscountAdjustmentState, setGlobalDiscountAdjustmentState] =
+    useState<GlobalDiscountAdjustmentState>(
+      initialGlobalDiscountAdjustmentState,
+    );
 
   const persistDemandCycleStateSafely = useCallback((
     nextState: DemandCycleState,
@@ -498,6 +518,20 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
           run,
         });
     reportStorageOperationFailures(context, result.attempts);
+    return result.ok;
+  }, [isTestMode]);
+
+  const persistGlobalDiscountAdjustmentStateSafely = useCallback((
+    nextState: GlobalDiscountAdjustmentState,
+    context: string,
+  ): boolean => {
+    const result = saveGlobalDiscountAdjustmentState({
+      state: nextState,
+      fixedTime: isTestMode,
+    });
+    // Small date-scoped state is never allowed to prune production data. The
+    // domain helper returns the same structured metadata as other boundaries.
+    reportStorageOperationFailures(context, [result]);
     return result.ok;
   }, [isTestMode]);
   const [, setAreaCountRemoteLoadStatus] = useState<
@@ -1495,8 +1529,8 @@ const lateSkipNotice = useMemo(() => {
 
 
 
-  const rateDisplay = useMemo(() => {
-    return buildCurrentNormalRateDisplay({
+  const ratePresentation = useMemo(() => {
+    return buildCurrentNormalRatePresentation({
       session: state.session,
       progress: currentAreaProgress,
       effectiveDiscountTime:
@@ -1516,6 +1550,9 @@ const lateSkipNotice = useMemo(() => {
     effectiveRateIgnoreTimeRateCap,
     earlyNextMinus5Info,
   ]);
+  const rateDisplay = ratePresentation?.display ?? null;
+  const rateDisplayBeforeGlobalAdjustment =
+    ratePresentation?.baseDisplay ?? null;
   const finalGuide = useMemo(() => {
   if (!state.session || state.session.discountTime !== "20") return null;
 
@@ -1888,6 +1925,11 @@ const lateSkipNotice = useMemo(() => {
       inferredOperationDemandCycle ??
       selectDemandCycleForDate(seasonalDemandCycleState, demandCycleDate)
     : "normal";
+  const globalDiscountAdjustmentPercent =
+    selectGlobalDiscountAdjustmentForDate(
+      globalDiscountAdjustmentState,
+      state.sessionDraft.date,
+    );
   const canChangeDemandCycle =
     summerModeAvailable &&
     state.screen === "start" &&
@@ -1898,6 +1940,13 @@ const lateSkipNotice = useMemo(() => {
     : !summerModeAvailable
       ? "夏季モードは7月1日〜9月30日の営業開始前だけ変更できます。"
       : "当日の値引運用がすでに始まっているため、夏季モードを変更できません。";
+
+  useEffect(() => {
+    const date = state.sessionDraft.date;
+    setGlobalDiscountAdjustmentState(
+      loadGlobalDiscountAdjustmentState({ date, fixedTime: isTestMode }),
+    );
+  }, [isTestMode, state.sessionDraft.date]);
 
   useEffect(() => {
     if (summerModeAvailable) return;
@@ -2217,6 +2266,28 @@ const lateSkipNotice = useMemo(() => {
     return true;
   }
 
+  function changeGlobalDiscountAdjustment(
+    nextAdjustment: GlobalDiscountAdjustmentPercent,
+  ): void {
+    const date = state.sessionDraft.date;
+    const nextState: GlobalDiscountAdjustmentState = {
+      version: 1,
+      date,
+      adjustmentPercent:
+        normalizeGlobalDiscountAdjustmentPercent(nextAdjustment),
+    };
+    if (
+      persistGlobalDiscountAdjustmentStateSafely(
+        nextState,
+        isTestMode
+          ? "fixed-time-global-discount-adjustment"
+          : "global-discount-adjustment",
+      )
+    ) {
+      setGlobalDiscountAdjustmentState(nextState);
+    }
+  }
+
   function buildDraftFromSource(source: SessionData | SessionDraft): SessionDraft {
     return syncAfterRainSelection(normalizeSessionDraft(source), lastSessionWeather);
   }
@@ -2515,6 +2586,15 @@ const lateSkipNotice = useMemo(() => {
         ...prev.sessionDraft.weather,
         hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
       },
+      globalDiscountAdjustmentPercent:
+        prev.session &&
+        prev.session.date === currentDate &&
+        prev.session.discountTime === resolvedDiscountTime &&
+        !timeSwitchTarget
+          ? normalizeGlobalDiscountAdjustmentPercent(
+              prev.session.globalDiscountAdjustmentPercent,
+            )
+          : globalDiscountAdjustmentPercent,
       startedAt: canResumeCurrentSession ? prev.session!.startedAt : startedAt,
     };
     const isResumingSameDiscountSession = Boolean(
@@ -3342,6 +3422,10 @@ const lateSkipNotice = useMemo(() => {
             date: state.session.date,
             ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
             demandCycle: state.session.demandCycle,
+            globalDiscountAdjustmentPercent:
+              normalizeGlobalDiscountAdjustmentPercent(
+                state.session.globalDiscountAdjustmentPercent,
+              ),
           })
           : null
         : null;
@@ -4192,6 +4276,7 @@ const lateSkipNotice = useMemo(() => {
         ...draft.weather,
         hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
       },
+      globalDiscountAdjustmentPercent,
       startedAt,
     };
     const nextSessionTemperatureComfort = resolveSessionTemperatureComfort({
@@ -4710,6 +4795,9 @@ const lateSkipNotice = useMemo(() => {
       const skipped: SupabaseBackfillResult = {
         detectedAreaCount: 0,
         detectedReview19Count: 0,
+        directReview19AttemptedCount: 0,
+        directReview19SucceededCount: 0,
+        directReview19FailedCount: 0,
         queuedCount: 0,
         attemptedCount: 0,
         succeededCount: 0,
@@ -4745,6 +4833,49 @@ const lateSkipNotice = useMemo(() => {
     // cache before queueing; that was another path that could recreate an
     // unbounded duplicate population.
 
+    // Review19は端末正本を直接sourceにして送る。rich payloadを同じ容量の
+    // pendingへ複製しないため、pendingを作れなかった既存正本も救済できる。
+    const directReview19Result =
+      await syncAuthoritativeReview19RecordsDirectly(localReview19Records);
+    if (directReview19Result.status === "saved") {
+      const cleanup = attemptStorageOperationWithAuxiliaryRecovery({
+        key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
+        operation: "set",
+        run: () => {
+          removeReview19PendingItemsCoveredByRecords(
+            directReview19Result.sentRecords,
+          );
+        },
+      });
+      reportStorageOperationFailures(
+        "backfill-review19-covered-pending-cleanup",
+        cleanup.attempts,
+      );
+    }
+
+    // Offline/disabled時にも正本は維持し、後続retry用に軽量referenceだけを
+    // outboxへ残す。ここでfull Review19 payloadは保存しない。
+    let queuedReview19Count = 0;
+    const reviewQueueSave = directReview19Result.status === "saved"
+      ? null
+      : attemptStorageOperationWithAuxiliaryRecovery({
+          key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
+          operation: "set",
+          run: () => {
+            for (const record of localReview19Records) {
+              if (enqueueReview19RecordForCloud(record)) {
+                queuedReview19Count += 1;
+              }
+            }
+          },
+        });
+    if (reviewQueueSave) {
+      reportStorageOperationFailures(
+        "backfill-review19-reference-enqueue",
+        reviewQueueSave.attempts,
+      );
+    }
+
     let queuedAreaCount = 0;
     const areaQueueSave = attemptStorageOperationWithAuxiliaryRecovery({
       key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
@@ -4753,22 +4884,10 @@ const lateSkipNotice = useMemo(() => {
         queuedAreaCount = enqueueAreaCountRecordsForCloud(collectedAreaRecords);
       },
     });
-    let queuedReview19Count = 0;
-    const reviewQueueSave = attemptStorageOperationWithAuxiliaryRecovery({
-      key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
-      operation: "set",
-      run: () => {
-        queuedReview19Count = 0;
-        for (const record of localReview19Records) {
-          if (enqueueReview19RecordForCloud(record)) queuedReview19Count += 1;
-        }
-      },
-    });
     reportStorageOperationFailures("backfill-area-count-enqueue", areaQueueSave.attempts);
-    reportStorageOperationFailures("backfill-review19-enqueue", reviewQueueSave.attempts);
-    if (!areaQueueSave.ok || !reviewQueueSave.ok) {
+    if (!areaQueueSave.ok || (reviewQueueSave && !reviewQueueSave.ok)) {
       window.alert(
-        "端末データは保持されていますが、クラウド同期の準備を一部完了できませんでした。空き容量を確認して再試行してください。",
+        "端末データは保持されていますが、クラウド同期の準備を一部完了できませんでした。管理設定から再試行してください。",
       );
     }
     setCloudSyncVersion((version) => version + 1);
@@ -4778,12 +4897,27 @@ const lateSkipNotice = useMemo(() => {
     const result: SupabaseBackfillResult = {
       detectedAreaCount: collectedAreaRecords.length,
       detectedReview19Count: localReview19Records.length,
+      directReview19AttemptedCount:
+        directReview19Result.attemptedCount,
+      directReview19SucceededCount:
+        directReview19Result.succeededCount,
+      directReview19FailedCount:
+        directReview19Result.failedCount,
       queuedCount: queuedAreaCount + queuedReview19Count,
-      attemptedCount: flushResult.attempted,
-      succeededCount: flushResult.succeeded,
-      failedCount: flushResult.failed,
+      attemptedCount:
+        directReview19Result.attemptedCount + flushResult.attempted,
+      succeededCount:
+        directReview19Result.succeededCount + flushResult.succeeded,
+      failedCount: flushResult.failed +
+        (reviewQueueSave?.ok === false
+          ? directReview19Result.failedCount
+          : 0),
       pendingCount,
-      allSynced: pendingCount === 0,
+      allSynced:
+        pendingCount === 0 &&
+        areaQueueSave.ok &&
+        (directReview19Result.failedCount === 0 ||
+          Boolean(reviewQueueSave?.ok && flushResult.failed === 0)),
     };
     setLastBackfillResult(result);
     setAreaCountRecords((current) =>
@@ -4838,6 +4972,8 @@ const lateSkipNotice = useMemo(() => {
   basisGuide: displayBasisGuide,
   weatherGuideText,
   rateDisplay,
+  rateDisplayBeforeGlobalAdjustment,
+  globalDiscountAdjustmentPercent,
   finalGuide,
   pendingBanner,
   timeSwitchNotice: state.timeSwitchNotice,
@@ -4926,6 +5062,7 @@ const lateSkipNotice = useMemo(() => {
       startReview19Manually,
       resetApp,
       changeDemandCycle,
+      changeGlobalDiscountAdjustment,
     },
   };
 }

@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-24（日本時間）
+最終更新: 2026-08-27（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,10 +11,10 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260824-2040.zip`
-- `appVersion`: `2026.8.9-12`
+- 作業基準ZIP: `nebiki-helper-20260824-2159.zip`
+- `appVersion`: `2026.8.9-13`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260824-215940-jst`
+- `buildId`: `build-20260827-203600-jst`
 - リリースZIP: この文書と同梱された `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 値引ヘルパーの運用目的
@@ -153,6 +153,28 @@ Storage:
 - 9-11のcurrent-sessionに、12/12入力完備、Review19とsessionの日付／sessionStartedAt一致、未保存の `review19`／`review19_weather` stateが実在する場合だけ、翌日deployを含むreload後も復元する。日付から内容を推測せず、保存済み`review19_done`、incomplete、不一致stateは従来どおり復元しない。再度「完了」で同一Review19 identity／pending identityへdedupeして正式保存できる。
 - fixed-timeは本番Supabase AreaCountをREAD ONLYで使う既存仕様を維持し、production housekeeping／cache write／pending／Review19／finalized day／learning populationへ一切writeしない。
 - anonymous rich long-run fixture（AreaCount 2,000、pending 100、Review19複数、daily snapshot 80等）では、UTF-16概算 `5011.6 KiB` から `2516.7 KiB` へ49.8%削減し、AreaCount local cacheは2,000件から897件になった。protected dataはbyte-identicalである。
+
+## Review19 cloud outbox
+
+- Review19 authoritative local recordとSupabase pendingでrich payloadを二重保持しない。新規Review19 pendingは `review19_ref_v1` の軽量referenceで、date、demandCycle、sessionStartedAt、sourceUpdatedAt、final／complete等、端末正本を一意に解決するための最小metadataだけを保持する。
+- 同期時はreference identityから `nebiki-helper/review19-records` の端末正本を解決し、必要な場合だけcurrent-session、work-session checkpoint、Review19 source stateも安全な復元元として参照する。Supabaseへ送るrich payloadは解決したauthoritative Review19から生成する。
+- legacy full-payload Review19 pendingは後方互換で読み込み・送信できる。finalからpartialへ退行させず、より新しいlocal finalがある場合はそれを採用する。成功したrevisionで安全に覆われるpendingだけを削除する。
+- 管理設定の手動同期は、pendingが存在しないcomplete・finalなlocal Review19正本も直接idempotent upsertする。したがってquotaでpending作成に失敗したReview19も、端末正本が残っていれば後から救済できる。送信前に同サイズのfull pendingを作成しない。
+- offline／通信失敗時は端末正本を維持し、可能なら軽量referenceを残す。referenceすら保存できない場合も正本を削除せず、次回の手動同期で再検出する。remote既存recordは既存identity・CAS・rich mergeにより重複rowを作らない。
+- 管理設定の `未送信キュー` はlocal outbox件数であり、0件をremote全履歴の同期済み保証とは扱わない。手動同期結果ではReview19正本の直接確認／送信件数をqueue件数と分けて表示する。
+- 匿名rich fixtureのUTF-16 key＋value概算は、Review19端末正本96.6 KiB、legacy full pending 97.0 KiB、新reference pending 0.9 KiB。pending部分を99.1%削減した。
+
+## 全体値引補正
+
+- 一時的な現場事情へ対応する、人間が明示選択する日次rate補正。StartScreenで `-5% / なし / +5%` を選択し、アプリは夜担当欠勤、近隣店、天候、曜日、祝日、Obon等から自動推論しない。
+- 通常値引ロジックが算出した表示rateの最終段へ5 percentage pointsを1回だけ加減する。20%＋5は25%、20%−5は15%。結果は0〜50%へclampする。
+- 20時30分の既存全品半額、30／40／50、40／50、all50等、業務ルールによるforced rateは補正対象外。＋5／−5のどちらでも既存forced 50%は50%のまま。
+- 設定はbusiness date単位で保存し、新しい日付は0へ戻る。同日内では選択を復元する。session開始時の値を `globalDiscountAdjustmentPercent: -5 | 0 | 5` として固定し、途中変更しても完了済みの過去sessionを遡及変更しない。
+- rate snapshotは補正前rate、補正値、補正後の実表示rateを分離して保持する。resume、undo、navigation、rerenderで二重適用しない。session、daySnapshot、Review19／finalized day／exportの既存経路へoptional metadataとして伝播する。
+- autoEvaluation、human raw9、finalEvaluation、中央値判定、productionAnalysisは書き換えない。旧recordのfield欠損は補正0相当として読み、物理migrationしない。
+- fixed-timeは専用storage keyで同じ計算を利用するが、productionのday setting、AreaCount、pending、Review19、finalized day、learning populationへWRITEしない。本番Supabase AreaCount READ ONLYは維持する。
+
+用途例として、夜担当欠勤等で他部門の人へ値引を任せる日は＋5、一時的な需要増では−5を人間が選択できる。ただしアプリは理由を推測しない。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -303,7 +325,7 @@ Storage:
 ### local-first、pending、retry
 
 - AreaCountは端末cacheへupsertしてからoutboxへ積み、Review19は端末state／recordを保存してからoutboxへ積む。Supabase成功を現場保存の条件にしない。
-- pending keyは `nebiki-helper/pending-supabase-sync-v1`。itemは `type`（`area_count` / `review19`）、identity、payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持つ。
+- pending keyは `nebiki-helper/pending-supabase-sync-v1`。AreaCount itemは従来どおり `type`、identity、送信payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持つ。新規Review19 itemは同じrich payloadを複製せず、`review19_ref_v1` のidentity／revision metadataだけを持ち、送信時にlocal authoritative Review19を解決する。旧full-payload Review19 itemも送信互換を維持する。
 - 同じtype・identityはqueue内で1 itemにまとめる。retryはapp起動、online event、新しいAreaCount／Review19保存後、管理設定の手動同期で行う。送信は直列で、process内のsingle in-flight lockにより並列flushを抑止する。送信中に同identityの新revisionが積まれた場合はCASで消さず、必要なら成功後にもう一度だけ追送する。
 - remote失敗、Supabase設定なし、schema未適用はすべてpendingに残す。特にsummerを旧schemaへnormalとして送るfallbackはない。
 - Review19は各エリア確定後のpartialも送る。final payloadがpartialへ退行しないようqueueとDB triggerの両方で保護する。remoteから中央値履歴へ取り込むのはcomplete・finalだけ。
@@ -329,8 +351,8 @@ Storage:
 
 - 管理設定の「端末内データをSupabaseへ同期」で手動実行する。対象は統合cache、旧normal cache、旧summer cache、finalized day、Review19のday snapshot、daily session snapshot、確定済みcurrent session、およびlocalのcomplete・final Review19。
 - future record、invalid date／area／count／timestamp／cycle、未測定、確定前UI state、fixed-time dataを除外する。複数保存元の同一recordは送信前にidentityで統合し、rich detailsを保持する。
-- 送信はidempotent upsert。何度実行してもrow／中央値sampleを増殖させず、remote既存rowをnull detailで劣化させず、localデータは削除しない。
-- 結果UIは残数／19:00の検出数、送信対象、成功、失敗、pendingを表示する。pending 0だけを「すべて同期済み」の条件とする。Supabase APIのため新規／更新を推測表示しない。
+- AreaCount送信は既存のidempotent upsert／pending／CASを維持する。local complete・final Review19はfull pendingを事前作成せず直接idempotent upsertし、成功revisionで覆われるlegacy／reference pendingを安全に整理する。pendingなしlocal正本も検出するため、9-12でoutbox作成だけquota失敗したReview19を救済できる。
+- 何度実行してもrow／中央値sampleを増殖させず、remote既存rowをnull detailで劣化させず、localデータは削除しない。結果UIは残数／19:00の検出数、送信対象、成功、失敗、Review19正本の直接確認／送信件数、`未送信キュー`を表示する。queue 0はlocal outboxが空という意味で、remote全件同期済みの保証とは表示しない。Supabase APIのため新規／更新を推測表示しない。
 
 ### SQL実行と実環境確認
 
@@ -344,11 +366,11 @@ Storage:
 
 ## 今回変更しない重要仕様
 
-- cloud syncのlocal-first、pending queue、retry timing、CAS、in-flight guard、rich merge、normal／summer dedupe、Review19 partial／final、backfill、fixed-time隔離を変更しない。
+- cloud syncのlocal-first、retry timing、CAS、in-flight guard、rich merge、normal／summer dedupe、Review19 partial／final、fixed-time隔離を維持する。9-13ではReview19 pendingだけを軽量reference化し、手動backfillへpendingなしlocal正本のdirect syncを追加した。AreaCount pending semanticsは変更しない。
 - Supabase SQL、schema、column、unique key、index、RLS、policyを変更しない。追加analysis metadataは既存JSONBで保持する。
 - 値引率基本値、天候・気温補正、夏季期間、9段階interaction／500ms長押し、完了画面の現在時刻率、20時30分ルールを変更しない。
 - `dataSchemaVersion` はoptional additive metadataのみのため `3` を維持する。
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:review19-storage-diagnostics`、`check:review19-completion-safety`、`check:initial-weather-focus`、`check:weather-confirmation`、`check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260824_REVIEW19_STORAGE_DIAGNOSTICS.md` を参照する。
+README記載の全 `check:*`（特に `check:review19-lightweight-outbox`、`check:global-discount-adjustment`、`check:review19-storage-diagnostics`、`check:review19-completion-safety`、`check:initial-weather-focus`、`check:weather-confirmation`、`check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260827_REVIEW19_OUTBOX_GLOBAL_ADJUSTMENT.md` を参照する。

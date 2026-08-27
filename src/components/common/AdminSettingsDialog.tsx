@@ -107,8 +107,8 @@ export function AdminSettingsDialog({
       }
       setStatus(
         result.allSynced
-          ? `同期完了：成功 ${result.succeededCount}件、未同期 0件`
-          : `同期結果：成功 ${result.succeededCount}件、失敗 ${result.failedCount}件、未同期 ${result.pendingCount}件`,
+          ? `同期完了：成功 ${result.succeededCount}件、未送信キュー 0件`
+          : `同期結果：成功 ${result.succeededCount}件、失敗 ${result.failedCount}件、未送信キュー ${result.pendingCount}件`,
       );
     } catch (error) {
       setStatus(
@@ -261,7 +261,7 @@ export function AdminSettingsDialog({
             端末内の通常・夏季の残数履歴と19:00チェックをクラウドへ送ります。
             端末内データは削除しません。
             <br />
-            クラウド未同期：{cloudSync?.pendingCount ?? 0}件
+            未送信キュー：{cloudSync?.pendingCount ?? 0}件
           </div>
           <button
             type="button"
@@ -282,9 +282,11 @@ export function AdminSettingsDialog({
             <div style={{ marginTop: 8, color: "#475569", fontSize: 12, lineHeight: 1.5 }}>
               検出：残数 {cloudSync.lastBackfillResult.detectedAreaCount}件・19:00 {cloudSync.lastBackfillResult.detectedReview19Count}件
               <br />
-              送信対象 {cloudSync.lastBackfillResult.queuedCount}件
+              19:00正本を直接確認・送信 {cloudSync.lastBackfillResult.directReview19SucceededCount ?? 0}/{cloudSync.lastBackfillResult.directReview19AttemptedCount ?? 0}件
               <br />
-              成功 {cloudSync.lastBackfillResult.succeededCount}件／失敗 {cloudSync.lastBackfillResult.failedCount}件／未同期 {cloudSync.lastBackfillResult.pendingCount}件
+              未送信キュー追加 {cloudSync.lastBackfillResult.queuedCount}件
+              <br />
+              成功 {cloudSync.lastBackfillResult.succeededCount}件／失敗 {cloudSync.lastBackfillResult.failedCount}件／未送信キュー {cloudSync.lastBackfillResult.pendingCount}件
             </div>
           ) : null}
           {cloudSync && cloudSync.errorDetails.pendingCount > 0 ? (

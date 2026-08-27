@@ -41,6 +41,7 @@ import {
   DEFAULT_DEMAND_CYCLE,
   normalizeDemandCycle,
 } from "../../domain/demandCycle.ts";
+import { normalizeGlobalDiscountAdjustmentPercent } from "../../domain/globalDiscountAdjustment.ts";
 import {
   formatLocalDate,
   getRuntimeNow,
@@ -631,6 +632,10 @@ function normalizeSessionData(raw?: Partial<SessionData> | null): SessionData | 
     ...normalizeDataVersionInfo(raw),
     startedAt:
       typeof raw.startedAt === "string" ? raw.startedAt : getRuntimeNow().toISOString(),
+    globalDiscountAdjustmentPercent:
+      normalizeGlobalDiscountAdjustmentPercent(
+        raw.globalDiscountAdjustmentPercent,
+      ),
     ...(temperatureComfortAnalysis ? { temperatureComfortAnalysis } : {}),
     ...(legacyUnresolvedTempLevel ? { legacyUnresolvedTempLevel } : {}),
   };

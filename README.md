@@ -39,6 +39,8 @@ npm run check:last-area-skip
 npm run check:fixed-time-supabase-read
 npm run check:initial-weather-focus
 npm run check:quota-root-fix
+npm run check:review19-lightweight-outbox
+npm run check:global-discount-adjustment
 npx tsc -b --pretty false
 npm run build
 ```
@@ -90,6 +92,24 @@ npm run build
 - 起動時はcurrent-sessionを先に読み、保護日を確定してから安全なduplicateだけを整理します。9-11のcurrent-sessionに12/12入力完備・Review19／session identity一致の未保存stateが実在すれば、翌日deployでも復元し、再度「完了」で正式保存できます。内容の推測補完はしません。
 - remote unavailable時は正式AreaCountを削除しません。local履歴と人間判定で業務を続け、安全なduplicate整理だけで容量が足りなければReview19入力を保持して既存のstorage診断を表示します。
 - anonymous rich long-run fixtureでは、UTF-16概算使用量を `5011.6 KiB` から `2516.7 KiB` へ49.8%削減しました。AreaCount 2,000件中、pending／current／local-onlyを保護しつつ897件をoffline cacheとして残しました。
+
+## Review19 lightweight cloud outbox（2026.8.9-13）
+
+- Review19の端末正本は従来どおりrich payloadを保持しますが、新規cloud outboxは同じpayloadを複製せず、`review19_ref_v1` のdate・demandCycle・sessionStartedAt・sourceUpdatedAt・final／complete情報だけを保持します。送信時にidentityから端末正本、current-session、checkpoint、Review19 source stateを解決します。
+- 旧full-payload pendingは読み込み・送信互換を維持します。finalからpartialへ退行せず、より新しいlocal finalが旧partialを覆う場合はfinalを送信し、成功したrevisionで安全に覆われるpendingだけを削除します。
+- 管理設定の手動同期はcomplete・finalなlocal Review19正本をpendingへ複製せず、Supabaseへ直接idempotent upsertします。このため、9-12で端末正本保存後にpending作成だけQuotaExceededErrorとなったrecordも、local正本が残っていれば手動同期で救済できます。
+- offline／通信失敗時はlocal正本を保持し、必要なら軽量referenceだけを残します。referenceすら保存できなくても正本を削除せず、後日の手動同期で再検出します。
+- 管理設定の件数はremote全件の同期済み保証ではなく、local outboxの件数であることを明確にするため `未送信キュー` と表示します。手動同期結果ではReview19正本の直接確認・送信件数を別表示します。
+- 匿名rich fixtureのUTF-16 key＋value概算は、Review19正本96.6 KiB、旧full pending 97.0 KiB、新reference pending 0.9 KiBで、pending部分を99.1%削減しました。
+
+## 全体値引補正（2026.8.9-13）
+
+- StartScreenで人間が `-5% / なし / +5%` を明示選択します。曜日、中央値、human判定、商品、weather、temperature等の既存計算を終えた通常表示率へ、最後に5 percentage pointsを1回だけ加減し、0〜50%へclampします。
+- 例: 基準20%＋5は25%、基準20%−5は15%。`引かない` は基準0%として、＋5なら5%、−5なら0%です。中央値auto、human raw9、finalEvaluation、productionAnalysisは変更しません。
+- 20:30の既存forced 50%／30・40・50ルールは補正対象外です。＋5／−5のどちらでも既存の最終値引表示を維持します。
+- 設定はbusiness date単位で保存し、新しい日付は0へ戻ります。session開始時の値を `globalDiscountAdjustmentPercent: -5 | 0 | 5` として固定し、途中変更で完了済みsessionを遡及変更しません。率snapshotは補正前・補正値・補正後を分離して保存するため、resumeや再renderでも二重適用しません。
+- 通常／fixed-timeは別storage keyです。fixed-timeでも同じ率計算を利用できますが、本番AreaCount、pending、Review19、finalized day、learning populationへのWRITE隔離を維持します。
+- optional additive metadataとして既存session／daySnapshot／Review19／export経路に保持し、旧recordの欠損は0相当です。物理migrationとDB変更はありません。
 
 ## 人間残数評価（5ボタン・9段階）
 
@@ -187,7 +207,7 @@ npm run build
 
 通常・夏季の残数記録は、どちらも同じlocal-first経路で保存します。残数確定時は先に端末へ保存し、その後Supabase送信用outboxへ追加してupsertを試みます。通信、設定、SQL schemaのいずれかに問題があっても現場フローは止めず、未送信itemを `nebiki-helper/pending-supabase-sync-v1` に残します。Supabase送信成功を端末保存の条件にはしません。
 
-pending itemは `type`、record identity、payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持ちます。同じtype・identityは1 itemへまとめ、app起動、online復帰、新しい残数／19:00チェック保存後、管理設定の手動同期時に直列再送します。同期処理はin-flight lockで多重実行を防ぎます。新schemaが未適用なら旧schemaへnormalとして送るfallbackは行わず、normal／summerを保持したままpendingに残します。
+AreaCount pendingは従来どおり `type`、record identity、送信payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持ちます。Review19の新規pendingは `review19_ref_v1` の軽量referenceで、rich payloadを二重保存せず、送信時にidentityから端末正本を解決します。旧full-payload Review19 pendingも後方互換で送信できます。同じtype・identityは1 itemへまとめ、app起動、online復帰、新しい残数／19:00チェック保存後、管理設定の手動同期時に直列再送します。同期処理はin-flight lockで多重実行を防ぎます。新schemaが未適用なら旧schemaへnormalとして送るfallbackは行わず、normal／summerを保持したままpendingに残します。
 
 ### 同期エラーの確認
 
@@ -229,7 +249,7 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 - 確定済みの現在session state
 - `nebiki-helper/review19-records` のcomplete・final 19:00記録
 
-未来日／未来時刻、不正なarea・count・cycle、未測定、確定前UI入力、固定時間モードのデータは除外します。同じ操作を繰り返してもunique upsertで件数は増えず、端末データは削除しません。画面には検出件数、送信対象、成功、失敗、pendingを表示し、pending 0だけを「すべて同期済み」とみなします。時間固定モードでは中央値用のAreaCount SELECTだけを許可し、remote mutation、production local write、retry、backfillは行いません。
+未来日／未来時刻、不正なarea・count・cycle、未測定、確定前UI入力、固定時間モードのデータは除外します。同じ操作を繰り返してもunique upsertで件数は増えず、端末データは削除しません。complete・finalなlocal Review19正本は、full pendingを作らず直接idempotent upsertするため、pending作成に失敗した保存済みrecordも救済できます。画面には検出件数、送信対象、成功、失敗、Review19正本の直接確認／送信件数、`未送信キュー`件数を表示します。`未送信キュー：0件` はlocal outboxが空という意味であり、remote全履歴の同期済み保証とは表現しません。時間固定モードでは中央値用のAreaCount SELECTだけを許可し、remote mutation、production local write、retry、backfillは行いません。
 
 ### SQL適用手順
 
@@ -250,12 +270,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回の変更はlocal cache retention、startup housekeeping、remote paginationと未保存Review19の厳密なresume条件で、正式record／export schemaへ破壊的変更を加えません。既存recordもそのまま読み込めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、productionAnalysis、20時30分、cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回のReview19 reference outboxはlocal同期用metadataで、全体値引補正は既存session／snapshotへ追加するoptional fieldです。正式schemaを破壊せず、旧recordのfield欠損は補正0として読めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、productionAnalysis、20時30分、AreaCount cloud syncのpending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-12`
+- `appVersion`: `2026.8.9-13`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260824-215940-jst`
+- `buildId`: `build-20260827-203600-jst`
 
-今回の実装・検証結果は `CHANGE_REPORT_20260824_LOCALSTORAGE_QUOTA_ROOT_FIX.md` を参照してください。
+今回の実装・検証結果は `CHANGE_REPORT_20260827_REVIEW19_OUTBOX_GLOBAL_ADJUSTMENT.md` を参照してください。

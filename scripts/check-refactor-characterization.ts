@@ -84,6 +84,8 @@ function assertPublicHookContract(): void {
       "basisGuide",
       "weatherGuideText",
       "rateDisplay",
+      "rateDisplayBeforeGlobalAdjustment",
+      "globalDiscountAdjustmentPercent",
       "finalGuide",
       "pendingBanner",
       "timeSwitchNotice",
@@ -163,6 +165,7 @@ function assertPublicHookContract(): void {
       "startReview19Manually",
       "resetApp",
       "changeDemandCycle",
+      "changeGlobalDiscountAdjustment",
     ]);
     assert.equal(captured.state.screen, "start");
     assert.equal(captured.state.sessionDraft.discountTime, "15");
@@ -178,15 +181,15 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  // 2026.8.9-12: reviewed startup housekeeping and bounded AreaCount-cache
-  // wiring are now part of the intentionally locked facade. Save ordering and
-  // completion gates remain locked.
-  assert.equal(body.length, 152109);
+  // 2026.8.9-13: reviewed lightweight Review19 outbox/manual-direct sync and
+  // session-scoped global rate-adjustment wiring are now part of the locked
+  // facade. Save ordering, fixed-time isolation, and completion gates remain locked.
+  assert.equal(body.length, 156487);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "0b6868229f0ff7cc44efd5ac80e317e2f27d6871202183115bc7430082ea3efe",
+    "06fddee5f1a237edcc01100afbe262e0c3ba57638ba7d496e60ae6879416b2a6",
   );
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 22);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 23);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
 }
 

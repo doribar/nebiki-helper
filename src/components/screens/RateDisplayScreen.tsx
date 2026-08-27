@@ -5,6 +5,7 @@ import type {
   DiscountTime,
   EditableAreaCountItem,
   FinalGuideData,
+  GlobalDiscountAdjustmentPercent,
   HumanEvaluationDetails,
   HumanEvaluationSelection,
   RateDisplayData,
@@ -27,6 +28,7 @@ import { evaluationText } from "../../domain/areaCountHistory.ts";
 import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
 import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
 import type { MedianEvaluationDisplay } from "../../domain/medianEvaluationPresentation.ts";
+import { formatGlobalDiscountAdjustment } from "../../domain/globalDiscountAdjustment.ts";
 
 type RateDisplayScreenProps = {
   weekdayText: string;
@@ -49,6 +51,8 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   rateDisplay: RateDisplayData | null;
+  rateDisplayBeforeGlobalAdjustment?: RateDisplayData | null;
+  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
   medianEvaluationDisplay?: MedianEvaluationDisplay | null;
   humanEvaluationDetails?: HumanEvaluationDetails;
   canOverrideAreaCountEvaluation?: boolean;
@@ -270,6 +274,8 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   rateDisplay,
+  rateDisplayBeforeGlobalAdjustment = null,
+  globalDiscountAdjustmentPercent = 0,
   medianEvaluationDisplay = null,
   humanEvaluationDetails,
   canOverrideAreaCountEvaluation = false,
@@ -462,6 +468,40 @@ export function RateDisplayScreen({
           }}
         >
           中央値判定：<strong>{medianEvaluationDisplay.text}</strong>
+        </section>
+      ) : null}
+
+      {!isFinalTime && globalDiscountAdjustmentPercent !== 0 ? (
+        <section
+          aria-label="全体値引補正の適用内容"
+          style={{
+            border: "1px solid #fdba74",
+            borderRadius: 10,
+            padding: "9px 11px",
+            marginBottom: 12,
+            background: "#fff7ed",
+            color: "#7c2d12",
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          {rateDisplayBeforeGlobalAdjustment ? (
+            <>
+              基準値引率：
+              <strong>{rateDisplayBeforeGlobalAdjustment.normal.main}</strong>
+              <br />
+            </>
+          ) : null}
+          全体補正：
+          <strong>
+            {formatGlobalDiscountAdjustment(globalDiscountAdjustmentPercent)}
+          </strong>
+          {rateDisplay ? (
+            <>
+              <br />
+              補正後：<strong>{rateDisplay.normal.main}</strong>
+            </>
+          ) : null}
         </section>
       ) : null}
 
