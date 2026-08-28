@@ -107,8 +107,8 @@ export function AdminSettingsDialog({
       }
       setStatus(
         result.allSynced
-          ? `同期完了：成功 ${result.succeededCount}件、未送信キュー 0件`
-          : `同期結果：成功 ${result.succeededCount}件、失敗 ${result.failedCount}件、未送信キュー ${result.pendingCount}件`,
+          ? `同期完了：端末sourceを確認し、未送信キューは0件です。`
+          : `同期結果：残数直接送信 ${result.directAreaSucceededCount ?? 0}件成功・${result.directAreaFailedCount ?? 0}件失敗、未送信キュー ${result.pendingCount}件`,
       );
     } catch (error) {
       setStatus(
@@ -280,13 +280,28 @@ export function AdminSettingsDialog({
           </button>
           {cloudSync?.lastBackfillResult ? (
             <div style={{ marginTop: 8, color: "#475569", fontSize: 12, lineHeight: 1.5 }}>
-              検出：残数 {cloudSync.lastBackfillResult.detectedAreaCount}件・19:00 {cloudSync.lastBackfillResult.detectedReview19Count}件
+              端末source検出：残数 {cloudSync.lastBackfillResult.detectedAreaCount}件・19:00 {cloudSync.lastBackfillResult.detectedReview19Count}件
+              <br />
+              同期開始時の未送信キュー {cloudSync.lastBackfillResult.existingPendingCount ?? 0}件
+              （再送成功 {cloudSync.lastBackfillResult.existingPendingSucceededCount ?? 0}件・失敗 {cloudSync.lastBackfillResult.existingPendingFailedCount ?? 0}件）
               <br />
               19:00正本を直接確認・送信 {cloudSync.lastBackfillResult.directReview19SucceededCount ?? 0}/{cloudSync.lastBackfillResult.directReview19AttemptedCount ?? 0}件
               <br />
-              未送信キュー追加 {cloudSync.lastBackfillResult.queuedCount}件
+              残数remote照合 {cloudSync.lastBackfillResult.directAreaRemoteComparisonReadyCycleCount ?? 0}/2区分・送信不要 {cloudSync.lastBackfillResult.directAreaRemoteCoveredCount ?? 0}件
               <br />
-              成功 {cloudSync.lastBackfillResult.succeededCount}件／失敗 {cloudSync.lastBackfillResult.failedCount}件／未送信キュー {cloudSync.lastBackfillResult.pendingCount}件
+              既存AreaCountキュー対象 {cloudSync.lastBackfillResult.directAreaPendingCoveredCount ?? 0}件・残数直接送信対象 {cloudSync.lastBackfillResult.directAreaTargetCount ?? 0}件
+              <br />
+              残数を直接送信：成功 {cloudSync.lastBackfillResult.directAreaSucceededCount ?? 0}/{cloudSync.lastBackfillResult.directAreaAttemptedCount ?? 0}件・失敗 {cloudSync.lastBackfillResult.directAreaFailedCount ?? 0}件・未試行 {cloudSync.lastBackfillResult.directAreaDeferredCount ?? 0}件
+              <br />
+              新規未送信キュー追加 {cloudSync.lastBackfillResult.queuedCount}件（AreaCount rich payloadは追加しません）
+              <br />
+              同期後の未送信キュー {cloudSync.lastBackfillResult.pendingCount}件
+              {cloudSync.lastBackfillResult.directAreaError ? (
+                <>
+                  <br />
+                  残数直接送信エラー：{cloudSync.lastBackfillResult.directAreaError}
+                </>
+              ) : null}
             </div>
           ) : null}
           {cloudSync && cloudSync.errorDetails.pendingCount > 0 ? (

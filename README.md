@@ -40,6 +40,7 @@ npm run check:fixed-time-supabase-read
 npm run check:initial-weather-focus
 npm run check:quota-root-fix
 npm run check:review19-lightweight-outbox
+npm run check:area-count-direct-backfill
 npm run check:global-discount-adjustment
 npx tsc -b --pretty false
 npm run build
@@ -101,6 +102,15 @@ npm run build
 - offline／通信失敗時はlocal正本を保持し、必要なら軽量referenceだけを残します。referenceすら保存できなくても正本を削除せず、後日の手動同期で再検出します。
 - 管理設定の件数はremote全件の同期済み保証ではなく、local outboxの件数であることを明確にするため `未送信キュー` と表示します。手動同期結果ではReview19正本の直接確認・送信件数を別表示します。
 - 匿名rich fixtureのUTF-16 key＋value概算は、Review19正本96.6 KiB、旧full pending 97.0 KiB、新reference pending 0.9 KiBで、pending部分を99.1%削減しました。
+
+## AreaCount manual direct backfill（2026.8.9-14）
+
+- 実端末9-13ではReview19正本6/6件のdirect syncに成功した一方、管理設定の手動同期がAreaCount source 878件をrich pendingへ一括複製し、同期途中でqueueが約70件まで増えた後、30件が `Failed to fetch` で残りました。root causeはbackfill全件を送信前にlocalStorage outboxへ二重保存する設計です。
+- 9-14の手動同期は既存pendingを既存CAS/in-flight経路で先に再送し、AreaCountのnormal／summer remote履歴を照合後、端末sourceを最大100件のmemory batchで直接idempotent upsertします。手動backfillからAreaCount rich pendingを新規作成しません。
+- remoteの同一business identityがlocal revision／detailを包含するrecordは送信不要とします。既存pending identityはdirect対象から外し、旧rich AreaCount pending（実端末の30件相当）は従来どおり読込・再送・失敗保持・成功cleanupできます。
+- direct uploadが `Failed to fetch` 等で失敗した場合はそのbatchで停止して残りを未試行とし、local sourceを削除せず次回の手動同期で再検出します。local-only、pending、remote未確認、currentの9-12 cache保護を維持し、新しいlightweight referenceも作りません。
+- 匿名878件rich fixtureのUTF-16概算では旧一括pendingは `2257.4 KiB` を追加する構造でした。direct方式の追加localStorage量は `0.0 KiB`（100%削減）で、通信batchだけをmemory上に保持します。
+- 結果UIは `端末source検出`、remote送信不要、既存queue対象、直接送信対象／成功／失敗／未試行、同期後queueを分けて表示します。source検出数を未同期件数とは表現しません。
 
 ## 全体値引補正（2026.8.9-13）
 
@@ -207,7 +217,7 @@ npm run build
 
 通常・夏季の残数記録は、どちらも同じlocal-first経路で保存します。残数確定時は先に端末へ保存し、その後Supabase送信用outboxへ追加してupsertを試みます。通信、設定、SQL schemaのいずれかに問題があっても現場フローは止めず、未送信itemを `nebiki-helper/pending-supabase-sync-v1` に残します。Supabase送信成功を端末保存の条件にはしません。
 
-AreaCount pendingは従来どおり `type`、record identity、送信payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持ちます。Review19の新規pendingは `review19_ref_v1` の軽量referenceで、rich payloadを二重保存せず、送信時にidentityから端末正本を解決します。旧full-payload Review19 pendingも後方互換で送信できます。同じtype・identityは1 itemへまとめ、app起動、online復帰、新しい残数／19:00チェック保存後、管理設定の手動同期時に直列再送します。同期処理はin-flight lockで多重実行を防ぎます。新schemaが未適用なら旧schemaへnormalとして送るfallbackは行わず、normal／summerを保持したままpendingに残します。
+通常運用で残数確定時に作るAreaCount pendingは従来どおり `type`、record identity、送信payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持ちます。一方、管理設定の過去AreaCount backfillはrich pendingを一括作成せず、remote照合後にbounded direct uploadします。Review19の新規pendingは `review19_ref_v1` の軽量referenceで、rich payloadを二重保存せず、送信時にidentityから端末正本を解決します。旧full-payload Review19 pendingも後方互換で送信できます。同じtype・identityは1 itemへまとめ、app起動、online復帰、新しい残数／19:00チェック保存後、管理設定の手動同期時に直列再送します。同期処理はin-flight lockで多重実行を防ぎます。新schemaが未適用なら旧schemaへnormalとして送るfallbackは行わず、normal／summerを保持したままpendingに残します。
 
 ### 同期エラーの確認
 
@@ -249,7 +259,7 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 - 確定済みの現在session state
 - `nebiki-helper/review19-records` のcomplete・final 19:00記録
 
-未来日／未来時刻、不正なarea・count・cycle、未測定、確定前UI入力、固定時間モードのデータは除外します。同じ操作を繰り返してもunique upsertで件数は増えず、端末データは削除しません。complete・finalなlocal Review19正本は、full pendingを作らず直接idempotent upsertするため、pending作成に失敗した保存済みrecordも救済できます。画面には検出件数、送信対象、成功、失敗、Review19正本の直接確認／送信件数、`未送信キュー`件数を表示します。`未送信キュー：0件` はlocal outboxが空という意味であり、remote全履歴の同期済み保証とは表現しません。時間固定モードでは中央値用のAreaCount SELECTだけを許可し、remote mutation、production local write、retry、backfillは行いません。
+未来日／未来時刻、不正なarea・count・cycle、未測定、確定前UI入力、固定時間モードのデータは除外します。既存pendingを先に再送した後、Review19正本を直接送信し、AreaCountはremote-covered／既存queue identityを除外して最大100件ずつ直接upsertします。手動backfillからrich AreaCount pendingを作らないため、878件等のsource数に比例してlocalStorageが一時増加しません。通信失敗時はlocal sourceを保持し、次回再検出します。同じ操作を繰り返してもunique upsertで件数は増えず、端末データは削除しません。画面には `端末source検出`、remote送信不要、既存queue、直接送信対象／成功／失敗／未試行、Review19正本の直接確認／送信、同期後の `未送信キュー` を別表示します。queue 0はlocal outboxが空という意味であり、remote全履歴の同期済み保証とは表現しません。時間固定モードでは中央値用のAreaCount SELECTだけを許可し、remote mutation、production local write、retry、backfillは行いません。
 
 ### SQL適用手順
 
@@ -268,14 +278,14 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 2026-08-11に利用者が実DBへcloud-sync migrationを適用済みです。旧verify artifactはPL/pgSQL関数定義の改行位置に依存し、正常なguardを誤って失敗扱いにしていました。現行verifyは関数定義の空白・改行・インデントを正規化してから、final→partial禁止、古いrevision禁止、同一revision guard、同時刻partial→final例外の4条件を検証します。DB上のguard実動作、schema、migration、RLSはこの修正では変更しません。
 
-このソースを検証した開発環境には実DB接続情報がないため、現在の端末に残る同期失敗の原因は未特定です。新版を実使用端末へdeploy後、管理設定の「エラー詳細」から診断内容をコピーして確認してください。
+この開発環境には実DB接続情報がなく、Supabase mutationは行っていません。利用者報告では9-13のReview19 direct syncは6/6成功し、legacy AreaCount pending 30件の通信errorは `Failed to fetch` でした。9-14は大量pending複製によるquota圧力を除去しますが、通信障害そのものを解決済みとは報告しません。deploy後は既存30件の再送結果とエラー詳細を確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のReview19 reference outboxはlocal同期用metadataで、全体値引補正は既存session／snapshotへ追加するoptional fieldです。正式schemaを破壊せず、旧recordのfield欠損は補正0として読めるため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、productionAnalysis、20時30分、AreaCount cloud syncのpending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回のAreaCount direct backfillは一時的な同期経路／結果metadataの変更だけで、正式record schemaを変更しないため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、productionAnalysis、20時30分、通常運用AreaCount pending／retry／CASは変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-13`
+- `appVersion`: `2026.8.9-14`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260827-203600-jst`
+- `buildId`: `build-20260828-091829-jst`
 
-今回の実装・検証結果は `CHANGE_REPORT_20260827_REVIEW19_OUTBOX_GLOBAL_ADJUSTMENT.md` を参照してください。
+今回の実装・検証結果は `CHANGE_REPORT_20260828_AREA_COUNT_DIRECT_BACKFILL.md` を参照してください。

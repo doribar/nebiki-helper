@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-27（日本時間）
+最終更新: 2026-08-28（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,10 +11,10 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260824-2159.zip`
-- `appVersion`: `2026.8.9-13`
+- 作業基準ZIP: `nebiki-helper-20260827-2050.zip`
+- `appVersion`: `2026.8.9-14`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260827-203600-jst`
+- `buildId`: `build-20260828-091829-jst`
 - リリースZIP: この文書と同梱された `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 値引ヘルパーの運用目的
@@ -163,6 +163,16 @@ Storage:
 - offline／通信失敗時は端末正本を維持し、可能なら軽量referenceを残す。referenceすら保存できない場合も正本を削除せず、次回の手動同期で再検出する。remote既存recordは既存identity・CAS・rich mergeにより重複rowを作らない。
 - 管理設定の `未送信キュー` はlocal outbox件数であり、0件をremote全履歴の同期済み保証とは扱わない。手動同期結果ではReview19正本の直接確認／送信件数をqueue件数と分けて表示する。
 - 匿名rich fixtureのUTF-16 key＋value概算は、Review19端末正本96.6 KiB、legacy full pending 97.0 KiB、新reference pending 0.9 KiB。pending部分を99.1%削減した。
+
+## AreaCount manual direct backfill
+
+- 9-13の実端末では、Review19正本のdirect syncが6/6件成功した。次のボトルネックとして、AreaCount source 878件を手動backfill開始時にrich pendingへ一括複製する経路が判明した。途中queueは約70件まで増え、最終的にlegacy AreaCount pending 30件が `Failed to fetch` で残った。
+- 9-14の管理設定手動同期は、既存pendingをCAS/in-flight queue経路で先に再送し、Review19正本をdirect syncした後、AreaCountのnormal／summer remote履歴を照合し、端末sourceを最大100件のmemory batchで直接idempotent upsertする。AreaCount backfillのrich payloadをlocalStorageへ新規複製しない。
+- remoteの同一5-field identityがlocal revision以上かつlocal detailを包含する場合は送信不要。既存pending identityはdirect対象から除外する。business identity／unique upsertを再利用するため、反復manual syncでremote rowや中央値sampleを増殖させない。
+- 旧rich AreaCount pendingのshape、sender、retry、attempt／lastError、CASは後方互換で維持する。実端末に残る30件相当は9-14でもそのまま再送でき、成功時だけqueueから消え、`Failed to fetch` なら保持される。
+- direct batchが通信失敗した場合はそのbatchを失敗、残りを未試行として停止する。新しいpending/referenceは作らず、local authoritative sourceを次回manual syncで再検出する。9-12のlocal-only／pending／remote未確認／current保護により、失敗sourceをremote-confirmedとしてpruneしない。
+- 結果UIの `端末source検出` は未同期件数ではない。remote送信不要、既存queue対象、直接送信対象／成功／失敗／未試行、同期後queueを別々に表示する。`未送信キュー: 0` はlocal outboxが空という意味で、remote全件同期保証ではない。
+- 匿名878件rich fixtureでは旧一括pendingのUTF-16追加量は2257.4 KiB、9-14 direct方式は0.0 KiBで100%削減した。memory batch上限は100件。通常の残数確定時に作る少量AreaCount pendingは変更しない。
 
 ## 全体値引補正
 
@@ -325,7 +335,7 @@ Storage:
 ### local-first、pending、retry
 
 - AreaCountは端末cacheへupsertしてからoutboxへ積み、Review19は端末state／recordを保存してからoutboxへ積む。Supabase成功を現場保存の条件にしない。
-- pending keyは `nebiki-helper/pending-supabase-sync-v1`。AreaCount itemは従来どおり `type`、identity、送信payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持つ。新規Review19 itemは同じrich payloadを複製せず、`review19_ref_v1` のidentity／revision metadataだけを持ち、送信時にlocal authoritative Review19を解決する。旧full-payload Review19 itemも送信互換を維持する。
+- pending keyは `nebiki-helper/pending-supabase-sync-v1`。通常運用AreaCount itemと9-13以前のlegacy itemは従来どおり `type`、identity、送信payload、`firstFailedAt`、`lastAttemptAt`、`attemptCount`、`enqueuedAt`、`lastError` を持つ。ただし管理設定のAreaCount一括backfillはrich pendingを作らずbounded direct uploadする。新規Review19 itemは `review19_ref_v1` のidentity／revision metadataだけを持ち、送信時にlocal authoritative Review19を解決する。
 - 同じtype・identityはqueue内で1 itemにまとめる。retryはapp起動、online event、新しいAreaCount／Review19保存後、管理設定の手動同期で行う。送信は直列で、process内のsingle in-flight lockにより並列flushを抑止する。送信中に同identityの新revisionが積まれた場合はCASで消さず、必要なら成功後にもう一度だけ追送する。
 - remote失敗、Supabase設定なし、schema未適用はすべてpendingに残す。特にsummerを旧schemaへnormalとして送るfallbackはない。
 - Review19は各エリア確定後のpartialも送る。final payloadがpartialへ退行しないようqueueとDB triggerの両方で保護する。remoteから中央値履歴へ取り込むのはcomplete・finalだけ。
@@ -351,8 +361,8 @@ Storage:
 
 - 管理設定の「端末内データをSupabaseへ同期」で手動実行する。対象は統合cache、旧normal cache、旧summer cache、finalized day、Review19のday snapshot、daily session snapshot、確定済みcurrent session、およびlocalのcomplete・final Review19。
 - future record、invalid date／area／count／timestamp／cycle、未測定、確定前UI state、fixed-time dataを除外する。複数保存元の同一recordは送信前にidentityで統合し、rich detailsを保持する。
-- AreaCount送信は既存のidempotent upsert／pending／CASを維持する。local complete・final Review19はfull pendingを事前作成せず直接idempotent upsertし、成功revisionで覆われるlegacy／reference pendingを安全に整理する。pendingなしlocal正本も検出するため、9-12でoutbox作成だけquota失敗したReview19を救済できる。
-- 何度実行してもrow／中央値sampleを増殖させず、remote既存rowをnull detailで劣化させず、localデータは削除しない。結果UIは残数／19:00の検出数、送信対象、成功、失敗、Review19正本の直接確認／送信件数、`未送信キュー`を表示する。queue 0はlocal outboxが空という意味で、remote全件同期済みの保証とは表示しない。Supabase APIのため新規／更新を推測表示しない。
+- 既存AreaCount pendingは従来のidempotent upsert／retry／CASを維持する。手動backfillのAreaCountは既存queueを先に再送し、remote-covered／queue identityを除外して最大100件ずつ直接upsertする。local complete・final Review19もfull pendingを事前作成せず直接送る。
+- 何度実行してもrow／中央値sampleを増殖させず、remote既存rowをnull detailで劣化させず、localデータは削除しない。結果UIは `端末source検出` と未同期／送信対象を混同せず、remote送信不要、既存queue、直接送信結果、Review19正本結果、同期後queueを分ける。
 
 ### SQL実行と実環境確認
 
@@ -366,11 +376,11 @@ Storage:
 
 ## 今回変更しない重要仕様
 
-- cloud syncのlocal-first、retry timing、CAS、in-flight guard、rich merge、normal／summer dedupe、Review19 partial／final、fixed-time隔離を維持する。9-13ではReview19 pendingだけを軽量reference化し、手動backfillへpendingなしlocal正本のdirect syncを追加した。AreaCount pending semanticsは変更しない。
+- cloud syncのlocal-first、通常運用AreaCount pending、retry timing、CAS、in-flight guard、rich merge、normal／summer dedupe、Review19 partial／final、fixed-time隔離を維持する。9-14で変えるのは管理設定のAreaCount大量backfillだけで、既存／通常運用pending semanticsは変更しない。
 - Supabase SQL、schema、column、unique key、index、RLS、policyを変更しない。追加analysis metadataは既存JSONBで保持する。
 - 値引率基本値、天候・気温補正、夏季期間、9段階interaction／500ms長押し、完了画面の現在時刻率、20時30分ルールを変更しない。
 - `dataSchemaVersion` はoptional additive metadataのみのため `3` を維持する。
 
 ## 確認コマンド
 
-README記載の全 `check:*`（特に `check:review19-lightweight-outbox`、`check:global-discount-adjustment`、`check:review19-storage-diagnostics`、`check:review19-completion-safety`、`check:initial-weather-focus`、`check:weather-confirmation`、`check:median-version-ui`、`check:last-area-skip`、`check:fixed-time-supabase-read`、`check:session-completion-storage-safety`、`check:daily-session-snapshot-storage`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:obon-calendar`、`check:analysis-metadata`、`check:supabase-sync-diagnostics`、`check:human-evaluation-9scale`、`check:review19-human-auto`、`check:supabase-sync-domain`、`check:review19-remote-storage`、`check:supabase-cloud-sync-sql`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。今回の最終結果は `CHANGE_REPORT_20260827_REVIEW19_OUTBOX_GLOBAL_ADJUSTMENT.md` を参照する。
+README記載の全 `check:*`（特に `check:area-count-direct-backfill`、`check:review19-lightweight-outbox`、`check:global-discount-adjustment`、`check:quota-root-fix`、`check:long-run-storage-safety`、`check:storage-write-boundary`、`check:fixed-time-supabase-read`、`check:supabase-sync-domain`）、TypeScript型チェック、変更対象ESLint、`npm run build` を実行する。PWA生成物は `dist/manifest.webmanifest`、`dist/sw.js`、`dist/registerSW.js` を確認する。9-14の最終結果は `CHANGE_REPORT_20260828_AREA_COUNT_DIRECT_BACKFILL.md` を参照する。

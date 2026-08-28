@@ -162,8 +162,8 @@ import {
   retainAreaCountLocalCacheWithinBudget,
 } from "../domain/areaCountCache.ts";
 import { collectAreaCountBackfillRecords } from "../domain/areaCountBackfill.ts";
+import { syncAuthoritativeAreaCountRecordsDirectly } from "../domain/areaCountDirectSync.ts";
 import {
-  enqueueAreaCountRecordsForCloud,
   enqueueReview19RecordForCloud,
   flushCloudSyncQueue,
   getCloudSyncStatus,
@@ -175,7 +175,10 @@ import {
   loadPendingSupabaseSyncQueue,
   PENDING_SUPABASE_SYNC_STORAGE_KEY,
 } from "../domain/supabaseSyncQueue.ts";
-import { buildPendingSupabaseSyncErrorDetails } from "../domain/supabaseSyncDiagnostics.ts";
+import {
+  buildPendingSupabaseSyncErrorDetails,
+  sanitizeSupabaseDiagnosticText,
+} from "../domain/supabaseSyncDiagnostics.ts";
 import { persistCompletedReview19LocalFirst } from "../domain/review19CompletionStorage.ts";
 import {
   buildReview19StorageFailureAlert,
@@ -4811,6 +4814,21 @@ const lateSkipNotice = useMemo(() => {
     }
 
     const nowMsForBackfill = getRuntimeNowMs();
+    let initialPendingItems = [] as ReturnType<
+      typeof loadPendingSupabaseSyncQueue
+    >;
+    try {
+      initialPendingItems = loadPendingSupabaseSyncQueue();
+    } catch {
+      // retryPendingCloudSync側のstructured storage boundaryに任せる。
+    }
+    const existingPendingCount = initialPendingItems.length;
+
+    // 9-13以前から残っているrich AreaCount pending（実端末の30件を含む）を
+    // 最初に既存CAS/in-flight経路で再送する。成功時だけqueueから消え、
+    // Failed to fetch等ではlastError付きのまま保持される。
+    const existingPendingResult = await retryPendingCloudSync();
+
     const localReview19Records = mergeReview19MedianHistory({
       localRecords: loadReview19Records(),
       remoteRecords: [],
@@ -4874,50 +4892,110 @@ const lateSkipNotice = useMemo(() => {
         "backfill-review19-reference-enqueue",
         reviewQueueSave.attempts,
       );
+      if (!reviewQueueSave.ok) {
+        const diagnostic = createReview19StorageFailureDiagnostic({
+          stage: "cloud_queue_prepare",
+          finalResult: reviewQueueSave.attempts.at(-1) ?? null,
+          attempts: reviewQueueSave.attempts,
+        });
+        reportReview19StorageFailureDiagnostic(diagnostic);
+        window.alert(buildReview19StorageFailureAlert(diagnostic));
+      }
     }
 
-    let queuedAreaCount = 0;
-    const areaQueueSave = attemptStorageOperationWithAuxiliaryRecovery({
-      key: PENDING_SUPABASE_SYNC_STORAGE_KEY,
-      operation: "set",
-      run: () => {
-        queuedAreaCount = enqueueAreaCountRecordsForCloud(collectedAreaRecords);
-      },
-    });
-    reportStorageOperationFailures("backfill-area-count-enqueue", areaQueueSave.attempts);
-    if (!areaQueueSave.ok || (reviewQueueSave && !reviewQueueSave.ok)) {
-      window.alert(
-        "端末データは保持されていますが、クラウド同期の準備を一部完了できませんでした。管理設定から再試行してください。",
+    // AreaCount manual backfillはlocal authoritative sourceを直接読む。
+    // 878件等をrich pendingへ一括複製せず、remote履歴でrevision/richnessを
+    // 確認してから最大100件のmemory batchだけをupsertする。
+    const remoteAreaResults = await Promise.all([
+      loadRemoteAreaCountRecords("normal"),
+      loadRemoteAreaCountRecords("summer"),
+    ]);
+    const remoteAreaRecords = mergeAreaCountRecordCollections(
+      ...remoteAreaResults.map((remoteResult) =>
+        remoteResult.status === "ready" ? remoteResult.records : [],
+      ),
+    );
+    let pendingAreaIdentities = new Set<string>();
+    try {
+      pendingAreaIdentities = new Set(
+        loadPendingSupabaseSyncQueue()
+          .filter((item) => item.type === "area_count")
+          .map((item) => item.identity),
       );
+    } catch {
+      // 読み取り不能時もdirect upsertはbusiness identityでidempotent。
+      // queue自体を変更・削除せず、storage exceptionをReactへ漏らさない。
     }
+    const directAreaResult =
+      await syncAuthoritativeAreaCountRecordsDirectly(collectedAreaRecords, {
+        knownRemoteRecords: remoteAreaRecords,
+        pendingIdentities: pendingAreaIdentities,
+      });
+    remoteAreaCountHistoryRef.current = mergeAreaCountRecordCollections(
+      remoteAreaCountHistoryRef.current,
+      remoteAreaRecords,
+      directAreaResult.sentRecords,
+    );
+
     setCloudSyncVersion((version) => version + 1);
 
-    const flushResult = await retryPendingCloudSync();
-    const pendingCount = getCloudSyncStatus().pendingCount;
+    let pendingCount = 0;
+    try {
+      pendingCount = getCloudSyncStatus().pendingCount;
+    } catch {
+      // Storage API unavailable時は0件同期済みと断定しない。
+      pendingCount = existingPendingResult.retained;
+    }
+    const directAreaError = directAreaResult.failureMessage
+      ? sanitizeSupabaseDiagnosticText(directAreaResult.failureMessage).trim()
+      : undefined;
     const result: SupabaseBackfillResult = {
       detectedAreaCount: collectedAreaRecords.length,
       detectedReview19Count: localReview19Records.length,
+      existingPendingCount,
+      existingPendingAttemptedCount: existingPendingResult.attempted,
+      existingPendingSucceededCount: existingPendingResult.succeeded,
+      existingPendingFailedCount: existingPendingResult.failed,
       directReview19AttemptedCount:
         directReview19Result.attemptedCount,
       directReview19SucceededCount:
         directReview19Result.succeededCount,
       directReview19FailedCount:
         directReview19Result.failedCount,
-      queuedCount: queuedAreaCount + queuedReview19Count,
+      directAreaRemoteComparisonReadyCycleCount: remoteAreaResults.filter(
+        (remoteResult) => remoteResult.status === "ready",
+      ).length,
+      directAreaCanonicalCount: directAreaResult.canonicalCount,
+      directAreaRemoteCoveredCount: directAreaResult.remoteCoveredCount,
+      directAreaPendingCoveredCount: directAreaResult.pendingCoveredCount,
+      directAreaTargetCount: directAreaResult.targetCount,
+      directAreaAttemptedCount: directAreaResult.attemptedCount,
+      directAreaSucceededCount: directAreaResult.succeededCount,
+      directAreaFailedCount: directAreaResult.failedCount,
+      directAreaDeferredCount: directAreaResult.deferredCount,
+      ...(directAreaError ? { directAreaError } : {}),
+      // AreaCount manual backfillは0件。ここで増え得るのはReview19の
+      // lightweight referenceだけで、rich AreaCount payloadは複製しない。
+      queuedCount: queuedReview19Count,
       attemptedCount:
-        directReview19Result.attemptedCount + flushResult.attempted,
+        existingPendingResult.attempted +
+        directReview19Result.attemptedCount +
+        directAreaResult.attemptedCount,
       succeededCount:
-        directReview19Result.succeededCount + flushResult.succeeded,
-      failedCount: flushResult.failed +
-        (reviewQueueSave?.ok === false
-          ? directReview19Result.failedCount
-          : 0),
+        existingPendingResult.succeeded +
+        directReview19Result.succeededCount +
+        directAreaResult.succeededCount,
+      failedCount:
+        existingPendingResult.failed +
+        directReview19Result.failedCount +
+        directAreaResult.failedCount,
       pendingCount,
       allSynced:
         pendingCount === 0 &&
-        areaQueueSave.ok &&
-        (directReview19Result.failedCount === 0 ||
-          Boolean(reviewQueueSave?.ok && flushResult.failed === 0)),
+        directReview19Result.failedCount === 0 &&
+        directAreaResult.failedCount === 0 &&
+        directAreaResult.deferredCount === 0 &&
+        !reviewQueueSave,
     };
     setLastBackfillResult(result);
     setAreaCountRecords((current) =>

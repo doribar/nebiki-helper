@@ -766,10 +766,27 @@ export type EditableAreaCountItem = {
 export type SupabaseBackfillResult = {
   detectedAreaCount: number;
   detectedReview19Count: number;
+  /** 同期開始時点で存在したlegacy/current outbox件数。 */
+  existingPendingCount?: number;
+  existingPendingAttemptedCount?: number;
+  existingPendingSucceededCount?: number;
+  existingPendingFailedCount?: number;
   /** Review19正本からfull-payload outboxを作らず直接確認・送信した件数。 */
   directReview19AttemptedCount?: number;
   directReview19SucceededCount?: number;
   directReview19FailedCount?: number;
+  /** AreaCount sourceをrich outboxへ複製せず直接確認・送信した結果。 */
+  directAreaRemoteComparisonReadyCycleCount?: number;
+  directAreaCanonicalCount?: number;
+  directAreaRemoteCoveredCount?: number;
+  directAreaPendingCoveredCount?: number;
+  directAreaTargetCount?: number;
+  directAreaAttemptedCount?: number;
+  directAreaSucceededCount?: number;
+  directAreaFailedCount?: number;
+  directAreaDeferredCount?: number;
+  /** credential sanitization済みの一時診断。正式recordへ保存しない。 */
+  directAreaError?: string;
   queuedCount: number;
   attemptedCount: number;
   succeededCount: number;

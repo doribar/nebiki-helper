@@ -1127,7 +1127,9 @@ await test("hook integration is local-first, fixed-isolated, and retry-safe", ()
   assert.ok(cloudSource.includes("area-count-cloud-enqueue"));
   assert.ok(settingsSource.includes("端末内データをSupabaseへ同期"));
   assert.ok(settingsSource.includes("result.allSynced"));
-  assert.ok(settingsSource.includes("未送信キュー 0件"));
+  assert.ok(settingsSource.includes("未送信キューは0件"));
+  assert.ok(syncBlock.includes("syncAuthoritativeAreaCountRecordsDirectly"));
+  assert.equal(syncBlock.includes("enqueueAreaCountRecordsForCloud"), false);
   assert.ok(settingsSource.includes('width: "min(92vw, 520px)"'));
   assert.ok(settingsSource.includes('maxWidth: "100%"'));
   assert.ok(settingsSource.includes('boxSizing: "border-box"'));

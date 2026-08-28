@@ -181,13 +181,13 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  // 2026.8.9-13: reviewed lightweight Review19 outbox/manual-direct sync and
-  // session-scoped global rate-adjustment wiring are now part of the locked
-  // facade. Save ordering, fixed-time isolation, and completion gates remain locked.
-  assert.equal(body.length, 156487);
+  // 2026.8.9-14: reviewed AreaCount manual backfill now retries the legacy
+  // queue first, then uses bounded direct upload without rich pending copies.
+  // Fixed-time isolation, save ordering, and completion gates remain locked.
+  assert.equal(body.length, 159617);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "06fddee5f1a237edcc01100afbe262e0c3ba57638ba7d496e60ae6879416b2a6",
+    "1d201ce9fd55f52f44f18953eade35af44fe9c13a9f22a0a7dbc2981c0cb1ea9",
   );
   assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 23);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);

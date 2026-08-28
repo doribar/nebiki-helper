@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-13",
+  "version": "2026.8.9-14",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -51,6 +51,7 @@
     "check:initial-weather-focus": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-initial-weather-focus.ts",
     "check:quota-root-fix": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-quota-root-fix.ts",
     "check:review19-lightweight-outbox": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-lightweight-outbox.ts",
+    "check:area-count-direct-backfill": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-direct-backfill.ts",
     "check:global-discount-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-global-discount-adjustment.ts"
   },
   "dependencies": {
