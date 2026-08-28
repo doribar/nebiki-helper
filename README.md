@@ -112,6 +112,13 @@ npm run build
 - 匿名878件rich fixtureのUTF-16概算では旧一括pendingは `2257.4 KiB` を追加する構造でした。direct方式の追加localStorage量は `0.0 KiB`（100%削減）で、通信batchだけをmemory上に保持します。
 - 結果UIは `端末source検出`、remote送信不要、既存queue対象、直接送信対象／成功／失敗／未試行、同期後queueを分けて表示します。source検出数を未同期件数とは表現しません。
 
+## 2026-08-25 debug Review19 one-time cleanup（2026.8.9-15）
+
+- 2026-08-25に作成された既知のdebug Review19 1件だけをstartup maintenanceで端末から除去します。対象は `date=2026-08-25`、`demandCycle=summer`、`sessionStartedAt=2026-08-25T07:54:21.145Z`、`appVersion=2026.8.9-12`、`review19Status=recorded` が完全一致し、所定12エリアが過不足なく存在して全て整数0の場合だけです。
+- Review19端末正本、該当する軽量reference／legacy pending、current-session／checkpoint／source-state／runtime copy、finalized day内の該当 `review19Check` だけを整理します。2026-08-25の日record、15時／17時session、AreaCount、memo、discardCount、global discount adjustment等は維持します。
+- finalized dayのproductionAnalysisは既存builderで15時／17時evidenceを維持し、19時Review19なしとして再構築します。cleanupはcloud retryより前に完了し、2回目以降はno-opです。全local cleanupが成功した場合だけ一度通知します。
+- これは恒久的な削除UI／APIではありません。Supabaseのanon DELETE権限は開放せず、管理者が確認SELECTで一致1件を確認してからguarded DELETEをSQL Editorで実行します。maintenance SQLはmigrationではなく、[今回のCHANGE REPORT](CHANGE_REPORT_20260828_REVIEW19_DEBUG_CLEANUP.md) に掲載します。
+
 ## 全体値引補正（2026.8.9-13）
 
 - StartScreenで人間が `-5% / なし / +5%` を明示選択します。曜日、中央値、human判定、商品、weather、temperature等の既存計算を終えた通常表示率へ、最後に5 percentage pointsを1回だけ加減し、0〜50%へclampします。
@@ -280,12 +287,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 この開発環境には実DB接続情報がなく、Supabase mutationは行っていません。利用者報告では9-13のReview19 direct syncは6/6成功し、legacy AreaCount pending 30件の通信errorは `Failed to fetch` でした。9-14は大量pending複製によるquota圧力を除去しますが、通信障害そのものを解決済みとは報告しません。deploy後は既存30件の再送結果とエラー詳細を確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のAreaCount direct backfillは一時的な同期経路／結果metadataの変更だけで、正式record schemaを変更しないため `3` を維持します。新しいDB migration、SQL、列、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、productionAnalysis、20時30分、通常運用AreaCount pending／retry／CASは変更しません。
+`dataSchemaVersion` はJSON schemaのversionです。今回のone-time cleanupは既知debug recordをexact guardで端末から取り除くmaintenanceで、正式record schemaを変更しないため `3` を維持します。新しいDB migration、SQL artifact、列、DELETE grant、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、全体値引補正、AreaCount direct backfill、通常のReview19保存／同期は変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-14`
+- `appVersion`: `2026.8.9-15`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260828-091829-jst`
+- `buildId`: `build-20260828-211234-jst`
 
-今回の実装・検証結果は `CHANGE_REPORT_20260828_AREA_COUNT_DIRECT_BACKFILL.md` を参照してください。
+今回の実装・検証結果と、管理者が今回だけ実行するSupabase確認／削除SQLは `CHANGE_REPORT_20260828_REVIEW19_DEBUG_CLEANUP.md` を参照してください。

@@ -190,6 +190,10 @@ import {
   mergeReview19MedianHistory,
 } from "../domain/review19RemoteStorage.ts";
 import {
+  cleanupReview19Debug20260825,
+  excludeReview19Debug20260825Target,
+} from "../domain/maintenance/cleanupReview19Debug20260825.ts";
+import {
   getEarlyNextMinus5NoticeText,
   getEarlyNextMinus5TargetDiscountTime,
   shouldReserveEarlyNextMinus5OnAutoTransition,
@@ -349,9 +353,19 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const testNowMs = params?.testNow?.getTime() ?? null;
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
   const startupHousekeepingCompletedRef = useRef(false);
+  const review19DebugCleanupResultRef = useRef<ReturnType<
+    typeof cleanupReview19Debug20260825
+  > | null>(null);
+  const review19DebugCleanupNoticeShownRef = useRef(false);
 
   if (!initialPersistenceRef.current) {
     const initialDate = formatLocalDate(getRuntimeNow());
+    if (!isTestMode && !review19DebugCleanupResultRef.current) {
+      // 9-15 one-time maintenance must finish before loading resumable state
+      // and before any startup cloud retry can resolve/re-send Review19.
+      review19DebugCleanupResultRef.current =
+        cleanupReview19Debug20260825();
+    }
     initialPersistenceRef.current = isTestMode
       ? {
           currentSession: null,
@@ -454,6 +468,23 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     useState(0);
   const weatherConfirmationSubmittingRef = useRef(false);
   const autoTransitionInFlightKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const cleanup = review19DebugCleanupResultRef.current;
+    if (
+      isTestMode ||
+      review19DebugCleanupNoticeShownRef.current ||
+      !cleanup?.ok ||
+      !cleanup.changed ||
+      cleanup.removedCount < 1
+    ) {
+      return;
+    }
+    review19DebugCleanupNoticeShownRef.current = true;
+    window.alert(
+      "2026/8/25のデバッグ用19:00チェックを端末から削除しました。",
+    );
+  }, [isTestMode]);
   const [nowMs, setNowMs] = useState(() => getRuntimeNowMs());
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
@@ -834,8 +865,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       const mergedAreaRecords = historySource.records;
       setAreaCountRecords(cloneAreaCountRecords(mergedAreaRecords));
 
-      const remoteReview19Records = [normalReview19, summerReview19].flatMap(
-        (result) => (result.status === "ready" ? result.records : []),
+      const remoteReview19Records = excludeReview19Debug20260825Target(
+        [normalReview19, summerReview19].flatMap(
+          (result) => (result.status === "ready" ? result.records : []),
+        ),
       );
       if (remoteReview19Records.length > 0) {
         const mergedReview19Records = mergeReview19MedianHistory({

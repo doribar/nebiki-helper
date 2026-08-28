@@ -93,6 +93,7 @@ const allowedLocalStoragePrimitiveSignatures = new Set([
   "src/domain/storage.ts|localStorage.removeItem|STORAGE_KEYS.review19SourceState",
   "src/domain/storage.ts|localStorage.setItem|STORAGE_KEYS.dailySessionSnapshots",
   "src/domain/storage.ts|localStorage.removeItem|key",
+  "src/domain/storage.ts|storage.setItem|key",
   "src/domain/supabaseSyncQueue.ts|storage.setItem|PENDING_SUPABASE_SYNC_STORAGE_KEY",
   "src/domain/supabaseSyncQueue.ts|resolveStorage(options.storage)?.removeItem|PENDING_SUPABASE_SYNC_STORAGE_KEY",
 ]);

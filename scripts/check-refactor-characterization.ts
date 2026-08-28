@@ -181,15 +181,15 @@ function assertFacadeBodyIsUnchanged(): void {
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  // 2026.8.9-14: reviewed AreaCount manual backfill now retries the legacy
-  // queue first, then uses bounded direct upload without rich pending copies.
-  // Fixed-time isolation, save ordering, and completion gates remain locked.
-  assert.equal(body.length, 159617);
+  // 2026.8.9-15: the exact, one-time Review19 cleanup runs before resumable
+  // state loading/cloud retry and shows one success notice only after every
+  // required local write succeeds. Normal save ordering and gates stay locked.
+  assert.equal(body.length, 160575);
   assert.equal(
     createHash("sha256").update(body).digest("hex"),
-    "1d201ce9fd55f52f44f18953eade35af44fe9c13a9f22a0a7dbc2981c0cb1ea9",
+    "7838d4d81ac1d081373c64269cb23ac0a40599307cf25a0d647e27a0468e3048",
   );
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 23);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 24);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
 }
 

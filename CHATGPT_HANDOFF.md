@@ -11,10 +11,10 @@
 
 ## 現行リリース情報
 
-- 作業基準ZIP: `nebiki-helper-20260827-2050.zip`
-- `appVersion`: `2026.8.9-14`
+- 作業基準ZIP: `nebiki-helper-20260828-0927.zip`
+- `appVersion`: `2026.8.9-15`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260828-091829-jst`
+- `buildId`: `build-20260828-211234-jst`
 - リリースZIP: この文書と同梱された `nebiki-helper-YYYYMMDD-HHMM.zip`。確定した識別情報で再生成した `dist` を収録する。
 
 ## 値引ヘルパーの運用目的
@@ -173,6 +173,15 @@ Storage:
 - direct batchが通信失敗した場合はそのbatchを失敗、残りを未試行として停止する。新しいpending/referenceは作らず、local authoritative sourceを次回manual syncで再検出する。9-12のlocal-only／pending／remote未確認／current保護により、失敗sourceをremote-confirmedとしてpruneしない。
 - 結果UIの `端末source検出` は未同期件数ではない。remote送信不要、既存queue対象、直接送信対象／成功／失敗／未試行、同期後queueを別々に表示する。`未送信キュー: 0` はlocal outboxが空という意味で、remote全件同期保証ではない。
 - 匿名878件rich fixtureでは旧一括pendingのUTF-16追加量は2257.4 KiB、9-14 direct方式は0.0 KiBで100%削減した。memory batch上限は100件。通常の残数確定時に作る少量AreaCount pendingは変更しない。
+
+## 2026-08-25 debug Review19 one-time maintenance（2026.8.9-15）
+
+- 2026-08-25に、Review19の全12エリア残数を整数0として入力したdebug recordが1件作成された。対象は `date=2026-08-25`、`demandCycle=summer`、`sessionStartedAt=2026-08-25T07:54:21.145Z`、`appVersion=2026.8.9-12`、`review19Status=recorded` の完全一致に加え、所定12エリアが過不足なく存在してすべて整数0の場合だけである。日付だけでは削除しない。
+- 9-15は汎用削除機能ではなく、startupで一度だけ働く隔離済みmaintenanceを持つ。端末Review19正本、対象の `review19_ref_v1`、all-zeroを再確認できるlegacy full-payload pending、current-session、work-session checkpoint、Review19 source state、runtime navigation copy、finalized day内の `review19Check` だけをexact guardで整理する。AreaCount pending、通常15時／17時session、AreaCount、memo、discardCount、recordId、finalizedAt、globalDiscountAdjustment等は変更しない。
+- finalized dayは日record自体を残し、対象 `review19Check` だけを除去して `review19Status=not_performed` とする。既存 `buildProductionAnalysis` を15時／17時のsession／AreaCount evidenceと「19時Review19なし」で再実行し、15時／17時checkpointを維持しながら19時だけを不足扱いにする。
+- cleanupはcloud retry／manual backfillより前に実行する。全対象sourceをpreflightしてからsafe storage boundaryで更新し、途中で安全確認できないsourceやwrite failureがあれば成功通知を出さない。対象がなくなった2回目以降は自然にno-opとなる。対象remote rowが管理者削除前にSELECTで戻ってきても、同じexact guardでlocal mergeから除外し再出現を防ぐ。
+- 実際に1件以上を含むlocal cleanupがすべて成功した場合だけ、`2026/8/25のデバッグ用19:00チェックを端末から削除しました。` と一度通知する。恒久的な削除ボタン、DELETE API、anon DELETE grant／RLS policy、service role keyは追加しない。
+- Supabase側は管理者がSQL Editorで、exact identity、appVersion、complete/final、payload内statusと12エリアall-zeroを確認し、SELECTがちょうど1件の場合だけguarded DELETEを実行する。9-15の全Supabase SQL artifactは変更しない。local cleanup確認後、次の通常releaseではこのone-time moduleとstartup呼び出しを削除できる。
 
 ## 全体値引補正
 

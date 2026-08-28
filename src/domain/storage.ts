@@ -166,6 +166,24 @@ export function attemptStorageOperation(params: {
 }
 
 /**
+ * Maintenance/domain code that must preserve untouched JSON values can write
+ * through the same structured boundary without adding a raw primitive outside
+ * this module.
+ */
+export function writeStorageJsonValueSafely(params: {
+  storage: Pick<Storage, "setItem">;
+  key: string;
+  value: unknown;
+}): StorageOperationResult {
+  const { storage, key, value } = params;
+  return attemptStorageOperation({
+    key,
+    operation: "set",
+    run: () => storage.setItem(key, JSON.stringify(value)),
+  });
+}
+
+/**
  * UI / hookから任意keyを削除するときもDOMExceptionをReactへ漏らさない境界。
  * payloadを読み取らず、失敗結果だけを呼び出し側へ返す。
  */
