@@ -357,9 +357,11 @@ try {
       ),
     )],
     ["nebiki-helper/daily-session-snapshots", JSON.stringify(
-      Array.from({ length: 12 }, (_, index) => ({
+      Array.from({ length: 12 }, (_, index) => makeSession({
         date: dateFromOffset(168 + index),
-        crashRecovery: "s".repeat(1_500),
+        cycle: "normal",
+        discountTime: index % 2 === 0 ? "15" : "17",
+        padding: 1_500,
       })),
     )],
   ]);
@@ -380,6 +382,8 @@ try {
   assert.equal(initialized.migration?.ok, true);
   assert.equal(initialized.review19Records.length, 180);
   assert.equal(initialized.finalizedDayRecords.length, 180);
+  assert.equal(initialized.dailySessionSnapshots.length, 12);
+  assert.equal(initialized.areaCountRecords.length, 240);
   assert.deepEqual(
     buildAllReview19DataExportPayloadsByDemandCycle({
       records: initialized.review19Records,
@@ -408,7 +412,14 @@ try {
   assert.equal(storage.getItem(LEGACY_REVIEW19_STORAGE_KEY), null);
   assert.equal(storage.getItem(LEGACY_FINALIZED_DAY_STORAGE_KEY), null);
   for (const [key, expected] of operationalValues) {
-    assert.equal(storage.getItem(key), expected, `migration changed ${key}`);
+    if (
+      key === "nebiki-helper/area-count-records-v2" ||
+      key === "nebiki-helper/daily-session-snapshots"
+    ) {
+      assert.equal(storage.getItem(key), null, `archive did not release ${key}`);
+    } else {
+      assert.equal(storage.getItem(key), expected, `migration changed ${key}`);
+    }
   }
   const afterMigrationBytes = storage.totalApproxBytes();
   const afterTop5 = storage.topEntrySizes();
@@ -416,7 +427,7 @@ try {
     beforeBytes,
     afterMigrationBytes,
   });
-  console.log("PASS 1: 180営業日rich historyをarchiveへ移しexport・median・operational原本を維持");
+  console.log("PASS 1: 180営業日rich historyとsession/AreaCountをarchiveへ移しexport・median・operational原本を維持");
 
   storage.setCapacityBytes(Math.floor(2.25 * 1024 * 1024));
   const operationalDate = history.reviews.at(-1)!.date;

@@ -1,6 +1,7 @@
 import {
   HistoricalArchiveRepository,
   NativeIndexedDbHistoricalArchiveAdapter,
+  mergeDailySessionSnapshotArchiveOperations,
   mergeReview19ArchiveOperations,
   migrateLegacyHistoricalLocalStorage,
   type HistoricalArchiveFailure,
@@ -19,8 +20,24 @@ import {
   type StoredFinalizedDayData,
 } from "./finalizedDayData.ts";
 import { cloneReview19Records } from "./review19.ts";
-import { loadReview19Records, type StorageOperationResult } from "./storage.ts";
-import type { DemandCycle, Review19DaySnapshot, Review19Result } from "./types.ts";
+import {
+  loadDailySessionSnapshots,
+  loadReview19Records,
+  type StorageOperationResult,
+} from "./storage.ts";
+import {
+  loadLocalAreaCountRecords,
+} from "./areaCountLocalStorage.ts";
+import {
+  mergeAreaCountRecordCollections,
+  type AreaCountRecord,
+} from "./areaCountHistory.ts";
+import type {
+  DailySessionSnapshot,
+  DemandCycle,
+  Review19DaySnapshot,
+  Review19Result,
+} from "./types.ts";
 
 export type HistoricalArchiveRuntimeStatus =
   | "not_started"
@@ -34,6 +51,8 @@ export type HistoricalArchiveRuntimeSnapshot = {
   status: HistoricalArchiveRuntimeStatus;
   review19Records: Review19Result[];
   finalizedDayRecords: StoredFinalizedDayData[];
+  dailySessionSnapshots: DailySessionSnapshot[];
+  areaCountRecords: AreaCountRecord[];
   migration: LegacyHistoricalArchiveMigrationResult | null;
   failure: HistoricalArchiveFailure | null;
 };
@@ -44,6 +63,8 @@ let snapshot: HistoricalArchiveRuntimeSnapshot = {
   status: "not_started",
   review19Records: [],
   finalizedDayRecords: [],
+  dailySessionSnapshots: [],
+  areaCountRecords: [],
   migration: null,
   failure: null,
 };
@@ -54,15 +75,25 @@ function clone<T>(value: T): T {
 
 function legacyFallback(): Pick<
   HistoricalArchiveRuntimeSnapshot,
-  "review19Records" | "finalizedDayRecords"
+  | "review19Records"
+  | "finalizedDayRecords"
+  | "dailySessionSnapshots"
+  | "areaCountRecords"
 > {
   try {
     return {
       review19Records: loadReview19Records(),
       finalizedDayRecords: loadFinalizedDayData(),
+      dailySessionSnapshots: loadDailySessionSnapshots(),
+      areaCountRecords: loadLocalAreaCountRecords(),
     };
   } catch {
-    return { review19Records: [], finalizedDayRecords: [] };
+    return {
+      review19Records: [],
+      finalizedDayRecords: [],
+      dailySessionSnapshots: [],
+      areaCountRecords: [],
+    };
   }
 }
 
@@ -83,12 +114,18 @@ async function hydrateRuntime(
   target: HistoricalArchiveRepository,
   migration: LegacyHistoricalArchiveMigrationResult | null,
 ): Promise<HistoricalArchiveRuntimeSnapshot> {
-  const [review19, finalizedDays] = await Promise.all([
+  const [review19, finalizedDays, dailySessionSnapshots, areaCountRecords] = await Promise.all([
     target.listReview19Records(),
     target.listFinalizedDays(),
+    target.listDailySessionSnapshots(),
+    target.listAreaCountRecords(),
   ]);
   const fallback = legacyFallback();
-  const failure = resultFailure(review19) ?? resultFailure(finalizedDays);
+  const failure =
+    resultFailure(review19) ??
+    resultFailure(finalizedDays) ??
+    resultFailure(dailySessionSnapshots) ??
+    resultFailure(areaCountRecords);
   const review19Records = review19.ok
     ? mergeReview19Operations(review19.value, fallback.review19Records)
     : fallback.review19Records;
@@ -98,6 +135,18 @@ async function hydrateRuntime(
         ...fallback.finalizedDayRecords,
       ])
     : fallback.finalizedDayRecords;
+  const archivedDailySessionSnapshots = dailySessionSnapshots.ok
+    ? mergeDailySessionSnapshotArchiveOperations([
+        ...dailySessionSnapshots.value,
+        ...fallback.dailySessionSnapshots,
+      ])
+    : fallback.dailySessionSnapshots;
+  const archivedAreaCountRecords = areaCountRecords.ok
+    ? mergeAreaCountRecordCollections(
+        areaCountRecords.value,
+        fallback.areaCountRecords,
+      )
+    : fallback.areaCountRecords;
   return {
     status: failure
       ? "partial"
@@ -106,14 +155,60 @@ async function hydrateRuntime(
         : "complete",
     review19Records,
     finalizedDayRecords,
+    dailySessionSnapshots: archivedDailySessionSnapshots,
+    areaCountRecords: archivedAreaCountRecords,
     migration,
     failure:
-      failure ?? migration?.review19.failure ?? migration?.finalizedDays.failure ?? null,
+      failure ??
+      migration?.review19.failure ??
+      migration?.finalizedDays.failure ??
+      migration?.dailySessionSnapshots.failure ??
+      migration?.areaCountRecords.failure ??
+      null,
   };
 }
 
 export function getHistoricalArchiveRuntimeSnapshot(): HistoricalArchiveRuntimeSnapshot {
   return clone(snapshot);
+}
+
+/**
+ * Synchronous memory view used after the App startup gate. The legacy
+ * localStorage operational journal is merged for crash overlap/current-day
+ * writes; stable identities prevent double counting.
+ */
+export function getHistoricalDailySessionSnapshots(): DailySessionSnapshot[] {
+  let operational: DailySessionSnapshot[] = [];
+  try {
+    operational = loadDailySessionSnapshots();
+  } catch {
+    // Archive memory remains usable when localStorage reads are unavailable.
+  }
+  return mergeDailySessionSnapshotArchiveOperations([
+    ...snapshot.dailySessionSnapshots,
+    ...operational,
+  ]);
+}
+
+export function getHistoricalDailySessionSnapshotsForDate(
+  date: string,
+): DailySessionSnapshot[] {
+  return getHistoricalDailySessionSnapshots().filter(
+    (item) => item.session.date === date,
+  );
+}
+
+export function getHistoricalAreaCountRecords(): AreaCountRecord[] {
+  let operational: AreaCountRecord[] = [];
+  try {
+    operational = loadLocalAreaCountRecords();
+  } catch {
+    // Archive memory remains usable when localStorage reads are unavailable.
+  }
+  return mergeAreaCountRecordCollections(
+    snapshot.areaCountRecords,
+    operational,
+  );
 }
 
 export function getHistoricalArchiveRepository(): HistoricalArchiveRepository | null {
@@ -123,6 +218,8 @@ export function getHistoricalArchiveRepository(): HistoricalArchiveRepository | 
 export function initializeHistoricalArchiveRuntime(params?: {
   repository?: HistoricalArchiveRepository;
   storage?: Storage;
+  protectedDailySnapshotDates?: readonly string[];
+  protectedAreaCountDates?: readonly string[];
 }): Promise<HistoricalArchiveRuntimeSnapshot> {
   if (initialization) return initialization;
   snapshot = { ...snapshot, status: "in_progress" };
@@ -138,9 +235,11 @@ export function initializeHistoricalArchiveRuntime(params?: {
         params?.storage ??
         (typeof localStorage === "undefined" ? null : localStorage);
       const migration = storage
-        ? await migrateLegacyHistoricalLocalStorage({
+          ? await migrateLegacyHistoricalLocalStorage({
             repository: target,
             storage,
+            protectedDailySnapshotDates: params?.protectedDailySnapshotDates,
+            protectedAreaCountDates: params?.protectedAreaCountDates,
           })
         : null;
       snapshot = await hydrateRuntime(target, migration);

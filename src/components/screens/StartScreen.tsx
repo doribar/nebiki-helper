@@ -24,7 +24,7 @@ import {
   buildSameDayConfirmedHourlyWeather,
   buildWeatherConfirmationDisplayRows,
 } from "../../domain/weatherConfirmationDisplay";
-import { getDailySessionSnapshotsForDate } from "../../domain/storage";
+import { getHistoricalDailySessionSnapshotsForDate } from "../../domain/historicalArchiveRuntime.ts";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import { WeatherConfirmationPanel } from "./WeatherConfirmationPanel";
@@ -504,7 +504,7 @@ export function StartScreen({
       isFixedTimeMode ||
       typeof localStorage === "undefined"
         ? []
-        : getDailySessionSnapshotsForDate(sessionDraft.date);
+        : getHistoricalDailySessionSnapshotsForDate(sessionDraft.date);
 
     return buildSameDayConfirmedHourlyWeather({
       date: sessionDraft.date,

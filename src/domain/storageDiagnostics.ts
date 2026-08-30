@@ -59,6 +59,8 @@ export type ArchiveMigrationDiagnosticStatus =
 export type ArchiveStorageDiagnosticInput = {
   review19Count: number | null;
   finalizedDayCount: number | null;
+  dailySessionSnapshotCount?: number | null;
+  areaCountCount?: number | null;
   migrationStatus: ArchiveMigrationDiagnosticStatus;
   /** Input-only sealing evidence; exact dates are never included in output. */
   finalizedDates?: readonly string[];
@@ -68,6 +70,32 @@ export type ArchiveStorageDiagnostic = Omit<
   ArchiveStorageDiagnosticInput,
   "finalizedDates"
 >;
+
+export type DailySnapshotStorageDiagnostic = {
+  totalRecordCount: number;
+  dateCount: number;
+  currentDateCount: number;
+  trulyActiveCount: number;
+  historicalUnfinalizedDateCount: number;
+  archivedCount: number;
+  localPruneableCount: number;
+  protectedCurrentDateCount: number;
+  protectedCurrentSessionCount: number;
+  oldestDate: string | null;
+  newestDate: string | null;
+};
+
+export type AreaCountStorageDiagnostic = {
+  totalCount: number;
+  archivedCount: number;
+  localOnlyCount: number;
+  pendingCount: number;
+  currentCount: number;
+  remoteConfirmedCount: number;
+  remoteUnconfirmedCount: number;
+  localPruneableCount: number;
+  offlineMinimumProtectedCount: number;
+};
 
 export type LocalStorageKeyDiagnostic = {
   key: string;
@@ -112,6 +140,10 @@ export type NebikiStorageUsageDiagnostic = {
     };
   };
   archive: ArchiveStorageDiagnostic;
+  history: {
+    dailySnapshots: DailySnapshotStorageDiagnostic | null;
+    areaCount: AreaCountStorageDiagnostic | null;
+  };
   originEstimate: OriginStorageEstimateDiagnostic;
 };
 
@@ -149,6 +181,10 @@ function normalizeArchiveDiagnostic(
   return {
     review19Count: normalizeCount(archive?.review19Count ?? null),
     finalizedDayCount: normalizeCount(archive?.finalizedDayCount ?? null),
+    dailySessionSnapshotCount: normalizeCount(
+      archive?.dailySessionSnapshotCount ?? null,
+    ),
+    areaCountCount: normalizeCount(archive?.areaCountCount ?? null),
     migrationStatus: validStatuses.includes(
       archive?.migrationStatus as ArchiveMigrationDiagnosticStatus,
     )
@@ -368,6 +404,8 @@ async function collectOriginEstimate(
 export async function collectNebikiStorageUsageDiagnostic(params?: {
   storage?: StorageDiagnosticStorage | null;
   archive?: Partial<ArchiveStorageDiagnosticInput>;
+  dailySnapshotDiagnostic?: DailySnapshotStorageDiagnostic | null;
+  areaCountDiagnostic?: AreaCountStorageDiagnostic | null;
   estimateProvider?: StorageEstimateProvider | null;
   softBudgetBytes?: number;
   topEntryLimit?: number;
@@ -437,6 +475,10 @@ export async function collectNebikiStorageUsageDiagnostic(params?: {
       },
     },
     archive: normalizeArchiveDiagnostic(params?.archive),
+    history: {
+      dailySnapshots: params?.dailySnapshotDiagnostic ?? null,
+      areaCount: params?.areaCountDiagnostic ?? null,
+    },
     originEstimate,
   };
 }

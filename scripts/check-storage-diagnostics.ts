@@ -192,7 +192,13 @@ await test("archive count/statusは外部summaryだけを統合する", async ()
   assert.deepEqual(diagnostic.archive, {
     review19Count: 180,
     finalizedDayCount: 180,
+    dailySessionSnapshotCount: null,
+    areaCountCount: null,
     migrationStatus: "complete",
+  });
+  assert.deepEqual(diagnostic.history, {
+    dailySnapshots: null,
+    areaCount: null,
   });
 });
 
@@ -323,5 +329,4 @@ await test("format helperはpayloadに触れずKiBだけを返す", () => {
 });
 
 console.log(`Storage diagnostics checks passed: ${passed}/15`);
-
 

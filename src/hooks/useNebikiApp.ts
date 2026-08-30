@@ -64,7 +64,6 @@ import {
   loadReview19SourceState,
   saveReview19SourceState,
   clearReview19SourceState,
-  getDailySessionSnapshotsForDate,
   loadDailySessionSnapshots,
   runStartupStorageHousekeeping,
   setArchivedFinalizedDatesForStorageRetention,
@@ -134,6 +133,7 @@ import {
   evaluationToRateAdjustment as getAreaCountRateAdjustment,
   getActualWeekdayLabel,
   getAreaCountFallbackWeekdayGroup,
+  getAreaCountRecordIdentity,
   getAreaCountRecommendation as buildAreaCountRecommendation,
   getAreaCountSameItemLimit,
   isAreaCountAssistTarget,
@@ -146,13 +146,11 @@ import {
 import { resolveAreaCountHistorySource } from "../domain/areaCountHistorySource.ts";
 import {
   AREA_COUNT_LOCAL_STORAGE_KEY,
-  loadLegacySummerAreaCountRecords,
-  loadLegacyNormalAreaCountRecords,
-  loadLocalAreaCountRecords,
   loadUnifiedAreaCountRecords,
   replaceUnifiedAreaCountRecords,
 } from "../domain/areaCountLocalStorage.ts";
 import {
+  isAreaCountRecordCoveredByRemote,
   retainAreaCountLocalCacheWithinBudget,
 } from "../domain/areaCountCache.ts";
 import { collectAreaCountBackfillRecords } from "../domain/areaCountBackfill.ts";
@@ -311,7 +309,10 @@ import {
 } from "../domain/analysisMetadata.ts";
 import {
   cacheRemoteReview19InHistoricalArchive,
+  getHistoricalAreaCountRecords,
   getHistoricalArchiveRuntimeSnapshot,
+  getHistoricalDailySessionSnapshots,
+  getHistoricalDailySessionSnapshotsForDate,
   initializeArchivedFinalizedDay,
   listArchivedReview19ByBusinessIdentity,
   patchArchivedFinalizedDayByDate,
@@ -547,7 +548,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   >("loading");
   const remoteAreaCountHistoryRef = useRef<AreaCountRecord[]>([]);
   const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
-    isTestMode ? [] : loadLocalAreaCountRecords()
+    isTestMode ? [] : getHistoricalAreaCountRecords()
   );
 
   function persistAreaCountRecordSafely(
@@ -787,7 +788,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       if (cancelled) return;
 
       const areaResults = [normalArea, summerArea];
-      const localAreaRecords = loadLocalAreaCountRecords();
+      const localAreaRecords = getHistoricalAreaCountRecords();
       const remoteAreaRecords = mergeAreaCountRecordCollections(
         ...areaResults.map((result) =>
           result.status === "ready" ? result.records : [],
@@ -827,6 +828,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
             remoteRecords: remoteAreaRecords,
             pendingIdentities: pendingAreaIdentities,
             protectedDates,
+            minimumSamplesPerGroup: 0,
+            seedRemoteRecords: false,
           })
         : null;
       if (
@@ -1263,7 +1266,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       weather: state.session.weather,
       snapshots: isTestMode
         ? []
-        : getDailySessionSnapshotsForDate(state.session.date),
+        : getHistoricalDailySessionSnapshotsForDate(state.session.date),
       lastSessionWeather,
       existingAnalysis: state.session.temperatureComfortAnalysis,
       legacyUnresolvedTempLevel: state.session.legacyUnresolvedTempLevel,
@@ -1352,7 +1355,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       weather: state.session.weather,
       snapshots: isTestMode
         ? []
-        : getDailySessionSnapshotsForDate(state.session.date),
+        : getHistoricalDailySessionSnapshotsForDate(state.session.date),
       lastSessionWeather,
       previousSession: state.session,
     }).resolvedWeather;
@@ -1812,7 +1815,7 @@ const lateSkipNotice = useMemo(() => {
     void finalizedDayDataVersion;
     return archivedFinalizedDayRecords;
   })();
-  const savedDailySessionSnapshots = loadDailySessionSnapshots();
+  const savedDailySessionSnapshots = getHistoricalDailySessionSnapshots();
   const completedDailyDates = savedDailySessionSnapshots
     .filter(
       (snapshot) =>
@@ -2645,7 +2648,7 @@ const lateSkipNotice = useMemo(() => {
       weather: nextSessionBase.weather,
       snapshots: isTestMode
         ? []
-        : getDailySessionSnapshotsForDate(nextSessionBase.date),
+        : getHistoricalDailySessionSnapshotsForDate(nextSessionBase.date),
       lastSessionWeather,
       previousSession: isResumingSameDiscountSession ? null : prev.session,
       existingAnalysis: isResumingSameDiscountSession
@@ -2964,7 +2967,7 @@ const lateSkipNotice = useMemo(() => {
       snapshotWriteResult.attempts,
     );
     const sessions = [
-      ...getDailySessionSnapshotsForDate(session.date).filter((snapshot) => {
+      ...getHistoricalDailySessionSnapshotsForDate(session.date).filter((snapshot) => {
         return !(
           snapshot.session.discountTime === "20" &&
           snapshot.session.startedAt === session.startedAt
@@ -3865,7 +3868,7 @@ const lateSkipNotice = useMemo(() => {
         weather: reviewDraft.weather,
         snapshots: isTestMode
           ? []
-          : getDailySessionSnapshotsForDate(reviewDraft.date),
+          : getHistoricalDailySessionSnapshotsForDate(reviewDraft.date),
         lastSessionWeather,
         previousSession: session,
       }).analysis;
@@ -3904,7 +3907,7 @@ const lateSkipNotice = useMemo(() => {
         weather: prev.sessionDraft.weather,
         snapshots: isTestMode
           ? []
-          : getDailySessionSnapshotsForDate(prev.sessionDraft.date),
+          : getHistoricalDailySessionSnapshotsForDate(prev.sessionDraft.date),
         lastSessionWeather,
         previousSession: prev.session,
       }).analysis;
@@ -4192,7 +4195,7 @@ const lateSkipNotice = useMemo(() => {
       areaCountRecords,
       sessions: isTestMode
         ? []
-        : getDailySessionSnapshotsForDate(state.review19.date),
+        : getHistoricalDailySessionSnapshotsForDate(state.review19.date),
       review19Check: {
         version: 1,
         ...getCurrentDataVersionInfo(),
@@ -4358,7 +4361,7 @@ const lateSkipNotice = useMemo(() => {
       weather: nextSessionBase.weather,
       snapshots: isTestMode
         ? []
-        : getDailySessionSnapshotsForDate(nextSessionBase.date),
+        : getHistoricalDailySessionSnapshotsForDate(nextSessionBase.date),
       lastSessionWeather,
       previousSession: state.session,
     }).analysis;
@@ -4646,7 +4649,7 @@ const lateSkipNotice = useMemo(() => {
   async function getExportableDailyData() {
     const finalized = archivedFinalizedDayRecordsRef.current;
     const finalizedDates = new Set(finalized.map((record) => record.date));
-    const sessionSnapshots = loadDailySessionSnapshots();
+    const sessionSnapshots = getHistoricalDailySessionSnapshots();
     const legacyDates = [...new Set(
       sessionSnapshots
         .filter(
@@ -4862,14 +4865,10 @@ const lateSkipNotice = useMemo(() => {
       remoteRecords: [],
     });
     const collectedAreaRecords = collectAreaCountBackfillRecords({
-      unifiedCacheRecords: mergeAreaCountRecordCollections(
-        loadUnifiedAreaCountRecords(),
-        loadLegacyNormalAreaCountRecords(),
-      ),
-      summerCacheRecords: loadLegacySummerAreaCountRecords(),
+      unifiedCacheRecords: getHistoricalAreaCountRecords(),
       finalizedDayRecords: archivedFinalizedDayRecordsRef.current,
       review19Records: archivedReview19RecordsRef.current,
-      dailySessionSnapshots: loadDailySessionSnapshots(),
+      dailySessionSnapshots: getHistoricalDailySessionSnapshots(),
       currentState: state,
       nowMs: nowMsForBackfill,
     });
@@ -5031,7 +5030,7 @@ const lateSkipNotice = useMemo(() => {
       mergeAreaCountRecordCollections(
         current,
         remoteAreaCountHistoryRef.current,
-        loadLocalAreaCountRecords(),
+        getHistoricalAreaCountRecords(),
       ),
     );
     return result;
@@ -5039,12 +5038,123 @@ const lateSkipNotice = useMemo(() => {
 
   async function getStorageUsageDiagnostic() {
     const archive = getHistoricalArchiveRuntimeSnapshot();
+    const currentDate = formatLocalDate(getRuntimeNow());
+    const dailySnapshots = getHistoricalDailySessionSnapshots();
+    let localDailySnapshots: ReturnType<typeof loadDailySessionSnapshots> = [];
+    let localAreaRecords: ReturnType<typeof loadUnifiedAreaCountRecords> = [];
+    let pendingItems: ReturnType<typeof loadPendingSupabaseSyncQueue> = [];
+    try {
+      localDailySnapshots = loadDailySessionSnapshots();
+      localAreaRecords = loadUnifiedAreaCountRecords();
+      pendingItems = loadPendingSupabaseSyncQueue();
+    } catch {
+      // The base diagnostic will still report the unreadable key/error safely.
+    }
+    const dailyDates = [...new Set(
+      dailySnapshots.map((snapshot) => snapshot.session.date),
+    )].sort();
+    const finalizedDates = new Set(
+      archive.finalizedDayRecords.map((record) => record.date),
+    );
+    const currentSessionIdentity = state.session
+      ? JSON.stringify([
+          state.session.date,
+          state.session.discountTime,
+          state.session.startedAt,
+        ])
+      : null;
+    const snapshotIdentity = (snapshot: (typeof dailySnapshots)[number]) =>
+      JSON.stringify([
+        snapshot.session.date,
+        snapshot.session.discountTime,
+        snapshot.session.startedAt,
+      ]);
+
+    const allAreaRecords = getHistoricalAreaCountRecords();
+    const pendingAreaIdentities = new Set(
+      pendingItems
+        .filter((item) => item.type === "area_count")
+        .map((item) => item.identity),
+    );
+    const remoteByIdentity = new Map(
+      remoteAreaCountHistoryRef.current.map((record) => [
+        getAreaCountRecordIdentity(record),
+        record,
+      ]),
+    );
+    const remoteConfirmedIdentities = new Set(
+      allAreaRecords.flatMap((local) => {
+        const remote = remoteByIdentity.get(getAreaCountRecordIdentity(local));
+        return remote && isAreaCountRecordCoveredByRemote({ local, remote })
+          ? [getAreaCountRecordIdentity(local)]
+          : [];
+      }),
+    );
+    const localAreaIdentitySet = new Set(
+      localAreaRecords.map(getAreaCountRecordIdentity),
+    );
     return collectNebikiStorageUsageDiagnostic({
       archive: {
         review19Count: archive.review19Records.length,
         finalizedDayCount: archive.finalizedDayRecords.length,
+        dailySessionSnapshotCount: archive.dailySessionSnapshots.length,
+        areaCountCount: archive.areaCountRecords.length,
         migrationStatus: archive.status,
         finalizedDates: archive.finalizedDayRecords.map((record) => record.date),
+      },
+      dailySnapshotDiagnostic: {
+        totalRecordCount: dailySnapshots.length,
+        dateCount: dailyDates.length,
+        currentDateCount: dailySnapshots.filter(
+          (snapshot) => snapshot.session.date === currentDate,
+        ).length,
+        trulyActiveCount: dailySnapshots.filter(
+          (snapshot) =>
+            currentSessionIdentity !== null &&
+            snapshotIdentity(snapshot) === currentSessionIdentity,
+        ).length,
+        historicalUnfinalizedDateCount: dailyDates.filter(
+          (date) => date !== currentDate && !finalizedDates.has(date),
+        ).length,
+        archivedCount: archive.dailySessionSnapshots.length,
+        localPruneableCount: localDailySnapshots.filter(
+          (snapshot) =>
+            snapshot.session.date !== currentDate &&
+            snapshotIdentity(snapshot) !== currentSessionIdentity,
+        ).length,
+        protectedCurrentDateCount: localDailySnapshots.filter(
+          (snapshot) => snapshot.session.date === currentDate,
+        ).length,
+        protectedCurrentSessionCount: localDailySnapshots.filter(
+          (snapshot) => snapshotIdentity(snapshot) === currentSessionIdentity,
+        ).length,
+        oldestDate: dailyDates[0] ?? null,
+        newestDate: dailyDates.at(-1) ?? null,
+      },
+      areaCountDiagnostic: {
+        totalCount: allAreaRecords.length,
+        archivedCount: archive.areaCountRecords.length,
+        localOnlyCount: allAreaRecords.filter(
+          (record) =>
+            !remoteConfirmedIdentities.has(getAreaCountRecordIdentity(record)),
+        ).length,
+        pendingCount: pendingAreaIdentities.size,
+        currentCount: allAreaRecords.filter(
+          (record) => record.date === currentDate,
+        ).length,
+        remoteConfirmedCount: remoteConfirmedIdentities.size,
+        remoteUnconfirmedCount:
+          allAreaRecords.length - remoteConfirmedIdentities.size,
+        localPruneableCount: allAreaRecords.filter((record) => {
+          const identity = getAreaCountRecordIdentity(record);
+          return localAreaIdentitySet.has(identity) &&
+            remoteConfirmedIdentities.has(identity) &&
+            !pendingAreaIdentities.has(identity) &&
+            record.date !== currentDate;
+        }).length,
+        // Full IndexedDB history is the offline source; no sample must remain
+        // in localStorage solely for median coverage.
+        offlineMinimumProtectedCount: 0,
       },
     });
   }

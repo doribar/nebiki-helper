@@ -4,6 +4,9 @@ import { useNebikiApp } from "../hooks/useNebikiApp";
 import { getCanonicalUrlForLegacyHash } from "../domain/fullMode";
 import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
 import {
+  loadCurrentSession,
+  loadReview19SourceState,
+  loadWorkSessionCheckpoint,
   removeStorageKeySafely,
   reportStorageOperationFailures,
   runStartupStorageHousekeeping,
@@ -358,13 +361,36 @@ export default function App() {
   useEffect(() => {
     if (isTestMode) return;
     let cancelled = false;
-    void initializeHistoricalArchiveRuntime().then((archive) => {
+    const currentBusinessDate = formatLocalDate();
+    const protectedBusinessDates = new Set([currentBusinessDate]);
+    try {
+      for (const candidate of [
+        loadCurrentSession(),
+        loadWorkSessionCheckpoint(),
+        loadReview19SourceState(),
+      ]) {
+        if (candidate?.session?.date) {
+          protectedBusinessDates.add(candidate.session.date);
+        }
+        if (candidate?.review19?.date) {
+          protectedBusinessDates.add(candidate.review19.date);
+        }
+      }
+    } catch {
+      // A storage read failure must not abort archive startup. The current
+      // calendar date remains protected and the archive migration keeps every
+      // legacy source whenever verification cannot complete.
+    }
+    void initializeHistoricalArchiveRuntime({
+      protectedDailySnapshotDates: [...protectedBusinessDates],
+      protectedAreaCountDates: [...protectedBusinessDates],
+    }).then((archive) => {
       if (cancelled) return;
       setArchivedFinalizedDatesForStorageRetention(
         archive.finalizedDayRecords.map((record) => record.date),
       );
       runStartupStorageHousekeeping({
-        protectedDates: [formatLocalDate()],
+        protectedDates: [currentBusinessDate],
       });
       setArchiveReady(true);
     });

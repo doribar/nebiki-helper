@@ -163,6 +163,8 @@ export function retainAreaCountLocalCacheWithinBudget(params: {
   protectedDates?: ReadonlySet<string>;
   byteBudget?: number;
   minimumSamplesPerGroup?: number;
+  /** False when the full offline population is already available in IndexedDB. */
+  seedRemoteRecords?: boolean;
 }): AreaCountCacheRetentionResult {
   const localRecords = mergeAreaCountRecordCollections(params.localRecords);
   const remoteRecords = mergeAreaCountRecordCollections(params.remoteRecords);
@@ -205,9 +207,11 @@ export function retainAreaCountLocalCacheWithinBudget(params: {
   }
   // Keep a bounded offline fallback even on a fresh device. Remote rows are
   // cache candidates only; they never become pending or local-first evidence.
-  for (const remote of remoteRecords) {
-    if (!localIdentitySet.has(getAreaCountRecordIdentity(remote))) {
-      confirmedCandidates.push(remote);
+  if (params.seedRemoteRecords !== false) {
+    for (const remote of remoteRecords) {
+      if (!localIdentitySet.has(getAreaCountRecordIdentity(remote))) {
+        confirmedCandidates.push(remote);
+      }
     }
   }
 

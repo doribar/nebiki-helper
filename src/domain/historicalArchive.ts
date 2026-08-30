@@ -9,26 +9,49 @@ import {
 } from "./finalizedDayData.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
 import {
+  getAreaCountRecordIdentity,
+  mergeAreaCountRecordCollections,
+  normalizeAreaCountRecords,
+  type AreaCountRecord,
+} from "./areaCountHistory.ts";
+import {
+  AREA_COUNT_LOCAL_STORAGE_KEY,
+  LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY,
+  LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+} from "./areaCountLocalStorage.ts";
+import {
   cloneReview19Result,
   getReview19SourceUpdatedAt,
   normalizeReview19Result,
 } from "./review19.ts";
-import type { DemandCycle, Review19Result } from "./types.ts";
+import type {
+  DailySessionSnapshot,
+  DemandCycle,
+  DiscountTime,
+  Review19Result,
+} from "./types.ts";
 
 export const HISTORICAL_ARCHIVE_DB_NAME =
   "nebiki-helper-historical-archive" as const;
-export const HISTORICAL_ARCHIVE_DB_VERSION = 1 as const;
+export const HISTORICAL_ARCHIVE_DB_VERSION = 2 as const;
 export const HISTORICAL_ARCHIVE_REVIEW19_STORE = "review19" as const;
 export const HISTORICAL_ARCHIVE_FINALIZED_DAY_STORE = "finalized-days" as const;
+export const HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE =
+  "daily-session-snapshots" as const;
+export const HISTORICAL_ARCHIVE_AREA_COUNT_STORE = "area-count-records" as const;
 
 export const LEGACY_REVIEW19_STORAGE_KEY =
   "nebiki-helper/review19-records" as const;
 export const LEGACY_FINALIZED_DAY_STORAGE_KEY =
   "nebiki-helper/finalized-day-data" as const;
+export const LEGACY_DAILY_SESSION_SNAPSHOT_STORAGE_KEY =
+  "nebiki-helper/daily-session-snapshots" as const;
 
 type HistoricalArchiveStoreName =
   | typeof HISTORICAL_ARCHIVE_REVIEW19_STORE
-  | typeof HISTORICAL_ARCHIVE_FINALIZED_DAY_STORE;
+  | typeof HISTORICAL_ARCHIVE_FINALIZED_DAY_STORE
+  | typeof HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE
+  | typeof HISTORICAL_ARCHIVE_AREA_COUNT_STORE;
 
 type Review19ArchiveEntry = {
   key: string;
@@ -45,7 +68,26 @@ type FinalizedDayArchiveEntry = {
   record: StoredFinalizedDayData;
 };
 
-type HistoricalArchiveEntry = Review19ArchiveEntry | FinalizedDayArchiveEntry;
+type DailySessionSnapshotArchiveEntry = {
+  key: string;
+  date: string;
+  discountTime: DiscountTime;
+  sessionStartedAt: string;
+  record: DailySessionSnapshot;
+};
+
+type AreaCountArchiveEntry = {
+  key: string;
+  date: string;
+  demandCycle: DemandCycle;
+  record: AreaCountRecord;
+};
+
+type HistoricalArchiveEntry =
+  | Review19ArchiveEntry
+  | FinalizedDayArchiveEntry
+  | DailySessionSnapshotArchiveEntry
+  | AreaCountArchiveEntry;
 
 export type HistoricalArchiveOperation =
   | "open"
@@ -148,6 +190,20 @@ function getFinalizedDayArchiveKey(record: Pick<StoredFinalizedDayData, "date">)
   return record.date;
 }
 
+export function getDailySessionSnapshotArchiveKey(
+  snapshot: Pick<DailySessionSnapshot, "session">,
+): string {
+  return JSON.stringify([
+    snapshot.session.date,
+    snapshot.session.discountTime,
+    snapshot.session.startedAt,
+  ]);
+}
+
+export function getAreaCountArchiveKey(record: AreaCountRecord): string {
+  return getAreaCountRecordIdentity(record);
+}
+
 function toReview19Entry(record: Review19Result): Review19ArchiveEntry | null {
   const normalized = normalizeReview19Result(record);
   if (!normalized) return null;
@@ -169,6 +225,114 @@ function toFinalizedDayEntry(
     key: getFinalizedDayArchiveKey(normalized),
     date: normalized.date,
     recordId: normalized.recordId,
+    record: clone(normalized),
+  };
+}
+
+function normalizeDailySessionSnapshot(
+  value: unknown,
+): DailySessionSnapshot | null {
+  if (!value || typeof value !== "object") return null;
+  const snapshot = value as DailySessionSnapshot;
+  if (
+    snapshot.version !== 1 ||
+    typeof snapshot.capturedAt !== "string" ||
+    !snapshot.session ||
+    typeof snapshot.session.date !== "string" ||
+    typeof snapshot.session.startedAt !== "string" ||
+    typeof snapshot.session.discountTime !== "string"
+  ) {
+    return null;
+  }
+  const startedAt = new Date(snapshot.session.startedAt);
+  if (Number.isNaN(startedAt.getTime())) return null;
+  const localDate = [
+    startedAt.getFullYear(),
+    String(startedAt.getMonth() + 1).padStart(2, "0"),
+    String(startedAt.getDate()).padStart(2, "0"),
+  ].join("-");
+  if (localDate !== snapshot.session.date) return null;
+  return clone(snapshot);
+}
+
+function getDailySessionCompletionSignature(
+  snapshot: DailySessionSnapshot,
+): string {
+  return JSON.stringify(
+    Object.values(snapshot.areas ?? {})
+      .map((area) => ({
+        areaId: area.areaId,
+        status: area.status,
+        visitedAt: area.visitedAt ?? null,
+        completedAt: area.completedAt ?? null,
+        confirmedAt: area.rateDecisionSnapshot?.confirmedAt ?? null,
+        measurementStatus: area.measurementStatus ?? null,
+        missingReason: area.missingReason ?? null,
+        measurementRecordedAt: area.measurementRecordedAt ?? null,
+      }))
+      .sort((left, right) => left.areaId.localeCompare(right.areaId)),
+  );
+}
+
+function preferDailySessionSnapshot(
+  current: DailySessionSnapshot,
+  candidate: DailySessionSnapshot,
+): DailySessionSnapshot {
+  if (
+    getDailySessionCompletionSignature(current) ===
+    getDailySessionCompletionSignature(candidate)
+  ) {
+    return clone(current);
+  }
+  return candidate.capturedAt >= current.capturedAt
+    ? clone(candidate)
+    : clone(current);
+}
+
+export function mergeDailySessionSnapshotArchiveOperations(
+  snapshots: readonly DailySessionSnapshot[],
+): DailySessionSnapshot[] {
+  const byIdentity = new Map<string, DailySessionSnapshot>();
+  for (const raw of snapshots) {
+    const normalized = normalizeDailySessionSnapshot(raw);
+    if (!normalized) continue;
+    const key = getDailySessionSnapshotArchiveKey(normalized);
+    const current = byIdentity.get(key);
+    byIdentity.set(
+      key,
+      current ? preferDailySessionSnapshot(current, normalized) : normalized,
+    );
+  }
+  return [...byIdentity.values()].sort((left, right) => {
+    const date = left.session.date.localeCompare(right.session.date);
+    if (date !== 0) return date;
+    return left.capturedAt.localeCompare(right.capturedAt);
+  }).map(clone);
+}
+
+function toDailySessionSnapshotEntry(
+  snapshot: DailySessionSnapshot,
+): DailySessionSnapshotArchiveEntry | null {
+  const normalized = normalizeDailySessionSnapshot(snapshot);
+  if (!normalized) return null;
+  return {
+    key: getDailySessionSnapshotArchiveKey(normalized),
+    date: normalized.session.date,
+    discountTime: normalized.session.discountTime,
+    sessionStartedAt: normalized.session.startedAt,
+    record: clone(normalized),
+  };
+}
+
+function toAreaCountEntry(
+  record: AreaCountRecord,
+): AreaCountArchiveEntry | null {
+  const [normalized] = normalizeAreaCountRecords([record]);
+  if (!normalized) return null;
+  return {
+    key: getAreaCountArchiveKey(normalized),
+    date: normalized.date,
+    demandCycle: normalizeDemandCycle(normalized.demandCycle),
     record: clone(normalized),
   };
 }
@@ -440,6 +604,111 @@ export class HistoricalArchiveRepository {
       return saved.value;
     });
   }
+
+  async listDailySessionSnapshots(): Promise<
+    HistoricalArchiveResult<DailySessionSnapshot[]>
+  > {
+    return safely("read", async () => {
+      const entries = await this.adapter.getAll(
+        HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE,
+      );
+      return mergeDailySessionSnapshotArchiveOperations(
+        entries.flatMap((entry) => {
+          const record = (entry as DailySessionSnapshotArchiveEntry).record;
+          const normalized = normalizeDailySessionSnapshot(record);
+          return normalized ? [normalized] : [];
+        }),
+      );
+    });
+  }
+
+  async countDailySessionSnapshots(): Promise<HistoricalArchiveResult<number>> {
+    return safely("read", () =>
+      this.adapter.count(HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE),
+    );
+  }
+
+  async upsertDailySessionSnapshots(
+    snapshots: readonly DailySessionSnapshot[],
+  ): Promise<HistoricalArchiveResult<DailySessionSnapshot[]>> {
+    return safely("write", async () => {
+      const current = await this.listDailySessionSnapshots();
+      if (!current.ok) {
+        throw Object.assign(new Error(current.message), {
+          name: current.errorName,
+        });
+      }
+      const merged = mergeDailySessionSnapshotArchiveOperations([
+        ...current.value,
+        ...snapshots,
+      ]);
+      const touchedKeys = new Set(
+        snapshots.flatMap((snapshot) => {
+          const normalized = normalizeDailySessionSnapshot(snapshot);
+          return normalized ? [getDailySessionSnapshotArchiveKey(normalized)] : [];
+        }),
+      );
+      const entries = merged
+        .map(toDailySessionSnapshotEntry)
+        .filter((entry): entry is DailySessionSnapshotArchiveEntry =>
+          entry !== null && touchedKeys.has(entry.key)
+        );
+      await this.adapter.putMany(
+        HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE,
+        entries,
+      );
+      return merged.map(clone);
+    });
+  }
+
+  async listAreaCountRecords(): Promise<
+    HistoricalArchiveResult<AreaCountRecord[]>
+  > {
+    return safely("read", async () => {
+      const entries = await this.adapter.getAll(
+        HISTORICAL_ARCHIVE_AREA_COUNT_STORE,
+      );
+      return mergeAreaCountRecordCollections(
+        entries.flatMap((entry) => {
+          const record = (entry as AreaCountArchiveEntry).record;
+          return normalizeAreaCountRecords([record]);
+        }),
+      );
+    });
+  }
+
+  async countAreaCountRecords(): Promise<HistoricalArchiveResult<number>> {
+    return safely("read", () =>
+      this.adapter.count(HISTORICAL_ARCHIVE_AREA_COUNT_STORE),
+    );
+  }
+
+  async upsertAreaCountRecords(
+    records: readonly AreaCountRecord[],
+  ): Promise<HistoricalArchiveResult<AreaCountRecord[]>> {
+    return safely("write", async () => {
+      const current = await this.listAreaCountRecords();
+      if (!current.ok) {
+        throw Object.assign(new Error(current.message), {
+          name: current.errorName,
+        });
+      }
+      const merged = mergeAreaCountRecordCollections(
+        current.value,
+        normalizeAreaCountRecords(records),
+      );
+      const touchedKeys = new Set(
+        normalizeAreaCountRecords(records).map(getAreaCountArchiveKey),
+      );
+      const entries = merged
+        .map(toAreaCountEntry)
+        .filter((entry): entry is AreaCountArchiveEntry =>
+          entry !== null && touchedKeys.has(entry.key)
+        );
+      await this.adapter.putMany(HISTORICAL_ARCHIVE_AREA_COUNT_STORE, entries);
+      return merged.map(clone);
+    });
+  }
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
@@ -504,6 +773,34 @@ export class NativeIndexedDbHistoricalArchiveAdapter
             { keyPath: "key" },
           );
           store.createIndex("recordId", "recordId", { unique: false });
+        }
+        if (!database.objectStoreNames.contains(
+          HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE,
+        )) {
+          const store = database.createObjectStore(
+            HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE,
+            { keyPath: "key" },
+          );
+          store.createIndex("date", "date", { unique: false });
+          store.createIndex(
+            "date-discount-time",
+            ["date", "discountTime"],
+            { unique: false },
+          );
+        }
+        if (!database.objectStoreNames.contains(
+          HISTORICAL_ARCHIVE_AREA_COUNT_STORE,
+        )) {
+          const store = database.createObjectStore(
+            HISTORICAL_ARCHIVE_AREA_COUNT_STORE,
+            { keyPath: "key" },
+          );
+          store.createIndex("date", "date", { unique: false });
+          store.createIndex(
+            "date-demand-cycle",
+            ["date", "demandCycle"],
+            { unique: false },
+          );
         }
       };
       request.onsuccess = () => resolve(request.result);
@@ -580,6 +877,8 @@ export class MemoryHistoricalArchiveAdapter implements HistoricalArchiveAdapter 
   private readonly stores = new Map<HistoricalArchiveStoreName, Map<string, HistoricalArchiveEntry>>([
     [HISTORICAL_ARCHIVE_REVIEW19_STORE, new Map()],
     [HISTORICAL_ARCHIVE_FINALIZED_DAY_STORE, new Map()],
+    [HISTORICAL_ARCHIVE_DAILY_SESSION_SNAPSHOT_STORE, new Map()],
+    [HISTORICAL_ARCHIVE_AREA_COUNT_STORE, new Map()],
   ]);
   fault: MemoryHistoricalArchiveFault = null;
   faultError: Error = Object.assign(new Error("Injected archive failure"), {
@@ -642,6 +941,8 @@ export type LegacyHistoricalArchiveMigrationResult = {
   ok: boolean;
   review19: LegacyArchiveMigrationSourceResult;
   finalizedDays: LegacyArchiveMigrationSourceResult;
+  dailySessionSnapshots: LegacyArchiveMigrationSourceResult;
+  areaCountRecords: LegacyArchiveMigrationSourceResult;
 };
 
 function emptyMigrationResult(key: string): LegacyArchiveMigrationSourceResult {
@@ -676,6 +977,56 @@ function removeLegacyStorage(storage: Storage, key: string): HistoricalArchiveRe
   } catch (error) {
     return failure("remove_legacy", error);
   }
+}
+
+function replaceLegacyStorageArray(
+  storage: Storage,
+  key: string,
+  records: readonly unknown[],
+): HistoricalArchiveResult<null> {
+  try {
+    if (records.length === 0) storage.removeItem(key);
+    else storage.setItem(key, JSON.stringify(records));
+    return { ok: true, value: null };
+  } catch (error) {
+    return failure(records.length === 0 ? "remove_legacy" : "write", error);
+  }
+}
+
+function normalizeRawDailySessionSnapshotArray(
+  raw: unknown,
+): DailySessionSnapshot[] | null {
+  if (!Array.isArray(raw)) return null;
+  const normalized: DailySessionSnapshot[] = [];
+  for (const value of raw) {
+    const snapshot = normalizeDailySessionSnapshot(value);
+    if (!snapshot) return null;
+    normalized.push(snapshot);
+  }
+  return mergeDailySessionSnapshotArchiveOperations(normalized);
+}
+
+function normalizeRawAreaCountArray(
+  raw: unknown,
+  fallbackDemandCycle?: DemandCycle,
+): AreaCountRecord[] | null {
+  if (!Array.isArray(raw)) return null;
+  const normalized: AreaCountRecord[] = [];
+  for (const value of raw) {
+    const [record] = normalizeAreaCountRecords(
+      [value],
+      fallbackDemandCycle,
+    );
+    if (!record) return null;
+    if (
+      fallbackDemandCycle &&
+      normalizeDemandCycle(record.demandCycle) !== fallbackDemandCycle
+    ) {
+      return null;
+    }
+    normalized.push(record);
+  }
+  return mergeAreaCountRecordCollections(normalized);
 }
 
 async function migrateReview19Source(params: {
@@ -771,6 +1122,165 @@ async function migrateFinalizedDaySource(params: {
   return { ...result, sourceRemoved: true };
 }
 
+async function migrateDailySessionSnapshotSource(params: {
+  repository: HistoricalArchiveRepository;
+  storage: Storage;
+  protectedDates: ReadonlySet<string>;
+}): Promise<LegacyArchiveMigrationSourceResult> {
+  const result = emptyMigrationResult(
+    LEGACY_DAILY_SESSION_SNAPSHOT_STORAGE_KEY,
+  );
+  const source = readLegacyStorage(params.storage, result.key);
+  if (!source.ok) return { ...result, verified: false, failure: source };
+  if (!source.value.present) {
+    const count = await params.repository.countDailySessionSnapshots();
+    return count.ok
+      ? { ...result, archiveRecordCount: count.value }
+      : { ...result, verified: false, failure: count };
+  }
+  result.sourcePresent = true;
+  const sourceRecords = normalizeRawDailySessionSnapshotArray(source.value.value);
+  if (!sourceRecords) {
+    return {
+      ...result,
+      verified: false,
+      failure: failure("verify", Object.assign(
+        new Error("Legacy daily-session snapshots contain an invalid record"),
+        { name: "ArchiveVerificationError" },
+      )),
+    };
+  }
+  result.sourceRecordCount = sourceRecords.length;
+  const current = await params.repository.listDailySessionSnapshots();
+  if (!current.ok) return { ...result, verified: false, failure: current };
+  const expected = mergeDailySessionSnapshotArchiveOperations([
+    ...current.value,
+    ...sourceRecords,
+  ]);
+  const write = await params.repository.upsertDailySessionSnapshots(sourceRecords);
+  if (!write.ok) return { ...result, verified: false, failure: write };
+  const verified = await params.repository.listDailySessionSnapshots();
+  if (!verified.ok) return { ...result, verified: false, failure: verified };
+  result.archiveRecordCount = verified.value.length;
+  if (stableStringify(verified.value) !== stableStringify(expected)) {
+    return {
+      ...result,
+      verified: false,
+      failure: failure("verify", Object.assign(
+        new Error("Daily-session archive read-back differs from canonical source"),
+        { name: "ArchiveVerificationError" },
+      )),
+    };
+  }
+  result.verified = true;
+  const retained = sourceRecords.filter((snapshot) =>
+    params.protectedDates.has(snapshot.session.date),
+  );
+  const replaced = replaceLegacyStorageArray(
+    params.storage,
+    result.key,
+    retained,
+  );
+  if (!replaced.ok) {
+    return { ...result, sourceRemoved: false, failure: replaced };
+  }
+  // "sourceRemoved" means the historical source was successfully released;
+  // a protected operational subset may intentionally remain under the key.
+  return { ...result, sourceRemoved: true };
+}
+
+async function migrateAreaCountSource(params: {
+  repository: HistoricalArchiveRepository;
+  storage: Storage;
+  protectedDates: ReadonlySet<string>;
+}): Promise<LegacyArchiveMigrationSourceResult> {
+  const result = emptyMigrationResult(AREA_COUNT_LOCAL_STORAGE_KEY);
+  const sources = [
+    { key: AREA_COUNT_LOCAL_STORAGE_KEY, fallback: undefined },
+    { key: LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY, fallback: "normal" as const },
+    { key: LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY, fallback: "summer" as const },
+  ].map(({ key, fallback }) => ({
+    key,
+    fallback,
+    source: readLegacyStorage(params.storage, key),
+  }));
+  const readFailure = sources.find(({ source }) => !source.ok);
+  if (readFailure && !readFailure.source.ok) {
+    return { ...result, verified: false, failure: readFailure.source };
+  }
+  const presentSources = sources.filter(
+    ({ source }) => source.ok && source.value.present,
+  );
+  if (presentSources.length === 0) {
+    const count = await params.repository.countAreaCountRecords();
+    return count.ok
+      ? { ...result, archiveRecordCount: count.value }
+      : { ...result, verified: false, failure: count };
+  }
+  result.sourcePresent = true;
+  const normalizedSources: AreaCountRecord[][] = [];
+  for (const item of presentSources) {
+    if (!item.source.ok) continue;
+    const normalized = normalizeRawAreaCountArray(
+      item.source.value.value,
+      item.fallback,
+    );
+    if (!normalized) {
+      return {
+        ...result,
+        verified: false,
+        failure: failure("verify", Object.assign(
+          new Error(`Legacy AreaCount source is invalid: ${item.key}`),
+          { name: "ArchiveVerificationError" },
+        )),
+      };
+    }
+    normalizedSources.push(normalized);
+  }
+  const sourceRecords = mergeAreaCountRecordCollections(...normalizedSources);
+  result.sourceRecordCount = sourceRecords.length;
+  const current = await params.repository.listAreaCountRecords();
+  if (!current.ok) return { ...result, verified: false, failure: current };
+  const expected = mergeAreaCountRecordCollections(current.value, sourceRecords);
+  const write = await params.repository.upsertAreaCountRecords(sourceRecords);
+  if (!write.ok) return { ...result, verified: false, failure: write };
+  const verified = await params.repository.listAreaCountRecords();
+  if (!verified.ok) return { ...result, verified: false, failure: verified };
+  result.archiveRecordCount = verified.value.length;
+  if (stableStringify(verified.value) !== stableStringify(expected)) {
+    return {
+      ...result,
+      verified: false,
+      failure: failure("verify", Object.assign(
+        new Error("AreaCount archive read-back differs from canonical source"),
+        { name: "ArchiveVerificationError" },
+      )),
+    };
+  }
+  result.verified = true;
+  const retained = sourceRecords.filter((record) =>
+    params.protectedDates.has(record.date),
+  );
+  const unified = replaceLegacyStorageArray(
+    params.storage,
+    AREA_COUNT_LOCAL_STORAGE_KEY,
+    retained,
+  );
+  if (!unified.ok) {
+    return { ...result, sourceRemoved: false, failure: unified };
+  }
+  for (const key of [
+    LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY,
+    LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
+  ]) {
+    const removed = removeLegacyStorage(params.storage, key);
+    if (!removed.ok) {
+      return { ...result, sourceRemoved: false, failure: removed };
+    }
+  }
+  return { ...result, sourceRemoved: true };
+}
+
 /**
  * Idempotent read -> archive transaction -> exact read-back verification ->
  * legacy removal. A crash after archive commit but before removal is safe:
@@ -779,16 +1289,32 @@ async function migrateFinalizedDaySource(params: {
 export async function migrateLegacyHistoricalLocalStorage(params: {
   repository: HistoricalArchiveRepository;
   storage: Storage;
+  protectedDailySnapshotDates?: readonly string[];
+  protectedAreaCountDates?: readonly string[];
 }): Promise<LegacyHistoricalArchiveMigrationResult> {
   const review19 = await migrateReview19Source(params);
   const finalizedDays = await migrateFinalizedDaySource(params);
+  const dailySessionSnapshots = await migrateDailySessionSnapshotSource({
+    ...params,
+    protectedDates: new Set(params.protectedDailySnapshotDates ?? []),
+  });
+  const areaCountRecords = await migrateAreaCountSource({
+    ...params,
+    protectedDates: new Set(params.protectedAreaCountDates ?? []),
+  });
   return {
     ok:
       review19.verified &&
       finalizedDays.verified &&
+      dailySessionSnapshots.verified &&
+      areaCountRecords.verified &&
       (!review19.sourcePresent || review19.sourceRemoved) &&
-      (!finalizedDays.sourcePresent || finalizedDays.sourceRemoved),
+      (!finalizedDays.sourcePresent || finalizedDays.sourceRemoved) &&
+      (!dailySessionSnapshots.sourcePresent || dailySessionSnapshots.sourceRemoved) &&
+      (!areaCountRecords.sourcePresent || areaCountRecords.sourceRemoved),
     review19,
     finalizedDays,
+    dailySessionSnapshots,
+    areaCountRecords,
   };
 }

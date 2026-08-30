@@ -333,11 +333,34 @@ export function AdminSettingsDialog({
               <br />
               IndexedDB 1日データ：{storageDiagnostic.archive.finalizedDayCount ?? "取得不可"}件
               <br />
+              IndexedDB session履歴：{storageDiagnostic.archive.dailySessionSnapshotCount ?? "取得不可"}件
+              <br />
+              IndexedDB AreaCount履歴：{storageDiagnostic.archive.areaCountCount ?? "取得不可"}件
+              <br />
               migration：{storageDiagnostic.archive.migrationStatus}
               <br />
               未送信キュー：{storageDiagnostic.localStorage.protectedData.pendingQueueCount}件
               <br />
               current保護：{storageDiagnostic.localStorage.protectedData.currentSessionPresent ? "あり" : "なし"}／未確定日：{storageDiagnostic.localStorage.protectedData.unfinalizedDailyDateCount}日
+              {storageDiagnostic.history.dailySnapshots ? (
+                <>
+                  <br />
+                  session履歴：{storageDiagnostic.history.dailySnapshots.totalRecordCount}件／{storageDiagnostic.history.dailySnapshots.dateCount}日
+                  （当日 {storageDiagnostic.history.dailySnapshots.currentDateCount}件・active {storageDiagnostic.history.dailySnapshots.trulyActiveCount}件）
+                  <br />
+                  過去formal未確定：{storageDiagnostic.history.dailySnapshots.historicalUnfinalizedDateCount}日／archive済み {storageDiagnostic.history.dailySnapshots.archivedCount}件／local整理可能 {storageDiagnostic.history.dailySnapshots.localPruneableCount}件
+                  <br />
+                  期間：{storageDiagnostic.history.dailySnapshots.oldestDate ?? "-"}〜{storageDiagnostic.history.dailySnapshots.newestDate ?? "-"}
+                </>
+              ) : null}
+              {storageDiagnostic.history.areaCount ? (
+                <>
+                  <br />
+                  AreaCount：全{storageDiagnostic.history.areaCount.totalCount}件／archive {storageDiagnostic.history.areaCount.archivedCount}件／当日 {storageDiagnostic.history.areaCount.currentCount}件
+                  <br />
+                  remote確認 {storageDiagnostic.history.areaCount.remoteConfirmedCount}件／未確認 {storageDiagnostic.history.areaCount.remoteUnconfirmedCount}件／pending {storageDiagnostic.history.areaCount.pendingCount}件
+                </>
+              ) : null}
               {storageDiagnostic.originEstimate.available ? (
                 <>
                   <br />

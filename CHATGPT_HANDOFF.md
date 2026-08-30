@@ -11,12 +11,12 @@
 
 ## 現行リリース情報
 
-- 9-15 baseline ZIP: `nebiki-helper-20260829-0807.zip`（SHA-256 `57391dd0817fe8149c6bbc58dc30af1bf8c70b189e5dd667747c3a71cabe5f0a`）
-- 9-15差分比較の正本は上記ZIPとする。nominal source directoryには非`dist`差分が8件あるためpristine baselineとして扱わない。旧記載の`nebiki-helper-20260828-0927.zip`は内部versionが`2026.8.9-14`であり、9-15 baselineではない。
-- `appVersion`: `2026.8.9-16`
+- 9-16 baseline ZIP: `nebiki-helper-20260830-0944.zip`（SHA-256 `6b4a305b0757858a4e078155a0d035f8a8d726a9c0db4cf9bd2d5565c946314c`）
+- 9-17差分比較の正本は上記9-16 ZIPとする。
+- `appVersion`: `2026.8.9-17`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260830-093910-jst`（CHANGE REPORTと最終distに一致）。
-- リリースZIP: `nebiki-helper-20260830-0944.zip`。確定した識別情報で再生成した`dist`を収録し、SHA-256はZIP外の最終CHANGE REPORT／最終回答で伝達する。
+- `buildId`: `build-20260830-112242-jst`（CHANGE REPORTと最終distに一致）。
+- リリースZIP: `nebiki-helper-20260830-1125.zip`。SHA-256は完成ZIPそのものを再検査した最終報告を正本とし、確定した識別情報で生成した`dist`を収録する。
 
 ## 値引ヘルパーの運用目的
 
@@ -195,6 +195,19 @@ Storage:
 - 管理設定の「端末保存容量を確認」は、値やpayload本文を表示せず、nebiki-helper localStorage概算total／soft budget／headroom、key別上位サイズとrecord count、IndexedDB Review19／finalized-day件数、migration status、pending数、current／unfinalized保護有無を表示する。`navigator.storage.estimate()` はorigin全体の参考値でありlocalStorage quotaそのものではないと明示する。匿名diagnostic JSONをコピーできる。
 - DB migration、Supabase table／column／index／trigger／RLS／grant変更、service roleのclient導入は行わない。正式JSONのoptional metadata意味も変えないため `dataSchemaVersion=3` を維持する。
 - 180営業日anonymous rich fixtureでは、localStorageは`10211.5 KiB`からmigration直後`417.9 KiB`へ減少（95.9%解放）し、17時AreaCount／Review19／20:30 finalizedのcritical write後と追加180営業日後はいずれも`421.4 KiB`だった。archiveは初回`180 Review19 / 180 finalized day`、最終`482 / 360`で、remote 120件を含む追加履歴をlocalStorageへ再materializeしない。
+
+## Operational history archive / localStorage headroom（2026.8.9-17）
+
+- 9-16 deploy後の実端末ではarchive migrationがcompleteでも、`daily-session-snapshots 4820.5 KiB / 86件 / 33 historical unfinalized dates` と `area-count-records-v2 1839.6 KiB / 866件` が残り、localStorage total `6731.8 KiB`、2.25 MiB soft budgetに対するheadroomが0だった。
+- daily snapshotの33日はformal finalized-day archiveがないため9-16 retentionで全件保護されていた。これは過去versionで20:30 formal finalizationを作らなかったhistorical session evidenceであり、33日すべてが現在進行中という意味ではない。9-17はこれらから架空のfinalized-dayを生成せず、snapshotのまま保全する。
+- IndexedDB `nebiki-helper-historical-archive` をversion 2へ上げ、`daily-session-snapshots` と `area-count-records` storeを追加した。既存`review19`／`finalized-days` storeとcanonical semanticsは維持する。snapshot identityはdate×discountTime×sessionStartedAt、AreaCount identityは既存5-field identityを使う。
+- startup migrationはlocal source read→canonical upsert→archive再read→count／stable content verify→current／active protected subsetだけlocalStorageへ残す順序である。write、SecurityError、AbortError、verify mismatch、remove failure時は原本を削除せず、次回startupでidempotent retryする。markerだけを根拠にremoveしない。
+- protected dateは現在日、current-session、work-session-checkpoint、review19-source-stateの日付。current operationのAreaCount／snapshotはlocal-first journalに残し、次回startupでarchiveする。15時／17時のcritical pathへ新しい必須async writeを追加しない。
+- full historical AreaCount／snapshotはIndexedDB＋runtime memoryからmedian、manual backfill、Review19 daySnapshot、productionAnalysis材料、temperature continuity、exportへ供給する。remote full AreaCountをlocalStorageへseedせず、local＋remote＋archiveは既存identityでdedupeする。offline medianはIndexedDB archiveを使う。
+- 実端末相当fixtureは `6705.3 KiB`（snapshot `4896.6`、AreaCount `1808.4`）からmigration後 `59.3 KiB`、15時／17時各12エリアとtransition保存後 `120.6 KiB`へ減少し、最低headroom `2183.4 KiB`。`86 snapshots / 866 AreaCount / finalized 0`を欠落なくarchiveした。
+- 360営業日fixtureは`720 snapshots / 8640 AreaCount / finalized 0`を保持し、legacy source `21354.1 KiB`からmigration後localStorage `0.0 KiB`。正式履歴はIndexedDBで増えるがlocalStorageは日数比例で増えない。
+- 管理diagnosticはIDB Review19／finalizedに加えてsession／AreaCount count、snapshotのdate／active／historical formal-unfinalized／archive／local整理可能件数、AreaCountのcurrent／pending／remote confirmed／unconfirmed／archive件数を匿名表示する。payload／credentialは表示しない。
+- 9-16 Review19 archive／remote non-rematerialization／lightweight outbox、9-14 AreaCount direct backfill、9-13全体値引補正、fixed-time READ ONLY＋production WRITE隔離、normal／summer／Obon、median／human／productionAnalysisを変更しない。Supabase schema／SQL／RLS／grant変更はなく、`dataSchemaVersion=3`。
 
 ## 全体値引補正
 

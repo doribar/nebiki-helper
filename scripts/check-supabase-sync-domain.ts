@@ -1096,7 +1096,8 @@ await test("hook integration is local-first, fixed-isolated, and retry-safe", ()
       syncBlock.indexOf("collectAreaCountBackfillRecords({"),
   );
   assert.ok(syncBlock.includes('skippedReason: "fixed_time_mode"'));
-  assert.ok(syncBlock.includes("loadLegacyNormalAreaCountRecords()"));
+  assert.ok(syncBlock.includes("getHistoricalAreaCountRecords()"));
+  assert.equal(syncBlock.includes("loadLegacyNormalAreaCountRecords()"), false);
 
   const retryStart = hookSource.indexOf(
     "const retryPendingCloudSync = useCallback",

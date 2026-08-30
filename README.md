@@ -40,6 +40,11 @@ npm run check:fixed-time-supabase-read
 npm run check:initial-weather-focus
 npm run check:quota-root-fix
 npm run check:review19-lightweight-outbox
+npm run check:review19-archive-cloud
+npm run check:historical-archive
+npm run check:historical-archive-long-run
+npm run check:operational-storage-headroom
+npm run check:storage-diagnostics
 npm run check:area-count-direct-backfill
 npm run check:global-discount-adjustment
 npx tsc -b --pretty false
@@ -125,6 +130,14 @@ npm run build
 - Review19完了はIndexedDB authoritative save成功後にだけlightweight outboxを準備します。finalized day、memo／discardCount patch、Review19 manual sync、全件exportもarchiveを正本にします。archive初期化中は履歴依存UIをreadyにせず、起動直後の0件表示／欠落export raceを防ぎます。
 - localStorageはcurrent operation、crash recovery、lightweight outbox、bounded AreaCount／daily snapshot cacheへ限定します。全nebiki-helper keyのUTF-16概算2.25 MiB soft budgetと256 KiB headroom、runtime履歴24件、daily snapshot 512 KiB budgetを設けます。IndexedDB finalized archiveで検証済みのsealed日だけをsnapshot整理対象とし、current／unfinalized／pending／local-only／remote未確認の正式データは削除しません。
 - 管理設定の「端末保存容量を確認」からlocalStorage total／soft budget／headroom、key別上位サイズと件数、IndexedDB件数、migration status、pending／protected data、origin全体の参考estimateを匿名表示・JSONコピーできます。payload本文やcredentialは表示しません。origin estimateはlocalStorage quota値ではないと明示します。
+
+## daily snapshot／AreaCount historical archive（2026.8.9-17）
+
+- 9-16実端末ではmigration complete後も、formal finalized-dayを持たないhistorical daily snapshot 86件／33日が4.8 MiB、AreaCount 866件が1.84 MiB残り、localStorage headroomが0でした。
+- 9-17はIndexedDB historical archiveをversion 2へ上げ、daily-session snapshotとAreaCountのrich historical recordを完全保持します。過去snapshotから架空のfinalized-dayは作りません。
+- startupでlocalStorage sourceをarchiveへcanonical upsertし、再readしたidentity／count／stable contentの検証後だけ、localStorageをcurrent／active protected date subsetへ縮小します。失敗時は原本を残して次回retryします。
+- current-day AreaCount／snapshotは業務継続用local-first journalとして残り、次回起動時にarchiveされます。中央値、offline履歴、manual backfill、Review19 daySnapshot、exportはarchive＋current journalを既存identityでdedupeして利用します。
+- 実端末相当fixtureはlocalStorage 6705.3 KiBから59.3 KiBへ減少し、15時／17時各12エリア保存後も120.6 KiB、最低headroom 2183.4 KiBでした。360営業日（720 snapshot／8640 AreaCount、formal finalized 0）の履歴もIndexedDBへ保持し、migration後localStorageは日数比例で増えません。
 
 ## 全体値引補正（2026.8.9-13）
 
@@ -294,12 +307,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 この開発環境には実DB接続情報がなく、Supabase mutationは行っていません。利用者報告では9-13のReview19 direct syncは6/6成功し、legacy AreaCount pending 30件の通信errorは `Failed to fetch` でした。9-14は大量pending複製によるquota圧力を除去しますが、通信障害そのものを解決済みとは報告しません。deploy後は既存30件の再送結果とエラー詳細を確認してください。
 
-`dataSchemaVersion` は正式JSON schemaのversionです。9-16は端末内のhistorical storage backendをIndexedDBへ移す変更であり、record schemaとSupabase schemaを変更しないため `3` を維持します。新しいDB migration、SQL artifact、列、DELETE grant、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、全体値引補正、AreaCount direct backfillを変更しません。
+`dataSchemaVersion` は正式JSON schemaのversionです。9-17は端末内historical archiveへsnapshot／AreaCount storeを追加する変更であり、record schemaとSupabase schemaを変更しないため `3` を維持します。新しいSupabase migration、SQL artifact、列、DELETE grant、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、全体値引補正、AreaCount direct backfillを変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-16`
+- `appVersion`: `2026.8.9-17`
 - `dataSchemaVersion`: `3`
 - `buildId`: 最終production build時のJST値（CHANGE REPORT記載値）
 
-今回の実装・検証結果、migration／180営業日fixture、実ブラウザ確認は `CHANGE_REPORT_2026.8.9-16.md` を参照してください。
+今回の実装・検証結果、実端末相当／360営業日fixture、実ブラウザ確認は `CHANGE_REPORT_2026.8.9-17.md` を参照してください。

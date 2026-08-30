@@ -293,7 +293,7 @@ IndexedDBは端末内storage backendであり、Supabase schema migrationでは�
 - `dataSchemaVersion`: `3`
 - CHANGE REPORT: `CHANGE_REPORT_2026.8.9-16.md`
 - ZIP: `C:\Users\s0a6g\Documents\Codex\2026-07-18\step-1-2-3-4-5\outputs\nebiki-helper-20260830-0944.zip`
-- SHA-256: 最終ZIP生成後の外部CHANGE REPORT／最終回答に記載する（ZIP自身のhashを同梱内容へ埋め込む自己参照は行わない）。
+- SHA-256: `6b4a305b0757858a4e078155a0d035f8a8d726a9c0db4cf9bd2d5565c946314c`（生成済みZIP本体を再open・検査後に算出。同梱版reportでは自己参照を避け、ZIP外report／最終回答で確定値を伝達する）。
 
 ZIPの最終ファイルをPython `ZipFile`等で再openし、次を実測する。
 
