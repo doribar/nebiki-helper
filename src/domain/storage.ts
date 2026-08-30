@@ -69,6 +69,9 @@ export type PersistedNebikiState = {
   dailyMessageState: DailyMessageState;
 };
 
+/** Persisted navigation is a crash/debug aid; in-memory navigation stays intact. */
+export const PERSISTED_RUNTIME_HISTORY_MAX_ENTRIES = 24;
+
 export type StorageOperationResult =
   | {
       ok: true;
@@ -90,6 +93,33 @@ export type StorageOperationRecoveryResult = {
   finalResult: StorageOperationResult;
 };
 
+export const NEBIKI_LOCAL_STORAGE_SOFT_BUDGET_BYTES = Math.floor(
+  2.25 * 1024 * 1024,
+);
+export const NEBIKI_LOCAL_STORAGE_WRITE_HEADROOM_BYTES = 256 * 1024;
+
+export function estimateNebikiLocalStorageTotalBytes(): number {
+  if (typeof localStorage === "undefined") return 0;
+  let total = 0;
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith("nebiki-helper/")) continue;
+    const value = localStorage.getItem(key);
+    if (value !== null) total += (key.length + value.length) * 2;
+  }
+  return total;
+}
+
+function isOperationalHeadroomLow(): boolean {
+  try {
+    return estimateNebikiLocalStorageTotalBytes() >
+      NEBIKI_LOCAL_STORAGE_SOFT_BUDGET_BYTES -
+        NEBIKI_LOCAL_STORAGE_WRITE_HEADROOM_BYTES;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * DailySessionSnapshot is a rich, reconstructable copy. Keep its localStorage
  * footprint bounded so it cannot crowd out authoritative area/review/queue data.
@@ -98,7 +128,18 @@ export type StorageOperationRecoveryResult = {
  * the key) is deterministic and intentionally conservative across browsers.
  */
 export const DAILY_SESSION_SNAPSHOT_MAX_RECORDS = 120;
-export const DAILY_SESSION_SNAPSHOT_BYTE_BUDGET = 1024 * 1024;
+export const DAILY_SESSION_SNAPSHOT_BYTE_BUDGET = 512 * 1024;
+
+let archivedFinalizedDatesForRetention = new Set<string>();
+
+/** Register only dates whose rich finalized records were verified in IndexedDB. */
+export function setArchivedFinalizedDatesForStorageRetention(
+  dates: readonly string[],
+): void {
+  archivedFinalizedDatesForRetention = new Set(
+    dates.filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)),
+  );
+}
 
 export type DailySessionSnapshotRetentionResult = {
   snapshots: DailySessionSnapshot[];
@@ -205,6 +246,9 @@ export function attemptStorageOperationWithAuxiliaryRecovery(params: {
   operation: "set" | "remove";
   run: () => void;
 }): StorageOperationRecoveryResult {
+  const proactiveAttempts = isOperationalHeadroomLow()
+    ? releaseAuxiliaryStorageForReview19()
+    : [];
   const guardedParams = {
     ...params,
     run: () => {
@@ -221,7 +265,7 @@ export function attemptStorageOperationWithAuxiliaryRecovery(params: {
     },
   };
   const firstAttempt = attemptStorageOperation(guardedParams);
-  const attempts: StorageOperationResult[] = [firstAttempt];
+  const attempts: StorageOperationResult[] = [...proactiveAttempts, firstAttempt];
   if (firstAttempt.ok || !firstAttempt.quotaExceeded) {
     return {
       ok: firstAttempt.ok,
@@ -352,7 +396,9 @@ function cloneRuntimeState(raw: PersistedRuntimeState | null): PersistedRuntimeS
         : null,
     undoSnapshot: raw.undoSnapshot ? JSON.parse(JSON.stringify(raw.undoSnapshot)) : null,
     screenHistory: Array.isArray(raw.screenHistory)
-      ? JSON.parse(JSON.stringify(raw.screenHistory))
+      ? JSON.parse(JSON.stringify(raw.screenHistory.slice(
+          -PERSISTED_RUNTIME_HISTORY_MAX_ENTRIES,
+        )))
       : [],
     weatherConfirmationPending: normalizeWeatherConfirmationPending(
       raw.weatherConfirmationPending,
@@ -674,10 +720,13 @@ function loadFinalizedDayDatesForSnapshotRetention(): Set<string> {
     localStorage.getItem(FINALIZED_DAY_DATA_STORAGE_KEY),
     [],
   );
-  if (!Array.isArray(parsed)) return new Set();
+  if (!Array.isArray(parsed)) {
+    return new Set(archivedFinalizedDatesForRetention);
+  }
 
-  return new Set(
-    parsed.flatMap((candidate) => {
+  return new Set([
+    ...archivedFinalizedDatesForRetention,
+    ...parsed.flatMap((candidate) => {
       if (!candidate || typeof candidate !== "object") return [];
       const record = candidate as {
         version?: unknown;
@@ -692,7 +741,7 @@ function loadFinalizedDayDatesForSnapshotRetention(): Set<string> {
         ? [record.date]
         : [];
     }),
-  );
+  ]);
 }
 
 /**
@@ -1018,12 +1067,15 @@ export function upsertDailySessionSnapshotSafely(
   }
 
   const preparedRetention = retained as DailySessionSnapshotRetentionResult;
+  const proactiveAttempts = isOperationalHeadroomLow()
+    ? releaseAuxiliaryStorageForReview19()
+    : [];
   const firstAttempt = attemptStorageOperation({
     key: STORAGE_KEYS.dailySessionSnapshots,
     operation: "set",
     run: () => saveDailySessionSnapshots(preparedRetention.snapshots),
   });
-  const attempts: StorageOperationResult[] = [firstAttempt];
+  const attempts: StorageOperationResult[] = [...proactiveAttempts, firstAttempt];
 
   if (firstAttempt.ok) {
     return {
@@ -1272,6 +1324,9 @@ export function savePersistedNebikiStateSafely(
 export function savePersistedNebikiStateWithAuxiliaryRecovery(
   state: PersistedNebikiState,
 ): StorageOperationResult[] {
+  const proactiveAttempts = isOperationalHeadroomLow()
+    ? releaseAuxiliaryStorageForReview19()
+    : [];
   const currentSessionResult = attemptStorageOperation(
     state.currentSession
       ? {
@@ -1285,7 +1340,7 @@ export function savePersistedNebikiStateWithAuxiliaryRecovery(
           run: clearCurrentSession,
         },
   );
-  const results = [currentSessionResult];
+  const results = [...proactiveAttempts, currentSessionResult];
 
   if (
     state.currentSession &&
@@ -1314,6 +1369,12 @@ export function savePersistedNebikiStateWithAuxiliaryRecovery(
 export function saveWorkSessionCheckpointSafely(
   state: AppState,
 ): StorageOperationResult {
+  if (isOperationalHeadroomLow()) {
+    const removed = removeStorageKeySafely(STORAGE_KEYS.workSessionCheckpoint);
+    return removed.ok
+      ? { ok: true, key: STORAGE_KEYS.workSessionCheckpoint, operation: "set" }
+      : removed;
+  }
   return attemptStorageOperation({
     key: STORAGE_KEYS.workSessionCheckpoint,
     operation: "set",
@@ -1324,6 +1385,12 @@ export function saveWorkSessionCheckpointSafely(
 export function saveRuntimeStateSafely(
   state: PersistedRuntimeState,
 ): StorageOperationResult {
+  if (isOperationalHeadroomLow()) {
+    const removed = removeStorageKeySafely(STORAGE_KEYS.runtimeState);
+    return removed.ok
+      ? { ok: true, key: STORAGE_KEYS.runtimeState, operation: "set" }
+      : removed;
+  }
   return attemptStorageOperation({
     key: STORAGE_KEYS.runtimeState,
     operation: "set",

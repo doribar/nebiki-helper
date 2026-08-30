@@ -74,9 +74,9 @@ npm run build
 - 通常sessionの完了、`daily-session-snapshots` 保存、15時→17時などの自動時刻遷移、20時30分の最終確定、AreaCount／Review19、Supabase pending、backfill、起動時mergeを含む業務中のstorage writeは、失敗を構造化結果として受け止めます。補助writeの例外をReact rootへ漏らして白画面化させません。
 - 自動時刻遷移では、補助的なdaily snapshotを安全に保存した後、その成否だけを理由に時刻到達通知と次session開始を中止しません。15時完了後もappのtimer／effectを維持し、17時到達時の既存ダイアログを表示できる構造です。
 - React StrictModeで同じ自動遷移effectが再実行されても、同一session・同一遷移先の通知と開始は1回だけです。開始に失敗した場合は再試行でき、手動遷移の挙動は変更しません。
-- `daily-session-snapshots` は単なるdebug cacheではありません。Review19／productionAnalysis／finalized day作成、temperature continuity、legacy export／backfillに使う中間業務証跡であり、当日や未確定日のsnapshotは削除しません。従来の最大120件に加え、localStorageのUTF-16 key＋value概算で1 MiBのsoft budgetを設け、正式なfinalized-day recordへ封印済みの古い日付groupだけを再構築可能な重複copyとして整理します。日付groupの途中だけを削除しません。
+- `daily-session-snapshots` は単なるdebug cacheではありません。Review19／productionAnalysis／finalized day作成、temperature continuity、legacy export／backfillに使う中間業務証跡であり、当日や未確定日のsnapshotは削除しません。最大120件の互換上限に加え、9-16ではUTF-16 key＋value概算512 KiBのsoft budgetを設け、IndexedDB finalized archiveで検証済みの古い日付groupだけを再構築可能な重複copyとして整理します。日付groupの途中だけを削除しません。
 - 容量不足時は完成Review19、finalized day、未同期pending、進行中session、local-only／remote未確認AreaCountを優先します。削除可能なのは完全包含を証明済みのlegacy mirror、正式recordへ封印済みのdaily snapshot、navigation/debug用runtime、重複checkpointです。quota時の再試行は1回に限定し、同じ操作を無限に繰り返しません。
-- 19:00チェックは、12エリアの完成recordを `nebiki-helper/review19-records` へ保存してからSupabase outboxを準備し、その後に `review19_done` へ遷移します。端末正本を保存できなければ完了扱いにせず、入力stateを保持したまま、保存先・操作・実際の `errorName`・quota該当有無・再試行結果をalertへ表示します。
+- 19:00チェックは、12エリアの完成recordを端末のauthoritative historical archiveへ保存してからSupabase outboxを準備し、その後に `review19_done` へ遷移します。9-16ではarchiveはIndexedDBです。端末正本を保存できなければ完了扱いにせず、入力stateを保持したまま、保存先・操作・実際の `errorName`・quota該当有無・再試行結果をalertへ表示します。
 - `QuotaExceededError` のときだけ、このアプリで利用できるブラウザ保存領域の上限に達した可能性を説明し、Android端末本体の空き容量不足とは断定しません。`SecurityError` は保存領域へのアクセス拒否として表示し、それ以外や安全に表示できない名前は推測せず `UnknownError` へ正規化します。
 - `localStorage.setItem()`／`removeItem()` の失敗は、key・操作・例外名・quota該当有無だけを構造化して扱います。Review19本文、12エリアpayload、error message、credentialは画面やconsoleへ出しません。正本とpendingのattempt列を分け、どちらが再試行されたかを混同しません。
 - Review19本体の保存後にcloud outboxだけ準備できなかった場合は、端末正本失敗とは異なる保存先として診断表示し、完成recordを保持します。管理設定の「端末内データをSupabaseへ同期」からbackfillできます。local-first、pending、retry、CAS、fixed-time隔離は変更しません。
@@ -112,12 +112,19 @@ npm run build
 - 匿名878件rich fixtureのUTF-16概算では旧一括pendingは `2257.4 KiB` を追加する構造でした。direct方式の追加localStorage量は `0.0 KiB`（100%削減）で、通信batchだけをmemory上に保持します。
 - 結果UIは `端末source検出`、remote送信不要、既存queue対象、直接送信対象／成功／失敗／未試行、同期後queueを分けて表示します。source検出数を未同期件数とは表現しません。
 
-## 2026-08-25 debug Review19 one-time cleanup（2026.8.9-15）
+## 2026-08-25 debug Review19 maintenanceの完了（2026.8.9-16）
 
-- 2026-08-25に作成された既知のdebug Review19 1件だけをstartup maintenanceで端末から除去します。対象は `date=2026-08-25`、`demandCycle=summer`、`sessionStartedAt=2026-08-25T07:54:21.145Z`、`appVersion=2026.8.9-12`、`review19Status=recorded` が完全一致し、所定12エリアが過不足なく存在して全て整数0の場合だけです。
-- Review19端末正本、該当する軽量reference／legacy pending、current-session／checkpoint／source-state／runtime copy、finalized day内の該当 `review19Check` だけを整理します。2026-08-25の日record、15時／17時session、AreaCount、memo、discardCount、global discount adjustment等は維持します。
-- finalized dayのproductionAnalysisは既存builderで15時／17時evidenceを維持し、19時Review19なしとして再構築します。cleanupはcloud retryより前に完了し、2回目以降はno-opです。全local cleanupが成功した場合だけ一度通知します。
-- これは恒久的な削除UI／APIではありません。Supabaseのanon DELETE権限は開放せず、管理者が確認SELECTで一致1件を確認してからguarded DELETEをSQL Editorで実行します。maintenance SQLはmigrationではなく、[今回のCHANGE REPORT](CHANGE_REPORT_20260828_REVIEW19_DEBUG_CLEANUP.md) に掲載します。
+- 9-15のone-time local cleanupと管理者SQL削除は完了し、端末export 6→5件、Supabase `matching_rows=0` が確認済みです。
+- 9-16ではone-time module、startup呼び出し、temporary remote exclusionを撤去しました。恒久的なReview19削除UI／API／anon DELETE権限は追加していません。
+
+## IndexedDB historical archiveとlocalStorage headroom（2026.8.9-16）
+
+- richなReview19正式履歴とfinalized-day正式履歴を、localStorageの無制限配列ではなくIndexedDB `nebiki-helper-historical-archive`（version 1）の `review19`／`finalized-days` storeへ保存します。rich metadata、session、Review19、productionAnalysis、weather／calendar／全体値引補正を省略しません。
+- 9-15以前の `nebiki-helper/review19-records` と `nebiki-helper/finalized-day-data` は、IndexedDB write後にarchiveを再readし、identity・count・canonical contentを検証できた場合だけ旧localStorage copyを削除します。失敗時は旧原本を残して次回起動で再試行し、migration markerだけを信用しません。
+- 起動時にSupabaseから取得したfull Review19 historyはmedian用memory／IndexedDB archiveへcanonical mergeし、旧Review19 localStorage keyへ全件再materializeしません。online medianはremote＋archive、offline median／exportはarchiveを使い、既存canonical dedupeと判定ロジックを維持します。
+- Review19完了はIndexedDB authoritative save成功後にだけlightweight outboxを準備します。finalized day、memo／discardCount patch、Review19 manual sync、全件exportもarchiveを正本にします。archive初期化中は履歴依存UIをreadyにせず、起動直後の0件表示／欠落export raceを防ぎます。
+- localStorageはcurrent operation、crash recovery、lightweight outbox、bounded AreaCount／daily snapshot cacheへ限定します。全nebiki-helper keyのUTF-16概算2.25 MiB soft budgetと256 KiB headroom、runtime履歴24件、daily snapshot 512 KiB budgetを設けます。IndexedDB finalized archiveで検証済みのsealed日だけをsnapshot整理対象とし、current／unfinalized／pending／local-only／remote未確認の正式データは削除しません。
+- 管理設定の「端末保存容量を確認」からlocalStorage total／soft budget／headroom、key別上位サイズと件数、IndexedDB件数、migration status、pending／protected data、origin全体の参考estimateを匿名表示・JSONコピーできます。payload本文やcredentialは表示しません。origin estimateはlocalStorage quota値ではないと明示します。
 
 ## 全体値引補正（2026.8.9-13）
 
@@ -260,11 +267,11 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 - 統合残数cache `nebiki-helper/area-count-records-v2`
 - 旧normal cache `nebiki-helper/area-count-records`
 - 旧summer cache `nebiki-helper/summer-area-count-records-v1`
-- `nebiki-helper/finalized-day-data`
+- IndexedDB historical archiveのfinalized-day正式記録（migration中だけ旧 `nebiki-helper/finalized-day-data` も読む）
 - 19:00記録内のday snapshot
 - 日次session snapshot
 - 確定済みの現在session state
-- `nebiki-helper/review19-records` のcomplete・final 19:00記録
+- IndexedDB historical archiveのcomplete・final 19:00記録（migration／legacy互換時だけ旧 `nebiki-helper/review19-records` も読む）
 
 未来日／未来時刻、不正なarea・count・cycle、未測定、確定前UI入力、固定時間モードのデータは除外します。既存pendingを先に再送した後、Review19正本を直接送信し、AreaCountはremote-covered／既存queue identityを除外して最大100件ずつ直接upsertします。手動backfillからrich AreaCount pendingを作らないため、878件等のsource数に比例してlocalStorageが一時増加しません。通信失敗時はlocal sourceを保持し、次回再検出します。同じ操作を繰り返してもunique upsertで件数は増えず、端末データは削除しません。画面には `端末source検出`、remote送信不要、既存queue、直接送信対象／成功／失敗／未試行、Review19正本の直接確認／送信、同期後の `未送信キュー` を別表示します。queue 0はlocal outboxが空という意味であり、remote全履歴の同期済み保証とは表現しません。時間固定モードでは中央値用のAreaCount SELECTだけを許可し、remote mutation、production local write、retry、backfillは行いません。
 
@@ -287,12 +294,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 この開発環境には実DB接続情報がなく、Supabase mutationは行っていません。利用者報告では9-13のReview19 direct syncは6/6成功し、legacy AreaCount pending 30件の通信errorは `Failed to fetch` でした。9-14は大量pending複製によるquota圧力を除去しますが、通信障害そのものを解決済みとは報告しません。deploy後は既存30件の再送結果とエラー詳細を確認してください。
 
-`dataSchemaVersion` はJSON schemaのversionです。今回のone-time cleanupは既知debug recordをexact guardで端末から取り除くmaintenanceで、正式record schemaを変更しないため `3` を維持します。新しいDB migration、SQL artifact、列、DELETE grant、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、全体値引補正、AreaCount direct backfill、通常のReview19保存／同期は変更しません。
+`dataSchemaVersion` は正式JSON schemaのversionです。9-16は端末内のhistorical storage backendをIndexedDBへ移す変更であり、record schemaとSupabase schemaを変更しないため `3` を維持します。新しいDB migration、SQL artifact、列、DELETE grant、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、全体値引補正、AreaCount direct backfillを変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-15`
+- `appVersion`: `2026.8.9-16`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260828-211234-jst`
+- `buildId`: 最終production build時のJST値（CHANGE REPORT記載値）
 
-今回の実装・検証結果と、管理者が今回だけ実行するSupabase確認／削除SQLは `CHANGE_REPORT_20260828_REVIEW19_DEBUG_CLEANUP.md` を参照してください。
+今回の実装・検証結果、migration／180営業日fixture、実ブラウザ確認は `CHANGE_REPORT_2026.8.9-16.md` を参照してください。

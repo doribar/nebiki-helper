@@ -287,14 +287,15 @@ export function buildFinalSessionDoneSummaryItems(params: {
   });
 }
 
-export function getLatestReview19DayCheck(
+export function selectLatestReview19DayCheck(
+  records: readonly Review19Result[],
   date: string,
   demandCycle?: DemandCycle,
 ): Review19DayCheckSnapshot | undefined {
   const targetDemandCycle = demandCycle === undefined
     ? undefined
     : normalizeDemandCycle(demandCycle);
-  const latest = loadReview19Records()
+  const latest = records
     .filter(
       (record) =>
         record.date === date &&
@@ -361,6 +362,22 @@ export function getLatestReview19DayCheck(
       ? JSON.parse(JSON.stringify(latest.snapshot)) as Review19Snapshot
       : undefined,
   };
+}
+
+/**
+ * 9-15以前のdomain test/legacy caller向け同期wrapper。
+ * 9-16のproduction pathはselectLatestReview19DayCheckへarchive snapshotを渡し、
+ * localStorage履歴へ暗黙依存しない。
+ */
+export function getLatestReview19DayCheck(
+  date: string,
+  demandCycle?: DemandCycle,
+): Review19DayCheckSnapshot | undefined {
+  return selectLatestReview19DayCheck(
+    loadReview19Records(),
+    date,
+    demandCycle,
+  );
 }
 
 export function createReview19DaySnapshot(params: {

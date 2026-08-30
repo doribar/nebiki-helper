@@ -2,6 +2,10 @@ import { useState, type CSSProperties } from "react";
 import { APP_VERSION, BUILD_ID, DATA_SCHEMA_VERSION } from "../../domain/dataVersion.ts";
 import type { SupabaseBackfillResult } from "../../domain/types.ts";
 import {
+  formatStorageKiB,
+  type NebikiStorageUsageDiagnostic,
+} from "../../domain/storageDiagnostics.ts";
+import {
   buildSupabaseSyncErrorCopyText,
   type PendingSupabaseSyncErrorDetails,
   type PendingSupabaseSyncErrorGroup,
@@ -23,6 +27,7 @@ type AdminSettingsDialogProps = {
     lastBackfillResult: SupabaseBackfillResult | null;
   };
   onSyncLocalDataToSupabase?: () => Promise<SupabaseBackfillResult>;
+  onGetStorageUsageDiagnostic?: () => Promise<NebikiStorageUsageDiagnostic>;
   onClose: () => void;
 };
 
@@ -75,10 +80,13 @@ export function AdminSettingsDialog({
   onExportLatestDailyData,
   cloudSync,
   onSyncLocalDataToSupabase,
+  onGetStorageUsageDiagnostic,
   onClose,
 }: AdminSettingsDialogProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [storageDiagnostic, setStorageDiagnostic] =
+    useState<NebikiStorageUsageDiagnostic | null>(null);
 
   const runExport = async (
     action: ExportAction | undefined,
@@ -135,6 +143,34 @@ export function AdminSettingsDialog({
       setStatus("エラー内容をコピーしました。");
     } catch {
       setStatus("コピーできませんでした。ブラウザのクリップボード権限を確認してください。");
+    }
+  };
+
+  const inspectStorage = async () => {
+    if (!onGetStorageUsageDiagnostic || busy) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const diagnostic = await onGetStorageUsageDiagnostic();
+      setStorageDiagnostic(diagnostic);
+      setStatus("端末保存容量を確認しました。");
+    } catch {
+      setStatus("端末保存容量を確認できませんでした。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyStorageDiagnostic = async () => {
+    if (!storageDiagnostic) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(
+        JSON.stringify(storageDiagnostic, null, 2),
+      );
+      setStatus("匿名の保存容量診断をコピーしました。");
+    } catch {
+      setStatus("診断をコピーできませんでした。");
     }
   };
 
@@ -246,6 +282,92 @@ export function AdminSettingsDialog({
               最新の1日データを出力
             </button>
           </div>
+        </section>
+
+        <section
+          style={{
+            marginBottom: 18,
+            borderTop: "1px solid #e2e8f0",
+            paddingTop: 16,
+          }}
+        >
+          <div style={{ marginBottom: 6, fontSize: 16, fontWeight: 900 }}>
+            端末保存容量
+          </div>
+          <div style={{ color: "#475569", fontSize: 13, lineHeight: 1.6, marginBottom: 10 }}>
+            業務データ本文を表示せず、key別の概算容量とarchive件数だけを確認します。
+          </div>
+          <button
+            type="button"
+            disabled={busy || !onGetStorageUsageDiagnostic}
+            onClick={() => void inspectStorage()}
+            style={{
+              ...exportButtonStyle,
+              borderColor: "#475569",
+              color: "#334155",
+              background: "#f8fafc",
+            }}
+          >
+            端末保存容量を確認
+          </button>
+          {storageDiagnostic ? (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 10,
+                borderRadius: 10,
+                background: "#f8fafc",
+                color: "#334155",
+                fontSize: 12,
+                lineHeight: 1.6,
+                overflowWrap: "anywhere",
+              }}
+            >
+              localStorage概算：{formatStorageKiB(storageDiagnostic.localStorage.totalApproxBytes)}
+              <br />
+              soft budget：{formatStorageKiB(storageDiagnostic.localStorage.softBudgetBytes)}
+              <br />
+              headroom概算：{formatStorageKiB(storageDiagnostic.localStorage.headroomBytes)}
+              <br />
+              IndexedDB Review19：{storageDiagnostic.archive.review19Count ?? "取得不可"}件
+              <br />
+              IndexedDB 1日データ：{storageDiagnostic.archive.finalizedDayCount ?? "取得不可"}件
+              <br />
+              migration：{storageDiagnostic.archive.migrationStatus}
+              <br />
+              未送信キュー：{storageDiagnostic.localStorage.protectedData.pendingQueueCount}件
+              <br />
+              current保護：{storageDiagnostic.localStorage.protectedData.currentSessionPresent ? "あり" : "なし"}／未確定日：{storageDiagnostic.localStorage.protectedData.unfinalizedDailyDateCount}日
+              {storageDiagnostic.originEstimate.available ? (
+                <>
+                  <br />
+                  origin全体参考値：usage {formatStorageKiB(storageDiagnostic.originEstimate.usageBytes ?? 0)} / quota {formatStorageKiB(storageDiagnostic.originEstimate.quotaBytes ?? 0)}
+                  <br />
+                  ※これはlocalStorage単独のquota値ではありません。
+                </>
+              ) : null}
+              <div style={{ marginTop: 8, fontWeight: 900 }}>容量上位key</div>
+              {storageDiagnostic.localStorage.topEntries.slice(0, 6).map((entry) => (
+                <div key={entry.key}>
+                  {entry.key}：{formatStorageKiB(entry.approxBytes)}（{entry.recordCount ?? "?"}件）
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => void copyStorageDiagnostic()}
+                style={{
+                  ...exportButtonStyle,
+                  minHeight: 42,
+                  marginTop: 10,
+                  borderColor: "#64748b",
+                  color: "#334155",
+                  fontSize: 14,
+                }}
+              >
+                匿名診断JSONをコピー
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <section

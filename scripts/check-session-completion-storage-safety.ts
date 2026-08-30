@@ -283,7 +283,11 @@ try {
     const finalizeEnd = source.indexOf("function judgeCurrentArea", finalizeStart);
     const finalizeBody = source.slice(finalizeStart, finalizeEnd);
     assert.ok(finalizeStart >= 0 && finalizeEnd > finalizeStart);
-    assert.match(finalizeBody, /persistFinalizedDayOperationSafely/);
+    assert.match(
+      finalizeBody,
+      /await (?:replaceArchivedFinalizedDay|initializeArchivedFinalizedDay)/,
+    );
+    assert.match(finalizeBody, /if \(!finalizedWrite\.ok\)/);
     assert.match(finalizeBody, /storageFailed:\s*true/);
     assert.match(source, /if \(finalizedDayData\.storageFailed\) return;/);
   });

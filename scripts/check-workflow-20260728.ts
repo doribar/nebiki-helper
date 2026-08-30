@@ -117,8 +117,8 @@ test("20:30正式確定はdoneで再構築せずBack・再入力でも同じ正�
   assert.match(snapshotEffect, /discountTime === "20"\) return/);
   assert.match(finalizer, /!progress\.rateDecisionSnapshot/);
   assert.match(finalizer, /: progress\.rateDecisionSnapshot/);
-  assert.match(finalizer, /initializeFinalizedDayData/);
-  assert.match(finalizer, /replaceFinalizedDayDataCore/);
+  assert.match(finalizer, /initializeArchivedFinalizedDay/);
+  assert.match(finalizer, /replaceArchivedFinalizedDay/);
   assert.match(restore, /restoredState\.finalizedDayRecordId = state\.finalizedDayRecordId/);
   assert.equal(routerSource.includes("shouldSkipFinalDoneScreen"), false);
 });

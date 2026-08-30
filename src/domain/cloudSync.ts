@@ -10,6 +10,7 @@ import {
 } from "./areaCountLocalStorage.ts";
 import { upsertRemoteAreaCountRecord } from "./areaCountRemoteStorage.ts";
 import { normalizeReview19Result } from "./review19.ts";
+import { normalizeDemandCycle } from "./demandCycle.ts";
 import {
   buildReview19PendingReference,
   getReview19PendingBusinessIdentity,
@@ -44,7 +45,7 @@ import {
   reportStorageOperationFailures,
   type StorageOperationResult,
 } from "./storage.ts";
-import type { Review19Result } from "./types.ts";
+import type { DemandCycle, Review19Result } from "./types.ts";
 
 export type CloudSyncStatus = {
   pendingCount: number;
@@ -261,6 +262,42 @@ function loadDefaultReview19PendingSources(): Review19Result[] {
   ];
 }
 
+export type Review19PendingSourceQuery = {
+  date: string;
+  demandCycle: DemandCycle;
+};
+
+/** Concrete archive backends stay outside cloudSync; tests and IndexedDB inject this loader. */
+export type Review19PendingArchiveSourceLoader = (
+  query: Review19PendingSourceQuery,
+) => Promise<readonly Review19Result[]>;
+
+export type PendingCloudSyncOptions = {
+  loadReview19ArchiveSources?: Review19PendingArchiveSourceLoader;
+  upsertReview19Record?: (
+    record: Review19Result,
+  ) => Promise<RemoteReview19SaveResult>;
+};
+
+function getReview19PendingSourceQuery(
+  item: PendingSupabaseSyncItem,
+): Review19PendingSourceQuery | null {
+  if (item.type !== "review19") return null;
+  const reference = normalizeReview19PendingReference(item.payload);
+  if (reference) {
+    return getReview19PendingBusinessIdentity(reference) === item.identity
+      ? { date: reference.date, demandCycle: reference.demandCycle }
+      : null;
+  }
+  const legacy = normalizeLegacyQueuedReview19(item);
+  return legacy
+    ? {
+        date: legacy.date,
+        demandCycle: normalizeDemandCycle(legacy.demandCycle),
+      }
+    : null;
+}
+
 /** Resolves both legacy self-contained payloads and lightweight references. */
 export function resolveQueuedReview19Record(
   item: PendingSupabaseSyncItem,
@@ -408,6 +445,7 @@ export function removeReview19PendingItemsCoveredByRecords(
 
 export async function sendPendingSupabaseSyncItem(
   item: PendingSupabaseSyncItem,
+  options: PendingCloudSyncOptions = {},
 ): Promise<{ ok: boolean; error?: string }> {
   if (item.type === "area_count") {
     const record = normalizeQueuedAreaCount(item);
@@ -424,16 +462,33 @@ export async function sendPendingSupabaseSyncItem(
         };
   }
 
-  const record = resolveQueuedReview19Record(item);
+  let archiveSources: readonly Review19Result[] = [];
+  let archiveLoadFailed = false;
+  const query = getReview19PendingSourceQuery(item);
+  if (query && options.loadReview19ArchiveSources) {
+    try {
+      archiveSources = await options.loadReview19ArchiveSources(query);
+    } catch {
+      archiveLoadFailed = true;
+    }
+  }
+  const record = resolveQueuedReview19Record(item, [
+    ...archiveSources,
+    ...loadDefaultReview19PendingSources(),
+  ]);
   if (!record) {
     return {
       ok: false,
       error: normalizeReview19PendingReference(item.payload)
-        ? "Review19 local source is unavailable"
+        ? archiveLoadFailed
+          ? "Review19 archive source could not be loaded"
+          : "Review19 local source is unavailable"
         : "invalid review19 payload",
     };
   }
-  const result = await upsertRemoteReview19Record(record);
+  const result = await (
+    options.upsertReview19Record ?? upsertRemoteReview19Record
+  )(record);
   return result.status === "saved"
     ? { ok: true }
     : {
@@ -445,6 +500,10 @@ export async function sendPendingSupabaseSyncItem(
       };
 }
 
-export function flushCloudSyncQueue(): Promise<FlushPendingSupabaseSyncResult> {
-  return flushPendingSupabaseSyncQueue({ sender: sendPendingSupabaseSyncItem });
+export function flushCloudSyncQueue(
+  options: PendingCloudSyncOptions = {},
+): Promise<FlushPendingSupabaseSyncResult> {
+  return flushPendingSupabaseSyncQueue({
+    sender: (item) => sendPendingSupabaseSyncItem(item, options),
+  });
 }

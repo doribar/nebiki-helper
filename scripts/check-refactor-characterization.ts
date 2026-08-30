@@ -162,6 +162,7 @@ function assertPublicHookContract(): void {
       "startNextDoneSession",
       "exportAllData",
       "syncLocalDataToSupabase",
+      "getStorageUsageDiagnostic",
       "startReview19Manually",
       "resetApp",
       "changeDemandCycle",
@@ -175,21 +176,21 @@ function assertPublicHookContract(): void {
   assert.equal(renderToString(createElement(Probe)), "<span>probe</span>");
 }
 
-function assertFacadeBodyIsUnchanged(): void {
+function assertFacadeArchitectureGuards(): void {
   const projectRoot = fileURLToPath(new URL("..", import.meta.url));
   const source = readFileSync(`${projectRoot}/src/hooks/useNebikiApp.ts`, "utf8")
     .replaceAll("\r\n", "\n");
   const body = source.slice(source.indexOf("export function useNebikiApp"));
 
-  // 2026.8.9-15: the exact, one-time Review19 cleanup runs before resumable
-  // state loading/cloud retry and shows one success notice only after every
-  // required local write succeeds. Normal save ordering and gates stay locked.
-  assert.equal(body.length, 160575);
-  assert.equal(
-    createHash("sha256").update(body).digest("hex"),
-    "7838d4d81ac1d081373c64269cb23ac0a40599307cf25a0d647e27a0468e3048",
-  );
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 24);
+  // 9-16 intentionally changes the persistence facade. Characterize the
+  // externally important gates instead of pinning the whole implementation.
+  assert.match(body, /persistCompletedReview19LocalFirstAsync/);
+  assert.match(body, /saveReview19ToHistoricalArchive/);
+  assert.match(body, /initializeArchivedFinalizedDay/);
+  assert.match(body, /getStorageUsageDiagnostic/);
+  assert.doesNotMatch(body, /cleanupReview19Debug20260825/);
+  assert.doesNotMatch(body, /saveReview19Records\(/);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 23);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
 }
 
@@ -452,7 +453,7 @@ function assertExportJsonCharacterization(): void {
 }
 
 assertPublicHookContract();
-assertFacadeBodyIsUnchanged();
+assertFacadeArchitectureGuards();
 assertTimeBoundaries();
 assertExportJsonCharacterization();
 

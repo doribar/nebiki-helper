@@ -263,7 +263,7 @@ test("19時・日次の全件／最新／direct exportを分離する", () => {
   assert.match(hookSource, /if \(!payload \|\| payload\.records\.length === 0\) return false/);
   assert.match(
     hookSource,
-    /const record = persistFinalizedDayMemo\(recordId, memo\)/,
+    /await persistFinalizedDayMemo\(recordId, memo\)/,
   );
   assert.match(hookSource, /state\.screen !== "review19_done"/);
 });

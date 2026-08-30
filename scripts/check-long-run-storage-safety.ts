@@ -327,11 +327,10 @@ try {
     JSON.stringify(expectedRetained.snapshots),
   );
   assert.ok(
-    expectedDailyBytes > oldDailyBytes,
-    `fixture must grow daily snapshots (${expectedDailyBytes} <= ${oldDailyBytes})`,
+    expectedDailyBytes < oldDailyBytes,
+    `512KiB retention must compact the legacy snapshot set (${expectedDailyBytes} >= ${oldDailyBytes})`,
   );
-  const growthBytes = expectedDailyBytes - oldDailyBytes;
-  storage.setQuotaBytes(initialUsedBytes + Math.floor(growthBytes / 2));
+  storage.setQuotaBytes(initialUsedBytes);
 
   const dailyAttemptOffset = storage.setAttempts.get(
     STORAGE_KEYS.dailySessionSnapshots,
@@ -340,13 +339,13 @@ try {
     protectedDate: "2026-08-16",
   });
   assert.equal(dailyResult.ok, true);
-  assert.equal(dailyResult.quotaExceeded, true);
-  assert.equal(dailyResult.retried, true);
+  assert.equal(dailyResult.quotaExceeded, false);
+  assert.equal(dailyResult.retried, false);
   assert.equal(
     (storage.setAttempts.get(STORAGE_KEYS.dailySessionSnapshots) ?? 0) -
       dailyAttemptOffset,
     2,
-    "quota recovery must perform one initial write plus at most one retry",
+    "one proactive retention write plus the target write must complete without a quota retry",
   );
   assert.deepEqual(storage.removeAttempts, [
     STORAGE_KEYS.runtimeState,

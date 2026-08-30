@@ -6,7 +6,13 @@ import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
 import {
   removeStorageKeySafely,
   reportStorageOperationFailures,
+  runStartupStorageHousekeeping,
+  setArchivedFinalizedDatesForStorageRetention,
 } from "../domain/storage";
+import {
+  getHistoricalArchiveRuntimeSnapshot,
+  initializeHistoricalArchiveRuntime,
+} from "../domain/historicalArchiveRuntime.ts";
 
 type TestModeConfig = {
   now: Date;
@@ -209,6 +215,30 @@ function TestModeBanner({ testMode }: { testMode: TestModeConfig }) {
   );
 }
 
+function ArchiveLoadingScreen() {
+  return (
+    <main
+      aria-busy="true"
+      style={{
+        minHeight: "100svh",
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        background: "#f8fafc",
+        color: "#334155",
+        textAlign: "center",
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 22, fontWeight: 900 }}>端末履歴を準備しています</div>
+        <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6 }}>
+          既存データを安全に確認しています。画面を閉じずにお待ちください。
+        </div>
+      </div>
+    </main>
+  );
+}
+
 function AppRoot(props: { testMode: TestModeConfig | null }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const app = useNebikiApp({ testNow: props.testMode?.now ?? null });
@@ -296,6 +326,7 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
           onExportLatestDailyData={app.actions.exportLatestDailyData}
           cloudSync={app.derived.cloudSync}
           onSyncLocalDataToSupabase={app.actions.syncLocalDataToSupabase}
+          onGetStorageUsageDiagnostic={app.actions.getStorageUsageDiagnostic}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
@@ -305,8 +336,11 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
 
 export default function App() {
   const testMode = getCurrentTestMode();
-  const [loadedDate] = useState(() => formatLocalDate(testMode?.now));
-  const [todayDate, setTodayDate] = useState(() => formatLocalDate(testMode?.now));
+  const isTestMode = Boolean(testMode);
+  const testModeNow = testMode?.now;
+  const [archiveReady, setArchiveReady] = useState(isTestMode);
+  const [loadedDate] = useState(() => formatLocalDate(testModeNow));
+  const [todayDate, setTodayDate] = useState(() => formatLocalDate(testModeNow));
   const hasDateChanged = !testMode && todayDate !== loadedDate;
 
   useEffect(() => {
@@ -322,7 +356,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const updateTodayDate = () => setTodayDate(formatLocalDate(testMode?.now));
+    if (isTestMode) return;
+    let cancelled = false;
+    void initializeHistoricalArchiveRuntime().then((archive) => {
+      if (cancelled) return;
+      setArchivedFinalizedDatesForStorageRetention(
+        archive.finalizedDayRecords.map((record) => record.date),
+      );
+      runStartupStorageHousekeeping({
+        protectedDates: [formatLocalDate()],
+      });
+      setArchiveReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isTestMode]);
+
+  useEffect(() => {
+    const updateTodayDate = () => setTodayDate(formatLocalDate(testModeNow));
     const intervalId = window.setInterval(updateTodayDate, 30 * 1000);
     window.addEventListener("focus", updateTodayDate);
     document.addEventListener("visibilitychange", updateTodayDate);
@@ -331,9 +383,12 @@ export default function App() {
       window.removeEventListener("focus", updateTodayDate);
       document.removeEventListener("visibilitychange", updateTodayDate);
     };
-  }, [testMode?.now.getTime()]);
+  }, [testModeNow]);
 
   if (hasDateChanged) return <DateChangedBlocker loadedDate={loadedDate} />;
+  if (!archiveReady && getHistoricalArchiveRuntimeSnapshot().status !== "complete") {
+    return <ArchiveLoadingScreen />;
+  }
 
   return (
     <>

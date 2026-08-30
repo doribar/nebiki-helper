@@ -186,9 +186,9 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 
 try {
-  test("daily snapshotは件数120に加えて1MiBのUTF-16概算budgetを持つ", () => {
+  test("daily snapshotは件数120に加えて512KiBのUTF-16概算budgetを持つ", () => {
     assert.equal(DAILY_SESSION_SNAPSHOT_MAX_RECORDS, 120);
-    assert.equal(DAILY_SESSION_SNAPSHOT_BYTE_BUDGET, 1024 * 1024);
+    assert.equal(DAILY_SESSION_SNAPSHOT_BYTE_BUDGET, 512 * 1024);
     assert.equal(estimateLocalStorageEntryBytes("ab", "日本"), 8);
   });
 

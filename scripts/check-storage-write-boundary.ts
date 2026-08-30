@@ -75,6 +75,7 @@ const allowedLocalStoragePrimitiveSignatures = new Set([
   "src/domain/fixedTimeTemperatureMemory.ts|localStorage.setItem|FIXED_TIME_TEMPERATURE_STORAGE_KEY",
   "src/domain/finalizedDayData.ts|getLocalStorage()?.setItem|FINALIZED_DAY_DATA_STORAGE_KEY",
   "src/domain/globalDiscountAdjustment.ts|storage.setItem|key",
+  "src/domain/historicalArchive.ts|storage.removeItem|key",
   "src/domain/storage.ts|localStorage.setItem|STORAGE_KEYS.currentSession",
   "src/domain/storage.ts|localStorage.removeItem|STORAGE_KEYS.currentSession",
   "src/domain/storage.ts|localStorage.setItem|STORAGE_KEYS.workSessionCheckpoint",

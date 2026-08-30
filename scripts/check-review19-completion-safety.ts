@@ -436,7 +436,10 @@ try {
       new URL("../src/hooks/useNebikiApp.ts", import.meta.url),
       "utf8",
     );
-    assert.match(hookSource, /persistCompletedReview19LocalFirst\(recordedReview\)/);
+    assert.match(
+      hookSource,
+      /await persistCompletedReview19LocalFirstAsync\([\s\S]*?recordedReview/,
+    );
     assert.match(hookSource, /if \(!persistenceResult\.localSaved\)[\s\S]*?return;/);
     assert.match(
       hookSource,

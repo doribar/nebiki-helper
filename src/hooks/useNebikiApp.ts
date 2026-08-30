@@ -58,16 +58,16 @@ import {
   attemptStorageOperation,
   attemptStorageOperationWithAuxiliaryRecovery,
   removeStorageKeySafely,
+  releaseAuxiliaryStorageForReview19,
   reportStorageOperationFailures,
   STORAGE_KEYS,
-  loadReview19Records,
-  saveReview19Records,
   loadReview19SourceState,
   saveReview19SourceState,
   clearReview19SourceState,
   getDailySessionSnapshotsForDate,
   loadDailySessionSnapshots,
   runStartupStorageHousekeeping,
+  setArchivedFinalizedDatesForStorageRetention,
   upsertDailySessionSnapshotSafely,
 } from "../domain/storage";
 import {
@@ -107,12 +107,6 @@ import {
 } from "../domain/allDataExport.ts";
 import { getAutomaticDayExportFilename } from "../domain/dayExport.ts";
 import {
-  FINALIZED_DAY_DATA_STORAGE_KEY,
-  initializeFinalizedDayData,
-  loadFinalizedDayData,
-  patchFinalizedDayDataMetadata,
-  patchFinalizedDayDataMetadataByRecordId,
-  replaceFinalizedDayDataCore,
   selectFinalizedDayDataByRecordId,
   selectFinalizedDayDataByDate,
   type StoredFinalizedDayData,
@@ -179,7 +173,7 @@ import {
   buildPendingSupabaseSyncErrorDetails,
   sanitizeSupabaseDiagnosticText,
 } from "../domain/supabaseSyncDiagnostics.ts";
-import { persistCompletedReview19LocalFirst } from "../domain/review19CompletionStorage.ts";
+import { persistCompletedReview19LocalFirstAsync } from "../domain/review19CompletionStorage.ts";
 import {
   buildReview19StorageFailureAlert,
   createReview19StorageFailureDiagnostic,
@@ -189,10 +183,6 @@ import {
   loadRemoteReview19Records,
   mergeReview19MedianHistory,
 } from "../domain/review19RemoteStorage.ts";
-import {
-  cleanupReview19Debug20260825,
-  excludeReview19Debug20260825Target,
-} from "../domain/maintenance/cleanupReview19Debug20260825.ts";
 import {
   getEarlyNextMinus5NoticeText,
   getEarlyNextMinus5TargetDiscountTime,
@@ -283,7 +273,7 @@ import {
   createReview19Reference,
   createReview19Snapshot,
   createReview19WeatherDraft,
-  getLatestReview19DayCheck,
+  selectLatestReview19DayCheck,
 } from "./nebikiApp/sessionSnapshots.ts";
 import {
   getNearTemperatureC,
@@ -319,6 +309,17 @@ import {
   buildAnalysisWeatherContext,
   buildSessionAnalysisCalendarContext,
 } from "../domain/analysisMetadata.ts";
+import {
+  cacheRemoteReview19InHistoricalArchive,
+  getHistoricalArchiveRuntimeSnapshot,
+  initializeArchivedFinalizedDay,
+  listArchivedReview19ByBusinessIdentity,
+  patchArchivedFinalizedDayByDate,
+  patchArchivedFinalizedDayByRecordId,
+  replaceArchivedFinalizedDay,
+  saveReview19ToHistoricalArchive,
+} from "../domain/historicalArchiveRuntime.ts";
+import { collectNebikiStorageUsageDiagnostic } from "../domain/storageDiagnostics.ts";
 
 export { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
 
@@ -353,19 +354,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const testNowMs = params?.testNow?.getTime() ?? null;
   const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
   const startupHousekeepingCompletedRef = useRef(false);
-  const review19DebugCleanupResultRef = useRef<ReturnType<
-    typeof cleanupReview19Debug20260825
-  > | null>(null);
-  const review19DebugCleanupNoticeShownRef = useRef(false);
-
   if (!initialPersistenceRef.current) {
     const initialDate = formatLocalDate(getRuntimeNow());
-    if (!isTestMode && !review19DebugCleanupResultRef.current) {
-      // 9-15 one-time maintenance must finish before loading resumable state
-      // and before any startup cloud retry can resolve/re-send Review19.
-      review19DebugCleanupResultRef.current =
-        cleanupReview19Debug20260825();
-    }
     initialPersistenceRef.current = isTestMode
       ? {
           currentSession: null,
@@ -469,22 +459,6 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const weatherConfirmationSubmittingRef = useRef(false);
   const autoTransitionInFlightKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    const cleanup = review19DebugCleanupResultRef.current;
-    if (
-      isTestMode ||
-      review19DebugCleanupNoticeShownRef.current ||
-      !cleanup?.ok ||
-      !cleanup.changed ||
-      cleanup.removedCount < 1
-    ) {
-      return;
-    }
-    review19DebugCleanupNoticeShownRef.current = true;
-    window.alert(
-      "2026/8/25のデバッグ用19:00チェックを端末から削除しました。",
-    );
-  }, [isTestMode]);
   const [nowMs, setNowMs] = useState(() => getRuntimeNowMs());
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
@@ -595,34 +569,46 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
   const [finalizedDayDataVersion, setFinalizedDayDataVersion] = useState(0);
+  const initialArchiveSnapshotRef = useRef(
+    getHistoricalArchiveRuntimeSnapshot(),
+  );
+  const [archivedReview19Records, setArchivedReview19Records] = useState<
+    Review19Result[]
+  >(() => initialArchiveSnapshotRef.current.review19Records);
+  const archivedReview19RecordsRef = useRef<Review19Result[]>(
+    initialArchiveSnapshotRef.current.review19Records,
+  );
+  const [archivedFinalizedDayRecords, setArchivedFinalizedDayRecords] = useState<
+    StoredFinalizedDayData[]
+  >(() => initialArchiveSnapshotRef.current.finalizedDayRecords);
+  const archivedFinalizedDayRecordsRef = useRef<StoredFinalizedDayData[]>(
+    initialArchiveSnapshotRef.current.finalizedDayRecords,
+  );
+  const remoteReview19HistoryRef = useRef<Review19Result[]>([]);
+  const review19SaveInFlightRef = useRef(false);
+  const finalizationInFlightRef = useRef(false);
+
+  const replaceArchivedReview19Records = useCallback((records: Review19Result[]) => {
+    const cloned = JSON.parse(JSON.stringify(records)) as Review19Result[];
+    archivedReview19RecordsRef.current = cloned;
+    setArchivedReview19Records(cloned);
+    setReview19RecordsVersion((version) => version + 1);
+  }, []);
+
+  const replaceArchivedFinalizedDayRecords = useCallback((
+    records: StoredFinalizedDayData[],
+  ) => {
+    const cloned = JSON.parse(JSON.stringify(records)) as StoredFinalizedDayData[];
+    archivedFinalizedDayRecordsRef.current = cloned;
+    setArchivedFinalizedDayRecords(cloned);
+    setFinalizedDayDataVersion((version) => version + 1);
+  }, []);
   const [cloudSyncVersion, setCloudSyncVersion] = useState(0);
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [lastBackfillResult, setLastBackfillResult] =
     useState<SupabaseBackfillResult | null>(null);
   const lastFinalizedDayDataRef = useRef<StoredFinalizedDayData | null>(null);
   const review19CloudFingerprintRef = useRef<string | null>(null);
-
-  function persistFinalizedDayOperationSafely<T>(params: {
-    context: string;
-    run: () => T;
-  }): { ok: true; value: T } | { ok: false; value: null } {
-    const holder: { value?: T } = {};
-    const result = attemptStorageOperationWithAuxiliaryRecovery({
-      key: FINALIZED_DAY_DATA_STORAGE_KEY,
-      operation: "set",
-      run: () => {
-        holder.value = params.run();
-      },
-    });
-    reportStorageOperationFailures(params.context, result.attempts);
-    if (!result.ok || !("value" in holder)) {
-      window.alert(
-        "端末データの保存容量が不足しているため、1日データを確定できませんでした。空き容量を確認して、もう一度保存してください。",
-      );
-      return { ok: false, value: null };
-    }
-    return { ok: true, value: holder.value as T };
-  }
 
   function persistReview19SourceStateSafely(
     sourceState: AppState,
@@ -654,12 +640,15 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     }
     setCloudSyncing(true);
     try {
-      const firstPass = await flushCloudSyncQueue();
+      const cloudOptions = {
+        loadReview19ArchiveSources: listArchivedReview19ByBusinessIdentity,
+      };
+      const firstPass = await flushCloudSyncQueue(cloudOptions);
       let result = { ...firstPass };
       // 送信中に同じidentityの新しいpayloadが積まれた場合、最初のflushは
       // 送信済みrevisionを安全に残す。成功後にもう一度だけ追送して取りこぼさない。
       if (result.failed === 0 && getCloudSyncStatus().pendingCount > 0) {
-        const followUp = await flushCloudSyncQueue();
+        const followUp = await flushCloudSyncQueue(cloudOptions);
         result = {
           attempted: result.attempted + followUp.attempted,
           succeeded: result.succeeded + followUp.succeeded,
@@ -687,7 +676,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       return {
         attempted: 0,
         succeeded: 0,
-        failed: 0,
+        // A queue/storage failure is not a successful zero-work sync. Keep the
+        // manual-sync summary conservative even when the queue count itself
+        // cannot be read.
+        failed: 1,
         retained,
       };
     } finally {
@@ -697,7 +689,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
 
   if (!lastFinalizedDayDataRef.current && state.finalizedDayRecordId) {
     lastFinalizedDayDataRef.current =
-      loadFinalizedDayData().find(
+      archivedFinalizedDayRecordsRef.current.find(
         (record) => record.recordId === state.finalizedDayRecordId,
       ) ?? null;
   }
@@ -791,7 +783,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       loadRemoteAreaCountRecords("summer"),
       loadRemoteReview19Records("normal"),
       loadRemoteReview19Records("summer"),
-    ]).then(([normalArea, summerArea, normalReview19, summerReview19]) => {
+    ]).then(async ([normalArea, summerArea, normalReview19, summerReview19]) => {
       if (cancelled) return;
 
       const areaResults = [normalArea, summerArea];
@@ -865,29 +857,36 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       const mergedAreaRecords = historySource.records;
       setAreaCountRecords(cloneAreaCountRecords(mergedAreaRecords));
 
-      const remoteReview19Records = excludeReview19Debug20260825Target(
-        [normalReview19, summerReview19].flatMap(
-          (result) => (result.status === "ready" ? result.records : []),
-        ),
+      const remoteReview19Records = [normalReview19, summerReview19].flatMap(
+        (result) => (result.status === "ready" ? result.records : []),
       );
+      remoteReview19HistoryRef.current = JSON.parse(
+        JSON.stringify(remoteReview19Records),
+      ) as Review19Result[];
       if (remoteReview19Records.length > 0) {
-        const mergedReview19Records = mergeReview19MedianHistory({
-          localRecords: loadReview19Records(),
-          remoteRecords: remoteReview19Records,
-        });
-        const reviewMergeSave = attemptStorageOperationWithAuxiliaryRecovery({
-          key: STORAGE_KEYS.review19Records,
-          operation: "set",
-          run: () => {
-            saveReview19Records(mergedReview19Records);
-          },
-        });
-        reportStorageOperationFailures(
-          "remote-review19-merge",
-          reviewMergeSave.attempts,
+        // Full remote Review19 history belongs in IndexedDB/offline memory,
+        // never back in the unbounded localStorage array.
+        const cached = await cacheRemoteReview19InHistoricalArchive(
+          remoteReview19Records,
         );
-        setReview19RecordsVersion((version) => version + 1);
+        if (cached.ok && !cancelled) {
+          replaceArchivedReview19Records(cached.value);
+        }
       }
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      setAreaCountRemoteLoadStatus("error");
+      const name =
+        error &&
+        typeof error === "object" &&
+        "name" in error &&
+        typeof (error as { name?: unknown }).name === "string"
+          ? (error as { name: string }).name
+          : "UnknownError";
+      // Metadata only: never include a record body or credential in diagnostics.
+      console.warn("[nebiki-helper] remote history hydration failed", {
+        errorName: name,
+      });
     });
 
     return () => {
@@ -898,6 +897,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     initialToday,
     initialLoadedState?.session?.date,
     initialLoadedState?.review19?.date,
+    replaceArchivedReview19Records,
   ]);
 
   useEffect(() => {
@@ -1806,11 +1806,11 @@ const lateSkipNotice = useMemo(() => {
 
   const savedReview19Records = (() => {
     void review19RecordsVersion;
-    return loadReview19Records();
+    return archivedReview19Records;
   })();
   const savedFinalizedDayData = (() => {
     void finalizedDayDataVersion;
-    return loadFinalizedDayData();
+    return archivedFinalizedDayRecords;
   })();
   const savedDailySessionSnapshots = loadDailySessionSnapshots();
   const completedDailyDates = savedDailySessionSnapshots
@@ -2869,11 +2869,11 @@ const lateSkipNotice = useMemo(() => {
   }
 
 
-  function finalizeFinalDayData(params: {
+  async function finalizeFinalDayData(params: {
     nextState: AppState;
     nextAreaCountRecords: AreaCountRecord[];
     exportedAt: string;
-  }): { record: StoredFinalizedDayData | null; storageFailed: boolean } {
+  }): Promise<{ record: StoredFinalizedDayData | null; storageFailed: boolean }> {
     const session = params.nextState.session;
     if (isTestMode || !session || session.discountTime !== "20") {
       return { record: null, storageFailed: false };
@@ -2983,35 +2983,54 @@ const lateSkipNotice = useMemo(() => {
       demandCycle: session.demandCycle,
       areaCountRecords: params.nextAreaCountRecords,
       sessions,
-      review19Check: getLatestReview19DayCheck(
+      review19Check: selectLatestReview19DayCheck(
+        archivedReview19RecordsRef.current,
         session.date,
         session.demandCycle,
       ),
     });
-    const finalizedWrite = persistFinalizedDayOperationSafely({
-      context: "finalized-day-save",
-      run: () =>
-        params.nextState.finalizedDayRecordId
-          ? replaceFinalizedDayDataCore({
+    if (finalizationInFlightRef.current) {
+      return { record: null, storageFailed: true };
+    }
+    finalizationInFlightRef.current = true;
+    const finalizedWrite = await (async () => {
+      try {
+        return params.nextState.finalizedDayRecordId
+          ? await replaceArchivedFinalizedDay({
               daySnapshot,
               finalizedAt: params.exportedAt,
             })
-          : initializeFinalizedDayData({
+          : await initializeArchivedFinalizedDay({
               daySnapshot,
               finalizedAt: params.exportedAt,
-            }),
-    });
+            });
+      } finally {
+        finalizationInFlightRef.current = false;
+      }
+    })();
     if (!finalizedWrite.ok) {
+      console.warn("[nebiki-helper] finalized-day archive save failed", {
+        operation: finalizedWrite.operation,
+        errorName: finalizedWrite.errorName,
+      });
+      window.alert(
+        `1日データを端末履歴へ保存できませんでした。\nエラー：${finalizedWrite.errorName}\n入力内容は保持されています。もう一度保存してください。`,
+      );
       return { record: null, storageFailed: true };
     }
     const result = finalizedWrite.value;
+    const runtime = getHistoricalArchiveRuntimeSnapshot();
+    replaceArchivedFinalizedDayRecords(runtime.finalizedDayRecords);
+    setArchivedFinalizedDatesForStorageRetention(
+      runtime.finalizedDayRecords.map((record) => record.date),
+    );
+    runStartupStorageHousekeeping({ protectedDates: [session.date] });
     lastFinalizedDayDataRef.current = result.record;
-    setFinalizedDayDataVersion((version) => version + 1);
     return { record: result.record, storageFailed: false };
   }
 
 
-  function judgeCurrentArea(
+  async function judgeCurrentArea(
     judge: Exclude<AreaJudge, null>,
     areaCount?: number | null,
     manualAreaCountEvaluation?: AreaCountEvaluation,
@@ -3181,7 +3200,7 @@ const lateSkipNotice = useMemo(() => {
       normalizedStapleItemCount,
     );
 
-    const finalizedDayData = finalizeFinalDayData({
+    const finalizedDayData = await finalizeFinalDayData({
       nextState: nextStateForAction,
       nextAreaCountRecords,
       exportedAt: actionAt,
@@ -3817,7 +3836,7 @@ const lateSkipNotice = useMemo(() => {
         !canStartReview19FromCurrentState({
           state: prev,
           now,
-          records: isTestMode ? [] : loadReview19Records(),
+          records: isTestMode ? [] : archivedReview19RecordsRef.current,
         })
       ) {
         return prev;
@@ -3919,8 +3938,8 @@ const lateSkipNotice = useMemo(() => {
     const historicalRecords = isTestMode
       ? []
       : mergeReview19MedianHistory({
-          localRecords: loadReview19Records(),
-          remoteRecords: [],
+          localRecords: archivedReview19RecordsRef.current,
+          remoteRecords: remoteReview19HistoryRef.current,
         });
     const recordedAt = getRuntimeNow().toISOString();
 
@@ -4102,8 +4121,8 @@ const lateSkipNotice = useMemo(() => {
             historicalRecords: isTestMode
               ? []
               : mergeReview19MedianHistory({
-                  localRecords: loadReview19Records(),
-                  remoteRecords: [],
+                  localRecords: archivedReview19RecordsRef.current,
+                  remoteRecords: remoteReview19HistoryRef.current,
                 }),
           }),
         };
@@ -4231,7 +4250,7 @@ const lateSkipNotice = useMemo(() => {
     };
   }
 
-  function saveReview19(
+  async function saveReview19(
     latestAreaCount?: {
       areaId: AreaId;
       count: number;
@@ -4240,11 +4259,26 @@ const lateSkipNotice = useMemo(() => {
     },
     latestExcludedAreaId?: AreaId,
   ) {
+    if (review19SaveInFlightRef.current) return;
     const recordedReview = buildRecordedReview19Result(latestAreaCount, latestExcludedAreaId);
     if (!recordedReview?.dataQuality.complete) return;
 
     if (!isTestMode) {
-      const persistenceResult = persistCompletedReview19LocalFirst(recordedReview);
+      review19SaveInFlightRef.current = true;
+      const persistenceResult = await (async () => {
+        try {
+          return await persistCompletedReview19LocalFirstAsync(
+            recordedReview,
+            {
+              saveAuthoritative: saveReview19ToHistoricalArchive,
+              enqueueCloud: enqueueReview19RecordForCloud,
+              releaseAuxiliary: releaseAuxiliaryStorageForReview19,
+            },
+          );
+        } finally {
+          review19SaveInFlightRef.current = false;
+        }
+      })();
       if (!persistenceResult.localSaved) {
         const diagnostic = createReview19StorageFailureDiagnostic({
           stage: "authoritative_local_save",
@@ -4255,6 +4289,10 @@ const lateSkipNotice = useMemo(() => {
         window.alert(buildReview19StorageFailureAlert(diagnostic));
         return;
       }
+
+      replaceArchivedReview19Records(
+        getHistoricalArchiveRuntimeSnapshot().review19Records,
+      );
 
       if (persistenceResult.cloudQueuePrepared) {
         if (persistenceResult.cloudQueueChanged) {
@@ -4277,7 +4315,6 @@ const lateSkipNotice = useMemo(() => {
         run: clearReview19SourceState,
       });
       reportStorageOperationFailures("review19-source-cleanup", [clearSourceResult]);
-      setReview19RecordsVersion((version) => version + 1);
     }
 
     setState((prev) => {
@@ -4548,58 +4585,52 @@ const lateSkipNotice = useMemo(() => {
     }
   }
 
-  function persistFinalizedDayMemo(
+  async function persistFinalizedDayMemo(
     recordId: string,
     memo: string | null,
-  ): StoredFinalizedDayData | null {
+  ): Promise<StoredFinalizedDayData | null> {
     const current =
       lastFinalizedDayDataRef.current?.recordId === recordId
         ? lastFinalizedDayDataRef.current
         : selectFinalizedDayDataByRecordId(
-            loadFinalizedDayData(),
+            archivedFinalizedDayRecordsRef.current,
             recordId,
           );
     if (!current || current.recordId !== recordId) return null;
 
-    const persisted = persistFinalizedDayOperationSafely({
-      context: "finalized-day-memo",
-      run: () =>
-        patchFinalizedDayDataMetadataByRecordId({
-          recordId,
-          patch: { memo },
-        }),
+    const persisted = await patchArchivedFinalizedDayByRecordId({
+      recordId,
+      patch: { memo },
     });
     if (!persisted.ok) return null;
     const updated = persisted.value;
     if (!updated || updated.recordId !== recordId) return null;
+    replaceArchivedFinalizedDayRecords(
+      getHistoricalArchiveRuntimeSnapshot().finalizedDayRecords,
+    );
     lastFinalizedDayDataRef.current = updated;
-    setFinalizedDayDataVersion((version) => version + 1);
     return updated;
   }
 
-  function saveFinalizedDayMemo(memo: string | null): void {
+  async function saveFinalizedDayMemo(memo: string | null): Promise<void> {
     const recordId = state.finalizedDayRecordId;
     if (!recordId) return;
-    persistFinalizedDayMemo(recordId, memo);
+    await persistFinalizedDayMemo(recordId, memo);
   }
 
-  function savePreviousDayDiscardCount(count: number | null) {
+  async function savePreviousDayDiscardCount(count: number | null) {
     if (count !== null && (!Number.isSafeInteger(count) || count < 0)) return;
     const previousDate = getPreviousJstCalendarDate(getRuntimeNow());
     if (!previousDate) return;
     const existing = selectFinalizedDayDataByDate(
-      loadFinalizedDayData(),
+      archivedFinalizedDayRecordsRef.current,
       previousDate,
     );
     if (!existing) return;
 
-    const persisted = persistFinalizedDayOperationSafely({
-      context: "finalized-day-discard-count",
-      run: () =>
-        patchFinalizedDayDataMetadata({
-          date: previousDate,
-          patch: { discardCount: count },
-        }),
+    const persisted = await patchArchivedFinalizedDayByDate({
+      date: previousDate,
+      patch: { discardCount: count },
     });
     if (!persisted.ok) return;
     const updated = persisted.value;
@@ -4607,11 +4638,13 @@ const lateSkipNotice = useMemo(() => {
     if (lastFinalizedDayDataRef.current?.recordId === updated.recordId) {
       lastFinalizedDayDataRef.current = updated;
     }
-    setFinalizedDayDataVersion((version) => version + 1);
+    replaceArchivedFinalizedDayRecords(
+      getHistoricalArchiveRuntimeSnapshot().finalizedDayRecords,
+    );
   }
 
   async function getExportableDailyData() {
-    const finalized = loadFinalizedDayData();
+    const finalized = archivedFinalizedDayRecordsRef.current;
     const finalizedDates = new Set(finalized.map((record) => record.date));
     const sessionSnapshots = loadDailySessionSnapshots();
     const legacyDates = [...new Set(
@@ -4656,14 +4689,18 @@ const lateSkipNotice = useMemo(() => {
         demandCycle,
         areaCountRecords: mergedAreaCountRecords,
         sessions,
-        review19Check: getLatestReview19DayCheck(date, demandCycle),
+        review19Check: selectLatestReview19DayCheck(
+          archivedReview19RecordsRef.current,
+          date,
+          demandCycle,
+        ),
       });
     });
     return [...finalized, ...legacy];
   }
 
   function exportAllReview19Data(): boolean {
-    const records = selectAllReview19Data(loadReview19Records());
+    const records = selectAllReview19Data(archivedReview19RecordsRef.current);
     if (records.length === 0) return false;
     const exportedAt = getRuntimeNow().toISOString();
     const exports = buildAllReview19DataExportPayloadsByDemandCycle({
@@ -4685,7 +4722,7 @@ const lateSkipNotice = useMemo(() => {
   function exportLatestReview19Data(): boolean {
     const exportedAt = getRuntimeNow().toISOString();
     const payload = buildLatestReview19DataExportPayload({
-      records: loadReview19Records(),
+      records: archivedReview19RecordsRef.current,
       exportedAt,
     });
     if (!payload || payload.records.length === 0) return false;
@@ -4749,10 +4786,10 @@ const lateSkipNotice = useMemo(() => {
     );
   }
 
-  function exportCompletedDailyData(memo: string | null): boolean {
+  async function exportCompletedDailyData(memo: string | null): Promise<boolean> {
     const recordId = state.finalizedDayRecordId;
     if (!recordId) return false;
-    const record = persistFinalizedDayMemo(recordId, memo);
+    const record = await persistFinalizedDayMemo(recordId, memo);
     if (!record || record.recordId !== recordId) return false;
     const exportedAt = getRuntimeNow().toISOString();
     return downloadJsonFile(
@@ -4763,52 +4800,10 @@ const lateSkipNotice = useMemo(() => {
 
   async function exportAllData() {
     const exportedAt = getRuntimeNow().toISOString();
-    const sessionSnapshots = loadDailySessionSnapshots();
-    const dailyDates = [...new Set(
-      sessionSnapshots
-        .filter((snapshot) =>
-          snapshot.session.discountTime === "20" &&
-          snapshot.screen === "done"
-        )
-        .map((snapshot) => snapshot.session.date)
-    )].sort();
-
-    const remoteResult = await loadRemoteAreaCountRecords();
-    const remoteRecords = remoteResult.status === "ready" ? remoteResult.records : [];
-    const mergedAreaCountRecords = remoteRecords.reduce(
-      (records, record) => upsertAreaCountRecord(records, record),
-      cloneAreaCountRecords(areaCountRecords),
-    );
-    const dailyData = dailyDates.map((date) => {
-      const sameDateSessions = sessionSnapshots.filter(
-        (snapshot) => snapshot.session.date === date,
-      );
-      const demandCycle = normalizeDemandCycle(
-        sameDateSessions[0]?.demandCycle ??
-          sameDateSessions[0]?.session.demandCycle ??
-          mergedAreaCountRecords.find((record) => record.date === date)?.demandCycle,
-      );
-      const sessions = sameDateSessions.filter(
-        (snapshot) =>
-          normalizeDemandCycle(
-            snapshot.demandCycle ?? snapshot.session.demandCycle,
-          ) === demandCycle,
-      );
-      return createReview19DaySnapshot({
-        capturedAt:
-          sessions
-            .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
-            .at(-1)?.capturedAt ?? exportedAt,
-        date,
-        demandCycle,
-        areaCountRecords: mergedAreaCountRecords,
-        sessions,
-        review19Check: getLatestReview19DayCheck(date, demandCycle),
-      });
-    });
+    const dailyData = await getExportableDailyData();
     const payload = buildAllDataExportPayload({
       dailyData,
-      review19Data: loadReview19Records(),
+      review19Data: archivedReview19RecordsRef.current,
       exportedAt,
     });
     if (payload.dailyData.length === 0 && payload.review19Data.length === 0) return;
@@ -4863,7 +4858,7 @@ const lateSkipNotice = useMemo(() => {
     const existingPendingResult = await retryPendingCloudSync();
 
     const localReview19Records = mergeReview19MedianHistory({
-      localRecords: loadReview19Records(),
+      localRecords: archivedReview19RecordsRef.current,
       remoteRecords: [],
     });
     const collectedAreaRecords = collectAreaCountBackfillRecords({
@@ -4872,8 +4867,8 @@ const lateSkipNotice = useMemo(() => {
         loadLegacyNormalAreaCountRecords(),
       ),
       summerCacheRecords: loadLegacySummerAreaCountRecords(),
-      finalizedDayRecords: loadFinalizedDayData(),
-      review19Records: loadReview19Records(),
+      finalizedDayRecords: archivedFinalizedDayRecordsRef.current,
+      review19Records: archivedReview19RecordsRef.current,
       dailySessionSnapshots: loadDailySessionSnapshots(),
       currentState: state,
       nowMs: nowMsForBackfill,
@@ -5025,6 +5020,7 @@ const lateSkipNotice = useMemo(() => {
       pendingCount,
       allSynced:
         pendingCount === 0 &&
+        existingPendingResult.failed === 0 &&
         directReview19Result.failedCount === 0 &&
         directAreaResult.failedCount === 0 &&
         directAreaResult.deferredCount === 0 &&
@@ -5039,6 +5035,18 @@ const lateSkipNotice = useMemo(() => {
       ),
     );
     return result;
+  }
+
+  async function getStorageUsageDiagnostic() {
+    const archive = getHistoricalArchiveRuntimeSnapshot();
+    return collectNebikiStorageUsageDiagnostic({
+      archive: {
+        review19Count: archive.review19Records.length,
+        finalizedDayCount: archive.finalizedDayRecords.length,
+        migrationStatus: archive.status,
+        finalizedDates: archive.finalizedDayRecords.map((record) => record.date),
+      },
+    });
   }
 
   function resetApp() {
@@ -5170,6 +5178,7 @@ const lateSkipNotice = useMemo(() => {
       startNextDoneSession,
       exportAllData,
       syncLocalDataToSupabase,
+      getStorageUsageDiagnostic,
       startReview19Manually,
       resetApp,
       changeDemandCycle,

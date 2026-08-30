@@ -4,6 +4,7 @@ import type {
   AreaCountRecord,
 } from "./areaCountHistory.ts";
 import type { PendingSupabaseSyncErrorDetails } from "./supabaseSyncDiagnostics.ts";
+import type { NebikiStorageUsageDiagnostic } from "./storageDiagnostics.ts";
 import type {
   AnalysisCalendarContext,
   AnalysisWeatherContext,
@@ -911,7 +912,7 @@ export type UseNebikiAppActions = {
     manualAreaCountEvaluation?: AreaCountEvaluation,
     stapleItemCount?: number | null,
     humanEvaluationSelection?: HumanEvaluationSelection,
-  ) => void;
+  ) => Promise<void>;
   getCurrentAreaCountRecommendation: (count: number) => AreaCountRecommendation;
   skipCurrentArea: () => void;
   chooseSkipTargetArea: (areaId: AreaId) => void;
@@ -938,20 +939,21 @@ export type UseNebikiAppActions = {
       humanEvaluationSelection?: HumanEvaluationSelection;
     },
     latestExcludedAreaId?: AreaId,
-  ) => void;
+  ) => Promise<void>;
   startAreaCountCorrection: (areaId: AreaId) => void;
-  saveFinalizedDayMemo: (memo: string | null) => void;
-  savePreviousDayDiscardCount: (count: number | null) => void;
+  saveFinalizedDayMemo: (memo: string | null) => Promise<void>;
+  savePreviousDayDiscardCount: (count: number | null) => Promise<void>;
   exportAllReview19Data: () => boolean;
   exportLatestReview19Data: () => boolean;
   exportAllDailyData: () => Promise<boolean>;
   exportLatestDailyData: () => Promise<boolean>;
   exportCompletedReview19Data: () => boolean;
-  exportCompletedDailyData: (memo: string | null) => boolean;
+  exportCompletedDailyData: (memo: string | null) => Promise<boolean>;
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
   exportAllData: () => void;
   syncLocalDataToSupabase: () => Promise<SupabaseBackfillResult>;
+  getStorageUsageDiagnostic: () => Promise<NebikiStorageUsageDiagnostic>;
   startReview19Manually: () => void;
   resetApp: () => void;
   changeDemandCycle: (demandCycle: DemandCycle) => boolean;
