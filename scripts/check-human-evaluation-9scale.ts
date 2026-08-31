@@ -249,6 +249,26 @@ test("summer-cycle even scores switch at JST 17:59/18:00", () => {
   }
 });
 
+test("summer-cycle guidance points match 15:00/17:00 lower and 18:30 higher", () => {
+  const selection = requireSelection("normal", "slightly_few");
+  const cases = [
+    { discountTime: "15" as const, nowMs: Date.UTC(2026, 7, 9, 6, 0), expected: "lower" },
+    { discountTime: "17" as const, nowMs: Date.UTC(2026, 7, 9, 8, 0), expected: "lower" },
+    { discountTime: "18" as const, nowMs: Date.UTC(2026, 7, 9, 9, 30), expected: "higher" },
+  ];
+
+  for (const entry of cases) {
+    const details = resolveHumanEvaluationForDiscount({
+      selection,
+      demandCycle: "summer",
+      sessionDiscountTime: entry.discountTime,
+      nowMs: entry.nowMs,
+      evaluatedAt: new Date(entry.nowMs).toISOString(),
+    });
+    assert.equal(details.resolutionDirection, entry.expected);
+  }
+});
+
 test("resolution preserves raw score, selection order, and caller-owned objects", () => {
   const selection = requireSelection("normal", "slightly_few");
   const selectionBefore = JSON.stringify(selection);

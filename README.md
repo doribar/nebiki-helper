@@ -139,6 +139,12 @@ npm run build
 - current-day AreaCount／snapshotは業務継続用local-first journalとして残り、次回起動時にarchiveされます。中央値、offline履歴、manual backfill、Review19 daySnapshot、exportはarchive＋current journalを既存identityでdedupeして利用します。
 - 実端末相当fixtureはlocalStorage 6705.3 KiBから59.3 KiBへ減少し、15時／17時各12エリア保存後も120.6 KiB、最低headroom 2183.4 KiBでした。360営業日（720 snapshot／8640 AreaCount、formal finalized 0）の履歴もIndexedDBへ保持し、migration後localStorageは日数比例で増えません。
 
+## UI文言整理（2026.8.9-18）
+
+- 「全体値引補正」は `-5% / なし / +5%` ボタンだけを表示し、下部の計算説明は表示しません。補正計算、保存、session capture、20:30 forced rate除外は変更していません。
+- 「迷ったら…」は通常モードで15時／17時以降、夏季モードで15時・17時／18時以降の境界だけを表示します。夏季even-scoreの内部解決は以前からJST 18:00境界で正しく、今回変更したのはUI案内だけです。
+- 「アウトパック → 多い側に寄せる」の案内だけを削除し、大パックだけ値引／期限が近いものだけ値引の案内は維持します。
+
 ## 全体値引補正（2026.8.9-13）
 
 - StartScreenで人間が `-5% / なし / +5%` を明示選択します。曜日、中央値、human判定、商品、weather、temperature等の既存計算を終えた通常表示率へ、最後に5 percentage pointsを1回だけ加減し、0〜50%へclampします。
@@ -307,12 +313,12 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 この開発環境には実DB接続情報がなく、Supabase mutationは行っていません。利用者報告では9-13のReview19 direct syncは6/6成功し、legacy AreaCount pending 30件の通信errorは `Failed to fetch` でした。9-14は大量pending複製によるquota圧力を除去しますが、通信障害そのものを解決済みとは報告しません。deploy後は既存30件の再送結果とエラー詳細を確認してください。
 
-`dataSchemaVersion` は正式JSON schemaのversionです。9-17は端末内historical archiveへsnapshot／AreaCount storeを追加する変更であり、record schemaとSupabase schemaを変更しないため `3` を維持します。新しいSupabase migration、SQL artifact、列、DELETE grant、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、全体値引補正、AreaCount direct backfillを変更しません。
+`dataSchemaVersion` は正式JSON schemaのversionです。9-18はUI文言だけの変更であり、record schemaとSupabase schemaを変更しないため `3` を維持します。新しいSupabase migration、SQL artifact、列、DELETE grant、RLS変更はありません。中央値engine、last-area skip、initial weather scroll、fixed-time READ ONLYとWRITE隔離、Obon、全体値引補正、AreaCount direct backfillを変更しません。
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-17`
+- `appVersion`: `2026.8.9-18`
 - `dataSchemaVersion`: `3`
 - `buildId`: 最終production build時のJST値（CHANGE REPORT記載値）
 
-今回の実装・検証結果、実端末相当／360営業日fixture、実ブラウザ確認は `CHANGE_REPORT_2026.8.9-17.md` を参照してください。
+今回の実装・検証結果と実ブラウザ確認は `CHANGE_REPORT_2026.8.9-18.md` を参照してください。

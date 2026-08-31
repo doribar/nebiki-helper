@@ -214,12 +214,16 @@ test("夏季モードの手動エリア判定へ基準を明示", () => {
 test("迷ったらUIとstateはエリア判定だけ削除し個別量側は維持", () => {
   const areaScreen = source("src/components/screens/AreaJudgeScreen.tsx");
   const rateScreen = source("src/components/screens/RateDisplayScreen.tsx");
+  const judgeHint = source("src/components/common/JudgeHintDialog.tsx");
   assert.doesNotMatch(areaScreen, /迷ったら…/);
   assert.doesNotMatch(areaScreen, /showJudgeHint/);
   assert.doesNotMatch(areaScreen, /JudgeHintDialog/);
   assert.match(rateScreen, /迷ったら…/);
   assert.match(rateScreen, /showJudgeHint/);
   assert.match(rateScreen, /JudgeHintDialog/);
+  assert.doesNotMatch(judgeHint, /アウトパック/);
+  assert.match(judgeHint, /大パックだけ値引/);
+  assert.match(judgeHint, /近いものだけ値引/);
 });
 
 let passed = 0;

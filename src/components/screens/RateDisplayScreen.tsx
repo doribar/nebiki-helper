@@ -57,7 +57,6 @@ type RateDisplayScreenProps = {
   humanEvaluationDetails?: HumanEvaluationDetails;
   canOverrideAreaCountEvaluation?: boolean;
   onOverrideAreaCountEvaluation?: (selection: HumanEvaluationSelection) => void;
-  showSummerModeJudgeHint?: boolean;
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
   showThreeDayHolidayMiddleNotice?: boolean;
@@ -135,13 +134,13 @@ function RateInstructionCard({
   step,
   currentIndex,
   totalCount,
-  showSummerModeJudgeHint,
+  demandCycle,
   onDone,
 }: {
   step: RateInstructionStep;
   currentIndex: number;
   totalCount: number;
-  showSummerModeJudgeHint: boolean;
+  demandCycle: DemandCycle;
   onDone: () => void;
 }) {
   const [showJudgeHint, setShowJudgeHint] = useState(false);
@@ -220,7 +219,7 @@ function RateInstructionCard({
 
       {showJudgeHint ? (
         <JudgeHintDialog
-          showSummerModeJudgeHint={showSummerModeJudgeHint}
+          demandCycle={demandCycle}
           onClose={() => setShowJudgeHint(false)}
         />
       ) : null}
@@ -280,7 +279,6 @@ export function RateDisplayScreen({
   humanEvaluationDetails,
   canOverrideAreaCountEvaluation = false,
   onOverrideAreaCountEvaluation,
-  showSummerModeJudgeHint = false,
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
   showThreeDayHolidayMiddleNotice = false,
@@ -644,7 +642,7 @@ export function RateDisplayScreen({
                 step={currentRateInstructionStep}
                 currentIndex={rateInstructionStepIndex}
                 totalCount={rateInstructionSteps.length}
-                showSummerModeJudgeHint={showSummerModeJudgeHint}
+                demandCycle={demandCycle}
                 onDone={handleRateInstructionDone}
               />
             ) : null}

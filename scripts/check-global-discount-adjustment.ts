@@ -330,6 +330,8 @@ test("StartScreen/RateDisplayは選択UIと非0補正の内訳を正規sourceか
   assert.match(startSource, /全体値引補正/);
   assert.match(startSource, /\[-5, 0, 5\]/);
   assert.match(startSource, /adjustmentPercent > 0/);
+  assert.doesNotMatch(startSource, /通常の値引率へ最後に5ポイント加減します/);
+  assert.doesNotMatch(startSource, /20時30分の固定値引には適用されません/);
   assert.match(rateSource, /全体補正/);
   assert.match(rateSource, /rateDisplayBeforeGlobalAdjustment/);
   assert.match(routerSource, /globalDiscountAdjustmentPercent/);

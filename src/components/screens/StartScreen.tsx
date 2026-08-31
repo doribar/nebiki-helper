@@ -979,19 +979,6 @@ export function StartScreen({
             );
           })}
         </div>
-        <div
-          style={{
-            marginTop: 7,
-            color: "#64748b",
-            fontSize: 11,
-            lineHeight: 1.45,
-          }}
-        >
-          {isFinalTime
-            ? "20時30分の固定値引には適用されません"
-            : "通常の値引率へ最後に5ポイント加減します"}
-          {isFixedTimeMode ? "（時刻固定モード専用）" : ""}
-        </div>
       </section>
 
       <div style={{ marginBottom: 14 }}>

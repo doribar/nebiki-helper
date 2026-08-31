@@ -11,12 +11,12 @@
 
 ## 現行リリース情報
 
-- 9-16 baseline ZIP: `nebiki-helper-20260830-0944.zip`（SHA-256 `6b4a305b0757858a4e078155a0d035f8a8d726a9c0db4cf9bd2d5565c946314c`）
-- 9-17差分比較の正本は上記9-16 ZIPとする。
-- `appVersion`: `2026.8.9-17`
+- 9-17 baseline ZIP: `nebiki-helper-20260830-1125.zip`（SHA-256 `6e03571744550078922973d491e5694d1454928d142de8dc6efbcf6fa98fe9d5`）
+- 9-18差分比較の正本は上記9-17 ZIPとする。
+- `appVersion`: `2026.8.9-18`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260830-112242-jst`（CHANGE REPORTと最終distに一致）。
-- リリースZIP: `nebiki-helper-20260830-1125.zip`。SHA-256は完成ZIPそのものを再検査した最終報告を正本とし、確定した識別情報で生成した`dist`を収録する。
+- `buildId`: `build-20260830-215459-jst`（CHANGE REPORTと最終distに一致）。
+- リリースZIP: `nebiki-helper-20260830-2157.zip`。SHA-256は完成ZIPそのものを再検査した最終報告を正本とする。
 
 ## 値引ヘルパーの運用目的
 
@@ -209,9 +209,17 @@ Storage:
 - 管理diagnosticはIDB Review19／finalizedに加えてsession／AreaCount count、snapshotのdate／active／historical formal-unfinalized／archive／local整理可能件数、AreaCountのcurrent／pending／remote confirmed／unconfirmed／archive件数を匿名表示する。payload／credentialは表示しない。
 - 9-16 Review19 archive／remote non-rematerialization／lightweight outbox、9-14 AreaCount direct backfill、9-13全体値引補正、fixed-time READ ONLY＋production WRITE隔離、normal／summer／Obon、median／human／productionAnalysisを変更しない。Supabase schema／SQL／RLS／grant変更はなく、`dataSchemaVersion=3`。
 
+## UI文言整理（2026.8.9-18）
+
+- StartScreenの「全体値引補正」は `-5% / なし / +5%` の選択UIだけを表示し、ボタン下の補足説明は表示しない。percentage points計算、session capture、保存field、fixed-time分離、20:30 forced rate除外は変更しない。
+- 個別量側「迷ったら…」は、通常モードで `15時=少ない側 / 17時以降=多い側`、夏季モードで `15時・17時=少ない側 / 18時以降=多い側` の1組だけを表示する。夏季の内部even-score解決は以前からJST 18:00境界で正しかったため、計算ロジックは変更せず表示を正本へ合わせた。
+- 「アウトパック → 多い側に寄せる」案内だけをUIから削除した。大パックだけ値引、期限が近いものだけ値引の案内、およびアウトパックに関係し得る他のデータ／ロジックは変更しない。
+- storage、IndexedDB、Supabase、DB、SQL、record schemaには変更を加えず、`dataSchemaVersion=3`を維持する。
+
 ## 全体値引補正
 
 - 一時的な現場事情へ対応する、人間が明示選択する日次rate補正。StartScreenで `-5% / なし / +5%` を選択し、アプリは夜担当欠勤、近隣店、天候、曜日、祝日、Obon等から自動推論しない。
+- StartScreenでは選択ボタンだけを簡潔に表示し、ボタン下の計算説明／20:30除外説明は表示しない。機能と保存仕様は従来どおり。
 - 通常値引ロジックが算出した表示rateの最終段へ5 percentage pointsを1回だけ加減する。20%＋5は25%、20%−5は15%。結果は0〜50%へclampする。
 - 20時30分の既存全品半額、30／40／50、40／50、all50等、業務ルールによるforced rateは補正対象外。＋5／−5のどちらでも既存forced 50%は50%のまま。
 - 設定はbusiness date単位で保存し、新しい日付は0へ戻る。同日内では選択を復元する。session開始時の値を `globalDiscountAdjustmentPercent: -5 | 0 | 5` として固定し、途中変更しても完了済みの過去sessionを遡及変更しない。
@@ -240,7 +248,7 @@ Storage:
 - モードは15時、17時、18時30分、19時30分、20時30分、19時チェックを含む営業日全体へ適用する。
 - 当日の運用開始後は変更できない。期間内の選択状態は翌日以降へ引き継ぐ。
 - 時間固定モードは固定したJST日時で期間判定し、本番とは独立した選択・日次ロックを使用する。中央値判定の入力に限り、本番Supabase AreaCount履歴をREAD ONLYで参照する。固定モード由来のrecordは本番local履歴・Supabase・pending・Review19・learning populationへ書かない。
-- ONかつ17:59までは、9段階の中間値を少ない側へ解決する案内を表示する。18:00以降は中間値を多い側へ解決し、単独の5基準項目は変更しない。
+- 「迷ったら…」は夏季モード中、15時・17時を少ない側、18時以降を多い側として同じダイアログ内に表示する。内部の9段階中間値は従来どおりJST 18:00未満を少ない側、18:00以降を多い側へ解決し、単独の5基準項目は変更しない。
 - 通常履歴と夏履歴は混ぜない。旧データで `demandCycle` が欠ける場合は `normal` として扱う。
 - `summer` の短期中央値は対象年と同じ年の夏データだけ、長期中央値は対象年より前の年の夏データだけを使用する。
 - 前年以前の夏データは、今年の自動判定開始3件へ含めない。

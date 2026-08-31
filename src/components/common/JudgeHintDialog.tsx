@@ -1,22 +1,19 @@
 import { PrimaryButton } from "../layout/PrimaryButton";
+import type { DemandCycle } from "../../domain/types";
 
 function JudgeHintContent({
   compact = false,
-  showSummerModeJudgeHint = false,
+  demandCycle = "normal",
 }: {
   compact?: boolean;
-  showSummerModeJudgeHint?: boolean;
+  demandCycle?: DemandCycle;
 }) {
+  const isSummerMode = demandCycle === "summer";
+
   return (
     <div style={{ lineHeight: 1.8 }}>
       {!compact ? (
         <>
-          <div>
-            ・アウトパック
-            <span style={{ color: "#00897b", fontWeight: 700 }}>
-              ➡多い側に寄せる
-            </span>
-          </div>
           <div>
             ・商品が大パックと小パックで分かれている
             <span style={{ color: "#ab47bc", fontWeight: 700 }}>
@@ -35,46 +32,48 @@ function JudgeHintContent({
           </div>
         </>
       ) : null}
-      <div>
-        15時：2つの間で迷う場合は選択肢を長押し。
-        <br />中間評価として記録し、値引率は
-        <span style={{ color: "#e65100", fontWeight: 700 }}>
-          少ない側の判定
-        </span>
-        で計算します。
-      </div>
-      {!showSummerModeJudgeHint ? (
-        <div style={{ marginTop: 8 }}>
-          17時以降：2つの間で迷う場合は選択肢を長押し。
-          <br />中間評価として記録し、値引率は
-          <span style={{ color: "#e65100", fontWeight: 700 }}>
-            多い側の判定
-          </span>
-          で計算します。
-        </div>
-      ) : null}
-      {showSummerModeJudgeHint ? (
-        <div
-          style={{
-            marginTop: 12,
-            padding: "10px 12px",
-            border: "1px solid #f59e0b",
-            borderRadius: 10,
-            background: "#fffbeb",
-            color: "#78350f",
-            fontSize: 14,
-            lineHeight: 1.6,
-          }}
-        >
-          <div style={{ fontWeight: 900 }}>夏季モード中（17:59まで）</div>
+      {isSummerMode ? (
+        <>
           <div>
-            残数判定で2つの間に迷う場合は選択肢を長押し。隣の項目を選ぶと中間評価として記録し、値引率は少ない側の判定で計算します。
+            15時・17時：2つの間で迷う場合は選択肢を長押し。
+            <br />中間評価として記録し、値引率は
+            <span style={{ color: "#e65100", fontWeight: 700 }}>
+              少ない側の判定
+            </span>
+            で計算します。
           </div>
-          <div>
+          <div style={{ marginTop: 8 }}>
+            18時以降：2つの間で迷う場合は選択肢を長押し。
+            <br />中間評価として記録し、値引率は
+            <span style={{ color: "#e65100", fontWeight: 700 }}>
+              多い側の判定
+            </span>
+            で計算します。
+          </div>
+          <div style={{ marginTop: 8 }}>
             明らかに多い場合は無理に下げず、夕方〜夜の売れ方も考慮して個別に判断します。
           </div>
-        </div>
-      ) : null}
+        </>
+      ) : (
+        <>
+          <div>
+            15時：2つの間で迷う場合は選択肢を長押し。
+            <br />中間評価として記録し、値引率は
+            <span style={{ color: "#e65100", fontWeight: 700 }}>
+              少ない側の判定
+            </span>
+            で計算します。
+          </div>
+          <div style={{ marginTop: 8 }}>
+            17時以降：2つの間で迷う場合は選択肢を長押し。
+            <br />中間評価として記録し、値引率は
+            <span style={{ color: "#e65100", fontWeight: 700 }}>
+              多い側の判定
+            </span>
+            で計算します。
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -82,11 +81,11 @@ function JudgeHintContent({
 export function JudgeHintDialog({
   onClose,
   compact = false,
-  showSummerModeJudgeHint = false,
+  demandCycle = "normal",
 }: {
   onClose: () => void;
   compact?: boolean;
-  showSummerModeJudgeHint?: boolean;
+  demandCycle?: DemandCycle;
 }) {
   return (
     <div
@@ -125,7 +124,7 @@ export function JudgeHintDialog({
 
         <JudgeHintContent
           compact={compact}
-          showSummerModeJudgeHint={showSummerModeJudgeHint}
+          demandCycle={demandCycle}
         />
 
         <div style={{ marginTop: 18 }}>

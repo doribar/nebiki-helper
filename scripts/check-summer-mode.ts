@@ -284,17 +284,20 @@ test("15. JST 18:00以降は夏季モードの迷った時案内を表示しな�
   );
 });
 
-test("16. 夏季モードの迷った時案内を既存ダイアログへ接続", () => {
+test("16. 迷った時案内はmode別に15/17境界と17/18境界だけを表示", () => {
   const dialogSource = readRepoFile("src/components/common/JudgeHintDialog.tsx");
-  const routerSource = readRepoFile("src/app/AppRouter.tsx");
+  const rateSource = readRepoFile("src/components/screens/RateDisplayScreen.tsx");
 
-  assert.match(dialogSource, /夏季モード中/);
-  assert.match(dialogSource, /残数判定/);
+  assert.match(dialogSource, /15時：/);
+  assert.match(dialogSource, /17時以降：/);
+  assert.match(dialogSource, /15時・17時：/);
+  assert.match(dialogSource, /18時以降：/);
   assert.match(dialogSource, /少ない側/);
+  assert.match(dialogSource, /多い側/);
   assert.match(dialogSource, /明らかに多い/);
   assert.match(dialogSource, /夕方.*夜/);
-  assert.match(routerSource, /showSummerModeJudgeHint/);
-  assert.match(routerSource, /shouldShowSummerModeJudgeHint/);
+  assert.doesNotMatch(dialogSource, /夏季モード中（17:59まで）/);
+  assert.match(rateSource, /<JudgeHintDialog[\s\S]*?demandCycle=\{demandCycle\}/);
 });
 
 let passed = 0;

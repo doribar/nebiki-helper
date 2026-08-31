@@ -10,10 +10,7 @@ import { DoneScreen } from "../components/screens/DoneScreen";
 import { Review19Screen } from "../components/screens/Review19Screen";
 import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresentation.ts";
-import {
-  isSummerModeAvailable,
-  shouldShowSummerModeJudgeHint,
-} from "../domain/demandCycle.ts";
+import { isSummerModeAvailable } from "../domain/demandCycle.ts";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -23,12 +20,6 @@ type AppRouterProps = {
 
 export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
   const { state, derived, actions } = app;
-  const summerModeBusinessDate = state.session?.date ?? state.sessionDraft.date;
-  const showSummerModeJudgeHint = shouldShowSummerModeJudgeHint({
-    demandCycle: derived.demandCycle,
-    businessDate: summerModeBusinessDate,
-    nowMs: (testNow ?? new Date()).getTime(),
-  });
   const handleReturnHome = () => {
     const ok = window.confirm(
       "トップ画面に戻りますか？\n現在の画面を離れます。必要ならキャンセルしてください。"
@@ -206,7 +197,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
               selection,
             );
           }}
-          showSummerModeJudgeHint={showSummerModeJudgeHint}
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           showDayBeforeHolidayNotice={derived.showDayBeforeHolidayNotice}
           showThreeDayHolidayMiddleNotice={derived.showThreeDayHolidayMiddleNotice}
