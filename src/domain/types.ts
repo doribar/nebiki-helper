@@ -249,6 +249,14 @@ export type HumanEvaluationResolutionReason =
   | "summer_1800_or_later"
   | "review19_observation"
   | "legacy_5_level";
+export type HumanEvaluationAdjustment = {
+  applied: true;
+  source: "human";
+  direction: "lower" | "higher";
+  steps: 1 | 2 | 3 | 4;
+  originalEvaluation: AreaCountEvaluation;
+  finalEvaluation: AreaCountEvaluation;
+};
 export type HumanEvaluationDetails = {
   humanEvaluationScore9: HumanEvaluationScore9;
   humanEvaluationScale: HumanEvaluationScale;
@@ -261,6 +269,8 @@ export type HumanEvaluationDetails = {
   demandCycle?: DemandCycle;
   evaluatedAt?: string;
   sessionDiscountTime?: DiscountTime;
+  /** 簡易操作等で自動判定を人間が何段動かしたか。欠損は補正操作なし。 */
+  evaluationAdjustment?: HumanEvaluationAdjustment;
 };
 export type AreaCountEvaluationSource = "manual" | "history";
 export type AreaRateAdjustment = -10 | -5 | 0 | 5 | 10;
@@ -288,6 +298,8 @@ export type BasisGuideDisplay = {
   bonusCalcParts?: string[];
   bonusTotal?: number;
   referenceText: string;
+  /** UI用の短い参照条件。保存済みreferenceTextの意味は変更しない。 */
+  referenceConditionLabel: string;
 };
 
 export type RateLine = {
@@ -866,6 +878,7 @@ export type UseNebikiAppDerived = {
   doneNextSessionInfo: DoneNextSessionInfo | null;
   review19Items: Review19AreaItem[];
   review19ReferenceLines: string[];
+  review19ReferenceLabel: string | null;
   editableAreaCounts: EditableAreaCountItem[];
   finalizedDayMemo: string;
   previousDayDiscardTarget: {
@@ -913,6 +926,7 @@ export type UseNebikiAppActions = {
     stapleItemCount?: number | null,
     humanEvaluationSelection?: HumanEvaluationSelection,
   ) => Promise<void>;
+  applyManyToSlightlyManyAdjustment: () => Promise<void>;
   getCurrentAreaCountRecommendation: (count: number) => AreaCountRecommendation;
   skipCurrentArea: () => void;
   chooseSkipTargetArea: (areaId: AreaId) => void;

@@ -591,6 +591,7 @@ export function createReview19Reference(
     date: reviewDraft.date,
     weekday: reviewDraft.weekday,
     discountTime: "19",
+    demandCycle,
     weather: resolvedWeather,
     applyObonRule,
   });

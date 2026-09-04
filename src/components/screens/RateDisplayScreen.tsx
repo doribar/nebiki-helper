@@ -42,6 +42,7 @@ type RateDisplayScreenProps = {
     bonusSummaryText?: string;
     bonusDetailLines?: string[];
     referenceText: string;
+    referenceConditionLabel: string;
   };
   pendingBanner?: {
     remainingCount: number;
@@ -57,6 +58,8 @@ type RateDisplayScreenProps = {
   humanEvaluationDetails?: HumanEvaluationDetails;
   canOverrideAreaCountEvaluation?: boolean;
   onOverrideAreaCountEvaluation?: (selection: HumanEvaluationSelection) => void;
+  canApplyManyToSlightlyManyAdjustment?: boolean;
+  onApplyManyToSlightlyManyAdjustment?: () => void;
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
   showThreeDayHolidayMiddleNotice?: boolean;
@@ -279,6 +282,8 @@ export function RateDisplayScreen({
   humanEvaluationDetails,
   canOverrideAreaCountEvaluation = false,
   onOverrideAreaCountEvaluation,
+  canApplyManyToSlightlyManyAdjustment = false,
+  onApplyManyToSlightlyManyAdjustment,
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
   showThreeDayHolidayMiddleNotice = false,
@@ -305,9 +310,7 @@ export function RateDisplayScreen({
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const manyColor = "#ff0000";
   const normalColor = "#008000";
-  const productAmountReferenceText = `${
-    demandCycle === "summer" ? "夏の" : ""
-  }${basisGuide.referenceText.replace(/を基準に考えて$/, "")}`;
+  const productAmountReferenceText = basisGuide.referenceConditionLabel;
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -465,7 +468,41 @@ export function RateDisplayScreen({
             lineHeight: 1.6,
           }}
         >
-          中央値判定：<strong>{medianEvaluationDisplay.text}</strong>
+          <div>
+            中央値判定：<strong>{medianEvaluationDisplay.text}</strong>
+          </div>
+          {humanEvaluationDetails?.evaluationAdjustment?.applied ? (
+            <div style={{ marginTop: 6 }}>
+              人間補正：<strong>1段弱める</strong>
+              <br />
+              採用判定：
+              <strong>
+                {evaluationText(
+                  humanEvaluationDetails.evaluationAdjustment.finalEvaluation,
+                )}
+              </strong>
+            </div>
+          ) : canApplyManyToSlightlyManyAdjustment &&
+            onApplyManyToSlightlyManyAdjustment ? (
+            <button
+              type="button"
+              onClick={onApplyManyToSlightlyManyAdjustment}
+              style={{
+                width: "100%",
+                minHeight: 44,
+                marginTop: 8,
+                border: "1px solid #60a5fa",
+                borderRadius: 10,
+                background: "#fff",
+                color: "#1e3a8a",
+                fontSize: 14,
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              やや多いにする
+            </button>
+          ) : null}
         </section>
       ) : null}
 
@@ -612,7 +649,6 @@ export function RateDisplayScreen({
           <>
             <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
               <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
-              <span>を基準に考えて</span>
               <br />
               <span>各商品の量が「</span>
               <span style={{ color: "#ff0000", fontWeight: 700 }}>

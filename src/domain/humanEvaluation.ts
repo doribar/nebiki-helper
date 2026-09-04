@@ -3,6 +3,7 @@ import type {
   DemandCycle,
   DiscountTime,
   HumanEvaluationDetails,
+  HumanEvaluationAdjustment,
   HumanEvaluationResolutionDirection,
   HumanEvaluationResolutionReason,
   HumanEvaluationScore9,
@@ -37,6 +38,50 @@ function isHumanEvaluationScore9(value: unknown): value is HumanEvaluationScore9
 
 function getEvaluationIndex(value: AreaCountEvaluation): number {
   return EVALUATIONS_ASCENDING.indexOf(value);
+}
+
+function normalizeHumanEvaluationAdjustment(
+  raw: unknown,
+  automaticEvaluation: AreaCountEvaluation | undefined,
+  resolvedEvaluation: AreaCountEvaluation | undefined,
+): HumanEvaluationAdjustment | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const source = raw as Partial<HumanEvaluationAdjustment>;
+  if (
+    source.applied !== true ||
+    source.source !== "human" ||
+    (source.direction !== "lower" && source.direction !== "higher") ||
+    !Number.isInteger(source.steps) ||
+    Number(source.steps) < 1 ||
+    Number(source.steps) > 4 ||
+    !isAreaCountEvaluation(source.originalEvaluation) ||
+    !isAreaCountEvaluation(source.finalEvaluation)
+  ) {
+    return undefined;
+  }
+
+  const steps = Number(source.steps) as HumanEvaluationAdjustment["steps"];
+  const originalIndex = getEvaluationIndex(source.originalEvaluation);
+  const finalIndex = getEvaluationIndex(source.finalEvaluation);
+  const expectedFinalIndex = source.direction === "lower"
+    ? originalIndex - steps
+    : originalIndex + steps;
+  if (
+    finalIndex !== expectedFinalIndex ||
+    automaticEvaluation !== source.originalEvaluation ||
+    resolvedEvaluation !== source.finalEvaluation
+  ) {
+    return undefined;
+  }
+
+  return {
+    applied: true,
+    source: "human",
+    direction: source.direction,
+    steps,
+    originalEvaluation: source.originalEvaluation,
+    finalEvaluation: source.finalEvaluation,
+  };
 }
 
 export function areHumanEvaluationsAdjacent(
@@ -146,6 +191,9 @@ export function normalizeHumanEvaluationDetails(
     return undefined;
   }
 
+  const automaticEvaluation = isAreaCountEvaluation(source.automaticEvaluation)
+    ? source.automaticEvaluation
+    : undefined;
   const resolvedEvaluation = isAreaCountEvaluation(source.resolvedEvaluation)
     ? source.resolvedEvaluation
     : undefined;
@@ -167,6 +215,13 @@ export function normalizeHumanEvaluationDetails(
     source.demandCycle === "summer" || source.demandCycle === "normal"
       ? source.demandCycle
       : undefined;
+  const evaluationAdjustment = source.humanEvaluationScale === 9
+    ? normalizeHumanEvaluationAdjustment(
+        source.evaluationAdjustment,
+        automaticEvaluation,
+        resolvedEvaluation,
+      )
+    : undefined;
   const resolutionDirection =
     source.resolutionDirection as HumanEvaluationResolutionDirection;
   const resolutionReason = source.resolutionReason as HumanEvaluationResolutionReason;
@@ -251,15 +306,14 @@ export function normalizeHumanEvaluationDetails(
     humanEvaluationScore9: source.humanEvaluationScore9,
     humanEvaluationScale: source.humanEvaluationScale,
     humanEvaluationSelections: normalizedSelection.humanEvaluationSelections,
-    automaticEvaluation: isAreaCountEvaluation(source.automaticEvaluation)
-      ? source.automaticEvaluation
-      : undefined,
+    automaticEvaluation,
     resolvedEvaluation,
     resolutionDirection,
     resolutionReason,
     demandCycle,
     evaluatedAt,
     sessionDiscountTime,
+    evaluationAdjustment,
   };
 }
 

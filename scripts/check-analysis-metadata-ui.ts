@@ -195,10 +195,24 @@ test("祝日説明は指示ではなく適用中基準の受動説明", () => {
   }
 });
 
-test("夏季モードの個別量表示に夏の接頭辞を付ける", () => {
+test("夏季モードの個別量表示に中黒区切りの夏接頭辞を付ける", () => {
   const rateScreen = source("src/components/screens/RateDisplayScreen.tsx");
   const router = source("src/app/AppRouter.tsx");
-  assert.match(rateScreen, /demandCycle === "summer" \? "夏の" : ""/);
+  const guide = getBasisGuideDisplay({
+    date: "2026-08-04",
+    weekday: 2,
+    discountTime: "17",
+    demandCycle: "summer",
+    weather: resolveWeatherInputForDiscount(
+      {
+        hourlyForecasts: createDefaultHourlyForecasts(),
+        afterRainSky: null,
+      },
+      "17",
+    ),
+  });
+  assert.equal(guide.referenceConditionLabel, "夏・火曜日・17時");
+  assert.match(rateScreen, /basisGuide\.referenceConditionLabel/);
   assert.match(router, /<RateDisplayScreen[\s\S]*?demandCycle=\{derived\.demandCycle\}/);
 });
 

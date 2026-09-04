@@ -35,6 +35,7 @@ type AreaJudgeScreenProps = {
     bonusSummaryText?: string;
     bonusDetailLines?: string[];
     referenceText: string;
+    referenceConditionLabel: string;
   };
   pendingBanner?: {
     remainingCount: number;
@@ -171,11 +172,9 @@ function getRecommendationColor(
 }
 
 function BasisTimeMiniPanel({
-  weekdayText,
-  timeText,
+  referenceConditionLabel,
 }: {
-  weekdayText: string;
-  timeText: string;
+  referenceConditionLabel: string;
 }) {
   return (
     <div
@@ -191,14 +190,7 @@ function BasisTimeMiniPanel({
         lineHeight: 1.5,
       }}
     >
-      <div>
-        <strong>今日の曜日：</strong>
-        {weekdayText}
-      </div>
-      <div>
-        <strong>値引時刻：</strong>
-        {timeText}
-      </div>
+      <div style={{ fontWeight: 900 }}>{referenceConditionLabel}</div>
     </div>
   );
 }
@@ -812,8 +804,7 @@ export function AreaJudgeScreen({
                 </div>
               ) : null}
               <BasisTimeMiniPanel
-                weekdayText={weekdayText}
-                timeText={timeText}
+                referenceConditionLabel={basisGuide.referenceConditionLabel}
               />
               <div ref={normalManualJudgeButtonRef}>
                 <HumanEvaluationSelector
@@ -828,7 +819,9 @@ export function AreaJudgeScreen({
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            <BasisTimeMiniPanel weekdayText={weekdayText} timeText={timeText} />
+            <BasisTimeMiniPanel
+              referenceConditionLabel={basisGuide.referenceConditionLabel}
+            />
             <JudgeOptionButton
               label="多い"
               selected={false}

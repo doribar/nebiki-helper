@@ -95,6 +95,7 @@ function getHumanEvaluationSelection(
 
 type Review19ScreenProps = {
   items: Review19AreaItem[];
+  referenceConditionLabel: string | null;
   calculatorDraftScope: string;
   onCompleteArea: (
     areaId: AreaId,
@@ -115,6 +116,7 @@ type Review19ScreenProps = {
 
 export function Review19Screen({
   items,
+  referenceConditionLabel,
   calculatorDraftScope,
   onCompleteArea,
   onSave,
@@ -482,6 +484,25 @@ export function Review19Screen({
             {activeItem.areaName}
           </div>
         </div>
+
+        {referenceConditionLabel ? (
+          <div
+            aria-label="19時チェック判定基準"
+            style={{
+              marginBottom: 12,
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid #e0e0e0",
+              background: "#f7f7f7",
+              color: "#333",
+              fontSize: 13,
+              fontWeight: 900,
+              lineHeight: 1.5,
+            }}
+          >
+            {referenceConditionLabel}
+          </div>
+        ) : null}
 
         {activeItem.excluded ? (
           <div

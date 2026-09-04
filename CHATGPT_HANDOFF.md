@@ -1,6 +1,6 @@
 # 値引ヘルパー 引継ぎメモ
 
-最終更新: 2026-08-30（日本時間）
+最終更新: 2026-09-04（日本時間）
 
 ## 正本と作業ルール
 
@@ -11,12 +11,11 @@
 
 ## 現行リリース情報
 
-- 9-17 baseline ZIP: `nebiki-helper-20260830-1125.zip`（SHA-256 `6e03571744550078922973d491e5694d1454928d142de8dc6efbcf6fa98fe9d5`）
-- 9-18差分比較の正本は上記9-17 ZIPとする。
-- `appVersion`: `2026.8.9-18`
+- 9-19の差分比較正本は、検証済み9-18リリース `nebiki-helper-20260830-2157.zip` とする。
+- `appVersion`: `2026.8.9-19`
 - `dataSchemaVersion`: `3`
-- `buildId`: `build-20260830-215459-jst`（CHANGE REPORTと最終distに一致）。
-- リリースZIP: `nebiki-helper-20260830-2157.zip`。SHA-256は完成ZIPそのものを再検査した最終報告を正本とする。
+- `buildId`: `build-20260904-173214-jst`（CHANGE REPORTと最終distに一致）。
+- リリースZIP: `nebiki-helper-20260904-2218.zip`。SHA-256は、完成ZIPそのものを再openして検査した9-19最終報告を正本とする。
 
 ## 値引ヘルパーの運用目的
 
@@ -215,6 +214,16 @@ Storage:
 - 個別量側「迷ったら…」は、通常モードで `15時=少ない側 / 17時以降=多い側`、夏季モードで `15時・17時=少ない側 / 18時以降=多い側` の1組だけを表示する。夏季の内部even-score解決は以前からJST 18:00境界で正しかったため、計算ロジックは変更せず表示を正本へ合わせた。
 - 「アウトパック → 多い側に寄せる」案内だけをUIから削除した。大パックだけ値引、期限が近いものだけ値引の案内、およびアウトパックに関係し得る他のデータ／ロジックは変更しない。
 - storage、IndexedDB、Supabase、DB、SQL、record schemaには変更を加えず、`dataSchemaVersion=3`を維持する。
+
+## 参照条件ラベル／manyの1段補正（2026.8.9-19）
+
+- エリア手動判定とRateDisplayの基準表示を共通formatterへ統一した。normalは `火曜日・15時`、summerは `夏・火曜日・17時` の形式で、区切りは中点だけを使い、「を基準に考えて」は表示しない。
+- 表示曜日は今日の実曜日ではなく、既存の祝日・祝日前日・三連休中日・お盆・曜日overrideを解決済みの `IndividualAmountReferenceContext.referenceWeekday/referenceWeekdayGroup` を使う。今回の変更で参照曜日の選択や中央値履歴条件は変えない。
+- Review19も同じformatterを使うが、現場のチェック時刻に合わせて表示時刻だけ `19` を明示し、内部referenceが19時30分でもUIへ「19時30分」を出さない。Review19にはquick adjustmentを追加しない。
+- `やや多いにする` は `autoEvaluation=many` かつhistory判定で、normal 15時またはsummer 15時・17時だけ表示する。normal 17時以降、summer 18時以降、他のauto判定では非表示。
+- 押下しても元の自動判定は `many` のまま保持する。既存9段階選択の `slightly_many` を通常のjudge/persist経路へ流し、`humanEvaluationDetails.evaluationAdjustment` に `source=human / direction=lower / steps=1 / originalEvaluation=many / finalEvaluation=slightly_many` をoptional保存する。既存の最終判定、area rate +5、snapshot、export、cloud detailsへ自然に伝播する。
+- 操作なしではadjustment metadataを生成せず、人間の明示同意とは扱わない。従来の5段階フル手動選択も残す。旧recordは新fieldなしで読み込め、物理migrationは不要。
+- rate計算、全体値引補正、forced 50、raw9／even resolution、Review19 observation、productionAnalysis、normal／summer／Obon、fixed-time隔離、IndexedDB／localStorage、Supabase／SQLは変更しない。`dataSchemaVersion=3`を維持する。
 
 ## 全体値引補正
 

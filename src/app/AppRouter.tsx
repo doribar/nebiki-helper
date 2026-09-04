@@ -11,6 +11,7 @@ import { Review19Screen } from "../components/screens/Review19Screen";
 import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresentation.ts";
 import { isSummerModeAvailable } from "../domain/demandCycle.ts";
+import { canApplyManyToSlightlyManyAdjustment } from "../domain/areaEvaluationAdjustment.ts";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -197,6 +198,22 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
               selection,
             );
           }}
+          canApplyManyToSlightlyManyAdjustment={Boolean(
+            state.currentAreaId &&
+            canApplyManyToSlightlyManyAdjustment({
+              demandCycle: derived.demandCycle,
+              discountTime: state.session.discountTime,
+              automaticEvaluation:
+                state.areaProgressMap[state.currentAreaId]
+                  ?.areaCountEvaluation,
+              evaluationSource:
+                state.areaProgressMap[state.currentAreaId]
+                  ?.areaCountEvaluationSource,
+            }),
+          )}
+          onApplyManyToSlightlyManyAdjustment={
+            actions.applyManyToSlightlyManyAdjustment
+          }
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           showDayBeforeHolidayNotice={derived.showDayBeforeHolidayNotice}
           showThreeDayHolidayMiddleNotice={derived.showThreeDayHolidayMiddleNotice}
@@ -259,6 +276,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       return (
         <Review19Screen
           items={derived.review19Items}
+          referenceConditionLabel={derived.review19ReferenceLabel}
           calculatorDraftScope={
             state.review19?.sessionStartedAt ?? state.session?.startedAt ?? "review19-session"
           }

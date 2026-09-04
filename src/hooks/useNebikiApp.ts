@@ -20,6 +20,7 @@ import type {
   AreaRateAdjustment,
   DemandCycle,
   HumanEvaluationDetails,
+  HumanEvaluationAdjustment,
   HumanEvaluationSelection,
   SupabaseBackfillResult,
   GlobalDiscountAdjustmentPercent,
@@ -40,6 +41,7 @@ import {
 } from "../domain/area";
 import {
   getBasisGuideDisplay,
+  getReferenceConditionLabel,
   getWeatherGuideText,
   getWeekdayBaseInfo,
   buildMergedBonusDisplay,
@@ -298,11 +300,16 @@ import {
   type DemandCycleState,
 } from "../domain/demandCycleStorage.ts";
 import {
+  createHumanEvaluationSelection,
   createReview19HumanEvaluationDetails,
   getEvaluationFromOddHumanScore,
   resolveHumanEvaluationDetails,
   resolveHumanEvaluationForDiscount,
 } from "../domain/humanEvaluation.ts";
+import {
+  canApplyManyToSlightlyManyAdjustment,
+  createManyToSlightlyManyAdjustment,
+} from "../domain/areaEvaluationAdjustment.ts";
 import {
   buildAnalysisWeatherContext,
   buildSessionAnalysisCalendarContext,
@@ -1369,6 +1376,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       date: state.session.date,
       weekday: state.session.weekday,
       discountTime: targetDiscountTime,
+      demandCycle: normalizeDemandCycle(state.session.demandCycle),
       weather: resolvedWeather,
       applyObonRule,
     });
@@ -1503,6 +1511,7 @@ const lateSkipNotice = useMemo(() => {
     date: sessionSource.date,
     weekday: sessionSource.weekday,
     discountTime: sessionSource.discountTime,
+    demandCycle: normalizeDemandCycle(sessionSource.demandCycle),
     weather: sessionSourceResolvedWeather,
     applyObonRule,
   });
@@ -1522,6 +1531,7 @@ const lateSkipNotice = useMemo(() => {
 }, [
   sessionSource.weekday,
   sessionSource.discountTime,
+  sessionSource.demandCycle,
   sessionSourceResolvedWeather,
   lateTimeBonusNotice,
   lateTimeBonus,
@@ -1545,6 +1555,10 @@ const lateSkipNotice = useMemo(() => {
       referenceText: basisGuide.referenceText.replace(
         "15時を基準に考えて",
         "16時を基準に考えて",
+      ),
+      referenceConditionLabel: basisGuide.referenceConditionLabel.replace(
+        /15時$/,
+        "16時",
       ),
     };
   }, [basisGuide, nowMs, state.session]);
@@ -1806,6 +1820,21 @@ const lateSkipNotice = useMemo(() => {
 
     return lines;
   }, [state.review19]);
+
+  const review19ReferenceLabel = useMemo(() => {
+    const reference = state.review19?.reference;
+    if (!reference) return null;
+    return getReferenceConditionLabel({
+      date: reference.date,
+      weekday: reference.weekday,
+      discountTime: "19",
+      demandCycle: normalizeDemandCycle(
+        state.review19?.demandCycle ?? reference.demandCycle,
+      ),
+      applyObonRule,
+      displayTimeText: "19時",
+    });
+  }, [state.review19, applyObonRule]);
 
   const savedReview19Records = (() => {
     void review19RecordsVersion;
@@ -3039,6 +3068,7 @@ const lateSkipNotice = useMemo(() => {
     manualAreaCountEvaluation?: AreaCountEvaluation,
     stapleItemCount?: number | null,
     humanEvaluationSelection?: HumanEvaluationSelection,
+    evaluationAdjustment?: HumanEvaluationAdjustment,
   ) {
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
@@ -3093,10 +3123,20 @@ const lateSkipNotice = useMemo(() => {
             rateAdjustment: areaCountRecommendation.areaRateAdjustment,
           }
         : undefined;
+    if (
+      evaluationAdjustment &&
+      (readyAreaCountResult?.evaluation !==
+        evaluationAdjustment.originalEvaluation ||
+        resolvedHumanEvaluationDetails?.resolvedEvaluation !==
+          evaluationAdjustment.finalEvaluation)
+    ) {
+      return;
+    }
     const humanEvaluationDetails = resolvedHumanEvaluationDetails
       ? {
           ...resolvedHumanEvaluationDetails,
           automaticEvaluation: readyAreaCountResult?.evaluation,
+          ...(evaluationAdjustment ? { evaluationAdjustment } : {}),
         }
       : undefined;
     const manualAreaCountResult =
@@ -3225,6 +3265,39 @@ const lateSkipNotice = useMemo(() => {
         ? { ...nextState, finalizedDayRecordId: finalizedDayData.record.recordId }
         : nextState;
     });
+  }
+
+  async function applyManyToSlightlyManyAdjustment(): Promise<void> {
+    if (!state.session || !state.currentAreaId) return;
+    const progress = state.areaProgressMap[state.currentAreaId];
+    if (!progress) return;
+    const automaticEvaluation =
+      progress.humanEvaluationDetails?.automaticEvaluation ??
+      (progress.areaCountEvaluationSource === "history"
+        ? progress.areaCountEvaluation
+        : undefined);
+    if (
+      typeof progress.areaCount !== "number" ||
+      !canApplyManyToSlightlyManyAdjustment({
+        demandCycle: normalizeDemandCycle(state.session.demandCycle),
+        discountTime: state.session.discountTime,
+        automaticEvaluation,
+        evaluationSource: progress.areaCountEvaluationSource,
+      })
+    ) {
+      return;
+    }
+
+    const selection = createHumanEvaluationSelection("slightly_many");
+    if (!selection) return;
+    await judgeCurrentArea(
+      "normal",
+      progress.areaCount,
+      undefined,
+      undefined,
+      selection,
+      createManyToSlightlyManyAdjustment(),
+    );
   }
 
   function goBackOneScreen() {
@@ -5232,6 +5305,7 @@ const lateSkipNotice = useMemo(() => {
   doneNextSessionInfo,
   review19Items,
   review19ReferenceLines,
+  review19ReferenceLabel,
   editableAreaCounts,
   finalizedDayMemo: activeFinalizedDayData?.memo ?? "",
   previousDayDiscardTarget,
@@ -5262,6 +5336,7 @@ const lateSkipNotice = useMemo(() => {
       markBentoJudgeGuideShown,
       confirmDailyNotice,
       judgeCurrentArea,
+      applyManyToSlightlyManyAdjustment,
       getCurrentAreaCountRecommendation,
       skipCurrentArea,
       chooseSkipTargetArea,

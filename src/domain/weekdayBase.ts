@@ -1,5 +1,6 @@
 import type {
   BasisGuideDisplay,
+  DemandCycle,
   DiscountTime,
   TempLevel,
   WeatherGuideText,
@@ -182,6 +183,58 @@ export function getIndividualAmountReferenceContext(params: {
     reason: "actual_weekday",
     referenceText: `${getActualWeekdayText(params.weekday)}の${timeText}を基準に考えて`,
   };
+}
+
+function getReferenceWeekdayConditionText(
+  reference: IndividualAmountReferenceContext,
+): string {
+  if (reference.kind === "three_day_holiday_middle") {
+    return "日曜日・金曜日・土曜日・中間";
+  }
+  if (reference.referenceWeekday !== null) {
+    return getActualWeekdayText(reference.referenceWeekday);
+  }
+
+  switch (reference.referenceWeekdayGroup) {
+    case "日":
+      return "日曜日";
+    case "金土":
+      return "金曜日・土曜日";
+    case "火木":
+      return "火曜日・木曜日";
+    case "月水":
+      return "月曜日・水曜日";
+    default:
+      return "参照曜日不明";
+  }
+}
+
+/** 判定で解決済みの参照曜日を、画面共通の短い条件ラベルにする。 */
+export function formatReferenceConditionLabel(params: {
+  demandCycle?: DemandCycle;
+  reference: IndividualAmountReferenceContext;
+  displayTimeText?: string;
+}): string {
+  const prefix = params.demandCycle === "summer" ? "夏・" : "";
+  const timeText =
+    params.displayTimeText ??
+    getBasisTimeText(params.reference.referenceDiscountTime);
+  return `${prefix}${getReferenceWeekdayConditionText(params.reference)}・${timeText}`;
+}
+
+export function getReferenceConditionLabel(params: {
+  date?: string;
+  weekday: number;
+  discountTime: DiscountTime;
+  demandCycle?: DemandCycle;
+  applyObonRule?: boolean;
+  displayTimeText?: string;
+}): string {
+  return formatReferenceConditionLabel({
+    demandCycle: params.demandCycle,
+    reference: getIndividualAmountReferenceContext(params),
+    displayTimeText: params.displayTimeText,
+  });
 }
 
 export function getOriginalWeekdayBase(weekday: number): WeekdayBaseLabel {
@@ -913,6 +966,7 @@ export function getBasisGuideDisplay(params: {
   date?: string;
   weekday: number;
   discountTime: DiscountTime;
+  demandCycle?: DemandCycle;
   weather: ResolvedWeatherInput;
   applyObonRule?: boolean;
 }): BasisGuideDisplay {
@@ -941,6 +995,10 @@ export function getBasisGuideDisplay(params: {
     bonusCalcParts: resolved.bonusCalcParts,
     bonusTotal: resolved.baseRateBonus,
     referenceText: individualAmountReference.referenceText,
+    referenceConditionLabel: formatReferenceConditionLabel({
+      demandCycle: params.demandCycle,
+      reference: individualAmountReference,
+    }),
   };
 }
 

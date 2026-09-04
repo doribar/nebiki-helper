@@ -145,6 +145,14 @@ npm run build
 - 「迷ったら…」は通常モードで15時／17時以降、夏季モードで15時・17時／18時以降の境界だけを表示します。夏季even-scoreの内部解決は以前からJST 18:00境界で正しく、今回変更したのはUI案内だけです。
 - 「アウトパック → 多い側に寄せる」の案内だけを削除し、大パックだけ値引／期限が近いものだけ値引の案内は維持します。
 
+## 参照条件ラベルと1段補正（2026.8.9-19）
+
+- 15時・17時等のエリア手動判定と19時チェックは、実際に採用された参照曜日を使い、通常は `火曜日・17時`、夏季は `夏・火曜日・17時` のような短い共通ラベルを表示します。Review19は内部の参照時刻にかかわらずUI上を `19時` とします。
+- 参照曜日は実曜日を再計算せず、既存の祝日・祝日前日・三連休中日・お盆・曜日overrideを解決済みの `IndividualAmountReferenceContext` から取得します。履歴抽出条件と曜日参照ロジックは変更しません。
+- 自動中央値判定が `many` の場合だけ、normal 15時、summer 15時・17時に `やや多いにする` を表示します。Review19、normal 17時以降、summer 18時以降、`many` 以外では表示しません。
+- 押下時は元の自動判定 `many` を保持し、optionalな `humanEvaluationDetails.evaluationAdjustment` に人間によるlower 1 stepを記録し、既存の最終判定／値引率経路へ `slightly_many` を渡します。補正なしを人間の明示同意とは記録しません。
+- 既存5段階手動判定、raw9、全体値引補正、値引率計算順、Review19の人間観測、productionAnalysis、IndexedDB archive、Supabase同期は維持します。optional metadata追加のため `dataSchemaVersion` は3のままです。
+
 ## 全体値引補正（2026.8.9-13）
 
 - StartScreenで人間が `-5% / なし / +5%` を明示選択します。曜日、中央値、human判定、商品、weather、temperature等の既存計算を終えた通常表示率へ、最後に5 percentage pointsを1回だけ加減し、0〜50%へclampします。
@@ -317,8 +325,8 @@ localとremoteは上記identityでdedupeします。異なるrevisionでは新�
 
 ## バージョン
 
-- `appVersion`: `2026.8.9-18`
+- `appVersion`: `2026.8.9-19`
 - `dataSchemaVersion`: `3`
-- `buildId`: 最終production build時のJST値（CHANGE REPORT記載値）
+- `buildId`: `build-20260904-173214-jst`
 
-今回の実装・検証結果と実ブラウザ確認は `CHANGE_REPORT_2026.8.9-18.md` を参照してください。
+今回の実装・検証結果と実ブラウザ確認は `CHANGE_REPORT_2026.8.9-19.md` を参照してください。
