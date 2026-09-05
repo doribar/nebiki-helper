@@ -96,7 +96,6 @@ import {
 } from "../domain/hourlyWeather.ts";
 import {
   advanceReview19SourceUpdatedAt,
-  createInitialReview19Result,
   buildReview19DataQuality,
   getReview19AreaItems,
   REVIEW19_EXCLUDE_REASON_TEXT,
@@ -254,7 +253,11 @@ import {
   getNormalFlowScreenForArea,
   hasRemainingNormalFlowArea,
 } from "./nebikiApp/normalFlow.ts";
-import { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
+import {
+  createReview19StartState,
+  getAutomaticReview19TransitionKey,
+  selectReview19SourceState,
+} from "./nebikiApp/review19Flow.ts";
 import {
   buildAutoTimeSwitchDialogText,
   createAreaProgressMapWithAutoSkippedAreas,
@@ -272,7 +275,6 @@ import {
   createReview19DaySnapshot,
   createReview19Reference,
   createReview19Snapshot,
-  createReview19WeatherDraft,
   selectLatestReview19DayCheck,
 } from "./nebikiApp/sessionSnapshots.ts";
 import {
@@ -2152,6 +2154,7 @@ const lateSkipNotice = useMemo(() => {
     state.session?.startedAt,
     doneNextSessionInfo?.canStart,
     doneNextSessionInfo?.targetDiscountTime,
+    nowMs,
   ]);
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
@@ -3901,6 +3904,22 @@ const lateSkipNotice = useMemo(() => {
   }
 
 
+  function buildReview19StartState(
+    currentState: AppState,
+    sourceState: AppState,
+    now: Date,
+  ): AppState {
+    return createReview19StartState({
+      currentState,
+      sourceState,
+      now,
+      snapshots: isTestMode || !sourceState.session
+        ? []
+        : getHistoricalDailySessionSnapshotsForDate(sourceState.session.date),
+      lastSessionWeather,
+    });
+  }
+
   function startReview19Manually() {
     setUndoSnapshot(null);
     setUndoNotice(null);
@@ -3927,45 +3946,7 @@ const lateSkipNotice = useMemo(() => {
       const session = sourceStateForReview?.session;
       if (!session) return prev;
 
-      const reviewDraft = createReview19WeatherDraft(session);
-      const initialReview19 = createInitialReview19Result({
-        date: session.date,
-        demandCycle: normalizeDemandCycle(session.demandCycle),
-        sessionStartedAt: session.startedAt,
-        reviewStartedAt: now.toISOString(),
-        excludedAreaIds: sourceStateForReview.review19ExcludedAreaIds,
-      });
-      const reviewTemperatureComfort = resolveSessionTemperatureComfort({
-        date: reviewDraft.date,
-        discountTime: "19",
-        weather: reviewDraft.weather,
-        snapshots: isTestMode
-          ? []
-          : getHistoricalDailySessionSnapshotsForDate(reviewDraft.date),
-        lastSessionWeather,
-        previousSession: session,
-      }).analysis;
-
-      return {
-        ...prev,
-        session,
-        screen: "review19",
-        sessionDraft: reviewDraft,
-        areaProgressMap: sourceStateForReview.areaProgressMap,
-        review19ExcludedAreaIds: sourceStateForReview.review19ExcludedAreaIds,
-        currentAreaId: null,
-        currentFlow: "normal",
-        pendingDeferredAreaIds: [],
-        timeSwitchNotice: null,
-        review19: {
-          ...initialReview19,
-          reference: createReview19Reference(
-            reviewDraft,
-            reviewTemperatureComfort,
-            supportsObonCalendarRule(session.appVersion),
-          ),
-        },
-      };
+      return buildReview19StartState(prev, sourceStateForReview, now);
     });
   }
 
@@ -4557,10 +4538,25 @@ const lateSkipNotice = useMemo(() => {
     if (!state.session) return;
 
     const previousDiscountTime = state.session.discountTime;
-    const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, new Date(nowMs));
+    const now = new Date(nowMs);
+    const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, now);
     if (!nextInfo?.canStart) return;
+    // 18:30入力へ既に移行した場合は、保全用の17時sessionが残っていても救済しない。
+    const previous1830TransitionKey = [
+      state.session.date, state.session.startedAt, "17", "18",
+    ].join("|");
+    const review19TransitionKey = options?.autoTransition
+      ? getAutomaticReview19TransitionKey({
+          state,
+          now,
+          records: archivedReview19RecordsRef.current,
+          isTestMode,
+          hasTransitionedTo1830: timeSwitchTarget === "18" ||
+            autoTransitionInFlightKeyRef.current === previous1830TransitionKey,
+        })
+      : null;
     const autoTransitionKey = options?.autoTransition
-      ? [
+      ? review19TransitionKey ?? [
           state.session.date,
           state.session.startedAt,
           previousDiscountTime,
@@ -4596,7 +4592,31 @@ const lateSkipNotice = useMemo(() => {
           "auto-time-transition-snapshot",
           snapshotWriteResult.attempts,
         );
+        if (review19TransitionKey && !snapshotWriteResult.ok) {
+          autoTransitionInFlightKeyRef.current = null;
+          window.alert("17時の記録を保存できませんでした。空き容量を確認して、もう一度操作してください。");
+          return;
+        }
       }
+    }
+
+    if (review19TransitionKey) {
+      if (!persistReview19SourceStateSafely(
+        sourceState,
+        "review19-source-before-auto-review19",
+      )) {
+        autoTransitionInFlightKeyRef.current = null;
+        return;
+      }
+      const reviewState = buildReview19StartState(sourceState, sourceState, now);
+      window.alert("19時チェックの時間になったため、19時チェックに進みます。");
+      setState(reviewState);
+      setTimeSwitchTarget(null);
+      setAreaJudgeSelection(null);
+      setResumeTargetScreen(null);
+      setUndoSnapshot(null);
+      setUndoNotice(null);
+      return;
     }
 
     const prioritizeUnfinishedAreas =

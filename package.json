@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-19",
+  "version": "2026.8.9-20",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -58,7 +58,8 @@
     "check:storage-diagnostics": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-storage-diagnostics.ts",
     "check:area-count-direct-backfill": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-direct-backfill.ts",
     "check:global-discount-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-global-discount-adjustment.ts",
-    "check:reference-label-quick-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-reference-label-quick-adjustment.ts"
+    "check:reference-label-quick-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-reference-label-quick-adjustment.ts",
+    "check:review19-priority-transition": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-priority-transition.ts"
   },
   "dependencies": {
     "react": "^19.2.4",
