@@ -208,7 +208,7 @@ test("28. 19時チェックと1日データを全件・最新の4導線へ分離
     assert.ok(settingsSource.includes(label));
   }
   assert.equal(settingsSource.includes("全データを出力"), false);
-  assert.ok(routerSource.includes("actions.exportCompletedReview19Data()"));
+  assert.ok(routerSource.includes("onCopyReview19Data={actions.copyCompletedReview19Data}"));
   assert.ok(routerSource.includes("actions.exportCompletedDailyData(memo)"));
 });
 test("29. 天候入力の予報キーは16〜21時だけ", () => {

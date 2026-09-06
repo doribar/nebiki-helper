@@ -4862,7 +4862,7 @@ const lateSkipNotice = useMemo(() => {
     );
   }
 
-  function exportCompletedReview19Data(): boolean {
+  async function copyCompletedReview19Data(): Promise<boolean> {
     if (
       state.screen !== "review19_done" ||
       !state.review19 ||
@@ -4871,15 +4871,20 @@ const lateSkipNotice = useMemo(() => {
     ) {
       return false;
     }
-    const exportedAt = getRuntimeNow().toISOString();
-    const payload = buildDirectReview19DataExportPayload({
-      record: state.review19,
-      exportedAt,
-    });
-    return downloadJsonFile(
-      payload,
-      `nebiki-review19-${state.review19.date}.json`,
-    );
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        return false;
+      }
+      const exportedAt = getRuntimeNow().toISOString();
+      const payload = buildDirectReview19DataExportPayload({
+        record: state.review19,
+        exportedAt,
+      });
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function exportCompletedDailyData(memo: string | null): Promise<boolean> {
@@ -5377,7 +5382,7 @@ const lateSkipNotice = useMemo(() => {
       exportLatestReview19Data,
       exportAllDailyData,
       exportLatestDailyData,
-      exportCompletedReview19Data,
+      copyCompletedReview19Data,
       exportCompletedDailyData,
       start19DiscountAfterReview,
       startNextDoneSession,

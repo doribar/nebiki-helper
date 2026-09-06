@@ -123,14 +123,14 @@ test("20:30正式確定はdoneで再構築せずBack・再入力でも同じ正�
   assert.equal(routerSource.includes("shouldSkipFinalDoneScreen"), false);
 });
 
-test("19:00チェックは入力中・完了直後の戻ると残数修正と直接出力を備える", () => {
+test("19:00チェックは入力中・完了直後の戻ると残数修正とコピーを備える", () => {
   assert.ok(reviewSource.includes("入力した残数を修正"));
   assert.match(reviewSource, /countCorrectionReturnAreaId/);
   assert.match(reviewSource, /onGoBack\(\)/);
   assert.ok(reviewDoneSource.includes("戻る"));
-  assert.ok(reviewDoneSource.includes("19:00チェックデータを出力"));
+  assert.ok(reviewDoneSource.includes("ChatGPT用にコピー"));
   assert.match(routerSource, /onGoBack=\{actions\.goBackOneScreen\}/);
-  assert.match(routerSource, /actions\.exportCompletedReview19Data\(\)/);
+  assert.match(routerSource, /onCopyReview19Data=\{actions\.copyCompletedReview19Data\}/);
 });
 
 test("判定確定前の現在エリアも入力済み残数の修正対象に含める", () => {

@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-20）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-21）
 
-最終更新: 2026-09-05 JST
+最終更新: 2026-09-07 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,31 +10,30 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260905-2242.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260905-2242.zip` |
-| appVersion | `2026.8.9-20` |
-| buildId | `build-20260905-223329-jst` |
+| ZIP | `nebiki-helper-20260907-0202.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260907-0202.zip` |
+| appVersion | `2026.8.9-21` |
+| buildId | `build-20260907-020124-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | 完成ZIP生成後の `outputs/nebiki-helper-20260905-2242.zip.sha256` / `RELEASE_REPORT_2026.8.9-20.md` を参照（ZIP外。自己参照を避けるため本書へ値を埋め込まない） |
+| SHA-256 | 完成ZIP生成後の `outputs/nebiki-helper-20260907-0202.zip.sha256` / `RELEASE_REPORT_2026.8.9-21.md` を参照（ZIP外。自己参照を避けるため本書へ値を埋め込まない） |
 
 絶対path:
 
 - 成果物workspace: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5`
-- application root: `C:\Users\s0a6g\Documents\Codex\2026-07-18\step-1-2-3-4-5\work\reference-override-20260904\nebiki-helper`
-- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260905-2242.zip`
+- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19-copy\nebiki-helper`
+- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260907-0202.zip`
 
-`package.json` / `package-lock.json` は9-20、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
+`package.json` / `package-lock.json` は9-21、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
 
-開発baselineは検証済み9-19 ZIP `nebiki-helper-20260904-2218.zip`（SHA-256: `83106cf1d960d1f83b882cdc775ec532f4a08c5e6c7602985e136b48d9d21d34`）。着手前はapplication code、package、dist、SQLが同ZIPと一致し、文書差分は既存のHANDOFF修正とAGENTS追加のみだった。9-20の変更は17時からのReview19優先遷移、専用test、version/build、関連文書に限定し、root SQL 9本は9-19とbyte-identical。詳細と検証範囲は `CHANGE_REPORT_2026.8.9-20.md` を読む。
+開発baselineは検証済み9-20 ZIP `nebiki-helper-20260905-2242.zip`（SHA-256: `ed9a2d27b3b7af00fb80fe2906c9fa18de623668c338a409964654673a7aca05`）。9-21の変更はReview19完了画面のコピー導線、専用test、version/build、関連文書に限定し、設定画面の既存JSON download、Review19保存、18:55優先遷移、root SQL 9本とAGENTS.mdは9-20とbyte-identical。詳細と検証範囲は `CHANGE_REPORT_2026.8.9-21.md` を読む。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-07-18\step-1-2-3-4-5`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19-copy\nebiki-helper`
 - application root直下に `.git` なし。
-- workspace rootの `.git` は空で、`HEAD` なし。
-- workspace/application rootの `git rev-parse --show-toplevel` はともに `fatal: not a git repository`。
+- 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
 
 したがって「値引ヘルパーGit root」は存在を確認できない。上記application rootを作業対象rootとして使い、差分は検証済みZIPとのhash比較で確認する。将来Git checkoutが用意された場合は、その時点で再度 `git rev-parse` する。
@@ -254,17 +253,24 @@ Supabase full Review19 historyはcanonical merge後にIndexedDB/memoryへ置き�
 
 archive件数が過去のlegacy local件数より多いことはremote canonical recoveryで起こり得る。duplicate corruptionを証明せず、件数を合わせる目的で削除しない。
 
+### 9-21: Review19完了画面のChatGPT用コピー
+
+- Review19完了画面の主操作は `ChatGPT用にコピー`。旧完了画面downloadは置き換え、`Blob`、`<a download>`、browser download、file saveをこの操作から呼ばない。
+- コピー対象は従来の完了画面出力と同じ `state.review19` を `buildDirectReview19DataExportPayload({ record, exportedAt })` で包み、`JSON.stringify(payload, null, 2)` した全文。format、version、dataSchemaVersion、appVersion、buildId、dataQuality、records、Review19 areaCounts、human/auto evaluation、calendar/weather、productionAnalysis、snapshot、daySnapshot、rateDecisionSnapshot等を省略しない。
+- `copyCompletedReview19Data()` は完了画面・recorded・recordedAtの既存guardを維持し、第一選択の `navigator.clipboard.writeText()` だけを実行する。API未対応・権限拒否・serialization失敗は `false` として完了状態を維持し、画面内エラーを表示する。成功表示も画面内stateで5秒後に消える。copy成功/失敗でarchive、outbox、cloud、localStorage、IndexedDBを変更しない。
+- 設定画面の `19:00チェックデータを全件出力` / `最新の19:00チェックデータを出力` は従来のdownload経路を維持する。
+
 ## 10. Supabaseとfixed-time
 
 - 既存table: `area_count_records`、`review19_records`
 - local-first。remote失敗だけで現場入力を失わない。
 - pending 0はlocal outboxが空という意味で、remote全履歴同期済みの保証ではない。
 - AreaCount manual direct backfill、Review19 pendingなし正本rescue、legacy pending、CAS/finality/in-flight guardを維持。
-- 実Supabase mutationは9-19・9-20開発検証では実施していない。
+- 実Supabase mutationは9-19・9-20・9-21開発検証では実施していない。
 
 fixed-timeはproduction AreaCount履歴をSupabaseからREAD ONLYで使い、同じmedian engineへ渡す。productionのAreaCount/pending/Review19/finalized/learning/global settingへWRITEしない。fixed-time cycle、clock、temperature、global adjustmentは専用state。
 
-DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-20でも変更していない。
+DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-21でも変更していない。
 
 ## 11. そのほかの現行UX
 
@@ -278,25 +284,27 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-`CHANGE_REPORT_2026.8.9-20.md` に記録された結果:
+`CHANGE_REPORT_2026.8.9-21.md` に記録された結果:
 
-- package.jsonの全 `check:*`: 52/52 PASS。
-- 新規 `check:review19-priority-transition`: 47/47 PASS。境界時刻、19:25以降、除外条件、手動共用、欠測/snapshot/source、保存失敗、実action本体の再入・反復実行を検証。
+- package.jsonの全 `check:*`: 53/53 PASS。`check:review19-copy` は21項目（builder一致、全metadata、copy失敗・再試行、storage/download無変更、設定download、UI）を確認。
+- `check:review19-priority-transition`: 47/47 PASS。9-20の18:55以降Review19優先遷移と保存保全は維持。
 - TypeScript + production build PASS、99 modules、PWA generateSW PASS（precache 10 entries）。buildにはchunk sizeと古いBrowserslist dataの警告がある。
-- changed-file focused ESLint: 0 errors / 4 warnings。4件は既存useNebikiAppのhook依存警告。新規指摘0。
-- 全体lint: 既存9 errors / 7 warnings、exit 1。9-19 baselineとfile/rule/severity/messageを比較し、増減0。
-- root SQL artifacts: 9-19 baselineと9/9 byte-identical。Supabase schema/sync変更なし、実DB mutation未実施。
+- changed-file focused ESLint: 0 errors / 4 warnings。既存useNebikiAppのhook依存警告のみ。新規diagnostic 0。
+- 全体lint: 既存9 errors / 7 warnings、exit 1。9-20 baselineとfile/rule/severity/messageを比較し、増減0。
+- root SQL artifacts 9/9とAGENTS.mdは9-20 baselineとbyte-identical。Supabase schema/sync変更なし、実DB mutation未実施。
 
-実ブラウザはproduction bundleをEdge（Chromium）で390×844、Asia/Tokyo、隔離したローカルoriginへ合成17時stateとテスト時計を設定して確認した。
+実ブラウザはproduction bundleをEdge（Chromium）で390×844、Asia/Tokyo、隔離したローカルoriginへテスト時計を設定して確認した。
 
 - 18:25: 既存alert → 18:30天候入力。
 - 18:55 / 19:25: Review19 alert → OK → Review19。17時source identity、既存残数17、他エリア欠測、17時interrupted snapshotを保持し、18:30 snapshotを生成しない。
 - 各ケースで実React timerを60秒進め、window focus / document visibilitychangeをdispatchしてもalertは1回。
 - innerWidth/innerHeight=390/844、clientWidth/scrollWidth=390/390、横overflowなし。console error/warning、pageerror、外部通信は各0。
+- 18:55から実際に12エリアを入力して正規のIndexedDB authoritative saveを完了し、完了画面でclipboard write/readとJSON.parseを実行。既存 `buildDirectReview19DataExportPayload` とpayload全体が一致し、copy時のdownload、Blob URL、anchor、localStorage、IndexedDB、outbox書込みは0件。成功表示は5秒で消え、拒否/API欠如/再試行も確認。
+- 設定画面の全件・最新Review19 downloadを実際に取得し、主要metadata、records、dataQualityをcopy payloadと比較。画像・結果は `work/review19-copy/browser-work/browser-results.json` と同ディレクトリの390px画像に記録。
 
-18:24/18:54/19:00等の全境界、storage失敗、固定時刻モード、手動復元、全除外条件は専用/既存自動testで確認した。実店舗端末の長時間バックグラウンド復帰、実Supabase mutation、Review19全12エリア完走、quick button実押下、大量storage fixtureの実端末注入は今回未確認。
+18:24/18:54/19:00等の全境界、storage失敗、固定時刻モード、手動復元、全除外条件、copy failureは専用/既存自動testで確認した。実店舗端末の長時間バックグラウンド復帰、実Supabase mutation、インストール済みPWA実機、quick button実押下、大量storage fixtureの実端末注入は今回未確認。
 
-完成ZIPは再openして `ZipFile.testzip()`、duplicate/backslash/traversal/single root、除外物/credential、dist/PWA、version/buildを検査する。検査結果とSHA-256はZIP外の `RELEASE_REPORT_2026.8.9-20.md` に保存する。
+完成ZIPは再openして `ZipFile.testzip()`、duplicate/backslash/traversal/single root、除外物/credential、dist/PWA、version/buildを検査する。検査結果とSHA-256はZIP外の `RELEASE_REPORT_2026.8.9-21.md` に保存する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -304,7 +312,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - full project ESLintに既存9 errors / 7 warnings。
 - `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、全51本より少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
-- 9-19のquick実browser押下、Review19 12/12 browser完走、実DB mutationは未確認。
+- 実Supabase mutation、インストール済みPWA実機、9-19 quick実browser押下、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
 検討可能だが未実装:
@@ -329,7 +337,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-20.md`（baseline記録は `CHANGE_REPORT_2026.8.9-19.md`）
+4. `CHANGE_REPORT_2026.8.9-21.md`（baseline記録は `CHANGE_REPORT_2026.8.9-20.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

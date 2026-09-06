@@ -297,7 +297,7 @@ test("設定PIN UIを廃止し4つの分離出力ボタンを表示", () => {
   assert.match(appSource, /onExportLatestReview19Data=\{app\.actions\.exportLatestReview19Data\}/);
   assert.match(appSource, /onExportAllDailyData=\{app\.actions\.exportAllDailyData\}/);
   assert.match(appSource, /onExportLatestDailyData=\{app\.actions\.exportLatestDailyData\}/);
-  assert.match(routerSource, /actions\.exportCompletedReview19Data\(\)/);
+  assert.match(routerSource, /onCopyReview19Data=\{actions\.copyCompletedReview19Data\}/);
   assert.match(routerSource, /actions\.exportCompletedDailyData\(memo\)/);
 });
 

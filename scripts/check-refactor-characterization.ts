@@ -158,7 +158,7 @@ function assertPublicHookContract(): void {
       "exportLatestReview19Data",
       "exportAllDailyData",
       "exportLatestDailyData",
-      "exportCompletedReview19Data",
+      "copyCompletedReview19Data",
       "exportCompletedDailyData",
       "start19DiscountAfterReview",
       "startNextDoneSession",

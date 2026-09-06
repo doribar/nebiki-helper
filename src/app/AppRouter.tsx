@@ -297,9 +297,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
     case "review19_done":
       return (
         <Review19DoneScreen
-          onExportReview19Data={() => {
-            actions.exportCompletedReview19Data();
-          }}
+          onCopyReview19Data={actions.copyCompletedReview19Data}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />
