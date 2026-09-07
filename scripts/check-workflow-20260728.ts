@@ -128,9 +128,9 @@ test("19:00チェックは入力中・完了直後の戻ると残数修正とコ
   assert.match(reviewSource, /countCorrectionReturnAreaId/);
   assert.match(reviewSource, /onGoBack\(\)/);
   assert.ok(reviewDoneSource.includes("戻る"));
-  assert.ok(reviewDoneSource.includes("ChatGPT用にコピー"));
+  assert.ok(reviewDoneSource.includes("JSONをダウンロード"));
   assert.match(routerSource, /onGoBack=\{actions\.goBackOneScreen\}/);
-  assert.match(routerSource, /onCopyReview19Data=\{actions\.copyCompletedReview19Data\}/);
+  assert.match(routerSource, /onExportReview19Data=\{actions\.exportCompletedReview19Data\}/);
 });
 
 test("判定確定前の現在エリアも入力済み残数の修正対象に含める", () => {

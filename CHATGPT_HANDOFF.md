@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-21）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-22）
 
-最終更新: 2026-09-07 JST
+最終更新: 2026-09-08 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,28 +10,28 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260907-0202.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260907-0202.zip` |
-| appVersion | `2026.8.9-21` |
-| buildId | `build-20260907-020124-jst` |
+| ZIP | `nebiki-helper-20260908-0652.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260908-0652.zip` |
+| appVersion | `2026.8.9-22` |
+| buildId | `build-20260908-064825-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | 完成ZIP生成後の `outputs/nebiki-helper-20260907-0202.zip.sha256` / `RELEASE_REPORT_2026.8.9-21.md` を参照（ZIP外。自己参照を避けるため本書へ値を埋め込まない） |
+| SHA-256 | 完成ZIP生成後の `outputs/nebiki-helper-20260908-0652.zip.sha256` / `RELEASE_REPORT_2026.8.9-22.md` を参照（ZIP外。自己参照を避けるため本書へ値を埋め込まない） |
 
 絶対path:
 
 - 成果物workspace: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5`
-- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19-copy\nebiki-helper`
-- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260907-0202.zip`
+- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19-standard\nebiki-helper`
+- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260908-0652.zip`
 
-`package.json` / `package-lock.json` は9-21、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
+`package.json` / `package-lock.json` は9-22、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
 
-開発baselineは検証済み9-20 ZIP `nebiki-helper-20260905-2242.zip`（SHA-256: `ed9a2d27b3b7af00fb80fe2906c9fa18de623668c338a409964654673a7aca05`）。9-21の変更はReview19完了画面のコピー導線、専用test、version/build、関連文書に限定し、設定画面の既存JSON download、Review19保存、18:55優先遷移、root SQL 9本とAGENTS.mdは9-20とbyte-identical。詳細と検証範囲は `CHANGE_REPORT_2026.8.9-21.md` を読む。
+検証済み9-21系列をbaselineとし、9-22ではReview19完了画面を既存downloadへ戻し、17→18:30自動遷移を廃止して17→Review19を通常ルート化し、通常sessionのAreaCount自動判定へ±1 quick adjustmentを追加した。dataSchemaVersionは3のまま、設定画面download、Review19保存、root SQL 9本とAGENTS.mdは変更していない。詳細と検証範囲は `CHANGE_REPORT_2026.8.9-22.md` を読む。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19-copy\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19-standard\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -162,33 +162,27 @@ Review19は、保存済み `IndividualAmountReferenceContext` そのものを直
 
 human 9-scaleのeven解決は、normalでは15時が少ない側、17時以降が多い側。summerではJST 18:00未満が少ない側、18:00以降が多い側。
 
-## 7. 人間評価と9-19 quick adjustment
+## 7. 人間評価と9-22 quick adjustment
 
 既存full manual判定は5つの基準ボタンを維持する。表示ボタンは1/3/5/7/9、長押し後に隣接項目を選ぶと2/4/6/8を保存する。raw score、選択順、scale、resolution direction/reasonを保持する。旧5段階recordは互換読込し、物理migrationしない。
 
 Review19のraw9は19時時点の人間観測。even scoreを15/17のような最終5段階へ丸めない。Review19のauto medianとhuman observationは別情報。
 
-9-19の `やや多いにする` は次の場合だけ表示する。
-
-- history由来autoが `many`
-- normal: 15時のみ
-- summer: 15時・17時のみ
-- Review19、normal 17時以降、summer 18時以降、many以外: 非表示
+`RateDisplayScreen` のquick buttonは、history由来の自動判定がreadyでcountがあり、通常の15/17/18/19 session（summer/normal）を表示中だけ有効にする。自動判定の順序 `few < slightly_few < normal < slightly_many < many` に対し、下1段・上1段を表示し、端では存在しない方向を表示しない。Review19、fixed-time、20:30、履歴不足・自動判定不明では表示しない。
 
 quick適用後の保存関係:
 
-- final adoptedは `slightly_many`。`AreaProgress.areaCountEvaluation`、`AreaCountRecord.suggestedEvaluation` / `userJudge` に入る。`areaCountEvaluation` / `suggestedEvaluation` を元のautoの保存先として読まない。
-- original autoの `many` は `humanEvaluationDetails.automaticEvaluation` と `humanEvaluationDetails.evaluationAdjustment.originalEvaluation` に保持する。
-- `humanEvaluationDetails.resolvedEvaluation` は `slightly_many`。`AreaProgress.areaCountDecisionBasis.finalEvaluation` / `AreaCountRecord.decisionBasis.finalEvaluation` も最終採用値を持つ。判定sourceはそれぞれ `areaCountEvaluationSource: "manual"` / `evaluationSource: "manual"` となる。
+- final adoptedはquickの移動先。`AreaProgress.areaCountEvaluation`、`AreaCountRecord.suggestedEvaluation` / `userJudge` に入る。`areaCountEvaluation` / `suggestedEvaluation` を元のautoの保存先として読まない。
+- original autoは `humanEvaluationDetails.automaticEvaluation` と `humanEvaluationDetails.evaluationAdjustment.originalEvaluation` に保持する。`humanEvaluationDetails.resolvedEvaluation`、`AreaProgress.areaCountDecisionBasis.finalEvaluation`、`AreaCountRecord.decisionBasis.finalEvaluation` はfinalを持つ。判定sourceはそれぞれ `areaCountEvaluationSource: "manual"` / `evaluationSource: "manual"` となる。
 - `humanEvaluationDetails.evaluationAdjustment`:
   - `applied: true`
   - `source: human`
-  - `direction: lower`
+  - `direction: lower` または `higher`
   - `steps: 1`
-  - `originalEvaluation: many`
-  - `finalEvaluation: slightly_many`
+  - `originalEvaluation: 元のautomaticEvaluation`
+  - `finalEvaluation: originalEvaluationから±1段`
 
-field欠損は「操作なし」でありhuman agreementではない。型は将来拡張可能だが、現行quick UIはmany→slightly_manyの1種類だけ。既存full manual selectorを置き換えない。
+field欠損は「操作なし」でありhuman agreementではない。quickは元auto基準で非累積、2段以上はfull manual selectorを使う。既存full manual selectorを置き換えない。
 
 quickは既存 `judgeCurrentArea()` / `applyAreaJudgeSelection()` と保存経路へ入り、AreaCount rate adjustmentを+10から+5へする。通常運用では `AreaCountRecord` をlocal-first保存し、更新した `AppState.areaProgressMap` は既存のcurrent session / checkpoint保存経路で保持する。fixed-timeでは本番保存を行わない。
 
@@ -225,14 +219,15 @@ productionAnalysis:
 
 ## 9. Review19の現在状態
 
-### 9-20: 18:30自動遷移を逃した場合のReview19優先
+### 9-22: 17時→Review19を通常ルート、18:30は手動のみ
 
-- 当日17時sessionを保持した通常画面/done画面では、18:25〜18:54は既存どおり18:30の天候入力へ自動遷移する。18:55以降はReview19未開始・未完了ならReview19を優先する。19:25以降も上限なしで適用し、19:30値引へ直接飛ばさない。
-- `review19Flow.ts` の `getAutomaticReview19TransitionKey()` で判定する。start画面、Review19各画面、当日の既存Review19 state、当日完了済みarchive、fixed-time、当日17時以外のsessionを除外する。既に18:30入力へ移った場合は `timeSwitchTarget` と既存17→18自動遷移keyでも除外するため、保全用17時sessionが残る場合にも再通知しない。
-- `startNextDoneSession({ autoTransition: true })` が既存 `finalizeUnmeasuredAreasForAutoTransition()` で未計測を `not_measured` / `auto_time_transition` とし、17時の `sessionEndReason: "auto_time_transition"` snapshotとReview19 source stateを既存safe storage境界で保存する。新経路は両保存成功後のみ進み、失敗時は現在の17時stateを保持してretry可能にする。18:25の既存失敗時挙動は変更しない。
-- 手動・自動とも `createReview19StartState()` を共用し、17時sourceのdate / demandCycle / startedAt / weather等から従来どおりReview19を生成する。`window.alert("19時チェックの時間になったため、19時チェックに進みます。")` のOK後に `screen: "review19"` を設定する。18:30session、AreaCount、実施済み扱い、早め値引予約を作らない。
-- date / session.startedAt / 17 / review19のkeyを保存・通知より前にrefへ確保し、成功後も保持する。30秒timer、focus、visibility、StrictModeの再評価で同一sourceの通知/開始を重複させない。保存失敗時はkeyを解放する。
-- `resolveDiscountTime()`、`getNextDoneDiscountInfo()`、start画面のmanual開始条件、manualDiscountTimeOverrideの既存意味、fixed-timeの既存経路は変更していない。
+- 17時sessionは18:25〜18:54を含めてそのまま保持する。timer、focus、visibility復帰、start画面の時計更新で18:30session・天候入力・AreaCountを自動生成しない。
+- 当日17時sessionをsourceにでき、Review19が未開始・未完了、同日authoritative recordがなく、同日18:30sessionが実際には開始されていない通常日は、18:55以降（19:25、20:30、23:59を含む）に `getAutomaticReview19TransitionKey()` がReview19開始keyを返す。`startNextDoneSession({ autoTransition: true })` はkeyがない17→18経路を保存・予約・画面遷移なしで終了する。
+- 自動開始は `finalizeUnmeasuredAreasForAutoTransition()`、17時の `auto_time_transition` snapshot、`persistReview19SourceStateSafely()`、`createReview19StartState()` の順で既存safe storage境界を共用する。未計測は `measurementStatus: "not_measured"` / `missingReason: "auto_time_transition"` として保全し、捏造した残数を作らない。snapshotまたはsource保存失敗時は17時stateとkeyを保持して再評価・retryできる。
+- 手動・自動とも `createReview19StartState()` を共用し、17時sourceのdate / demandCycle / sessionStartedAt / reference / weather等からReview19を生成する。18:30session、架空AreaCount、実施済み扱い、早め値引予約を作らない。alertは既存の `window.alert("19時チェックの時間になったため、19時チェックに進みます。")` を使い、timer/focus/visibility/StrictModeでも同一keyの通知・開始を一度だけ行う。
+- 18:30値引はDone画面の「18:30値引を開始」または既存start画面の時刻選択から明示操作で開始する。Done画面の操作は既存 `startNextDoneSession()` / `openNextSessionInput()` を使い、weather確認後の `startSession()` で初めて18:30sessionを作る。17時sourceを保持したまま新しい18時の作業mapへ切り替え、開始時に未入力状態の18時 `DailySessionSnapshot` を既存journalへ保存する。
+- 同日実開始済みの18:30session、またはその開始snapshotがある場合は `hasStarted1830Session()` がReview19手動・自動開始を抑止する。snapshotはarchive memoryとoperational journalから再ロードされるため、reload後も抑止する。開始画面draftを18にしただけでは抑止しない。legacyの18時sessionは削除・改変しない。
+- `resolveDiscountTime()` と `getNextDoneDiscountInfo()` の時刻境界、manualDiscountTimeOverrideの意味、18:30のweather/rate/AreaCount処理、fixed-time READ ONLYは維持する。fixed-timeではReview19・snapshot・sessionへのproduction writeを行わない。
 
 ### 保存・完了
 
@@ -253,12 +248,17 @@ Supabase full Review19 historyはcanonical merge後にIndexedDB/memoryへ置き�
 
 archive件数が過去のlegacy local件数より多いことはremote canonical recoveryで起こり得る。duplicate corruptionを証明せず、件数を合わせる目的で削除しない。
 
-### 9-21: Review19完了画面のChatGPT用コピー
+### 9-22: Review19完了画面のJSON download復帰
 
-- Review19完了画面の主操作は `ChatGPT用にコピー`。旧完了画面downloadは置き換え、`Blob`、`<a download>`、browser download、file saveをこの操作から呼ばない。
-- コピー対象は従来の完了画面出力と同じ `state.review19` を `buildDirectReview19DataExportPayload({ record, exportedAt })` で包み、`JSON.stringify(payload, null, 2)` した全文。format、version、dataSchemaVersion、appVersion、buildId、dataQuality、records、Review19 areaCounts、human/auto evaluation、calendar/weather、productionAnalysis、snapshot、daySnapshot、rateDecisionSnapshot等を省略しない。
-- `copyCompletedReview19Data()` は完了画面・recorded・recordedAtの既存guardを維持し、第一選択の `navigator.clipboard.writeText()` だけを実行する。API未対応・権限拒否・serialization失敗は `false` として完了状態を維持し、画面内エラーを表示する。成功表示も画面内stateで5秒後に消える。copy成功/失敗でarchive、outbox、cloud、localStorage、IndexedDBを変更しない。
-- 設定画面の `19:00チェックデータを全件出力` / `最新の19:00チェックデータを出力` は従来のdownload経路を維持する。
+- Review19完了画面の主操作は `JSONをダウンロード`。`buildDirectReview19DataExportPayload({ record, exportedAt })` と既存 `downloadJsonFile()` を使い、9-20までのpretty JSONファイル出力へ戻した。完了画面からclipboard APIやcopy専用stateを呼ばない。
+- export payloadのformat、version、dataSchemaVersion、appVersion、buildId、dataQuality、records、Review19 areaCounts、human/auto evaluation、calendar/weather、productionAnalysis、snapshot、daySnapshot、rateDecisionSnapshot等は変更・削除・要約していない。downloadはReview19保存、archive、outbox、cloud、localStorage、IndexedDBを変更しない。
+- 設定画面の `19:00チェックデータを全件出力` / `最新の19:00チェックデータを出力` は従来どおりJSON downloadする。完了画面は `buildDirectReview19DataExportPayload()`、設定画面は従来の全件/最新export builderを使う。
+
+### 9-22: AreaCount自動判定の±1 quick adjustment
+
+- 通常の `rate_display` で履歴自動判定がready、countが存在する15/17/18/19 session（summer/normal）に、元の自動判定から1段下げる・1段上げるボタンを表示する。fewは上だけ、manyは下だけ。Review19、fixed-time、20:30、履歴不足・不明は対象外で、full manual selectorは残す。
+- quickの基準は常に元の `automaticEvaluation`。連打や反対方向への押し直しで累積しない。`humanEvaluationDetails.evaluationAdjustment` に `applied/source/direction/steps/originalEvaluation/finalEvaluation` を保存し、`areaCountEvaluation` / `suggestedEvaluation` はfinal、`areaCountDecisionBasis.baseEvaluation` はoriginal、`finalEvaluation` と `areaRateAdjustment` はfinalに対応させる。
+- 保存は既存 `judgeCurrentArea()` → AreaCount record / current session / checkpoint / daily snapshot / finalized day / export / `record_details` の伝播経路を共用し、`rateDecisionSnapshot`へquick専用metadataを追加しない。既存のmany→slightly_many semanticと値引率engineを維持する。
 
 ## 10. Supabaseとfixed-time
 
@@ -266,11 +266,11 @@ archive件数が過去のlegacy local件数より多いことはremote canonical
 - local-first。remote失敗だけで現場入力を失わない。
 - pending 0はlocal outboxが空という意味で、remote全履歴同期済みの保証ではない。
 - AreaCount manual direct backfill、Review19 pendingなし正本rescue、legacy pending、CAS/finality/in-flight guardを維持。
-- 実Supabase mutationは9-19・9-20・9-21開発検証では実施していない。
+- 実Supabase mutationは9-22開発検証でも実施していない。
 
 fixed-timeはproduction AreaCount履歴をSupabaseからREAD ONLYで使い、同じmedian engineへ渡す。productionのAreaCount/pending/Review19/finalized/learning/global settingへWRITEしない。fixed-time cycle、clock、temperature、global adjustmentは専用state。
 
-DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-21でも変更していない。
+DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-22でも変更していない。
 
 ## 11. そのほかの現行UX
 
@@ -284,27 +284,21 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-`CHANGE_REPORT_2026.8.9-21.md` に記録された結果:
+`CHANGE_REPORT_2026.8.9-22.md` に記録された結果:
 
-- package.jsonの全 `check:*`: 53/53 PASS。`check:review19-copy` は21項目（builder一致、全metadata、copy失敗・再試行、storage/download無変更、設定download、UI）を確認。
-- `check:review19-priority-transition`: 47/47 PASS。9-20の18:55以降Review19優先遷移と保存保全は維持。
-- TypeScript + production build PASS、99 modules、PWA generateSW PASS（precache 10 entries）。buildにはchunk sizeと古いBrowserslist dataの警告がある。
-- changed-file focused ESLint: 0 errors / 4 warnings。既存useNebikiAppのhook依存警告のみ。新規diagnostic 0。
-- 全体lint: 既存9 errors / 7 warnings、exit 1。9-20 baselineとfile/rule/severity/messageを比較し、増減0。
-- root SQL artifacts 9/9とAGENTS.mdは9-20 baselineとbyte-identical。Supabase schema/sync変更なし、実DB mutation未実施。
+- package.jsonの全 `check:*`: 54/54 PASS。Review19 download専用check 15/15、Review19遷移・snapshot保全check 64/64、session completion safety 10/10、AreaCount ±1 quick check 28/28。
+- TypeScript + production build PASS、99 modules、PWA generateSW PASS（precache 10 entries）。chunk sizeと古いBrowserslist dataの警告は既存のまま。
+- changed-file focused ESLint: 0 errors / 4 warnings（useNebikiAppの既存hook依存警告のみ）。全体lintは9 errors / 7 warningsで、9-21 baselineとfile/rule/severity/messageを比較して新規diagnostic 0。
+- appVersion `2026.8.9-22`、buildId `build-20260908-064825-jst`、dataSchemaVersion `3`。root SQL 9本とAGENTS.mdは9-21 baselineとbyte-identical。Supabase schema / SQL / RLS / grant / trigger / fixed-timeは変更していない。
 
-実ブラウザはproduction bundleをEdge（Chromium）で390×844、Asia/Tokyo、隔離したローカルoriginへテスト時計を設定して確認した。
+実ブラウザはproduction previewをEdge（Chromium）で390×844、Asia/Tokyo、隔離local originへテスト時計を設定して確認した。
 
-- 18:25: 既存alert → 18:30天候入力。
-- 18:55 / 19:25: Review19 alert → OK → Review19。17時source identity、既存残数17、他エリア欠測、17時interrupted snapshotを保持し、18:30 snapshotを生成しない。
-- 各ケースで実React timerを60秒進め、window focus / document visibilitychangeをdispatchしてもalertは1回。
-- innerWidth/innerHeight=390/844、clientWidth/scrollWidth=390/390、横overflowなし。console error/warning、pageerror、外部通信は各0。
-- 18:55から実際に12エリアを入力して正規のIndexedDB authoritative saveを完了し、完了画面でclipboard write/readとJSON.parseを実行。既存 `buildDirectReview19DataExportPayload` とpayload全体が一致し、copy時のdownload、Blob URL、anchor、localStorage、IndexedDB、outbox書込みは0件。成功表示は5秒で消え、拒否/API欠如/再試行も確認。
-- 設定画面の全件・最新Review19 downloadを実際に取得し、主要metadata、records、dataQualityをcopy payloadと比較。画像・結果は `work/review19-copy/browser-work/browser-results.json` と同ディレクトリの390px画像に記録。
+- 18:25は17時done画面に留まり、自動18:30遷移を行わない。18:55は18:30を経由せず17時sourceのReview19へ入る。
+- Done画面の「18:30値引を開始」から既存weather確認を通して初めて18時sessionを生成し、19:25以降とreload後もReview19へ入らない。
+- Review19を12エリア入力して完了画面の `JSONをダウンロード` を取得し、JSON.parseとrecord件数を確認。設定画面の全件・最新downloadも取得した。
+- auto few / normal / many のquick buttonを実表示で確認した。390/390で横overflowなし、console error/warning、pageerror、外部通信は0件。
 
-18:24/18:54/19:00等の全境界、storage失敗、固定時刻モード、手動復元、全除外条件、copy failureは専用/既存自動testで確認した。実店舗端末の長時間バックグラウンド復帰、実Supabase mutation、インストール済みPWA実機、quick button実押下、大量storage fixtureの実端末注入は今回未確認。
-
-完成ZIPは再openして `ZipFile.testzip()`、duplicate/backslash/traversal/single root、除外物/credential、dist/PWA、version/buildを検査する。検査結果とSHA-256はZIP外の `RELEASE_REPORT_2026.8.9-21.md` に保存する。
+実Supabase mutation、インストール済みPWA実機、実店舗端末の長時間background復帰、quick操作後の全量cloud同期は未確認。ブラウザ詳細は `work/review19-standard/browser-work/browser-results.json` に記録する。完成ZIP再open検査とSHA-256はZIP外の `RELEASE_REPORT_2026.8.9-22.md` / `ZIP_VALIDATION_2026.8.9-22.json` に保存する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -312,12 +306,12 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - full project ESLintに既存9 errors / 7 warnings。
 - `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、全51本より少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
-- 実Supabase mutation、インストール済みPWA実機、9-19 quick実browser押下、実端末の長時間バックグラウンド復帰は未確認。
+- 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
 検討可能だが未実装:
 
-- quick adjustmentの任意方向/複数step UI。型が汎用なだけで、現行buttonはmany→slightly_manyのみ。
+- quick adjustmentの任意方向/複数step UI。現行buttonは元autoからの±1のみで、2段以上はfull manual selectorを使う。
 - quick適用有無とReview19/廃棄結果を比較するdashboardや自動学習。
 - 通常運用AreaCount outboxのlightweight reference化。現在はmanual bulk backfillだけがdirect方式。
 - full project ESLint debtの別作業での解消。
@@ -327,7 +321,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - IndexedDBへの全面移行。current/active localStorage journalは意図的に残る。
 - global adjustment/quick adjustmentの自動推論。
 - generic history DELETE UI/API、client DELETE権限、service role。
-- Review19 quick adjustment。
+- Review19 quick adjustment。Review19はhuman observation専用のまま。
 - archiveのTTL削除。正式履歴はIndexedDBで増える設計。
 - Review19件数をlegacy local件数へ合わせる自動削除。
 - 実Supabase mutationによる9-19確認。
@@ -337,7 +331,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-21.md`（baseline記録は `CHANGE_REPORT_2026.8.9-20.md`）
+4. `CHANGE_REPORT_2026.8.9-22.md`（9-21 baselineは `CHANGE_REPORT_2026.8.9-21.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`
@@ -350,7 +344,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 14. `src/domain/review19.ts`、`review19Evaluation.ts`、`review19CompletionStorage.ts`
 15. `src/domain/cloudSync.ts`、`review19CloudOutbox.ts`、`review19RemoteStorage.ts`
 16. `src/domain/areaCountDirectSync.ts`、`areaCountBackfill.ts`、`supabaseSyncQueue.ts`
-17. 対象screen componentと対応する `scripts/check-*.ts`
+17. `src/components/screens/Review19DoneScreen.tsx`、`DoneScreen.tsx`、`RateDisplayScreen.tsx` と対応する `scripts/check-*.ts`
 18. 必要な場合だけ過去CHANGE REPORT / README / SQL artifact
 
 再開時は、version metadataとGit rootの有無を再確認し、最新ZIPとの差分を取ってから編集する。恒久的な検証・packagingルールは `AGENTS.md` に従う。

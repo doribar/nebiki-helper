@@ -256,6 +256,7 @@ import {
 import {
   createReview19StartState,
   getAutomaticReview19TransitionKey,
+  hasStarted1830Session,
   selectReview19SourceState,
 } from "./nebikiApp/review19Flow.ts";
 import {
@@ -309,8 +310,7 @@ import {
   resolveHumanEvaluationForDiscount,
 } from "../domain/humanEvaluation.ts";
 import {
-  canApplyManyToSlightlyManyAdjustment,
-  createManyToSlightlyManyAdjustment,
+  getAreaEvaluationQuickAdjustments,
 } from "../domain/areaEvaluationAdjustment.ts";
 import {
   buildAnalysisWeatherContext,
@@ -1172,8 +1172,12 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       if (prev.screen !== "start") return prev;
 
       const now = getRuntimeNow();
-      const nowDiscountTime = resolveDiscountTime(now);
       const nowDate = formatLocalDate(now);
+      const nowDiscountTime = !isTestMode &&
+        prev.session?.date === nowDate && prev.session.discountTime === "17" &&
+        !timeSwitchTarget
+        ? "17"
+        : resolveDiscountTime(now);
       const nowWeekday = now.getDay();
 
       const nextDraft = { ...prev.sessionDraft };
@@ -1215,7 +1219,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const id = window.setInterval(syncDraftTime, 30000);
 
   return () => window.clearInterval(id);
-}, [state.screen, testNowMs]);
+}, [state.screen, testNowMs, isTestMode, timeSwitchTarget]);
 
   useEffect(() => {
     if (state.screen !== "start") return;
@@ -1906,7 +1910,11 @@ const lateSkipNotice = useMemo(() => {
       }
     : null;
 
-  const canStartReview19Manually = canStartReview19FromCurrentState({
+  const canStartReview19Manually = !hasStarted1830Session({
+    state,
+    now: new Date(nowMs),
+    snapshots: isTestMode ? [] : savedDailySessionSnapshots,
+  }) && canStartReview19FromCurrentState({
     state,
     now: new Date(nowMs),
     records: isTestMode ? [] : savedReview19Records,
@@ -2144,9 +2152,8 @@ const lateSkipNotice = useMemo(() => {
     }
     if (!doneNextSessionInfo?.canStart) return;
 
-    // 次の天候入力開始時刻が来たら、作業中・完了画面では自動で次の入力画面へ進む。
-    // ただし開始画面で天候入力中、または19時チェック中は、表示中の作業を優先し、自動遷移しない。
-    // ここで自動遷移すると、19時チェック開始直後に18時30分入力へ戻されることがある。
+    // 17時は18:55まで待機してReview19へ。18:30値引は明示操作だけで開始する。
+    // 開始画面の入力中・Review19中は既存どおり割り込まない。
     startNextDoneSession({ autoTransition: true });
   }, [
     state.screen,
@@ -2709,7 +2716,11 @@ const lateSkipNotice = useMemo(() => {
     let nextSkipRecords = cloneSkipRecords(nextSessionSkipRecordsRef.current);
     let nextState: AppState;
 
-    if (timeSwitchTarget && prev.session && canResumeCurrentSession) {
+    if (
+      prev.session && canResumeCurrentSession &&
+      (timeSwitchTarget ||
+        (nextSession.discountTime === "18" && prev.session.discountTime !== "18"))
+    ) {
       let skippedRecords: NextSessionSkipRecord[] = [];
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
@@ -2808,6 +2819,36 @@ const lateSkipNotice = useMemo(() => {
         finalTimeStep: 0,
         areaCountCorrection: null,
       };
+    }
+
+    if (!isTestMode && nextState.session?.discountTime === "18" && !isResumingSameDiscountSession) {
+      // 実際に開始した18:30sessionを既存journalへ保存する。未入力の測定値や完了実績は作らない。
+      const nightSession = nextState.session;
+      const nightSnapshot = createDailySessionSnapshot({
+        capturedAt: startedAt,
+        state: nextState,
+        resolvedWeather: temperatureComfort.resolvedWeather,
+        weekdayBaseInfo: getWeekdayBaseInfo(
+          nightSession.weekday, "18", temperatureComfort.resolvedWeather, nightSession.date,
+        ),
+        basisGuide: getBasisGuideDisplay({
+          date: nightSession.date,
+          weekday: nightSession.weekday,
+          discountTime: "18",
+          demandCycle: nightSession.demandCycle,
+          weather: temperatureComfort.resolvedWeather,
+          applyObonRule: supportsObonCalendarRule(nightSession.appVersion),
+        }),
+        lateTimeBonus: 0,
+        doneSummaryItems: [],
+      });
+      if (!nightSnapshot) return;
+      const saved = upsertDailySessionSnapshotSafely(nightSnapshot, { protectedDate: nightSession.date });
+      reportStorageOperationFailures("night-discount-session-start", saved.attempts);
+      if (!saved.ok) {
+        window.alert("18:30値引の開始記録を保存できませんでした。空き容量を確認して、もう一度操作してください。");
+        return;
+      }
     }
 
     setState(nextState);
@@ -3157,7 +3198,9 @@ const lateSkipNotice = useMemo(() => {
       : undefined;
     const areaCountDecisionBasis = areaCountRecommendation
       ? buildAreaCountDecisionBasis({
-          recommendation: areaCountRecommendation,
+          recommendation: evaluationAdjustment
+            ? { ...areaCountRecommendation, baseEvaluation: evaluationAdjustment.originalEvaluation }
+            : areaCountRecommendation,
           evaluationSource: areaCountEvaluationSource,
           finalEvaluation: effectiveAreaCountResult?.evaluation,
           areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
@@ -3270,28 +3313,18 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  async function applyManyToSlightlyManyAdjustment(): Promise<void> {
+  async function applyAreaEvaluationAdjustment(direction: HumanEvaluationAdjustment["direction"]): Promise<void> {
     if (!state.session || !state.currentAreaId) return;
     const progress = state.areaProgressMap[state.currentAreaId];
     if (!progress) return;
-    const automaticEvaluation =
-      progress.humanEvaluationDetails?.automaticEvaluation ??
-      (progress.areaCountEvaluationSource === "history"
-        ? progress.areaCountEvaluation
-        : undefined);
-    if (
-      typeof progress.areaCount !== "number" ||
-      !canApplyManyToSlightlyManyAdjustment({
-        demandCycle: normalizeDemandCycle(state.session.demandCycle),
-        discountTime: state.session.discountTime,
-        automaticEvaluation,
-        evaluationSource: progress.areaCountEvaluationSource,
-      })
-    ) {
-      return;
-    }
-
-    const selection = createHumanEvaluationSelection("slightly_many");
+    const adjustment = getAreaEvaluationQuickAdjustments({
+      screen: state.screen,
+      discountTime: state.session.discountTime,
+      isTestMode,
+      progress,
+    }).find((candidate) => candidate.direction === direction);
+    if (!adjustment || typeof progress.areaCount !== "number") return;
+    const selection = createHumanEvaluationSelection(adjustment.finalEvaluation);
     if (!selection) return;
     await judgeCurrentArea(
       "normal",
@@ -3299,7 +3332,7 @@ const lateSkipNotice = useMemo(() => {
       undefined,
       undefined,
       selection,
-      createManyToSlightlyManyAdjustment(),
+      adjustment,
     );
   }
 
@@ -3928,6 +3961,11 @@ const lateSkipNotice = useMemo(() => {
       if (prev.screen !== "start") return prev;
       const now = new Date(nowMs);
       if (
+        hasStarted1830Session({
+          state: prev,
+          now,
+          snapshots: isTestMode ? [] : getHistoricalDailySessionSnapshotsForDate(formatLocalDate(now)),
+        }) ||
         !canStartReview19FromCurrentState({
           state: prev,
           now,
@@ -4461,6 +4499,7 @@ const lateSkipNotice = useMemo(() => {
     options?: {
       preserveCurrentSession?: boolean;
       sourceState?: AppState;
+      lockDiscountTime?: boolean;
     }
   ): boolean {
     weatherConfirmationSubmittingRef.current = false;
@@ -4497,6 +4536,7 @@ const lateSkipNotice = useMemo(() => {
       discountTime: targetDiscountTime,
       manualWeekdayOverride: false,
       manualDiscountTimeOverride: false,
+      ...(options?.lockDiscountTime ? { weatherInputLockedDiscountTime: targetDiscountTime } : {}),
       weather: {
         ...baseDraft.weather,
         hourlyForecasts: cloneHourlyForecasts(baseDraft.weather.hourlyForecasts),
@@ -4541,20 +4581,18 @@ const lateSkipNotice = useMemo(() => {
     const now = new Date(nowMs);
     const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, now);
     if (!nextInfo?.canStart) return;
-    // 18:30入力へ既に移行した場合は、保全用の17時sessionが残っていても救済しない。
-    const previous1830TransitionKey = [
-      state.session.date, state.session.startedAt, "17", "18",
-    ].join("|");
     const review19TransitionKey = options?.autoTransition
       ? getAutomaticReview19TransitionKey({
           state,
           now,
           records: archivedReview19RecordsRef.current,
           isTestMode,
-          hasTransitionedTo1830: timeSwitchTarget === "18" ||
-            autoTransitionInFlightKeyRef.current === previous1830TransitionKey,
+          snapshots: isTestMode ? [] : getHistoricalDailySessionSnapshotsForDate(formatLocalDate(now)),
+          hasTransitionedTo1830: timeSwitchTarget === "18",
         })
       : null;
+    // 17→18:30の自動遷移は廃止。Review19を開始できない場合は保存・予約・画面遷移を行わない。
+    if (options?.autoTransition && previousDiscountTime === "17" && !review19TransitionKey) return;
     const autoTransitionKey = options?.autoTransition
       ? review19TransitionKey ?? [
           state.session.date,
@@ -4666,8 +4704,10 @@ const lateSkipNotice = useMemo(() => {
     // 20時30分も他の値引時刻と同じく、20:25から天候入力画面へ移動する。
     // 21時の天気・気温・風速を確認してから最終値引へ進む。
     const transitionOpened = openNextSessionInput(nextInfo.targetDiscountTime, {
-      preserveCurrentSession: prioritizeUnfinishedAreas,
+      preserveCurrentSession: prioritizeUnfinishedAreas ||
+        (!options?.autoTransition && previousDiscountTime === "17"),
       sourceState,
+      lockDiscountTime: !options?.autoTransition && nextInfo.targetDiscountTime === "18",
     });
     if (autoTransitionKey && !transitionOpened) {
       autoTransitionInFlightKeyRef.current = null;
@@ -4862,7 +4902,7 @@ const lateSkipNotice = useMemo(() => {
     );
   }
 
-  async function copyCompletedReview19Data(): Promise<boolean> {
+  function exportCompletedReview19Data(): boolean {
     if (
       state.screen !== "review19_done" ||
       !state.review19 ||
@@ -4871,20 +4911,15 @@ const lateSkipNotice = useMemo(() => {
     ) {
       return false;
     }
-    try {
-      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-        return false;
-      }
-      const exportedAt = getRuntimeNow().toISOString();
-      const payload = buildDirectReview19DataExportPayload({
-        record: state.review19,
-        exportedAt,
-      });
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      return true;
-    } catch {
-      return false;
-    }
+    const exportedAt = getRuntimeNow().toISOString();
+    const payload = buildDirectReview19DataExportPayload({
+      record: state.review19,
+      exportedAt,
+    });
+    return downloadJsonFile(
+      payload,
+      `nebiki-review19-${state.review19.date}.json`,
+    );
   }
 
   async function exportCompletedDailyData(memo: string | null): Promise<boolean> {
@@ -5361,7 +5396,7 @@ const lateSkipNotice = useMemo(() => {
       markBentoJudgeGuideShown,
       confirmDailyNotice,
       judgeCurrentArea,
-      applyManyToSlightlyManyAdjustment,
+      applyAreaEvaluationAdjustment,
       getCurrentAreaCountRecommendation,
       skipCurrentArea,
       chooseSkipTargetArea,
@@ -5382,7 +5417,7 @@ const lateSkipNotice = useMemo(() => {
       exportLatestReview19Data,
       exportAllDailyData,
       exportLatestDailyData,
-      copyCompletedReview19Data,
+      exportCompletedReview19Data,
       exportCompletedDailyData,
       start19DiscountAfterReview,
       startNextDoneSession,

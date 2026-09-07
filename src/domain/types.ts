@@ -926,7 +926,7 @@ export type UseNebikiAppActions = {
     stapleItemCount?: number | null,
     humanEvaluationSelection?: HumanEvaluationSelection,
   ) => Promise<void>;
-  applyManyToSlightlyManyAdjustment: () => Promise<void>;
+  applyAreaEvaluationAdjustment: (direction: HumanEvaluationAdjustment["direction"]) => Promise<void>;
   getCurrentAreaCountRecommendation: (count: number) => AreaCountRecommendation;
   skipCurrentArea: () => void;
   chooseSkipTargetArea: (areaId: AreaId) => void;
@@ -961,7 +961,7 @@ export type UseNebikiAppActions = {
   exportLatestReview19Data: () => boolean;
   exportAllDailyData: () => Promise<boolean>;
   exportLatestDailyData: () => Promise<boolean>;
-  copyCompletedReview19Data: () => Promise<boolean>;
+  exportCompletedReview19Data: () => boolean;
   exportCompletedDailyData: (memo: string | null) => Promise<boolean>;
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;

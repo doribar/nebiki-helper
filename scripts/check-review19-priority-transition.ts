@@ -5,10 +5,23 @@ import ts from "typescript";
 import { NORMAL_ROUTE } from "../src/domain/area.ts";
 import {
   createDefaultHourlyForecasts,
+  cloneHourlyForecasts,
   resolveWeatherInputForDiscount,
 } from "../src/domain/hourlyWeather.ts";
 import { createInitialReview19Result } from "../src/domain/review19.ts";
 import { getBasisGuideDisplay, getWeekdayBaseInfo } from "../src/domain/weekdayBase.ts";
+import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
+import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
+import { lockDemandCycleForDate } from "../src/domain/demandCycleStorage.ts";
+import { cloneSkipRecords } from "../src/domain/navigationHistory.ts";
+import { normalizeGlobalDiscountAdjustmentPercent } from "../src/domain/globalDiscountAdjustment.ts";
+import { supportsObonCalendarRule } from "../src/domain/obon.ts";
+import {
+  consumeSkipRecordsInMemory,
+  loadDailySessionSnapshots,
+  upsertDailySessionSnapshotSafely,
+} from "../src/domain/storage.ts";
+import { getHistoricalDailySessionSnapshotsForDate } from "../src/domain/historicalArchiveRuntime.ts";
 import type {
   AppState,
   DailySessionSnapshot,
@@ -21,10 +34,12 @@ import {
   canStartReview19FromCurrentState,
   formatLocalDate,
   getNextDoneDiscountInfo,
+  buildTimeSwitchNotice,
 } from "../src/hooks/nebikiApp/clock.ts";
 import {
   createReview19StartState,
   getAutomaticReview19TransitionKey,
+  hasStarted1830Session,
   selectReview19SourceState,
 } from "../src/hooks/nebikiApp/review19Flow.ts";
 import {
@@ -33,13 +48,24 @@ import {
 } from "../src/hooks/nebikiApp/sessionSnapshots.ts";
 import {
   createInitialState,
+  createInitialAreaProgressMap,
+  buildStartDefaultDraft,
+  isValidDiscountTime,
   normalizeLoadedState,
+  normalizeReview19ExcludedAreaIds,
 } from "../src/hooks/nebikiApp/stateNormalization.ts";
 import {
   buildAutoTimeSwitchDialogText,
+  createAreaProgressMapWithAutoSkippedAreas,
+  createTimeSwitchPlan,
   finalizeUnmeasuredAreasForAutoTransition,
   shouldPrioritizeUnfinishedAreasOnAutoTransition,
 } from "../src/hooks/nebikiApp/timeTransitions.ts";
+import {
+  getFirstNormalFlowAreaId,
+  getNormalFlowScreenForArea,
+} from "../src/hooks/nebikiApp/normalFlow.ts";
+import { resolveSessionTemperatureComfort } from "../src/hooks/nebikiApp/temperatureComfortState.ts";
 
 const DATE = "2026-09-05";
 // Local calendar construction matches the production clock on every test host.
@@ -360,7 +386,7 @@ test("unmeasured areas stay missing and 17 snapshot survives in Review19 daySnap
   assert.deepEqual(day.areaCountRecords, []);
 });
 
-test("manual start can still restore saved same-day 17 source after an 18:30 session", () => {
+test("legacy source selector still reads saved 17 data without rewriting the existing 18 state", () => {
   const source = fixture("17", "done", "summer");
   source.areaProgressMap.inari.areaCount = 17;
   const current = fixture("18", "start");
@@ -421,14 +447,16 @@ function hookHarness(params: {
   snapshotSaveOk?: boolean;
   savedSource?: AppState;
   records?: Review19Result[];
+  historicalSnapshots?: DailySessionSnapshot[];
 } = {}): ActionHarness {
   const state = params.state ?? fixture();
   const now = params.now ?? at(18, 55);
   const events: string[] = [];
   const snapshots: DailySessionSnapshot[] = [];
+  const persistedSnapshots: DailySessionSnapshot[] = [];
   const sources: AppState[] = [];
   const published: AppState[] = [];
-  const input = snapshotInputs(state);
+  const input = snapshotInputs(state.session ? state : params.savedSource ?? fixture());
   const context: Record<string, unknown> = {
     Date,
     state,
@@ -440,6 +468,7 @@ function hookHarness(params: {
     getRuntimeNow: () => now,
     getNextDoneDiscountInfo,
     getAutomaticReview19TransitionKey,
+    hasStarted1830Session,
     finalizeUnmeasuredAreasForAutoTransition,
     createDailySessionSnapshot,
     sessionSourceResolvedWeather: input.resolvedWeather,
@@ -450,6 +479,7 @@ function hookHarness(params: {
     upsertDailySessionSnapshotSafely: (snapshot: DailySessionSnapshot) => {
       events.push("snapshot");
       snapshots.push(snapshot);
+      if (params.snapshotSaveOk !== false) persistedSnapshots.push(snapshot);
       return { ok: params.snapshotSaveOk ?? true, attempts: [] };
     },
     reportStorageOperationFailures: () => undefined,
@@ -462,7 +492,9 @@ function hookHarness(params: {
       events.push("build");
       return createReview19StartState(args);
     },
-    getHistoricalDailySessionSnapshotsForDate: (date: string) => snapshots.filter((item) => item.session.date === date),
+    getHistoricalDailySessionSnapshotsForDate: (date: string) => [
+      ...(params.historicalSnapshots ?? []), ...persistedSnapshots,
+    ].filter((item) => item.session.date === date),
     lastSessionWeather: null,
     canStartReview19FromCurrentState,
     selectReview19SourceState,
@@ -491,13 +523,12 @@ function hookHarness(params: {
   return { run, runManual, events, snapshots, sources, published, context };
 }
 
-for (const [hour, minute] of [[18, 25], [18, 54]]) {
-  test(`actual hook ${hour}:${minute} still opens 18:30 weather with the existing dialog`, () => {
+for (const [hour, minute] of [[18, 24], [18, 25], [18, 30], [18, 54]]) {
+  test(`actual hook ${hour}:${minute} stays at 17 without dialog, snapshot, skip reservation, or 18:30 input`, () => {
     const harness = hookHarness({ now: at(hour, minute) });
     harness.run({ autoTransition: true });
-    assert.ok(harness.events.includes("open:18"));
-    assert.equal(harness.events.filter((event) => event.startsWith("alert:")).length, 1);
-    assert.match(harness.events.find((event) => event.startsWith("alert:"))!, /18時30分/);
+    assert.deepEqual(harness.events, []);
+    assert.equal(harness.snapshots.length, 0);
     assert.equal(harness.published.length, 0);
   });
 }
@@ -508,7 +539,7 @@ test("actual hook 18:24 performs no transition or persistence", () => {
   assert.deepEqual(harness.events, []);
 });
 
-for (const [hour, minute] of [[18, 55], [19, 0], [19, 25], [20, 30]]) {
+for (const [hour, minute] of [[18, 55], [19, 0], [19, 25], [20, 30], [23, 59]]) {
   test(`actual hook ${hour}:${minute} preserves source/snapshot and opens Review19 only after alert returns`, () => {
     const harness = hookHarness({ now: at(hour, minute), state: fixture("17", "area_judge") });
     harness.run({ autoTransition: true });
@@ -550,9 +581,9 @@ test("actual hook stale closures from timer/focus/visibility callbacks cannot du
   assert.equal(harness.sources.length, 1);
 });
 
-test("actual hook keeps an already claimed 18:30 transition from acquiring Review19 priority", () => {
+test("actual hook does not interrupt a manually opened 18:30 weather input", () => {
   const harness = hookHarness({ state: fixture("17", "area_judge") });
-  harness.context.autoTransitionInFlightKeyRef = { current: [DATE, STARTED_AT, "17", "18"].join("|") };
+  harness.context.timeSwitchTarget = "18";
   harness.run({ autoTransition: true });
   assert.deepEqual(harness.events, []);
 });
@@ -566,7 +597,10 @@ test("actual hook explicit next-discount action keeps its manual semantics at 18
 test("actual manual hook uses the same builder, restores saved 17 source, and blocks repeat invocation", () => {
   const source = fixture("17", "done", "summer");
   source.areaProgressMap.inari.areaCount = 17;
-  const harness = hookHarness({ state: fixture("18", "start"), savedSource: source, now: at(19, 0) });
+  const current = fixture("17", "start");
+  current.session = null;
+  current.sessionDraft.discountTime = "18";
+  const harness = hookHarness({ state: current, savedSource: source, now: at(19, 0) });
   harness.runManual();
   harness.runManual();
   assert.equal(harness.events.filter((event) => event === "build").length, 1);
@@ -589,13 +623,13 @@ test("actual manual hook still blocks a completed day and non-start screens", ()
   }
 });
 
-test("actual hook fixed-time keeps the existing route and performs no production snapshot/source writes", () => {
+test("actual hook fixed-time does not auto-start 18:30 or Review19 and performs no production writes", () => {
   const harness = hookHarness({ isTestMode: true });
   harness.run({ autoTransition: true });
   assert.equal(harness.sources.length, 0);
   assert.equal(harness.snapshots.length, 0);
   assert.equal(harness.published.length, 0);
-  assert.ok(harness.events.includes("open:18"));
+  assert.deepEqual(harness.events, []);
 });
 
 for (const stage of ["snapshot", "source"] as const) {
@@ -609,8 +643,284 @@ for (const stage of ["snapshot", "source"] as const) {
     assert.equal(harness.events.some((event) => event.startsWith("open:")), false);
     assert.equal(harness.events.some((event) => event.includes("19時チェックの時間")), false);
     assert.equal((harness.context.autoTransitionInFlightKeyRef as { current: string | null }).current, null);
+    harness.context.upsertDailySessionSnapshotSafely = (snapshot: DailySessionSnapshot) => {
+      harness.snapshots.push(snapshot);
+      return { ok: true, attempts: [] };
+    };
+    harness.context.persistReview19SourceStateSafely = (source: AppState) => {
+      harness.sources.push(source);
+      return true;
+    };
+    harness.run({ autoTransition: true });
+    assert.equal(harness.published.length, 1);
+    assert.equal(harness.published[0].screen, "review19");
   });
 }
+
+function nightSnapshot(state = fixture("18", "area_judge")): DailySessionSnapshot {
+  const snapshot = createDailySessionSnapshot({
+    capturedAt: at(18, 30).toISOString(), state, ...snapshotInputs(state),
+  });
+  assert.ok(snapshot);
+  return snapshot;
+}
+
+test("18:30 draft alone is not night-session evidence, including a preserved 17 source", () => {
+  const state = fixture("17", "start");
+  state.sessionDraft.discountTime = "18";
+  state.sessionDraft.weatherInputLockedDiscountTime = "18";
+  assert.equal(hasStarted1830Session({ state, now: at(18, 55) }), false);
+  state.session = null;
+  assert.equal(hasStarted1830Session({ state, now: at(18, 55) }), false);
+});
+
+for (const [hour, minute] of [[18, 55], [19, 25], [20, 30], [23, 59]]) {
+  test(`persisted same-day 18 snapshot suppresses 17→Review19 at ${hour}:${minute} after restore`, () => {
+    const stored = JSON.stringify([nightSnapshot()]);
+    const snapshots = JSON.parse(stored) as DailySessionSnapshot[];
+    const state = normalizeLoadedState(JSON.parse(JSON.stringify(fixture())), fixture().sessionDraft);
+    const before = JSON.stringify(snapshots);
+    assert.equal(hasStarted1830Session({ state, now: at(hour, minute), snapshots }), true);
+    const harness = hookHarness({ state, now: at(hour, minute), historicalSnapshots: snapshots });
+    for (let event = 0; event < 4; event += 1) harness.run({ autoTransition: true });
+    assert.deepEqual(harness.events, []);
+    assert.equal(JSON.stringify(snapshots), before);
+  });
+}
+
+test("old-day 18 snapshot does not suppress today's Review19", () => {
+  const snapshots = [nightSnapshot()];
+  const nextDate = new Date(2026, 8, 6, 18, 55);
+  const state = fixture();
+  state.session!.date = "2026-09-06";
+  state.session!.startedAt = new Date(2026, 8, 6, 17, 0).toISOString();
+  assert.equal(hasStarted1830Session({ state, now: nextDate, snapshots }), false);
+  assert.ok(getAutomaticReview19TransitionKey({ state, now: nextDate, snapshots }));
+});
+
+test("legacy actual 18 session is evidence without relying on manual override, and existing Review19 stays unchanged", () => {
+  for (const manualDiscountTimeOverride of [true, false]) {
+    const state = fixture("18", "start");
+    state.session!.manualDiscountTimeOverride = manualDiscountTimeOverride;
+    state.review19 = reviewRecord(true);
+    const before = JSON.stringify(state);
+    assert.equal(hasStarted1830Session({ state, now: at(23, 59) }), true);
+    const harness = hookHarness({ state });
+    harness.runManual();
+    assert.equal(harness.events.includes("build"), false);
+    assert.equal(JSON.stringify(state), before);
+  }
+});
+
+test("manual Review19 wrapper blocks persisted night evidence even after current session returns to 17", () => {
+  const state = fixture("17", "start");
+  const harness = hookHarness({ state, historicalSnapshots: [nightSnapshot()] });
+  harness.runManual();
+  assert.equal(harness.events.includes("build"), false);
+  assert.equal(harness.published[0], state);
+});
+
+// Run the actual manual opening and session-start bodies. UI setters are
+// controlled, while session planning, temperature, snapshot and cycle logic
+// are the application implementations.
+function manualStartHarness(params: {
+  state?: AppState;
+  now?: Date;
+  isTestMode?: boolean;
+  snapshotSaveOk?: boolean;
+} = {}) {
+  const state = params.state ?? fixture();
+  const harness = hookHarness({ ...params, state, now: params.now ?? at(18, 30) });
+  const { context, published, events } = harness;
+  Object.assign(context, {
+    NORMAL_ROUTE,
+    normalizeDemandCycle,
+    cloneHourlyForecasts,
+    cloneSkipRecords,
+    getCurrentDataVersionInfo,
+    normalizeGlobalDiscountAdjustmentPercent,
+    supportsObonCalendarRule,
+    resolveSessionTemperatureComfort,
+    lockDemandCycleForDate,
+    consumeSkipRecordsInMemory,
+    createTimeSwitchPlan,
+    createInitialAreaProgressMap,
+    createAreaProgressMapWithAutoSkippedAreas,
+    createInitialState,
+    buildStartDefaultDraft,
+    getFirstNormalFlowAreaId,
+    getNormalFlowScreenForArea,
+    getWeekdayBaseInfo,
+    getBasisGuideDisplay,
+    isValidDiscountTime,
+    normalizeReview19ExcludedAreaIds,
+    buildTimeSwitchNotice,
+    lastUsedSessionDraft: state.sessionDraft,
+    activeDemandCycle: "normal",
+    globalDiscountAdjustmentPercent: 5,
+    demandCycleState: { selectedCycle: "normal", lockedDate: DATE, lockedCycle: "normal" },
+    nextSessionSkipRecordsRef: { current: [] },
+    weatherConfirmationSubmittingRef: { current: false },
+    resumeTargetScreen: null,
+    setWeatherConfirmationPending: () => undefined,
+    setDemandCycleState: () => undefined,
+    persistDemandCycleStateSafely: () => undefined,
+    setLastUsedSessionDraft: () => undefined,
+    setState: (next: AppState) => {
+      events.push("setState");
+      published.push(next);
+      context.state = next;
+    },
+    setTimeSwitchTarget: (next: DiscountTime | null) => { context.timeSwitchTarget = next; },
+    replaceNextSessionSkipRecords: () => events.push("replaceSkips"),
+  });
+  context.openNextSessionInput = runInNewContext(extractHookFunction("openNextSessionInput"), context);
+  const start = runInNewContext(extractHookFunction("startSession"), context) as () => void;
+  return { ...harness, start };
+}
+
+test("manual done action opens only locked 18 weather draft, with original 17 still current", () => {
+  const harness = manualStartHarness();
+  harness.run();
+  const draftState = harness.published[0];
+  assert.equal(draftState.screen, "start");
+  assert.equal(draftState.session?.discountTime, "17");
+  assert.equal(draftState.sessionDraft.discountTime, "18");
+  assert.equal(draftState.sessionDraft.weatherInputLockedDiscountTime, "18");
+  assert.equal(draftState.sessionDraft.manualDiscountTimeOverride, false);
+  assert.equal(harness.context.timeSwitchTarget, "18");
+  assert.equal(harness.snapshots.length, 0);
+  assert.equal(hasStarted1830Session({ state: draftState, now: at(18, 30) }), false);
+});
+
+test("actual manual 18 start persists real unmeasured session before publishing without fake Review19 or AreaCount", () => {
+  const state = fixture();
+  state.areaProgressMap.inari = { ...state.areaProgressMap.inari, status: "completed", areaCount: 32 };
+  state.review19 = reviewRecord(true);
+  const reviewBefore = JSON.stringify(state.review19);
+  const harness = manualStartHarness({ state });
+  harness.run();
+  harness.events.length = 0;
+  harness.start();
+  const started = harness.published.at(-1)!;
+  assert.equal(started.session?.discountTime, "18");
+  assert.equal(started.session?.startedAt, at(18, 30).toISOString());
+  assert.equal(started.session?.manualDiscountTimeOverride, false);
+  assert.equal(started.session?.globalDiscountAdjustmentPercent, 5);
+  assert.equal(JSON.stringify(started.review19), reviewBefore);
+  assert.ok(Object.values(started.areaProgressMap).every((area) => area.areaCount === undefined));
+  assert.equal(harness.snapshots.length, 1);
+  const snapshot = harness.snapshots[0];
+  assert.ok(harness.events.indexOf("snapshot") < harness.events.indexOf("setState"));
+  assert.equal(snapshot.session.discountTime, "18");
+  assert.equal(snapshot.session.startedAt, started.session.startedAt);
+  assert.equal(snapshot.screen, "area_judge");
+  assert.equal(snapshot.sessionEndReason, undefined);
+  assert.equal(snapshot.calendarContext?.areaCountReference[0]?.discountTime, "18");
+  const expectedWeather = resolveSessionTemperatureComfort({
+    date: DATE, discountTime: "18", weather: started.session.weather,
+    snapshots: [], lastSessionWeather: null,
+    existingAnalysis: started.session.temperatureComfortAnalysis,
+  }).resolvedWeather;
+  assert.deepEqual(snapshot.session.resolvedWeather, expectedWeather);
+  assert.ok(Object.values(snapshot.areas).every((area) => area.areaCount === undefined));
+  assert.deepEqual(snapshot.doneSummaryItems, []);
+  const day = createReview19DaySnapshot({
+    date: DATE, capturedAt: at(19, 0).toISOString(), demandCycle: "normal",
+    sessions: harness.snapshots, areaCountRecords: [],
+  });
+  assert.deepEqual(day.sessions, []);
+  assert.deepEqual(day.areaCountRecords, []);
+  assert.equal(hasStarted1830Session({ state: fixture(), now: at(23, 59), snapshots: harness.snapshots }), true);
+});
+
+test("manual full time selector creates a fresh 18 session rather than relabelling the preserved 17 areas", () => {
+  const state = fixture("17", "start");
+  state.sessionDraft.discountTime = "18";
+  state.sessionDraft.manualDiscountTimeOverride = true;
+  state.areaProgressMap.inari = { ...state.areaProgressMap.inari, status: "completed", areaCount: 32 };
+  const harness = manualStartHarness({ state });
+  harness.start();
+  const started = harness.published[0];
+  assert.equal(started.session?.discountTime, "18");
+  assert.equal(started.session?.manualDiscountTimeOverride, true);
+  assert.notEqual(started.session?.startedAt, STARTED_AT);
+  assert.equal(started.areaProgressMap.inari.areaCount, undefined);
+  assert.equal(harness.snapshots.length, 1);
+});
+
+test("18 start snapshot failure retains the 17 source and permits retry without a false night marker", () => {
+  const harness = manualStartHarness({ snapshotSaveOk: false });
+  harness.run();
+  const prior = harness.context.state as AppState;
+  const before = JSON.stringify(prior);
+  harness.start();
+  assert.equal(harness.context.state, prior);
+  assert.equal(JSON.stringify(prior), before);
+  assert.equal(prior.session?.discountTime, "17");
+  assert.equal(harness.published.length, 1);
+  const readSnapshots = harness.context.getHistoricalDailySessionSnapshotsForDate as
+    (date: string) => DailySessionSnapshot[];
+  assert.equal(hasStarted1830Session({ state: prior, now: at(18, 55), snapshots: readSnapshots(DATE) }), false);
+  harness.context.upsertDailySessionSnapshotSafely = () => ({ ok: true, attempts: [] });
+  harness.start();
+  assert.equal(harness.published.at(-1)?.session?.discountTime, "18");
+});
+
+test("fixed-time explicit 18 start executes its operational plan but never persists a night snapshot", () => {
+  const harness = manualStartHarness({ isTestMode: true });
+  harness.run();
+  harness.start();
+  assert.equal(harness.published.at(-1)?.session?.discountTime, "18");
+  assert.equal(harness.sources.length, 0);
+  assert.equal(harness.snapshots.length, 0);
+});
+
+test("actual 18 start journal roundtrip survives current-state replacement without generating Review19 or count records", () => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const values = new Map<string, string>();
+  const localStorage = {
+    get length() { return values.size; },
+    key: (index: number) => [...values.keys()][index] ?? null,
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: localStorage });
+  try {
+    const harness = manualStartHarness();
+    harness.run();
+    assert.equal(loadDailySessionSnapshots().length, 0);
+    harness.context.upsertDailySessionSnapshotSafely = upsertDailySessionSnapshotSafely;
+    harness.start();
+    const persisted = loadDailySessionSnapshots();
+    assert.equal(persisted.length, 1);
+    assert.equal(persisted[0].session.discountTime, "18");
+    assert.ok(Object.values(persisted[0].areas).every((area) => area.areaCount === undefined));
+    assert.ok([...values.keys()].every((key) => key === "nebiki-helper/daily-session-snapshots"));
+    const restored17 = normalizeLoadedState(JSON.parse(JSON.stringify(fixture())), fixture().sessionDraft);
+    const reloaded = hookHarness({ state: restored17, now: at(23, 59) });
+    reloaded.context.getHistoricalDailySessionSnapshotsForDate = getHistoricalDailySessionSnapshotsForDate;
+    for (let event = 0; event < 4; event += 1) reloaded.run({ autoTransition: true });
+    assert.deepEqual(reloaded.events, []);
+    assert.equal(loadDailySessionSnapshots().length, 1);
+  } finally {
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
+});
+
+test("same-day authoritative Review19 and existing pending Review19 prevent actual automatic side effects", () => {
+  const inProgress = fixture();
+  inProgress.review19 = reviewRecord();
+  for (const harness of [
+    hookHarness({ records: [reviewRecord(true)] }),
+    hookHarness({ state: inProgress }),
+  ]) {
+    harness.run({ autoTransition: true });
+    assert.deepEqual(harness.events, []);
+  }
+});
 
 let passed = 0;
 for (const { name, run } of tests) {

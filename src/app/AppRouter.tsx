@@ -11,7 +11,7 @@ import { Review19Screen } from "../components/screens/Review19Screen";
 import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresentation.ts";
 import { isSummerModeAvailable } from "../domain/demandCycle.ts";
-import { canApplyManyToSlightlyManyAdjustment } from "../domain/areaEvaluationAdjustment.ts";
+import { getAreaEvaluationQuickAdjustments } from "../domain/areaEvaluationAdjustment.ts";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -56,7 +56,10 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           onEditWeatherInput={actions.editWeatherInput}
           onStart={actions.confirmWeatherInput}
           startButtonLabel={derived.startButtonLabel}
-          canStartReview19={derived.canStartReview19Manually && state.sessionDraft.discountTime === "18"}
+          canStartReview19={derived.canStartReview19Manually && (
+            state.sessionDraft.discountTime === "18" ||
+            (state.sessionDraft.discountTime === "17" && Boolean(derived.doneNextSessionInfo?.canStart))
+          )}
           onStartReview19={actions.startReview19Manually}
           now={testNow ?? undefined}
           onOpenSettings={onOpenSettings}
@@ -183,7 +186,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           }
           canOverrideAreaCountEvaluation={Boolean(
             state.currentAreaId &&
-            state.areaProgressMap[state.currentAreaId]?.areaCountEvaluationSource === "history" &&
+            (state.areaProgressMap[state.currentAreaId]?.areaCountEvaluationSource === "history" ||
+              buildMedianEvaluationDisplay(state.areaProgressMap[state.currentAreaId])?.status === "ready") &&
             typeof state.areaProgressMap[state.currentAreaId]?.areaCount === "number",
           )}
           onOverrideAreaCountEvaluation={(selection) => {
@@ -198,22 +202,13 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
               selection,
             );
           }}
-          canApplyManyToSlightlyManyAdjustment={Boolean(
-            state.currentAreaId &&
-            canApplyManyToSlightlyManyAdjustment({
-              demandCycle: derived.demandCycle,
-              discountTime: state.session.discountTime,
-              automaticEvaluation:
-                state.areaProgressMap[state.currentAreaId]
-                  ?.areaCountEvaluation,
-              evaluationSource:
-                state.areaProgressMap[state.currentAreaId]
-                  ?.areaCountEvaluationSource,
-            }),
-          )}
-          onApplyManyToSlightlyManyAdjustment={
-            actions.applyManyToSlightlyManyAdjustment
-          }
+          areaEvaluationQuickAdjustments={getAreaEvaluationQuickAdjustments({
+            screen: state.screen,
+            discountTime: state.session.discountTime,
+            isTestMode: testNow instanceof Date,
+            progress: state.currentAreaId ? state.areaProgressMap[state.currentAreaId] : undefined,
+          })}
+          onApplyAreaEvaluationAdjustment={actions.applyAreaEvaluationAdjustment}
           showDailyNotice={derived.showDailyNoticeBeforeRate}
           showDayBeforeHolidayNotice={derived.showDayBeforeHolidayNotice}
           showThreeDayHolidayMiddleNotice={derived.showThreeDayHolidayMiddleNotice}
@@ -252,6 +247,12 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
+          onStart1830={
+            !(testNow instanceof Date) && state.session?.discountTime === "17" &&
+            derived.doneNextSessionInfo?.canStart
+              ? () => actions.startNextDoneSession()
+              : undefined
+          }
           referenceText={derived.basisGuide.referenceText}
           timeText={derived.timeText}
           showDailyDataActions={
@@ -297,7 +298,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
     case "review19_done":
       return (
         <Review19DoneScreen
-          onCopyReview19Data={actions.copyCompletedReview19Data}
+          onExportReview19Data={actions.exportCompletedReview19Data}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />

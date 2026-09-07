@@ -1,36 +1,66 @@
+import { buildMedianEvaluationDisplay } from "./medianEvaluationPresentation.ts";
 import type {
   AreaCountEvaluation,
-  AreaCountEvaluationSource,
-  DemandCycle,
+  AreaProgress,
   DiscountTime,
   HumanEvaluationAdjustment,
+  ScreenName,
 } from "./types.ts";
 
-export function canApplyManyToSlightlyManyAdjustment(params: {
-  demandCycle: DemandCycle;
-  discountTime: DiscountTime;
-  automaticEvaluation?: AreaCountEvaluation;
-  evaluationSource?: AreaCountEvaluationSource;
-}): boolean {
-  if (
-    params.automaticEvaluation !== "many" ||
-    params.evaluationSource !== "history"
-  ) {
-    return false;
-  }
+const EVALUATIONS_ASCENDING: AreaCountEvaluation[] = [
+  "few",
+  "slightly_few",
+  "normal",
+  "slightly_many",
+  "many",
+];
 
-  return params.demandCycle === "summer"
-    ? params.discountTime === "15" || params.discountTime === "17"
-    : params.discountTime === "15";
-}
+export function createAreaEvaluationQuickAdjustment(
+  originalEvaluation: AreaCountEvaluation,
+  direction: HumanEvaluationAdjustment["direction"],
+): HumanEvaluationAdjustment | null {
+  const originalIndex = EVALUATIONS_ASCENDING.indexOf(originalEvaluation);
+  if (originalIndex < 0) return null;
+  const finalEvaluation = EVALUATIONS_ASCENDING[
+    originalIndex + (direction === "lower" ? -1 : 1)
+  ];
+  if (!finalEvaluation) return null;
 
-export function createManyToSlightlyManyAdjustment(): HumanEvaluationAdjustment {
   return {
     applied: true,
     source: "human",
-    direction: "lower",
+    direction,
     steps: 1,
-    originalEvaluation: "many",
-    finalEvaluation: "slightly_many",
+    originalEvaluation,
+    finalEvaluation,
   };
+}
+
+/** 保存済みの元の履歴自動判定を基準にする。採用判定から累積させない。 */
+export function getAreaEvaluationQuickAdjustments(params: {
+  screen: ScreenName;
+  discountTime: DiscountTime;
+  isTestMode: boolean;
+  progress?: AreaProgress;
+}): HumanEvaluationAdjustment[] {
+  if (
+    params.isTestMode ||
+    params.screen !== "rate_display" ||
+    params.discountTime === "20" ||
+    typeof params.progress?.areaCount !== "number" ||
+    params.progress.areaCountDecisionBasis?.recommendationStatus !== "ready"
+  ) {
+    return [];
+  }
+
+  const automatic = buildMedianEvaluationDisplay(params.progress);
+  if (automatic?.status !== "ready") return [];
+
+  return (["lower", "higher"] as const).flatMap((direction) => {
+    const adjustment = createAreaEvaluationQuickAdjustment(
+      automatic.evaluation,
+      direction,
+    );
+    return adjustment ? [adjustment] : [];
+  });
 }

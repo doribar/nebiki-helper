@@ -154,7 +154,7 @@ try {
     assert.equal(result.failure?.ok, false);
   });
 
-  test("15→17、17→18:30、18:30→19:30、19:30→20:30境界を維持", () => {
+  test("次値引の開始可能時刻を維持（17→18:30は明示操作専用）", () => {
     const at = (hour: number, minute: number) =>
       new Date(2026, 7, 16, hour, minute, 0, 0);
     const transitions: Array<{
@@ -192,7 +192,7 @@ try {
     assert.equal(shouldPrioritizeUnfinishedAreasOnAutoTransition("rate_display"), true);
   });
 
-  test("hook内3経路はraw upsertを使わずsafe boundaryを通る", () => {
+  test("hook内4経路はraw upsertを使わずsafe boundaryを通る", () => {
     const projectRoot = fileURLToPath(new URL("..", import.meta.url));
     const source = readFileSync(
       `${projectRoot}/src/hooks/useNebikiApp.ts`,
@@ -200,15 +200,16 @@ try {
     ).replaceAll("\r\n", "\n");
     assert.equal(
       [...source.matchAll(/\bupsertDailySessionSnapshotSafely\(/g)].length,
-      3,
+      4,
     );
     assert.doesNotMatch(source, /\bupsertDailySessionSnapshot\(/);
     assert.match(source, /daily-session-completion/);
     assert.match(source, /final-session-snapshot/);
     assert.match(source, /auto-time-transition-snapshot/);
+    assert.match(source, /night-discount-session-start/);
   });
 
-  test("自動遷移はsnapshot結果に関係なく次入力とdialogを続行", () => {
+  test("通常の次値引遷移はsnapshot失敗を報告して続行し、Review19は専用guardで保全する", () => {
     const projectRoot = fileURLToPath(new URL("..", import.meta.url));
     const source = readFileSync(
       `${projectRoot}/src/hooks/useNebikiApp.ts`,

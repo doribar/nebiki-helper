@@ -8,8 +8,8 @@ import {
   getReferenceConditionLabel,
 } from "../src/domain/weekdayBase.ts";
 import {
-  canApplyManyToSlightlyManyAdjustment,
-  createManyToSlightlyManyAdjustment,
+  getAreaEvaluationQuickAdjustments,
+  createAreaEvaluationQuickAdjustment,
 } from "../src/domain/areaEvaluationAdjustment.ts";
 import {
   createHumanEvaluationSelection,
@@ -57,7 +57,33 @@ function canQuick(params: {
   automaticEvaluation: AreaCountEvaluation;
   evaluationSource?: AreaCountEvaluationSource;
 }): boolean {
-  return canApplyManyToSlightlyManyAdjustment(params);
+  return getAreaEvaluationQuickAdjustments({
+    screen: "rate_display",
+    discountTime: params.discountTime,
+    isTestMode: false,
+    progress: {
+      areaId: "bento_men",
+      status: "unstarted",
+      areaJudge: "normal",
+      areaCount: 24,
+      areaCountEvaluation: params.automaticEvaluation,
+      areaCountEvaluationSource: params.evaluationSource,
+      areaCountDecisionBasis: {
+        ruleVersion: "area_count_median_v1",
+        demandCycle: params.demandCycle,
+        evaluationSource: "history",
+        recommendationStatus: "ready",
+        actualWeekday: "火",
+        actualWeekdayGroup: "火木",
+        comparisonMode: "weekday",
+        sampleSize: 3,
+        requiredSampleSize: 3,
+        baseEvaluation: params.automaticEvaluation,
+        finalEvaluation: params.automaticEvaluation,
+        areaRateAdjustment: evaluationToRateAdjustment(params.automaticEvaluation),
+      },
+    },
+  }).length > 0;
 }
 
 function buildAdjustedDetails(): HumanEvaluationDetails {
@@ -72,7 +98,7 @@ function buildAdjustedDetails(): HumanEvaluationDetails {
       evaluatedAt: "2026-09-08T06:10:00.000Z",
     }),
     automaticEvaluation: "many",
-    evaluationAdjustment: createManyToSlightlyManyAdjustment(),
+    evaluationAdjustment: createAreaEvaluationQuickAdjustment("many", "lower")!,
   };
 }
 
@@ -133,12 +159,12 @@ test("formatは解決済み参照曜日を再判定せず利用", () => {
   assert.equal(formatReferenceConditionLabel({ demandCycle: "summer", reference }), "夏・木曜日・17時");
 });
 
-test("normal 15 / auto many だけquick補正を許可", () => {
+test("normal 15 / auto many は既存quick補正を維持", () => {
   assert.equal(canQuick({ demandCycle: "normal", discountTime: "15", automaticEvaluation: "many", evaluationSource: "history" }), true);
 });
 
-test("normal 17 / auto many はquick補正を許可しない", () => {
-  assert.equal(canQuick({ demandCycle: "normal", discountTime: "17", automaticEvaluation: "many", evaluationSource: "history" }), false);
+test("normal 17 / auto many もquick補正を許可", () => {
+  assert.equal(canQuick({ demandCycle: "normal", discountTime: "17", automaticEvaluation: "many", evaluationSource: "history" }), true);
 });
 
 test("summer 15 / auto many はquick補正を許可", () => {
@@ -149,31 +175,32 @@ test("summer 17 / auto many はquick補正を許可", () => {
   assert.equal(canQuick({ demandCycle: "summer", discountTime: "17", automaticEvaluation: "many", evaluationSource: "history" }), true);
 });
 
-test("summer 18以降 / auto many はquick補正を許可しない", () => {
-  for (const discountTime of ["18", "19", "20"] as const) {
-    assert.equal(canQuick({ demandCycle: "summer", discountTime, automaticEvaluation: "many", evaluationSource: "history" }), false);
+test("summerの通常18/19 sessionへ共通化し20時半は対象外", () => {
+  for (const discountTime of ["18", "19"] as const) {
+    assert.equal(canQuick({ demandCycle: "summer", discountTime, automaticEvaluation: "many", evaluationSource: "history" }), true);
   }
+  assert.equal(canQuick({ demandCycle: "summer", discountTime: "20", automaticEvaluation: "many", evaluationSource: "history" }), false);
 });
 
-test("auto slightly_many はquick補正を許可しない", () => {
-  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "slightly_many", evaluationSource: "history" }), false);
+test("auto slightly_many もquick補正を許可", () => {
+  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "slightly_many", evaluationSource: "history" }), true);
 });
 
-test("auto normal はquick補正を許可しない", () => {
-  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "normal", evaluationSource: "history" }), false);
+test("auto normal もquick補正を許可", () => {
+  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "normal", evaluationSource: "history" }), true);
 });
 
-test("auto slightly_few はquick補正を許可しない", () => {
-  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "slightly_few", evaluationSource: "history" }), false);
+test("auto slightly_few もquick補正を許可", () => {
+  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "slightly_few", evaluationSource: "history" }), true);
 });
 
-test("auto few はquick補正を許可しない", () => {
-  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "few", evaluationSource: "history" }), false);
+test("auto few もquick補正を許可", () => {
+  assert.equal(canQuick({ demandCycle: "summer", discountTime: "15", automaticEvaluation: "few", evaluationSource: "history" }), true);
 });
 
 test("Review19画面にはquick補正ボタンを配線しない", () => {
-  assert.doesNotMatch(source("src/components/screens/Review19Screen.tsx"), /やや多いにする/);
-  assert.match(source("src/components/screens/RateDisplayScreen.tsx"), /やや多いにする/);
+  assert.doesNotMatch(source("src/components/screens/Review19Screen.tsx"), /areaEvaluationQuickAdjustments|onApplyAreaEvaluationAdjustment/);
+  assert.match(source("src/components/screens/RateDisplayScreen.tsx"), /evaluationText\(adjustment.finalEvaluation\)/);
 });
 
 test("quick補正は元auto manyと人間の1段lowerを保存", () => {

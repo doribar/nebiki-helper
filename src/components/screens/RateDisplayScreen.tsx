@@ -7,6 +7,7 @@ import type {
   FinalGuideData,
   GlobalDiscountAdjustmentPercent,
   HumanEvaluationDetails,
+  HumanEvaluationAdjustment,
   HumanEvaluationSelection,
   RateDisplayData,
   SkipTargetOption,
@@ -58,8 +59,10 @@ type RateDisplayScreenProps = {
   humanEvaluationDetails?: HumanEvaluationDetails;
   canOverrideAreaCountEvaluation?: boolean;
   onOverrideAreaCountEvaluation?: (selection: HumanEvaluationSelection) => void;
-  canApplyManyToSlightlyManyAdjustment?: boolean;
-  onApplyManyToSlightlyManyAdjustment?: () => void;
+  areaEvaluationQuickAdjustments?: HumanEvaluationAdjustment[];
+  onApplyAreaEvaluationAdjustment?: (
+    direction: HumanEvaluationAdjustment["direction"],
+  ) => void;
   showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
   showThreeDayHolidayMiddleNotice?: boolean;
@@ -282,8 +285,8 @@ export function RateDisplayScreen({
   humanEvaluationDetails,
   canOverrideAreaCountEvaluation = false,
   onOverrideAreaCountEvaluation,
-  canApplyManyToSlightlyManyAdjustment = false,
-  onApplyManyToSlightlyManyAdjustment,
+  areaEvaluationQuickAdjustments = [],
+  onApplyAreaEvaluationAdjustment,
   showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
   showThreeDayHolidayMiddleNotice = false,
@@ -473,7 +476,12 @@ export function RateDisplayScreen({
           </div>
           {humanEvaluationDetails?.evaluationAdjustment?.applied ? (
             <div style={{ marginTop: 6 }}>
-              人間補正：<strong>1段弱める</strong>
+              人間補正：
+              <strong>
+                {humanEvaluationDetails.evaluationAdjustment.direction === "lower"
+                  ? "1段少ない側"
+                  : "1段多い側"}
+              </strong>
               <br />
               採用判定：
               <strong>
@@ -482,27 +490,34 @@ export function RateDisplayScreen({
                 )}
               </strong>
             </div>
-          ) : canApplyManyToSlightlyManyAdjustment &&
-            onApplyManyToSlightlyManyAdjustment ? (
-            <button
-              type="button"
-              onClick={onApplyManyToSlightlyManyAdjustment}
-              style={{
-                width: "100%",
-                minHeight: 44,
-                marginTop: 8,
-                border: "1px solid #60a5fa",
-                borderRadius: 10,
-                background: "#fff",
-                color: "#1e3a8a",
-                fontSize: 14,
-                fontWeight: 900,
-                cursor: "pointer",
-              }}
-            >
-              やや多いにする
-            </button>
           ) : null}
+          {onApplyAreaEvaluationAdjustment
+            ? areaEvaluationQuickAdjustments.map((adjustment) => (
+                <button
+                  key={adjustment.direction}
+                  type="button"
+                  aria-pressed={
+                    humanEvaluationDetails?.evaluationAdjustment?.finalEvaluation ===
+                    adjustment.finalEvaluation
+                  }
+                  onClick={() => onApplyAreaEvaluationAdjustment(adjustment.direction)}
+                  style={{
+                    width: "100%",
+                    minHeight: 44,
+                    marginTop: 8,
+                    border: "1px solid #60a5fa",
+                    borderRadius: 10,
+                    background: "#fff",
+                    color: "#1e3a8a",
+                    fontSize: 14,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}
+                >
+                  {evaluationText(adjustment.finalEvaluation)}にする
+                </button>
+              ))
+            : null}
         </section>
       ) : null}
 

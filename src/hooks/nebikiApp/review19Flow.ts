@@ -12,19 +12,34 @@ import { createReview19Reference, createReview19WeatherDraft } from "./sessionSn
 import { normalizeLoadedState } from "./stateNormalization.ts";
 import { resolveSessionTemperatureComfort } from "./temperatureComfortState.ts";
 
-/** 18:30への移行を逃した当日17時sourceだけを救済する。19:25以降も優先する。 */
+/** 実際に開始した18:30sessionだけを夜値引日の証拠にする。入力draftだけでは判定しない。 */
+export function hasStarted1830Session(params: {
+  state: AppState;
+  now: Date;
+  snapshots?: readonly DailySessionSnapshot[];
+}): boolean {
+  const date = formatLocalDate(params.now);
+  const isNightSession = (session: AppState["session"]) =>
+    session?.date === date && session.discountTime === "18" && Boolean(session.startedAt);
+  return isNightSession(params.state.session) ||
+    Boolean(params.snapshots?.some((snapshot) => isNightSession(snapshot.session)));
+}
+
+/** 通常日は当日17時sourceから18:55以降Review19へ直接進む。時刻の上限は設けない。 */
 export function getAutomaticReview19TransitionKey(params: {
   state: AppState;
   now: Date;
   records?: Review19Result[];
   isTestMode?: boolean;
   hasTransitionedTo1830?: boolean;
+  snapshots?: readonly DailySessionSnapshot[];
 }): string | null {
   const { state, now } = params;
   const currentDate = formatLocalDate(now);
   if (
     params.isTestMode ||
     params.hasTransitionedTo1830 ||
+    hasStarted1830Session(params) ||
     state.screen === "start" ||
     state.screen === "review19_weather" ||
     state.screen === "review19" ||
@@ -40,7 +55,7 @@ export function getAutomaticReview19TransitionKey(params: {
   return [currentDate, state.session.startedAt, "17", "review19"].join("|");
 }
 
-/** 手動開始と自動救済が共用する、17時sourceからのReview19生成。保存・通知は呼出側。 */
+/** 手動開始と通常の自動遷移が共用する、17時sourceからのReview19生成。保存・通知は呼出側。 */
 export function createReview19StartState(params: {
   currentState: AppState;
   sourceState: AppState;

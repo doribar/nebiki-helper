@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { PrimaryButton } from "../layout/PrimaryButton";
 
 type Review19DoneScreenProps = {
-  onCopyReview19Data: () => Promise<boolean>;
+  onExportReview19Data: () => void;
   onGoBack: () => void;
   onReturnHome: () => void;
 };
@@ -16,36 +16,10 @@ const cardStyle: CSSProperties = {
 };
 
 export function Review19DoneScreen({
-  onCopyReview19Data,
+  onExportReview19Data,
   onGoBack,
   onReturnHome,
 }: Review19DoneScreenProps) {
-  const [copyStatus, setCopyStatus] = useState<"success" | "error" | null>(null);
-  const [copying, setCopying] = useState(false);
-  const copyInFlight = useRef(false);
-
-  useEffect(() => {
-    if (copyStatus !== "success") return;
-    const timer = window.setTimeout(() => setCopyStatus(null), 5000);
-    return () => window.clearTimeout(timer);
-  }, [copyStatus]);
-
-  async function copyReview19Data() {
-    if (copyInFlight.current) return;
-    copyInFlight.current = true;
-    setCopying(true);
-    setCopyStatus(null);
-    try {
-      const copied = await onCopyReview19Data();
-      setCopyStatus(copied ? "success" : "error");
-    } catch {
-      setCopyStatus("error");
-    } finally {
-      copyInFlight.current = false;
-      setCopying(false);
-    }
-  }
-
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -88,21 +62,13 @@ export function Review19DoneScreen({
           保存データ
         </div>
         <div style={{ fontSize: 14, color: "#555", lineHeight: 1.7, marginBottom: 14 }}>
-          今回保存した19時チェックデータをコピーして、ChatGPTのチャットに貼り付けられます。
+          今回保存した19時チェックデータをJSONファイルとしてダウンロードし、ChatGPTに添付できます。
         </div>
 
         <div>
-          <PrimaryButton onClick={copyReview19Data} disabled={copying}>
-            {copying ? "コピー中…" : "ChatGPT用にコピー"}
+          <PrimaryButton onClick={onExportReview19Data}>
+            JSONをダウンロード
           </PrimaryButton>
-        </div>
-        <div
-          role="status"
-          aria-live="polite"
-          style={{ marginTop: 10, fontSize: 14, lineHeight: 1.7, color: copyStatus === "error" ? "#b91c1c" : "#166534" }}
-        >
-          {copyStatus === "success" && "コピーしました"}
-          {copyStatus === "error" && "コピーできませんでした。ブラウザの権限を確認するか、設定からJSONを出力してください。"}
         </div>
       </section>
 

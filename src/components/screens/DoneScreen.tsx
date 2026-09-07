@@ -5,6 +5,7 @@ import type { DoneSummaryItem } from "../../domain/types";
 type DoneScreenProps = {
   onGoBack: () => void;
   onReturnHome: () => void;
+  onStart1830?: () => void;
   referenceText?: string;
   timeText?: string;
   summaryItems: DoneSummaryItem[];
@@ -84,6 +85,7 @@ function BasisTimeMiniPanel({
 export function DoneScreen({
   onGoBack,
   onReturnHome,
+  onStart1830,
   referenceText,
   timeText,
   summaryItems,
@@ -144,6 +146,17 @@ export function DoneScreen({
         <div style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
           値引作業は完了です。
         </div>
+
+        {onStart1830 ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            <button type="button" onClick={onStart1830} style={subActionButtonStyle}>
+              18:30値引を開始
+            </button>
+            <div style={{ fontSize: 13, color: "#555" }}>
+              夜の値引を担当する日は、こちらから開始してください。
+            </div>
+          </div>
+        ) : null}
 
       </section>
 
