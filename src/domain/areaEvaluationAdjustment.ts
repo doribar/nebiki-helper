@@ -56,7 +56,7 @@ export function getAreaEvaluationQuickAdjustments(params: {
   const automatic = buildMedianEvaluationDisplay(params.progress);
   if (automatic?.status !== "ready") return [];
 
-  return (["lower", "higher"] as const).flatMap((direction) => {
+  return (["higher", "lower"] as const).flatMap((direction) => {
     const adjustment = createAreaEvaluationQuickAdjustment(
       automatic.evaluation,
       direction,

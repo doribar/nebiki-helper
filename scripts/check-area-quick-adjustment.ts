@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import * as React from "react";
+import * as jsxRuntime from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
+import type { RateDisplayScreen } from "../src/components/screens/RateDisplayScreen.tsx";
 import {
   createAreaEvaluationQuickAdjustment,
   getAreaEvaluationQuickAdjustments,
@@ -32,6 +36,7 @@ import {
   resolveHumanEvaluationForDiscount,
 } from "../src/domain/humanEvaluation.ts";
 import { createDefaultHourlyForecasts, resolveWeatherInputForDiscount } from "../src/domain/hourlyWeather.ts";
+import { buildMedianEvaluationDisplay } from "../src/domain/medianEvaluationPresentation.ts";
 import { buildRateDecisionSnapshot } from "../src/domain/rateDecisionSnapshot.ts";
 import { createInitialReview19Result } from "../src/domain/review19.ts";
 import { buildDirectReview19DataExportPayload } from "../src/domain/separateDataExport.ts";
@@ -397,40 +402,197 @@ test("metadata survives current/checkpoint, snapshot, day, finalized, export and
   }
 });
 
-const rateScreenSource = readFileSync(new URL("../src/components/screens/RateDisplayScreen.tsx", import.meta.url), "utf8");
-
-test("rendered few/normal/many buttons identify destinations and only valid directions", () => {
-  for (const original of ["few", "normal", "many"] as const) {
-    const state = fixture(original);
-    const html = rateScreenSource;
-    assert.ok(choices(state).length >= 1);
-    assert.ok(html.includes("evaluationText(adjustment.finalEvaluation)"));
-    assert.equal((html.match(/key=\{adjustment\.direction\}/g) ?? []).length, 1);
-    assert.ok(html.includes("自動判定を手動で変更") || html.includes("HumanEvaluationSelector"));
+// Compile the actual screen and its TSX children; ordinary TS dependencies and
+// React hooks run unchanged. Capture its React tree during SSR so button handlers
+// can be exercised as well as checking the serialized DOM order.
+const componentModules = new Map<string, Record<string, unknown>>();
+async function loadComponentModule(url: URL): Promise<Record<string, unknown>> {
+  const cached = componentModules.get(url.href);
+  if (cached) return cached;
+  const source = readFileSync(url, "utf8");
+  const ast = ts.createSourceFile(url.pathname, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const dependencies = new Map<string, unknown>([
+    ["react", React], ["react/jsx-runtime", jsxRuntime],
+  ]);
+  for (const statement of ast.statements) {
+    if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly) continue;
+    assert.ok(ts.isStringLiteral(statement.moduleSpecifier));
+    const id = statement.moduleSpecifier.text;
+    if (dependencies.has(id)) continue;
+    assert.ok(id.startsWith("."), "only local component dependencies are expected: " + id);
+    const dependencyUrl = [id, id + ".ts", id + ".tsx"]
+      .map((candidate) => new URL(candidate, url)).find((candidate) => existsSync(candidate));
+    assert.ok(dependencyUrl, "actual component dependency exists: " + id);
+    dependencies.set(id, dependencyUrl.pathname.endsWith(".tsx")
+      ? await loadComponentModule(dependencyUrl)
+      : await import(dependencyUrl.href));
   }
-});
+  const exports: Record<string, unknown> = {};
+  const output = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  runInNewContext(output, {
+    exports,
+    require: (id: string) => {
+      assert.ok(dependencies.has(id), "actual dependency was loaded: " + id);
+      return dependencies.get(id);
+    },
+  });
+  componentModules.set(url.href, exports);
+  return exports;
+}
+
+const screenModule = await loadComponentModule(new URL("../src/components/screens/RateDisplayScreen.tsx", import.meta.url));
+const RuntimeRateDisplayScreen = screenModule.RateDisplayScreen as typeof RateDisplayScreen;
+type ScreenElement = React.ReactElement<Record<string, unknown>>;
+function elements(node: React.ReactNode): ScreenElement[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!React.isValidElement<Record<string, unknown>>(node)) return [];
+  return [node, ...elements(node.props.children as React.ReactNode)];
+}
+function nodeText(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(nodeText).join("");
+  return React.isValidElement<Record<string, unknown>>(node)
+    ? nodeText(node.props.children as React.ReactNode) : "";
+}
+
+function renderRateScreen(state: AppState, options: {
+  fixedTime?: boolean;
+  openManual?: boolean;
+  onApply?: (direction: HumanEvaluationAdjustment["direction"]) => void;
+} = {}) {
+  const progress = state.areaProgressMap[AREA];
+  let rendered: React.ReactNode = null;
+  function CaptureScreen() {
+    rendered = RuntimeRateDisplayScreen({
+      weekdayText: "火曜日", timeText: "17時", areaName: "弁当・麺",
+      discountTime: state.session!.discountTime, demandCycle: state.session!.demandCycle,
+      basisGuide: { referenceText: "火曜日・17時", referenceConditionLabel: "火曜日・17時" },
+      rateDisplay: null,
+      medianEvaluationDisplay: buildMedianEvaluationDisplay(progress),
+      humanEvaluationDetails: progress.humanEvaluationDetails,
+      areaEvaluationQuickAdjustments: choices(state, options.fixedTime),
+      onApplyAreaEvaluationAdjustment: options.onApply ?? (() => {}),
+      canOverrideAreaCountEvaluation: true, onOverrideAreaCountEvaluation: () => {},
+      onNextArea: () => {}, onSkip: () => {}, onGoBack: () => {}, onReturnHome: () => {},
+    });
+    if (options.openManual) {
+      const toggle = elements(rendered).find((element) =>
+        element.type === "button" && nodeText(element) === "自動判定を手動で変更",
+      );
+      assert.ok(toggle, "full manual toggle remains available");
+      if (!toggle.props["aria-expanded"]) (toggle.props.onClick as () => void)();
+    }
+    return rendered;
+  }
+  const markup = renderToStaticMarkup(React.createElement(CaptureScreen));
+  const allElements = elements(rendered);
+  const medianSection = allElements.find((element) =>
+    element.type === "section" && element.props["aria-label"] === "履歴中央値による自動判定",
+  );
+  const buttons = medianSection ? elements(medianSection).filter((element) => element.type === "button") : [];
+  const sectionMarkup = markup.match(/<section aria-label="履歴中央値による自動判定"[^>]*>([\s\S]*?)<\/section>/)?.[1] ?? "";
+  const domLabels = [...sectionMarkup.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)]
+    .map((match) => match[1].replace(/<[^>]*>/g, ""));
+  return { markup, allElements, medianSection, buttons, domLabels };
+}
+
+const orderedCases = [
+  { original: "normal", targets: [
+    { direction: "higher", final: "slightly_many", label: "やや多いにする" },
+    { direction: "lower", final: "slightly_few", label: "やや少ないにする" },
+  ] },
+  { original: "slightly_few", targets: [
+    { direction: "higher", final: "normal", label: "普通にする" },
+    { direction: "lower", final: "few", label: "少ないにする" },
+  ] },
+  { original: "slightly_many", targets: [
+    { direction: "higher", final: "many", label: "多いにする" },
+    { direction: "lower", final: "normal", label: "普通にする" },
+  ] },
+  { original: "few", targets: [
+    { direction: "higher", final: "slightly_few", label: "やや少ないにする" },
+  ] },
+  { original: "many", targets: [
+    { direction: "lower", final: "slightly_many", label: "やや多いにする" },
+  ] },
+] as const;
+
+for (const { original, targets } of orderedCases) {
+  test(`actual ${original} screen renders destinations in higher-before-lower DOM order`, () => {
+    const rendered = renderRateScreen(fixture(original));
+    const expectedLabels = targets.map((target) => target.label);
+    assert.deepEqual(rendered.domLabels, expectedLabels);
+    assert.deepEqual(rendered.buttons.map(nodeText), expectedLabels);
+    assert.deepEqual(rendered.buttons.map((button) => button.key), targets.map((target) => target.direction));
+    for (const button of rendered.buttons) {
+      assert.equal(button.props["aria-pressed"], false);
+      assert.equal(typeof button.props.onClick, "function");
+    }
+    assert.ok(rendered.allElements.some((element) =>
+      element.type === "button" && nodeText(element) === "自動判定を手動で変更",
+    ));
+  });
+
+  for (const [index, target] of targets.entries()) {
+    test(`actual ${original} button ${index + 1} invokes ${target.direction} and persists ${target.final}`, async () => {
+      const harness = actionHarness(original);
+      const directions: HumanEvaluationAdjustment["direction"][] = [];
+      const rendered = renderRateScreen(harness.context.state, { onApply: (direction) => {
+        directions.push(direction);
+        return harness.apply(direction);
+      } });
+      assert.equal(nodeText(rendered.buttons[index]), target.label);
+      await (rendered.buttons[index].props.onClick as () => Promise<void>)();
+      assert.deepEqual(directions, [target.direction]);
+      assert.equal(harness.writes.length, 1);
+      assertAdopted(harness.context.state, harness.writes[0], {
+        applied: true, source: "human", direction: target.direction, steps: 1,
+        originalEvaluation: original, finalEvaluation: target.final,
+      });
+      const updated = renderRateScreen(harness.context.state);
+      assert.deepEqual(updated.domLabels, targets.map((item) => item.label));
+      assert.deepEqual(updated.buttons.map((button) => button.props["aria-pressed"]),
+        targets.map((_, targetIndex) => targetIndex === index));
+    });
+  }
+}
 
 test("quick keeps the opposite button/full manual available and shows final adopted evaluation", async () => {
   const harness = actionHarness("normal");
-  await harness.apply("lower");
-  const html = rateScreenSource;
-  assert.ok(html.includes("evaluationText(adjustment.finalEvaluation)"));
-  assert.ok(html.includes("onApplyAreaEvaluationAdjustment(adjustment.direction)"));
-  assert.ok(html.includes("1段少ない側"));
-  assert.ok(html.includes("採用判定"));
-  assert.ok(html.includes("aria-pressed={"));
-  assert.ok(html.includes("自動判定を手動で変更"));
-  await harness.apply("higher");
-  assert.ok(rateScreenSource.includes("1段多い側"));
+  for (const index of [1, 1, 0, 0]) {
+    const before = renderRateScreen(harness.context.state, { onApply: harness.apply });
+    await (before.buttons[index].props.onClick as () => Promise<void>)();
+    const target = orderedCases[0].targets[index];
+    const rendered = renderRateScreen(harness.context.state, { openManual: true });
+    assert.deepEqual(rendered.domLabels, ["やや多いにする", "やや少ないにする"]);
+    assert.deepEqual(rendered.buttons.map((button) => button.props["aria-pressed"]), [index === 0, index === 1]);
+    assert.ok(rendered.medianSection);
+    assert.equal(nodeText(rendered.medianSection),
+      `中央値判定：普通人間補正：${index === 0 ? "1段多い側" : "1段少ない側"}採用判定：${evaluationText(target.final)}やや多いにするやや少ないにする`);
+    assert.match(rendered.markup, /aria-label="自動判定の手動変更-弁当・麺"/);
+    assertAdopted(harness.context.state, harness.writes.at(-1)!, {
+      applied: true, source: "human", direction: target.direction, steps: 1,
+      originalEvaluation: "normal", finalEvaluation: target.final,
+    });
+  }
+  assert.equal(harness.context.areaCountRecords.length, 1);
 });
 
 test("rendered fixed-time and insufficient auto omit quick, full manual implementation remains", () => {
-  assert.deepEqual(choices(fixture(), true), []);
   const insufficient = fixture();
   insufficient.areaProgressMap[AREA].areaCountDecisionBasis!.recommendationStatus = "insufficient";
-  assert.equal(choices(insufficient).length, 0);
-  const rateSource = rateScreenSource;
-  assert.match(rateSource, /HumanEvaluationSelector/);
+  for (const rendered of [
+    renderRateScreen(fixture(), { fixedTime: true, openManual: true }),
+    renderRateScreen(insufficient, { openManual: true }),
+    renderRateScreen(fixture("normal", "20")),
+  ]) {
+    assert.deepEqual(rendered.buttons, []);
+    assert.deepEqual(rendered.domLabels, []);
+  }
+  const manual = renderRateScreen(insufficient, { openManual: true });
+  assert.match(manual.markup, /aria-label="自動判定の手動変更-弁当・麺"/);
   const reviewSource = readFileSync(new URL("../src/components/screens/Review19Screen.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(reviewSource, /areaEvaluationQuickAdjustments|onApplyAreaEvaluationAdjustment/);
 });
