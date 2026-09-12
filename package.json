@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-23",
+  "version": "2026.8.9-24",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -61,7 +61,10 @@
     "check:reference-label-quick-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-reference-label-quick-adjustment.ts",
     "check:review19-priority-transition": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-priority-transition.ts",
     "check:review19-download": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-download.ts",
-    "check:area-quick-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-quick-adjustment.ts"
+    "check:area-quick-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-quick-adjustment.ts",
+    "check:advance-discount": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-advance-discount.ts",
+    "check:advance-discount-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-advance-discount-ui.ts",
+    "check:advance-discount-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-advance-discount-flow.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

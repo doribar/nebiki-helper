@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-23）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-24）
 
-最終更新: 2026-09-10 JST
+最終更新: 2026-09-12 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,28 +10,28 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260910-1420.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260910-1420.zip` |
-| appVersion | `2026.8.9-23` |
-| buildId | `build-20260910-091606-jst` |
+| ZIP | `nebiki-helper-20260912-2229.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260912-2229.zip` |
+| appVersion | `2026.8.9-24` |
+| buildId | `build-20260912-171652-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | 完成ZIP生成後の `outputs/nebiki-helper-20260910-1420.zip.sha256` / `RELEASE_REPORT_2026.8.9-23.md` を参照（ZIP外。自己参照を避けるため本書へ値を埋め込まない） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260912-2229.zip.sha256` / `RELEASE_REPORT_2026.8.9-24.md` を参照（自己参照回避） |
 
 絶対path:
 
 - 成果物workspace: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5`
-- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\quick-order23\nebiki-helper`
-- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260910-1420.zip`
+- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\advance24\nebiki-helper`
+- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260912-2229.zip`
 
-`package.json` / `package-lock.json` は9-23、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
+`package.json` / `package-lock.json` は9-24、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
 
-検証済み9-22 ZIP（`nebiki-helper-20260908-0652.zip`、SHA-256 `32cbb871316f9dfdf678ccfc52ad29fe8be8d8aefeec4018657c3aeb88dedcec`）をbaselineとし、9-23では±1 quick buttonの表示順だけを「上: higher、多い側 / 下: lower、少ない側」へ反転した。アプリのソース差分は `getAreaEvaluationQuickAdjustments()` の生成順1行のみ。9-22の17→Review19通常ルート、18:30 manual only、manual 18:30開始日のReview19抑止、Review19完了画面download、quick保存semanticは維持する。dataSchemaVersionは3のまま、root SQL 9本とAGENTS.mdは変更していない。詳細と検証範囲は `CHANGE_REPORT_2026.8.9-23.md` を読む。
+検証済み9-23 ZIP（`nebiki-helper-20260910-1420.zip`、SHA-256 `643334f3c117f3eb5d60bba961254c11972e6017440339b356d45506521dfc14`）をbaselineとした。9-24は通常Done画面の共通基準ラベルと、通常15/17の天候確定直後の先行値引指示画面を追加した。率は既存の基本率・解決済み天候補正・global補正と商品が多い固定+10だけを使用する。9-23のhigher→lower quick順・保存semantic、17→Review19通常ルート、18:30 manual only、Review19 download、storageを維持する。root SQL 9本とAGENTS.mdは変更していない。詳細は `CHANGE_REPORT_2026.8.9-24.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\quick-order23\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\advance24\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -266,13 +266,25 @@ archive件数が過去のlegacy local件数より多いことはremote canonical
 - local-first。remote失敗だけで現場入力を失わない。
 - pending 0はlocal outboxが空という意味で、remote全履歴同期済みの保証ではない。
 - AreaCount manual direct backfill、Review19 pendingなし正本rescue、legacy pending、CAS/finality/in-flight guardを維持。
-- 実Supabase mutationは9-23開発検証でも実施していない。
+- 実Supabase mutationは9-24開発検証でも実施していない。
 
 fixed-timeはproduction AreaCount履歴をSupabaseからREAD ONLYで使い、同じmedian engineへ渡す。productionのAreaCount/pending/Review19/finalized/learning/global settingへWRITEしない。fixed-time cycle、clock、temperature、global adjustmentは専用state。
 
-DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-23でも変更していない。
+DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-24でも変更していない。
 
 ## 11. そのほかの現行UX
+
+### 9-24: 通常Done基準ラベル・15/17先行値引
+
+- 通常 `DoneScreen` に `derived.basisGuide.referenceConditionLabel` を表示する。RateDisplayと同じ既存formatter / resolved referenceを使用し、手動曜日指定、holiday / Obon等の解決、summer / normalを尊重する。Review19DoneScreenは非変更。
+- 通常15/17の新しいsession開始では、天候確認を確定した後 `screen: "advance_discount"` に入り、`AdvanceDiscountScreen` を表示する。18/19/20、Review19、fixed-timeには追加しない。
+- 文面は「夏・木曜日・17時を基準に考えて」「多い商品のうち10個以上ある商品を」「10％で引いてください」の形でlabel・rateを動的表示。「多い」は既存RateDisplayと同じ赤、操作は「エリア別値引へ進む」。
+- `getAdvanceDiscountRate()` は `getBaseRate()` + `getWeekdayBaseInfo(...resolvedWeather...).baseRateBonus` + 商品が多い固定10を、`applyGlobalDiscountAdjustmentToRate()` でsessionのglobal補正を加算し共通0〜50%へ制限する。0以下も必ず「0％で引いてください」と数値表示する。既存エリア画面の「引かない」は非変更。
+- このhelperはsessionのdate / weekday / discountTime / globalと既存解決済みweatherだけを受け取る。AreaCount / median / area評価 / quick / decrease / 商品個別policyを参照せず、lateTimeBonus / early-next補正も新画面の式に加えない。新画面のlabelはsessionの時刻を既存 `getReferenceConditionLabel()` で解決する。
+- 押下までは新画面のまま保存・復元し、`continueAfterAdvanceDiscount()` で既存current area / normal-flow入口へ進む。session・area mapを変更せず、架空のAreaCount・評価・完了snapshotを作らない。既存current / checkpoint / runtime保存を使い、新flagやstorage keyは増やさない。
+- 同sessionの既存作業・Doneから条件編集して再開する場合は指示を再表示しない。未完了の指示から条件編集した場合は指示へ戻る。通過時は同sessionの指示およびその復帰先を指すnavigation履歴だけを除き、他session・通常作業履歴を残す。
+- 17時の指示画面で18:55を迎えた場合も既存Review19自動遷移とsource / 未測定snapshot保全を使用する。15→17の時刻切替後は天候確定してから17時の先行指示へ入る。保存schemaは3のまま。
+
 
 - 最後の未完了エリアでskipしてもdoneにせず、他候補がない旨を通知して未完了のまま残す。
 - skip直後の自己loopを防ぎ、後からの再訪は可能。
@@ -284,21 +296,22 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-`CHANGE_REPORT_2026.8.9-23.md` に記録された結果:
+`CHANGE_REPORT_2026.8.9-24.md` の結果:
 
-- package.jsonの全 `check:*`: 54/54 PASS。AreaCount ±1 quick専用checkは実コンポーネントのDOM順・handler検証を追加し40/40 PASS。既存のdirection/final/rate/metadata伝播、Review19遷移、manual 18:30、storage safety、AreaCount、export、fixed-timeも全checkで確認した。
-- TypeScript + production build PASS、99 modules、PWA generateSW PASS（precache 10 entries）。chunk sizeと古いBrowserslist dataの警告は既存のまま。
-- changed-file focused ESLint: 0 errors / 0 warnings。全体lintは9 errors / 7 warningsで、9-22 baselineとfile/rule/severity/messageを比較して新規diagnostic 0。
-- appVersion `2026.8.9-23`、buildId `build-20260910-091606-jst`、dataSchemaVersion `3`。root SQL 9本とAGENTS.mdは9-22 baselineとbyte-identical。Supabase schema / SQL / RLS / grant / trigger / fixed-timeは変更していない。
+- 全 `check:*`: 57/57 PASS。先行率15/15、UI35/35、先行flow30/30。Review19 priority transition70/70、quick40/40を含む既存checkもPASS。最後に追加したflow testは単独再実行で30件の結果に更新した。
+- TypeScript / production build PASS（101 modules）、PWA generateSW PASS（precache 10 entries）。chunk size / Browserslist dataの既存警告あり。
+- focused ESLint: 0 errors / 4 existing warnings（useNebikiAppの既存hook依存警告）。full lint: 9 errors / 7 warnings。9-23とfile / rule / severity / message比較で新規0。
+- appVersion `2026.8.9-24`、buildId `build-20260912-171652-jst`、dataSchemaVersion `3`。SQL 9本・AGENTS.mdは9-23 baselineとbyte-identical。Supabase / schema変更なし。
 
-実ブラウザはheadless Microsoft Edgeのproduction previewで390×844、Asia/Tokyo、隔離local originへ17時の履歴fixtureとテスト時計を設定し、9-22と9-23を比較した。
+headless Microsoft Edge、production preview、390×844、Asia/Tokyo、隔離fixtureで実操作した。
 
-- 5段階すべてのDOM順・上下位置を確認した。normalは上「やや多いにする」、下「やや少ないにする」。few / manyは1個だけでplaceholderなし。
-- 各directionのtap、同じbuttonの連打、反対方向への切替を実行した。採用評価、original auto、direction、steps、decision basis、AreaCount保存metadata、表示率が9-22と一致し、非累積を維持した。full manual selectorも残る。
-- 横overflowなし（390/390）。console error/warning、pageerror、外部通信、dialog、download、popupは0件。
-- 17→Review19、manual 18:30、Review19 download、fixed-time、20:30の回帰は今回の全checkで確認した。これらのフローの実ブラウザ再実行は今回行っていない（9-22の確認記録は過去CHANGE REPORTを参照）。
+- 夏15 / 夏17 / 通常17の天候入力を実際に確認・確定し、先行指示→エリア別値引入口へ進めた。率は0 / 10 / 20％のfixtureを確認。0％も「引かない」にならない。
+- 指示待機中のtimer / focus / visibility再評価とreload後も指示を保持。押下後reloadはarea_judgeのまま。session・未測定area mapは通過前後で一致し、AreaCount record / 架空評価を生成しない。
+- Doneの完成state fixtureで夏15 / 夏17 / 通常17 / 手動曜日指定 / Obonの5ラベルを実表示確認した。Doneまで12エリアを実入力した検証ではない。
+- 横overflow・文字切れなし。多いは赤。buttonは画面内に収まりtap正常。console error / warning、pageerror、外部通信、dialog / download / popupは0件。
+- Review19 / manual 18:30 / quick / fixed-time / 20:30 / archive等は今回の自動checkで回帰確認した。これらの全フローの実ブラウザ再実行はしていない。
 
-実Supabase mutation、インストール済みPWA実機、実店舗端末の長時間background復帰、quick操作後の全量cloud同期は未確認。ブラウザ詳細は `work/quick-order23/browser-results23.json` に記録する。完成ZIP再open検査とSHA-256はZIP外の `RELEASE_REPORT_2026.8.9-23.md` / `ZIP_VALIDATION_2026.8.9-23.json` に保存する。
+実Supabase mutation・全量cloud同期、インストール済みPWA実機、実店舗端末の長時間background復帰は未確認。証跡は `work/advance24/checks.json`、各check log、`lint-comparison24.json`、`browser-results24.json`。ZIP再open結果とSHAはZIP外の `outputs/RELEASE_REPORT_2026.8.9-24.md` / `ZIP_VALIDATION_2026.8.9-24.json`。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -331,7 +344,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-23.md`（9-22 baselineは `CHANGE_REPORT_2026.8.9-22.md`）
+4. `CHANGE_REPORT_2026.8.9-24.md`（9-23 baselineは `CHANGE_REPORT_2026.8.9-23.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`
@@ -345,6 +358,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 15. `src/domain/cloudSync.ts`、`review19CloudOutbox.ts`、`review19RemoteStorage.ts`
 16. `src/domain/areaCountDirectSync.ts`、`areaCountBackfill.ts`、`supabaseSyncQueue.ts`
 17. `src/components/screens/Review19DoneScreen.tsx`、`DoneScreen.tsx`、`RateDisplayScreen.tsx` と対応する `scripts/check-*.ts`
-18. 必要な場合だけ過去CHANGE REPORT / README / SQL artifact
+18. `src/domain/advanceDiscount.ts`、`src/components/screens/AdvanceDiscountScreen.tsx` と `scripts/check-advance-discount*.ts`
+19. 必要な場合だけ過去CHANGE REPORT / README / SQL artifact
 
 再開時は、version metadataとGit rootの有無を再確認し、最新ZIPとの差分を取ってから編集する。恒久的な検証・packagingルールは `AGENTS.md` に従う。

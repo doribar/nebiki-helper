@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { UseNebikiAppResult } from "../domain/types";
 import { StartScreen } from "../components/screens/StartScreen";
+import { AdvanceDiscountScreen } from "../components/screens/AdvanceDiscountScreen";
 import { AreaJudgeScreen } from "../components/screens/AreaJudgeScreen";
 import { AutoSkipNoticeScreen } from "../components/screens/AutoSkipNoticeScreen";
 import { AutoSkipCountScreen } from "../components/screens/AutoSkipCountScreen";
@@ -227,6 +228,15 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
         />
       );
 
+    case "advance_discount":
+      if (!derived.advanceDiscountInstruction || testNow instanceof Date) return null;
+      return (
+        <AdvanceDiscountScreen
+          {...derived.advanceDiscountInstruction}
+          onContinue={actions.continueAfterAdvanceDiscount}
+        />
+      );
+
     case "final_time":
       if (!derived.finalGuide) return null;
 
@@ -254,6 +264,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
               : undefined
           }
           referenceText={derived.basisGuide.referenceText}
+          referenceConditionLabel={derived.basisGuide.referenceConditionLabel}
           timeText={derived.timeText}
           showDailyDataActions={
             state.session?.discountTime === "20" &&

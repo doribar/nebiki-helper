@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getAdvanceDiscountRate } from "../domain/advanceDiscount.ts";
 import type {
   AppState,
   AreaId,
@@ -1294,6 +1295,24 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const startDraftNearTermWeather = useMemo(() => {
     return getNearTermWeatherForDiscount(state.sessionDraft.weather, state.sessionDraft.discountTime);
   }, [state.sessionDraft.weather, state.sessionDraft.discountTime]);
+  const advanceDiscountRate = getAdvanceDiscountRate({
+    session: state.screen === "advance_discount" ? state.session : null,
+    resolvedWeather: sessionSourceResolvedWeather,
+    isFixedTimeMode: isTestMode,
+  });
+  const advanceDiscountInstruction =
+    advanceDiscountRate !== null && state.session
+      ? {
+          referenceConditionLabel: getReferenceConditionLabel({
+            date: state.session.date,
+            weekday: state.session.weekday,
+            discountTime: state.session.discountTime,
+            demandCycle: state.session.demandCycle,
+            applyObonRule,
+          }),
+          ratePercent: advanceDiscountRate,
+        }
+      : null;
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;
   const activeSessionDate = state.session?.date ?? state.sessionDraft.date;
   const showDayBeforeHolidayNotice = shouldShowDayBeforeHolidayNotice({
@@ -2380,6 +2399,19 @@ const lateSkipNotice = useMemo(() => {
       prev.lastReferenceAreaId ??
       getFirstAvailableAreaId(prev.areaProgressMap, prev.normalFlowOrder);
 
+    if (
+      requestedScreen === "advance_discount" &&
+      !isTestMode &&
+      (prev.session?.discountTime === "15" || prev.session?.discountTime === "17")
+    ) {
+      return {
+        screen: "advance_discount" as const,
+        currentAreaId: fallbackAreaId,
+        lastReferenceAreaId: prev.lastReferenceAreaId,
+        finalTimeStep: 0 as const,
+      };
+    }
+
     if (!fallbackAreaId) {
       return {
         screen: "done" as const,
@@ -2821,6 +2853,15 @@ const lateSkipNotice = useMemo(() => {
       };
     }
 
+    if (
+      !isTestMode &&
+      !isResumingSameDiscountSession &&
+      (nextState.session?.discountTime === "15" || nextState.session?.discountTime === "17")
+    ) {
+      // 先行作業は画面だけで保持する。残数・判定・完了実績は作らない。
+      nextState = { ...nextState, screen: "advance_discount" };
+    }
+
     if (!isTestMode && nextState.session?.discountTime === "18" && !isResumingSameDiscountSession) {
       // 実際に開始した18:30sessionを既存journalへ保存する。未入力の測定値や完了実績は作らない。
       const nightSession = nextState.session;
@@ -2890,6 +2931,38 @@ const lateSkipNotice = useMemo(() => {
     weatherConfirmationSubmittingRef.current = true;
     setWeatherConfirmationPending(null);
     startSession();
+  }
+
+  function continueAfterAdvanceDiscount() {
+    if (
+      isTestMode ||
+      state.screen !== "advance_discount" ||
+      (state.session?.discountTime !== "15" && state.session?.discountTime !== "17")
+    ) return;
+
+    // 通常の戻る操作で、完了した先行指示を再表示しない。
+    // 条件編集を挟んだ場合の同sessionの指示・復帰先も履歴から除く。
+    screenHistoryRef.current = screenHistoryRef.current.filter((snapshot) => {
+      const session = snapshot.state.session;
+      const sameSession = session?.date === state.session?.date &&
+        session?.discountTime === state.session?.discountTime &&
+        session?.startedAt === state.session?.startedAt;
+      return !sameSession || (
+        snapshot.state.screen !== "advance_discount" &&
+        snapshot.resumeTargetScreen !== "advance_discount"
+      );
+    });
+    suppressHistoryPushRef.current = true;
+    setState((prev) => {
+      if (prev.screen !== "advance_discount") return prev;
+      const areaId = prev.currentAreaId ??
+        getFirstNormalFlowAreaId(prev.areaProgressMap, prev.normalFlowOrder);
+      return {
+        ...prev,
+        screen: areaId ? getNormalFlowScreenForArea(prev.areaProgressMap, areaId) : "done",
+        currentAreaId: areaId,
+      };
+    });
   }
 
   const areaCountAssistEnabled = Boolean(
@@ -5332,6 +5405,7 @@ const lateSkipNotice = useMemo(() => {
   weekdayText,
   timeText: effectiveTimeText,
   basisGuide: displayBasisGuide,
+  advanceDiscountInstruction,
   weatherGuideText,
   rateDisplay,
   rateDisplayBeforeGlobalAdjustment,
@@ -5390,6 +5464,7 @@ const lateSkipNotice = useMemo(() => {
       requestWeatherConfirmation,
       editWeatherInput,
       confirmWeatherInput,
+      continueAfterAdvanceDiscount,
       goBackOneScreen,
       startEditingConditions,
       undoLastAction,

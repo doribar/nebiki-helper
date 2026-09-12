@@ -6,6 +6,7 @@ type DoneScreenProps = {
   onGoBack: () => void;
   onReturnHome: () => void;
   onStart1830?: () => void;
+  referenceConditionLabel?: string;
   referenceText?: string;
   timeText?: string;
   summaryItems: DoneSummaryItem[];
@@ -86,6 +87,7 @@ export function DoneScreen({
   onGoBack,
   onReturnHome,
   onStart1830,
+  referenceConditionLabel,
   referenceText,
   timeText,
   summaryItems,
@@ -137,6 +139,15 @@ export function DoneScreen({
           textAlign: "center",
         }}
       >
+        {referenceConditionLabel ? (
+          <div
+            aria-label="判定の基準"
+            style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.6, marginBottom: 12 }}
+          >
+            {referenceConditionLabel}
+          </div>
+        ) : null}
+
         <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 12 }}>
           すべてのエリアの確認が
           <br />

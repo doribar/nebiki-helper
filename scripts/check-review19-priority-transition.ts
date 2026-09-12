@@ -581,6 +581,48 @@ test("actual hook stale closures from timer/focus/visibility callbacks cannot du
   assert.equal(harness.sources.length, 1);
 });
 
+test("pending advance instruction waits before 18:55 without inventing 18:30 or measurements", () => {
+  const state = fixture("17", "advance_discount");
+  const before = JSON.stringify(state);
+  const harness = hookHarness({ state, now: at(18, 54) });
+  harness.run({ autoTransition: true });
+  assert.deepEqual(harness.events, []);
+  assert.equal(JSON.stringify(state), before);
+});
+
+for (const [hour, minute] of [[18, 55], [19, 25]]) {
+  test(`pending advance instruction at ${hour}:${minute} retains 17 source and existing Review19 priority`, () => {
+    const harness = hookHarness({ state: fixture("17", "advance_discount"), now: at(hour, minute) });
+    harness.run({ autoTransition: true });
+    harness.run({ autoTransition: true });
+    assert.equal(harness.published.length, 1);
+    assert.equal(harness.published[0].screen, "review19");
+    assert.equal(harness.published[0].session?.discountTime, "17");
+    assert.equal(harness.snapshots.length, 1);
+    assert.equal(harness.snapshots[0].session.discountTime, "17");
+    assert.equal(harness.snapshots[0].sessionEndReason, "auto_time_transition");
+    assert.equal(harness.sources.length, 1);
+    assert.equal(harness.sources[0].session?.startedAt, STARTED_AT);
+    assert.ok(Object.values(harness.sources[0].areaProgressMap).every((area) => area.areaCount === undefined));
+    assert.ok(Object.values(harness.snapshots[0].areas).every((area) => area.areaCount === undefined));
+    assert.equal(harness.events.some((event) => event.startsWith("open:")), false);
+    assert.equal(harness.events.filter((event) => event.startsWith("alert:")).length, 1);
+  });
+}
+
+for (const stage of ["snapshot", "source"] as const) {
+  test(`pending advance instruction survives Review19 ${stage} storage failure`, () => {
+    const state = fixture("17", "advance_discount");
+    const before = JSON.stringify(state);
+    const harness = hookHarness({ state, snapshotSaveOk: stage !== "snapshot", sourceSaveOk: stage !== "source" });
+    harness.run({ autoTransition: true });
+    assert.equal(harness.published.length, 0);
+    assert.equal(JSON.stringify(state), before);
+    assert.equal(harness.events.includes("build"), false);
+    assert.equal((harness.context.autoTransitionInFlightKeyRef as { current: string | null }).current, null);
+  });
+}
+
 test("actual hook does not interrupt a manually opened 18:30 weather input", () => {
   const harness = hookHarness({ state: fixture("17", "area_judge") });
   harness.context.timeSwitchTarget = "18";

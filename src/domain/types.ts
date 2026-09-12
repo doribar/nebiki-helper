@@ -204,6 +204,7 @@ export type AreaProgress = {
 
 export type ScreenName =
   | "start"
+  | "advance_discount"
   | "review19_weather"
   | "review19_done"
   | "area_judge"
@@ -848,6 +849,10 @@ export type UseNebikiAppDerived = {
   weekdayText: string;
   timeText: string;
   basisGuide: BasisGuideDisplay;
+  advanceDiscountInstruction: {
+    referenceConditionLabel: string;
+    ratePercent: number;
+  } | null;
   weatherGuideText: WeatherGuideText;
   rateDisplay: RateDisplayData | null;
   /** 全体値引補正だけを適用する前の表示。 */
@@ -914,6 +919,7 @@ export type UseNebikiAppActions = {
   requestWeatherConfirmation: () => void;
   editWeatherInput: () => void;
   confirmWeatherInput: () => void;
+  continueAfterAdvanceDiscount: () => void;
   goBackOneScreen: () => void;
   startEditingConditions: () => void;
   undoLastAction: () => void;
