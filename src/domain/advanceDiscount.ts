@@ -8,7 +8,7 @@ import { getWeekdayBaseInfo } from "./weekdayBase.ts";
 
 type AdvanceDiscountSession = Pick<
   SessionData,
-  "date" | "weekday" | "discountTime" | "globalDiscountAdjustmentPercent"
+  "date" | "weekday" | "discountTime" | "demandCycle" | "globalDiscountAdjustmentPercent"
 >;
 
 /**
@@ -35,6 +35,7 @@ export function getAdvanceDiscountRate(params: {
     session.discountTime,
     params.resolvedWeather,
     session.date,
+    session.demandCycle,
   ).baseRateBonus;
 
   return applyGlobalDiscountAdjustmentToRate(

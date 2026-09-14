@@ -1363,13 +1363,15 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     sessionSource.weekday,
     sessionSource.discountTime,
     sessionSourceResolvedWeather,
-    sessionSource.date
+    sessionSource.date,
+    sessionSource.demandCycle,
   );
 }, [
   sessionSource.weekday,
   sessionSource.discountTime,
   sessionSourceResolvedWeather,
   sessionSource.date,
+  sessionSource.demandCycle,
 ]);
 
   const earlyNextMinus5Info = useMemo(() => {
@@ -1395,7 +1397,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       state.session.weekday,
       targetDiscountTime,
       resolvedWeather,
-      state.session.date
+      state.session.date,
+      state.session.demandCycle,
     );
     const targetBasisGuide = getBasisGuideDisplay({
       date: state.session.date,
@@ -2871,6 +2874,7 @@ const lateSkipNotice = useMemo(() => {
         resolvedWeather: temperatureComfort.resolvedWeather,
         weekdayBaseInfo: getWeekdayBaseInfo(
           nightSession.weekday, "18", temperatureComfort.resolvedWeather, nightSession.date,
+          nightSession.demandCycle,
         ),
         basisGuide: getBasisGuideDisplay({
           date: nightSession.date,

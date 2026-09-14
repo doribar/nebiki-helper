@@ -234,7 +234,7 @@ test("既存weather計算の日付補正を保持し曜日基準を新設しな�
   }
 });
 
-test("normal/summerで同じsession天候・全体補正なら同じ率にする", () => {
+test("快適度0ではnormal/summerで同じsession天候・全体補正なら同じ率にする", () => {
   for (const demandCycle of ["normal", "summer"] as const) {
     const cycleSession = { ...session("17", 5), demandCycle };
     assert.equal(getAdvanceDiscountRate({

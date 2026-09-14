@@ -708,6 +708,7 @@ function isSnowPrecipitationBonus(value: number): boolean {
 function applyComfortNegativeLimit(params: {
   rawScore: number;
   discountTime: DiscountTime;
+  demandCycle?: DemandCycle;
   hasRain: boolean;
 }): { score: -2 | -1 | 0 | 1 | 2; note?: string } {
   const rawScore = clampComfortScore(params.rawScore);
@@ -728,6 +729,10 @@ function applyComfortNegativeLimit(params: {
     return { score: 0, note: "17時以降の雨ありのため快適方向は0%" };
   }
 
+  if (params.demandCycle === "summer" && params.discountTime === "17") {
+    return { score: rawScore };
+  }
+
   if (rawScore < -1) {
     return { score: -1, note: "17時以降のため快適方向は-5%まで" };
   }
@@ -737,6 +742,7 @@ function applyComfortNegativeLimit(params: {
 
 function getComfortRateBonusTerm(params: {
   discountTime: DiscountTime;
+  demandCycle?: DemandCycle;
   rawScore: number;
   precipitationBonus: number;
 }): PercentTerm | undefined {
@@ -748,6 +754,7 @@ function getComfortRateBonusTerm(params: {
   const limited = applyComfortNegativeLimit({
     rawScore,
     discountTime: params.discountTime,
+    demandCycle: params.demandCycle,
     hasRain: isRainPrecipitationBonus(params.precipitationBonus),
   });
   const value = limited.score * 5;
@@ -828,6 +835,7 @@ function resolveWeatherEffect(params: {
   date?: string;
   weekday: number;
   discountTime: DiscountTime;
+  demandCycle?: DemandCycle;
   weather: ResolvedWeatherInput;
 }) {
   // 旧形式の保存データ互換用。値引率の計算には使わない。
@@ -868,6 +876,7 @@ function resolveWeatherEffect(params: {
   );
   const comfortTerm = getComfortRateBonusTerm({
     discountTime: params.discountTime,
+    demandCycle: params.demandCycle,
     rawScore: rawComfortShift,
     precipitationBonus,
   });
@@ -888,6 +897,7 @@ function resolveWeatherEffect(params: {
     : applyComfortNegativeLimit({
         rawScore: rawComfortScore,
         discountTime: params.discountTime,
+        demandCycle: params.demandCycle,
         hasRain: isRainPrecipitationBonus(precipitationBonus),
       }).score;
 
@@ -941,12 +951,14 @@ export function getWeekdayBaseInfo(
   discountTime: DiscountTime,
   weather: ResolvedWeatherInput,
   date?: string,
+  demandCycle?: DemandCycle,
 ): WeekdayBaseInfo {
   const resolved = resolveWeatherEffect({
     date,
     weekday,
     discountTime,
     weather,
+    demandCycle,
   });
 
   return {

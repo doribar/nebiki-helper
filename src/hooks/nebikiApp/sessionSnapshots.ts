@@ -585,7 +585,8 @@ export function createReview19Reference(
     reviewDraft.weekday,
     "19",
     resolvedWeather,
-    reviewDraft.date
+    reviewDraft.date,
+    demandCycle,
   );
   const basisGuide = getBasisGuideDisplay({
     date: reviewDraft.date,

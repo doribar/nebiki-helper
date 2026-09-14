@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-24）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-25）
 
-最終更新: 2026-09-12 JST
+最終更新: 2026-09-14 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,28 +10,28 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260912-2229.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260912-2229.zip` |
-| appVersion | `2026.8.9-24` |
-| buildId | `build-20260912-171652-jst` |
+| ZIP | `nebiki-helper-20260914-0129.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260914-0129.zip` |
+| appVersion | `2026.8.9-25` |
+| buildId | `build-20260913-201951-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260912-2229.zip.sha256` / `RELEASE_REPORT_2026.8.9-24.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260914-0129.zip.sha256` / `RELEASE_REPORT_2026.8.9-25.md` を参照（自己参照回避） |
 
 絶対path:
 
 - 成果物workspace: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5`
-- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\advance24\nebiki-helper`
-- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260912-2229.zip`
+- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\comfort25\nebiki-helper`
+- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260914-0129.zip`
 
-`package.json` / `package-lock.json` は9-24、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
+`package.json` / `package-lock.json` は9-25、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
 
-検証済み9-23 ZIP（`nebiki-helper-20260910-1420.zip`、SHA-256 `643334f3c117f3eb5d60bba961254c11972e6017440339b356d45506521dfc14`）をbaselineとした。9-24は通常Done画面の共通基準ラベルと、通常15/17の天候確定直後の先行値引指示画面を追加した。率は既存の基本率・解決済み天候補正・global補正と商品が多い固定+10だけを使用する。9-23のhigher→lower quick順・保存semantic、17→Review19通常ルート、18:30 manual only、Review19 download、storageを維持する。root SQL 9本とAGENTS.mdは変更していない。詳細は `CHANGE_REPORT_2026.8.9-24.md`。
+比較基準は9-24 ZIPそのもの（`nebiki-helper-20260912-2229.zip`、SHA-256 `b1f5ecafd3dfe1b322b9936588f389c3646d50ad82933913025754222301c42f`）。9-25は乾燥条件での夏17時だけ快適方向の天候補正上限を-5%から-10%へ変更した。normal17・夏18:30以降・雨雪の既存制限は維持する。計算、説明表示、先行値引、確定snapshotへ同じdemandCycleを伝播する。9-24の先行指示・Doneラベル、quick、Review19、storageを維持。SQL 9本とAGENTS.mdは非変更。詳細は `CHANGE_REPORT_2026.8.9-25.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\advance24\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\comfort25\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -204,6 +204,17 @@ quickは既存 `judgeCurrentArea()` / `applyAreaJudgeSelection()` と保存経�
 
 rate計算の正本は `discount.ts`、`weekdayBase.ts`、`rateDecisionSnapshot.ts`、`globalDiscountAdjustment.ts`。
 
+### 9-25: 夏17時の快適方向上限
+
+- `weekdayBase.ts` の `applyComfortNegativeLimit()` が唯一の制限判定。rawを-2〜+2に制限し、既存の15時・雨抑制を先に適用した後、`demandCycle === "summer" && discountTime === "17"` の乾燥条件だけraw負値を-2（-10%）まで許可する。raw -1なら-5%、0/正方向は従来どおり。
+- dryの15時はnormal/summerとも最大-10%、normal17とnormal/summer18・19は最大-5%のまま。雨あり15時は最大-5%、17時以降の雨ありは快適方向0%、雪は快適補正を使わない。起点/後続雨雪、future weather point、気温低下、風、after-rain recoveryは非変更。
+- dryは既存の解決済み降水補正が0の条件を指す。後続枠に雨雪があっても起点判定で降水補正0となる場合は含み、後続天候は従来のfuture weather pointで扱う。雨雪の制限判定を全予報枠の降水有無へ変更していない。
+- `getWeekdayBaseInfo()` の第5optional引数にdemandCycleを追加。cycle省略は従来のnormal相当。`getBasisGuideDisplay()` も同じ `resolveWeatherEffect()` を使い、bonus summary/calc/resultと率を一致させる。夏17時には旧「17時以降のため快適方向は-5%まで」を出さない。
+- hookの通常計算・early-next対象時刻・手動18開始snapshot、`advanceDiscount.ts`、`sessionSnapshots.ts` のReview19 referenceへ明示的にcycleを渡す。Review19 referenceは19時として計算するので結果は従来どおり。
+- 9/13相当の晴れ・弱風・25℃、気温点-2、未来6pt/-1点では夏17時の天候補正-10%。先行率は基本10 - 天候10 + 多い10 + global(-5/0/+5) = 5/10/15%。normal17・global-5では従来の10%。
+- 新しく確定する `rateDecisionSnapshot.weatherComfortAdjustmentPercent` は既存のweather bonus入力から-10を保持し、session/daily/day/finalized/exportへ既存経路で伝播する。保存済み-5をnormalization/exportで再計算しない。同identity・同完了signatureの再保存でも既存storage/archiveが旧basis/areasを保持する。migration・schema変更なし。
+
+
 概略は、基本率 → weather/comfort/late-time → final AreaCount evaluation → 既存商品line/limit → early-next等 → 最後にglobal adjustment → 0〜50 clamp。商品policyには表示line/metadataもあるため、全商品属性を単純加算と決めつけない。
 
 `globalDiscountAdjustmentPercent` は人間が選ぶ `-5 / 0 / +5` percentage points。新business dateでは0、同日内で復元、session開始時にcapture、完了済み過去sessionへ遡及適用しない。production/fixed-timeのsettingは分離。20:30 forced tierは対象外で、forced 50を45/55へしない。
@@ -266,11 +277,11 @@ archive件数が過去のlegacy local件数より多いことはremote canonical
 - local-first。remote失敗だけで現場入力を失わない。
 - pending 0はlocal outboxが空という意味で、remote全履歴同期済みの保証ではない。
 - AreaCount manual direct backfill、Review19 pendingなし正本rescue、legacy pending、CAS/finality/in-flight guardを維持。
-- 実Supabase mutationは9-24開発検証でも実施していない。
+- 実Supabase mutationは9-25開発検証でも実施していない。
 
 fixed-timeはproduction AreaCount履歴をSupabaseからREAD ONLYで使い、同じmedian engineへ渡す。productionのAreaCount/pending/Review19/finalized/learning/global settingへWRITEしない。fixed-time cycle、clock、temperature、global adjustmentは専用state。
 
-DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-24でも変更していない。
+DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-25でも変更していない。
 
 ## 11. そのほかの現行UX
 
@@ -280,7 +291,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 通常15/17の新しいsession開始では、天候確認を確定した後 `screen: "advance_discount"` に入り、`AdvanceDiscountScreen` を表示する。18/19/20、Review19、fixed-timeには追加しない。
 - 文面は「夏・木曜日・17時を基準に考えて」「多い商品のうち10個以上ある商品を」「10％で引いてください」の形でlabel・rateを動的表示。「多い」は既存RateDisplayと同じ赤、操作は「エリア別値引へ進む」。
 - `getAdvanceDiscountRate()` は `getBaseRate()` + `getWeekdayBaseInfo(...resolvedWeather...).baseRateBonus` + 商品が多い固定10を、`applyGlobalDiscountAdjustmentToRate()` でsessionのglobal補正を加算し共通0〜50%へ制限する。0以下も必ず「0％で引いてください」と数値表示する。既存エリア画面の「引かない」は非変更。
-- このhelperはsessionのdate / weekday / discountTime / globalと既存解決済みweatherだけを受け取る。AreaCount / median / area評価 / quick / decrease / 商品個別policyを参照せず、lateTimeBonus / early-next補正も新画面の式に加えない。新画面のlabelはsessionの時刻を既存 `getReferenceConditionLabel()` で解決する。
+- このhelperはsessionのdate / weekday / discountTime / demandCycle / globalと既存解決済みweatherだけを受け取る。AreaCount / median / area評価 / quick / decrease / 商品個別policyを参照せず、lateTimeBonus / early-next補正も新画面の式に加えない。新画面のlabelはsessionの時刻を既存 `getReferenceConditionLabel()` で解決する。
 - 押下までは新画面のまま保存・復元し、`continueAfterAdvanceDiscount()` で既存current area / normal-flow入口へ進む。session・area mapを変更せず、架空のAreaCount・評価・完了snapshotを作らない。既存current / checkpoint / runtime保存を使い、新flagやstorage keyは増やさない。
 - 同sessionの既存作業・Doneから条件編集して再開する場合は指示を再表示しない。未完了の指示から条件編集した場合は指示へ戻る。通過時は同sessionの指示およびその復帰先を指すnavigation履歴だけを除き、他session・通常作業履歴を残す。
 - 17時の指示画面で18:55を迎えた場合も既存Review19自動遷移とsource / 未測定snapshot保全を使用する。15→17の時刻切替後は天候確定してから17時の先行指示へ入る。保存schemaは3のまま。
@@ -296,22 +307,24 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-`CHANGE_REPORT_2026.8.9-24.md` の結果:
+`CHANGE_REPORT_2026.8.9-25.md` の結果:
 
-- 全 `check:*`: 57/57 PASS。先行率15/15、UI35/35、先行flow30/30。Review19 priority transition70/70、quick40/40を含む既存checkもPASS。最後に追加したflow testは単独再実行で30件の結果に更新した。
-- TypeScript / production build PASS（101 modules）、PWA generateSW PASS（precache 10 entries）。chunk size / Browserslist dataの既存警告あり。
-- focused ESLint: 0 errors / 4 existing warnings（useNebikiAppの既存hook依存警告）。full lint: 9 errors / 7 warnings。9-23とfile / rule / severity / message比較で新規0。
-- appVersion `2026.8.9-24`、buildId `build-20260912-171652-jst`、dataSchemaVersion `3`。SQL 9本・AGENTS.mdは9-23 baselineとbyte-identical。Supabase / schema変更なし。
+- 全 `check:*`: 59/59 PASS。専用weather 46/46（cycle・時刻・雨雪・raw段階200組を含む）、integration 11/11。既存先行率15/15、UI35/35、flow30/30、Review19 priority70/70、quick40/40もPASS。
+- 旧新実関数の独立比較: 22,020 scenarios / 297,765 assertions。21,908件不変、112件は許容したsummer17・dry・十分快適の差分だけ。予期しない差分0。
+- TypeScript / production build PASS（101 modules）、PWA generateSW PASS（precache10）。chunk size / Browserslist dataの既存警告あり。
+- focused ESLint: 0 errors / 4 existing warnings。full lint: 9 errors / 7 warnings。9-24とfile / rule / severity / message比較で新規0（message内の作業root絶対pathだけ揃えた）。
+- appVersion `2026.8.9-25`、buildId `build-20260913-201951-jst`、dataSchemaVersion `3`。SQL9本・AGENTS.mdは9-24 ZIPとbyte-identical。Supabase / schema変更なし。
+- 親・担当agentの実行記録でGPT-6 Astra / Ultraを確認。利用制限後も同モデル設定を再確認して再開した。
 
-headless Microsoft Edge、production preview、390×844、Asia/Tokyo、隔離fixtureで実操作した。
+headless Microsoft Edge production preview、390×844、Asia/Tokyo、隔離fixtureで実操作した。
 
-- 夏15 / 夏17 / 通常17の天候入力を実際に確認・確定し、先行指示→エリア別値引入口へ進めた。率は0 / 10 / 20％のfixtureを確認。0％も「引かない」にならない。
-- 指示待機中のtimer / focus / visibility再評価とreload後も指示を保持。押下後reloadはarea_judgeのまま。session・未測定area mapは通過前後で一致し、AreaCount record / 架空評価を生成しない。
-- Doneの完成state fixtureで夏15 / 夏17 / 通常17 / 手動曜日指定 / Obonの5ラベルを実表示確認した。Doneまで12エリアを実入力した検証ではない。
-- 横overflow・文字切れなし。多いは赤。buttonは画面内に収まりtap正常。console error / warning、pageerror、外部通信、dialog / download / popupは0件。
-- Review19 / manual 18:30 / quick / fixed-time / 20:30 / archive等は今回の自動checkで回帰確認した。これらの全フローの実ブラウザ再実行はしていない。
+- summer17のglobal -5 / 0 / +5、normal17のglobal -5の4条件。天候入力のstepperで25℃へ変更し、既存の後続時刻への反映と晴れ・弱風を確認して確定。
+- 夏17時は先行率5 / 10 / 15%、normal17は10%。reload後も指示を保持し、エリア残数20を入力、手動で普通を選択してRateDisplayへ進めた。
+- 内訳を展開し、夏17時の天候-10%と旧-5%limit文の不在、normal17の天候-5%と旧limit文を確認。エリア作業完了操作後のrateDecisionSnapshotも同じ値を保存。
+- 横overflowなし、console error/warning、外部通信、dialog/download/popupなど予期しない操作0件。
+- Doneラベル、15時、Review19、manual18、quick、fixed-time、20:30、storage/archive等の回帰は自動checkで確認。今回これら全フローの実ブラウザ再実行はしていない。
 
-実Supabase mutation・全量cloud同期、インストール済みPWA実機、実店舗端末の長時間background復帰は未確認。証跡は `work/advance24/checks.json`、各check log、`lint-comparison24.json`、`browser-results24.json`。ZIP再open結果とSHAはZIP外の `outputs/RELEASE_REPORT_2026.8.9-24.md` / `ZIP_VALIDATION_2026.8.9-24.json`。
+未確認: 実Supabase mutation・全量cloud同期、インストール済みPWA実機、実店舗端末・長時間background復帰。証跡は `work/comfort25/checks.json`、各check log、`lint-comparison25.json`、`baseline-comparison25.json`、`browser-results25.json`。ZIP再open結果とSHAはZIP外の `outputs/RELEASE_REPORT_2026.8.9-25.md` / `ZIP_VALIDATION_2026.8.9-25.json`。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -344,7 +357,7 @@ headless Microsoft Edge、production preview、390×844、Asia/Tokyo、隔離fix
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-24.md`（9-23 baselineは `CHANGE_REPORT_2026.8.9-23.md`）
+4. `CHANGE_REPORT_2026.8.9-25.md`（9-24 baselineは `CHANGE_REPORT_2026.8.9-24.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`
@@ -358,7 +371,7 @@ headless Microsoft Edge、production preview、390×844、Asia/Tokyo、隔離fix
 15. `src/domain/cloudSync.ts`、`review19CloudOutbox.ts`、`review19RemoteStorage.ts`
 16. `src/domain/areaCountDirectSync.ts`、`areaCountBackfill.ts`、`supabaseSyncQueue.ts`
 17. `src/components/screens/Review19DoneScreen.tsx`、`DoneScreen.tsx`、`RateDisplayScreen.tsx` と対応する `scripts/check-*.ts`
-18. `src/domain/advanceDiscount.ts`、`src/components/screens/AdvanceDiscountScreen.tsx` と `scripts/check-advance-discount*.ts`
+18. `src/domain/advanceDiscount.ts`、`src/components/screens/AdvanceDiscountScreen.tsx`、`scripts/check-advance-discount*.ts`、`scripts/check-summer17-comfort*.ts`
 19. 必要な場合だけ過去CHANGE REPORT / README / SQL artifact
 
 再開時は、version metadataとGit rootの有無を再確認し、最新ZIPとの差分を取ってから編集する。恒久的な検証・packagingルールは `AGENTS.md` に従う。
