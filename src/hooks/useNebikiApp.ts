@@ -101,7 +101,7 @@ import {
   getReview19AreaItems,
   REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
-import { buildReview19AutomaticEvaluation } from "../domain/review19Evaluation.ts";
+import { buildReview19HistoryStatistics } from "../domain/review19Evaluation.ts";
 import {
   buildAllDataExportPayload,
   getAllDataExportFilename,
@@ -4142,7 +4142,7 @@ const lateSkipNotice = useMemo(() => {
         nextAreaEvaluations[areaId] = {
           humanEvaluation: compatibleHumanEvaluation,
           humanEvaluationDetails,
-          ...buildReview19AutomaticEvaluation({
+          ...buildReview19HistoryStatistics({
             areaId,
             count: safeCount,
             date: prev.review19.date,
@@ -4280,7 +4280,7 @@ const lateSkipNotice = useMemo(() => {
         areaEvaluations[latestAreaCount.areaId] = {
           humanEvaluation: compatibleHumanEvaluation,
           humanEvaluationDetails,
-          ...buildReview19AutomaticEvaluation({
+          ...buildReview19HistoryStatistics({
             areaId: latestAreaCount.areaId,
             count: Math.max(0, Math.round(latestAreaCount.count)),
             date: state.review19.date,

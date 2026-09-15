@@ -11,7 +11,7 @@ import { createHumanEvaluationSelection, createReview19HumanEvaluationDetails } 
 import { downloadJsonFiles, type JsonDownloadRuntime } from "../src/domain/jsonDownload.ts";
 import { buildNormalRateDecisionSnapshot } from "../src/domain/rateDecisionSnapshot.ts";
 import { buildReview19DataQuality } from "../src/domain/review19.ts";
-import { buildReview19AutomaticEvaluation } from "../src/domain/review19Evaluation.ts";
+import { buildReview19HistoryStatistics } from "../src/domain/review19Evaluation.ts";
 import {
   buildAllReview19DataExportPayloadsByDemandCycle,
   buildDirectReview19DataExportPayload,
@@ -87,7 +87,7 @@ function fixture(demandCycle: DemandCycle = "normal"): AppState {
         selection: createHumanEvaluationSelection("slightly_many")!, demandCycle,
         evaluatedAt: RECORDED_AT,
       }),
-      ...buildReview19AutomaticEvaluation({ areaId, count, date: DATE, weekday: 0, demandCycle, historicalRecords: [] }),
+      ...buildReview19HistoryStatistics({ areaId, count, date: DATE, weekday: 0, demandCycle, historicalRecords: [] }),
     };
   }
   record.review19Status = "recorded";
@@ -243,7 +243,7 @@ for (const cycle of ["normal", "summer"] as const) {
   });
 }
 
-test("download preserves rich reference/weather/human/auto/production/snapshot metadata", async () => {
+test("download preserves rich reference/weather/human/statistics/production/snapshot metadata", async () => {
   const harness = completedDownloadHarness();
   assert.equal(harness.run(), true);
   const record = JSON.parse(await harness.files[0].blob.text()).records[0];
@@ -252,7 +252,11 @@ test("download preserves rich reference/weather/human/auto/production/snapshot m
   }
   assert.equal(record.reference.weather.hourlyForecasts["19"].weather, "rain");
   assert.equal(record.areaEvaluations.inari.humanEvaluationDetails.humanEvaluationScore9, 7);
-  assert.equal(record.areaEvaluations.inari.autoEvaluationStatus, "insufficient");
+  assert.equal(record.areaEvaluations.inari.autoEvaluationBasis.recommendationStatus, "insufficient");
+  for (const evaluation of Object.values(record.areaEvaluations)) {
+    assert.equal(Object.hasOwn(evaluation as object, "autoEvaluation"), false);
+    assert.equal(Object.hasOwn(evaluation as object, "autoEvaluationStatus"), false);
+  }
   assert.ok(record.areaEvaluations.inari.autoEvaluationBasis);
   assert.ok(record.snapshot.areas.inari.rateDecisionSnapshot);
   assert.ok(record.daySnapshot.sessions[0].areas.inari.rateDecisionSnapshot);

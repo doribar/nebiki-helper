@@ -25,7 +25,7 @@ import {
   buildRemoteReview19Row,
   normalizeRemoteReview19Row,
 } from "../src/domain/review19RemoteStorage.ts";
-import { buildReview19AutomaticEvaluation } from "../src/domain/review19Evaluation.ts";
+import { buildReview19HistoryStatistics } from "../src/domain/review19Evaluation.ts";
 import { createReview19Reference } from "../src/hooks/nebikiApp/sessionSnapshots.ts";
 import { createInitialSessionDraft } from "../src/hooks/nebikiApp/stateNormalization.ts";
 import {
@@ -613,7 +613,7 @@ test("Review19履歴も保存済みcalendar factをversionより優先", () => {
     };
   };
   const evaluate = (historicalRecords: Review19Result[]) =>
-    buildReview19AutomaticEvaluation({
+    buildReview19HistoryStatistics({
       areaId: "bento_men",
       count: 20,
       date: "2032-08-16",
@@ -626,7 +626,7 @@ test("Review19履歴も保存済みcalendar factをversionより優先", () => {
   const restoredLegacy = evaluate(
     dates.map((date) => makeHistorical(date, false)),
   );
-  assert.equal(restoredLegacy.autoEvaluationStatus, "ready");
+  assert.equal(restoredLegacy.autoEvaluationBasis.recommendationStatus, "ready");
   assert.equal(restoredLegacy.autoEvaluationBasis.sampleSize, 3);
   assert.equal(
     restoredLegacy.autoEvaluationBasis.comparisonMode,
@@ -636,8 +636,18 @@ test("Review19履歴も保存済みcalendar factをversionより優先", () => {
   const explicitObon = evaluate(
     dates.map((date) => makeHistorical(date, true)),
   );
-  assert.equal(explicitObon.autoEvaluationStatus, "insufficient");
+  assert.equal(explicitObon.autoEvaluationBasis.recommendationStatus, "insufficient");
   assert.equal(explicitObon.autoEvaluationBasis.sampleSize, 0);
+  for (const statistics of [restoredLegacy, explicitObon]) {
+    assert.deepEqual(Object.keys(statistics), ["autoEvaluationBasis"]);
+    for (const key of [
+      "evaluationSource", "baseEvaluation", "finalEvaluation", "areaRateAdjustment",
+      "smallDifferenceThreshold", "largeDifferenceThreshold", "lowerLargeThreshold",
+      "lowerSmallThreshold", "upperSmallThreshold", "upperLargeThreshold", "decreaseAdjustment",
+    ]) {
+      assert.equal(Object.hasOwn(statistics.autoEvaluationBasis, key), false, key);
+    }
+  }
 });
 
 test("お盆中日という日付だけで三連休中日へ誤分類しない", () => {

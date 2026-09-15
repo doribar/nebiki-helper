@@ -28,7 +28,7 @@ import {
   buildReview19DataQuality,
   createInitialReview19Result,
 } from "../src/domain/review19.ts";
-import { buildReview19AutomaticEvaluation } from "../src/domain/review19Evaluation.ts";
+import { buildReview19HistoryStatistics } from "../src/domain/review19Evaluation.ts";
 import {
   buildAllFinalizedDayDataExportPayloadsByDemandCycle,
   buildAllReview19DataExportPayloadsByDemandCycle,
@@ -330,7 +330,7 @@ try {
     records: history.days,
     exportedAt: fixtureExportedAt,
   });
-  const medianBefore = buildReview19AutomaticEvaluation({
+  const medianBefore = buildReview19HistoryStatistics({
     areaId: "bento_men",
     count: 12,
     date: "2025-07-01",
@@ -338,6 +338,17 @@ try {
     demandCycle: "normal",
     historicalRecords: history.reviews,
   });
+  assert.deepEqual(Object.keys(medianBefore), ["autoEvaluationBasis"]);
+  assert.equal(medianBefore.autoEvaluationBasis.recommendationStatus, "ready");
+  assert.ok(medianBefore.autoEvaluationBasis.sampleSize >= 3);
+  assert.equal(medianBefore.autoEvaluationBasis.medianCount, 8);
+  for (const key of [
+    "evaluationSource", "baseEvaluation", "finalEvaluation", "areaRateAdjustment",
+    "smallDifferenceThreshold", "largeDifferenceThreshold", "lowerLargeThreshold",
+    "lowerSmallThreshold", "upperSmallThreshold", "upperLargeThreshold", "decreaseAdjustment",
+  ]) {
+    assert.equal(Object.hasOwn(medianBefore.autoEvaluationBasis, key), false, key);
+  }
   const operationalValues = new Map<string, string>([
     ["nebiki-helper/current-session", JSON.stringify({
       date: dateFromOffset(180),
@@ -399,7 +410,7 @@ try {
     dayExportBefore,
   );
   assert.deepEqual(
-    buildReview19AutomaticEvaluation({
+    buildReview19HistoryStatistics({
       areaId: "bento_men",
       count: 12,
       date: "2025-07-01",

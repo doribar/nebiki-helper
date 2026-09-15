@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-25）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-26）
 
-最終更新: 2026-09-14 JST
+最終更新: 2026-09-15 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,28 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260914-0129.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260914-0129.zip` |
-| appVersion | `2026.8.9-25` |
-| buildId | `build-20260913-201951-jst` |
+| ZIP | `nebiki-helper-20260915-0201.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260915-0201.zip` |
+| appVersion | `2026.8.9-26` |
+| buildId | `build-20260914-205743-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260914-0129.zip.sha256` / `RELEASE_REPORT_2026.8.9-25.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260915-0201.zip.sha256` / `RELEASE_REPORT_2026.8.9-26.md` を参照（自己参照回避） |
 
-絶対path:
+application rootは成果物workspace内の `work/review19human26/nebiki-helper`。`package.json` / `package-lock.json` のversionだけを9-26へ進めた。buildIdは従来どおり `vite.config.ts` がbuild時にJSTで生成し、上記値はdist bundleで確認した。schema 3、version/build生成方法とも非変更。
 
-- 成果物workspace: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5`
-- application root: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\comfort25\nebiki-helper`
-- release ZIP: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\outputs\nebiki-helper-20260914-0129.zip`
-
-`package.json` / `package-lock.json` は9-25、`src/domain/dataVersion.ts` はschema 3。buildIdは `vite.config.ts` からbuild時に注入され、現行 `dist` bundleで上記値を確認した。
-
-比較基準は9-24 ZIPそのもの（`nebiki-helper-20260912-2229.zip`、SHA-256 `b1f5ecafd3dfe1b322b9936588f389c3646d50ad82933913025754222301c42f`）。9-25は乾燥条件での夏17時だけ快適方向の天候補正上限を-5%から-10%へ変更した。normal17・夏18:30以降・雨雪の既存制限は維持する。計算、説明表示、先行値引、確定snapshotへ同じdemandCycleを伝播する。9-24の先行指示・Doneラベル、quick、Review19、storageを維持。SQL 9本とAGENTS.mdは非変更。詳細は `CHANGE_REPORT_2026.8.9-25.md`。
+比較基準は9-25 ZIPそのもの（`nebiki-helper-20260914-0129.zip`、SHA-256 `467fd3d2f9a7c6e9dcd72c9f7c8f7379367612fe0c9ff76a8be2046a0d36dd8e`）。9-26ではReview19用の残数中央値からの5段階自動判定fieldの生成・保存・採用を停止し、正式評価を既存human raw9に一本化した。履歴残数・中央値・標本数、productionAnalysis、15/17通常評価・率、夏17時快適補正を維持。SQL 9本とAGENTS.mdは非変更。詳細は `CHANGE_REPORT_2026.8.9-26.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\comfort25\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19human26\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -166,7 +160,7 @@ human 9-scaleのeven解決は、normalでは15時が少ない側、17時以降�
 
 既存full manual判定は5つの基準ボタンを維持する。表示ボタンは1/3/5/7/9、長押し後に隣接項目を選ぶと2/4/6/8を保存する。raw score、選択順、scale、resolution direction/reasonを保持する。旧5段階recordは互換読込し、物理migrationしない。
 
-Review19のraw9は19時時点の人間観測。even scoreを15/17のような最終5段階へ丸めない。Review19のauto medianとhuman observationは別情報。
+Review19のraw9は19時時点の人間観測。even scoreを15/17のような最終5段階へ丸めない。Review19の履歴中央値は参考統計であり、正式評価はhuman raw9。9-26以降の新規データは5段階auto判定fieldを生成しない。
 
 `RateDisplayScreen` のquick buttonは、history由来の自動判定がreadyでcountがあり、通常の15/17/18/19 session（summer/normal）を表示中だけ有効にする。自動判定の順序 `few < slightly_few < normal < slightly_many < many` に対し、9-23では上にhigher（1段多い側）、下にlower（1段少ない側）を表示する。端では存在する方向の1個だけを表示し、空白やplaceholderは作らない。Review19、fixed-time、20:30、履歴不足・自動判定不明では表示しない。
 
@@ -242,7 +236,15 @@ productionAnalysis:
 
 ### 保存・完了
 
-Review19は12エリアの19時残数とhuman raw9、別軸のauto median、daySnapshot、calendar/weather、productionAnalysisを持つ。19時input画面には9-19の短いreference labelを表示するが、auto中央値/sample/basis詳細は現場UIへ出さず分析metadataとして保持する。
+Review19は12エリアの19時実残数と正式評価human raw9、履歴統計、daySnapshot、calendar/weather、productionAnalysisを持つ。19時input画面は既存9段階の人間入力と短いreference labelを維持し、自動判定結果を表示しない。baseline UIにも自動結果表示はなく、今回の変更は入力・最終保存時の自動判定fieldの生成・保存・採用を止めるもの。
+
+9-26では `buildReview19HistoryStatistics()` が従来の19時履歴選択・共通中央値計算を再利用し、`pickReview19HistoryStatistics()` のallowlistで履歴統計だけを取り出す。通常15/17の中央値エンジンは変更しない。新規Review19の `autoEvaluation` / `autoEvaluationStatus` は生成・補完しない。互換用の既存field名 `autoEvaluationBasis` は残すが、新規保存内容はruleVersion、標本充足status、cycle、weekday/group、比較方式・三連休参照、中央値・標本数、短期/長期統計・中央値下落guardのみ。5段階base/final評価、閾値、値引補正、減少補正は含めない。
+
+`recommendationStatus` と `area_count_median_v1` は統計の充足状態・計算由来を示す内部metadataで、Review19の採用評価ではない。人間評価の正式な値は `humanEvaluationDetails.humanEvaluationScore9`、`humanEvaluation` は奇数段階の旧5段階互換値。偶数段階を5段階へ丸めない。
+
+旧auto入りJSONの正規化枝は従来どおり保持する。過去recordを新ルールで再計算・削除せず、archive/export/remote互換を維持。旧版の途中Review19を再開した場合、再入力しないエリアの旧autoが残る場合があるが、UIや主要判断には使わない。新形式の正規化にも同じ統計allowlistを適用し、basisから自動評価を復活させない。
+
+`productionAnalysis` / `productionShortageSuspicion` は従来どおり15/17履歴と19時human raw9を参照する別機能であり、変更していない。実残数、15/17/19履歴、過去同曜日count、median/sample、Review19記録の保存・archive責務は維持する。
 
 completion:
 
@@ -262,7 +264,7 @@ archive件数が過去のlegacy local件数より多いことはremote canonical
 ### 9-22: Review19完了画面のJSON download復帰
 
 - Review19完了画面の主操作は `JSONをダウンロード`。`buildDirectReview19DataExportPayload({ record, exportedAt })` と既存 `downloadJsonFile()` を使い、9-20までのpretty JSONファイル出力へ戻した。完了画面からclipboard APIやcopy専用stateを呼ばない。
-- export payloadのformat、version、dataSchemaVersion、appVersion、buildId、dataQuality、records、Review19 areaCounts、human/auto evaluation、calendar/weather、productionAnalysis、snapshot、daySnapshot、rateDecisionSnapshot等は変更・削除・要約していない。downloadはReview19保存、archive、outbox、cloud、localStorage、IndexedDBを変更しない。
+- 9-22のdownload復帰時にはexport payloadのformat、version、dataSchemaVersion、appVersion、buildId、dataQuality、records、Review19 areaCounts、human/auto evaluation、calendar/weather、productionAnalysis、snapshot、daySnapshot、rateDecisionSnapshot等を変更・削除・要約していない。9-26では新規Review19のauto/status生成を停止し、既存export builderが人間評価と履歴統計をそのまま出力する。downloadはReview19保存、archive、outbox、cloud、localStorage、IndexedDBを変更しない。
 - 設定画面の `19:00チェックデータを全件出力` / `最新の19:00チェックデータを出力` は従来どおりJSON downloadする。完了画面は `buildDirectReview19DataExportPayload()`、設定画面は従来の全件/最新export builderを使う。
 
 ### 9-22導入 / 9-23表示順: AreaCount自動判定の±1 quick adjustment
@@ -277,11 +279,11 @@ archive件数が過去のlegacy local件数より多いことはremote canonical
 - local-first。remote失敗だけで現場入力を失わない。
 - pending 0はlocal outboxが空という意味で、remote全履歴同期済みの保証ではない。
 - AreaCount manual direct backfill、Review19 pendingなし正本rescue、legacy pending、CAS/finality/in-flight guardを維持。
-- 実Supabase mutationは9-25開発検証でも実施していない。
+- 実Supabase mutationは9-26開発検証でも実施していない。
 
 fixed-timeはproduction AreaCount履歴をSupabaseからREAD ONLYで使い、同じmedian engineへ渡す。productionのAreaCount/pending/Review19/finalized/learning/global settingへWRITEしない。fixed-time cycle、clock、temperature、global adjustmentは専用state。
 
-DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-25でも変更していない。
+DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-26でも変更していない。
 
 ## 11. そのほかの現行UX
 
@@ -307,24 +309,20 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-`CHANGE_REPORT_2026.8.9-25.md` の結果:
+- 全 `check:*`: **59/59 PASS**（packageの全check名との集合一致を確認）。Review19 human/statistics・旧auto互換31/31、download15/15、Obon16/16、archive長期6項目PASS。
+- normal/summer各12エリアのhuman raw9全段階を正規化、archive保存・再読込、cloud row変換、Review19/daySnapshot/統合JSONへ往復。相反する旧autoを付けてもproductionAnalysisの全12エリアhuman raw9・不足疑い判定が一致。
+- 既存human9 15/15、Review19完了保存16/16、priority70/70、quick40/40、先行率15/15・UI35/35・flow30/30、夏17時comfort46/46・integration11/11 PASS。通常値引、weather、fixed-time、20:30、storage、archive、export等も全checkに含む。
+- TypeScript / production build / PWA generateSW PASS（101 modules、precache10）。chunk size / Browserslist dataの既存build警告あり。
+- changed-file focused ESLint: **0 errors / 4 existing warnings**。full lint: **9 errors / 7 warnings**、9-25とfile/rule/severity/message比較で新規diagnostic 0。既存診断は今回の変更対象外。
+- Edge production preview 390×844: 17時完了状態から18:55の正規Review19遷移、12エリア実入力（raw1〜9、偶数は長押し隣接選択）、保存→完了JSON download→JSON.parseを確認。残数11〜22、中央値20〜31、sample3を保持し、新規auto/statusやbasisの判定・補正fieldなし。
+- IndexedDBには当日正本1件と既存履歴3件を保持。reload後は既存仕様どおりstartへ戻り、設定画面の全件4件・最新1件downloadでもhuman raw9、履歴統計、productionAnalysisを確認した。
+- 横overflow、アプリconsole error/warning、page error、外部通信0。想定されたReview19 alert1回とdownload3回のみ。Service Workerを遮断するPlaywright設定由来のwarning2件は別記し、PWA runtime確認には数えない。
+- AGENTS.md / root SQL9本は9-25 ZIPとbyte-identical。productionAnalysis、AreaCount engine、通常rate、天候・夏17時補正、先行値引、reference/transition、storage主要実装もbytes不変。hook差分はbuilder名のimportと2呼出しだけ。
+- 親・担当agentの実行ログでGPT-6 Astra / Ultraを確認。制限時には停止し、再開時も同設定を再確認した。
 
-- 全 `check:*`: 59/59 PASS。専用weather 46/46（cycle・時刻・雨雪・raw段階200組を含む）、integration 11/11。既存先行率15/15、UI35/35、flow30/30、Review19 priority70/70、quick40/40もPASS。
-- 旧新実関数の独立比較: 22,020 scenarios / 297,765 assertions。21,908件不変、112件は許容したsummer17・dry・十分快適の差分だけ。予期しない差分0。
-- TypeScript / production build PASS（101 modules）、PWA generateSW PASS（precache10）。chunk size / Browserslist dataの既存警告あり。
-- focused ESLint: 0 errors / 4 existing warnings。full lint: 9 errors / 7 warnings。9-24とfile / rule / severity / message比較で新規0（message内の作業root絶対pathだけ揃えた）。
-- appVersion `2026.8.9-25`、buildId `build-20260913-201951-jst`、dataSchemaVersion `3`。SQL9本・AGENTS.mdは9-24 ZIPとbyte-identical。Supabase / schema変更なし。
-- 親・担当agentの実行記録でGPT-6 Astra / Ultraを確認。利用制限後も同モデル設定を再確認して再開した。
+未確認: 実Supabase通信・mutation、インストール済みPWA実機、実ユーザー端末・長時間background復帰。通常値引・夏17時等の今回の回帰は自動testで確認し、全通常フローの実ブラウザ再実行はしていない。
 
-headless Microsoft Edge production preview、390×844、Asia/Tokyo、隔離fixtureで実操作した。
-
-- summer17のglobal -5 / 0 / +5、normal17のglobal -5の4条件。天候入力のstepperで25℃へ変更し、既存の後続時刻への反映と晴れ・弱風を確認して確定。
-- 夏17時は先行率5 / 10 / 15%、normal17は10%。reload後も指示を保持し、エリア残数20を入力、手動で普通を選択してRateDisplayへ進めた。
-- 内訳を展開し、夏17時の天候-10%と旧-5%limit文の不在、normal17の天候-5%と旧limit文を確認。エリア作業完了操作後のrateDecisionSnapshotも同じ値を保存。
-- 横overflowなし、console error/warning、外部通信、dialog/download/popupなど予期しない操作0件。
-- Doneラベル、15時、Review19、manual18、quick、fixed-time、20:30、storage/archive等の回帰は自動checkで確認。今回これら全フローの実ブラウザ再実行はしていない。
-
-未確認: 実Supabase mutation・全量cloud同期、インストール済みPWA実機、実店舗端末・長時間background復帰。証跡は `work/comfort25/checks.json`、各check log、`lint-comparison25.json`、`baseline-comparison25.json`、`browser-results25.json`。ZIP再open結果とSHAはZIP外の `outputs/RELEASE_REPORT_2026.8.9-25.md` / `ZIP_VALIDATION_2026.8.9-25.json`。
+証跡: `work/review19human26/checks.json`、各check log、`lint-comparison26.json`、`protected-source-proof26.json`、`browser-work/browser-results26.json`。完成ZIP検査・SHAは `outputs/RELEASE_REPORT_2026.8.9-26.md` / `ZIP_VALIDATION_2026.8.9-26.json`。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -357,7 +355,7 @@ headless Microsoft Edge production preview、390×844、Asia/Tokyo、隔離fixtu
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-25.md`（9-24 baselineは `CHANGE_REPORT_2026.8.9-24.md`）
+4. `CHANGE_REPORT_2026.8.9-26.md`（9-25 baselineは `CHANGE_REPORT_2026.8.9-25.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

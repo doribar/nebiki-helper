@@ -43,6 +43,7 @@ import {
   normalizeProductionAnalysis,
 } from "./analysisMetadata.ts";
 import { supportsObonCalendarRule } from "./obon.ts";
+import { pickReview19HistoryStatistics } from "./review19Evaluation.ts";
 
 export const REVIEW19_RATINGS: Array<{
   value: Review19Rating;
@@ -423,6 +424,21 @@ function normalizeReview19AreaEvaluations(
       autoEvaluationBasis.demandCycle ===
         normalizeDemandCycle(fallbackDemandCycle),
     );
+
+    // 新規形式では自動判定を補完せず、統計のみを保持する。
+    // auto入りの旧形式は以下の従来処理で読み込み、過去の観測値を維持する。
+    if (
+      candidate.autoEvaluation === undefined &&
+      candidate.autoEvaluationStatus === undefined
+    ) {
+      normalized[areaId] = {
+        ...humanEvaluationFields,
+        ...(autoEvaluationBasis && hasMatchingDemandCycle
+          ? { autoEvaluationBasis: pickReview19HistoryStatistics(autoEvaluationBasis) }
+          : {}),
+      };
+      continue;
+    }
 
     if (
       candidate.autoEvaluationStatus === "ready" &&

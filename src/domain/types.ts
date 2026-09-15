@@ -489,15 +489,15 @@ export type AreaCountDataQuality = {
 };
 
 export type Review19AutomaticEvaluation = {
-  /** 過去中央値との比較結果。人間評価の正解ラベルではなく、分析用の別観測値。 */
-  autoEvaluation: AreaCountEvaluation | null;
-  autoEvaluationStatus: "ready" | "insufficient";
-  /** 新規記録では必ず保存する。旧・不完全データの正規化時だけ欠損を許容する。 */
+  /** 旧データの読み込み互換用。新規Review19では生成せず、判断にも使用しない。 */
+  autoEvaluation?: AreaCountEvaluation | null;
+  autoEvaluationStatus?: "ready" | "insufficient";
+  /** 既存field名を維持。新規記録は中央値・標本数等の履歴統計のみ保存する。 */
   autoEvaluationBasis?: AreaCountDecisionBasis;
 };
 
 export type Review19AreaEvaluation = Review19AutomaticEvaluation & {
-  /** 売場を見た担当者の観測値。ground truthとして扱わない。 */
+  /** 正式評価はhumanEvaluationDetailsの9段階人間入力。このfieldは奇数段階の互換値。 */
   humanEvaluation?: AreaCountEvaluation;
   humanEvaluationDetails?: HumanEvaluationDetails;
 };
