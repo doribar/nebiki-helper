@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-26）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-27）
 
-最終更新: 2026-09-15 JST
+最終更新: 2026-09-19 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260915-0201.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260915-0201.zip` |
-| appVersion | `2026.8.9-26` |
-| buildId | `build-20260914-205743-jst` |
+| ZIP | `nebiki-helper-20260919-1807.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260919-1807.zip` |
+| appVersion | `2026.8.9-27` |
+| buildId | `build-20260918-120201-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260915-0201.zip.sha256` / `RELEASE_REPORT_2026.8.9-26.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260919-1807.zip.sha256` / `RELEASE_REPORT_2026.8.9-27.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/review19human26/nebiki-helper`。`package.json` / `package-lock.json` のversionだけを9-26へ進めた。buildIdは従来どおり `vite.config.ts` がbuild時にJSTで生成し、上記値はdist bundleで確認した。schema 3、version/build生成方法とも非変更。
+application rootは成果物workspace内の `work/doneLabel27/nebiki-helper`。package versionだけを9-27へ進め、buildIdは従来どおりViteからJSTで生成する。schema 3、version/build生成方法は非変更。
 
-比較基準は9-25 ZIPそのもの（`nebiki-helper-20260914-0129.zip`、SHA-256 `467fd3d2f9a7c6e9dcd72c9f7c8f7379367612fe0c9ff76a8be2046a0d36dd8e`）。9-26ではReview19用の残数中央値からの5段階自動判定fieldの生成・保存・採用を停止し、正式評価を既存human raw9に一本化した。履歴残数・中央値・標本数、productionAnalysis、15/17通常評価・率、夏17時快適補正を維持。SQL 9本とAGENTS.mdは非変更。詳細は `CHANGE_REPORT_2026.8.9-26.md`。
+比較基準は9-26 ZIP `nebiki-helper-20260915-0201.zip`（SHA-256 `2f8ca857a5f604f110ed245749c97a4b5a3cccc0cb9a3b2f3660c51d3cd1d519`）。9-27は通常DoneScreenの「全エリアの値引率」内の重複曜日・時刻panelだけを削除した。上部referenceConditionLabelと一覧は維持する。値引計算・Review19・履歴・保存・JSON export、SQL9本、AGENTS.mdは非変更。詳細は `CHANGE_REPORT_2026.8.9-27.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19human26\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\doneLabel27\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -194,6 +194,10 @@ quickは既存 `judgeCurrentArea()` / `applyAreaJudgeSelection()` と保存経�
 
 上記は有効なmetadataを持つsnapshot / recordが対象に含まれる場合の保存・出力経路であり、cloud送信成功や欠損した過去metadataの復元を保証するものではない。exportのlegacy互換処理は既存 `humanEvaluationDetails` を保持し、欠損からquick操作を推測して生成しない。根拠は `types.ts`、`useNebikiApp.ts`、`sessionSnapshots.ts`、`areaCountHistory.ts`、`finalizedDayData.ts`、`dayExport.ts`、`separateDataExport.ts`、`review19.ts`、`areaCountRemoteStorage.ts`、`review19RemoteStorage.ts`。
 
+### 9-27: DoneScreenの重複曜日・時刻表示を削除
+
+通常の値引完了画面は上部の `referenceConditionLabel`（例: `夏・木曜日・17時`）を残し、「全エリアの値引率」内の `BasisTimeMiniPanel` を表示しない。一覧の全行・値引率、ボタン、メモ、日次exportの挙動は維持。DoneScreen内だけのpanel・2helperと不要なreferenceText/timeText props、およびDoneScreenへの2属性渡しを削除した。他画面のpanel、AreaJudgeScreenの曜日・時刻、共通formatter・resolved referenceは変更していない。
+
 ## 8. rate、global adjustment、productionAnalysis
 
 rate計算の正本は `discount.ts`、`weekdayBase.ts`、`rateDecisionSnapshot.ts`、`globalDiscountAdjustment.ts`。
@@ -309,20 +313,18 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*`: **59/59 PASS**（packageの全check名との集合一致を確認）。Review19 human/statistics・旧auto互換31/31、download15/15、Obon16/16、archive長期6項目PASS。
-- normal/summer各12エリアのhuman raw9全段階を正規化、archive保存・再読込、cloud row変換、Review19/daySnapshot/統合JSONへ往復。相反する旧autoを付けてもproductionAnalysisの全12エリアhuman raw9・不足疑い判定が一致。
-- 既存human9 15/15、Review19完了保存16/16、priority70/70、quick40/40、先行率15/15・UI35/35・flow30/30、夏17時comfort46/46・integration11/11 PASS。通常値引、weather、fixed-time、20:30、storage、archive、export等も全checkに含む。
-- TypeScript / production build / PWA generateSW PASS（101 modules、precache10）。chunk size / Browserslist dataの既存build警告あり。
-- changed-file focused ESLint: **0 errors / 4 existing warnings**。full lint: **9 errors / 7 warnings**、9-25とfile/rule/severity/message比較で新規diagnostic 0。既存診断は今回の変更対象外。
-- Edge production preview 390×844: 17時完了状態から18:55の正規Review19遷移、12エリア実入力（raw1〜9、偶数は長押し隣接選択）、保存→完了JSON download→JSON.parseを確認。残数11〜22、中央値20〜31、sample3を保持し、新規auto/statusやbasisの判定・補正fieldなし。
-- IndexedDBには当日正本1件と既存履歴3件を保持。reload後は既存仕様どおりstartへ戻り、設定画面の全件4件・最新1件downloadでもhuman raw9、履歴統計、productionAnalysisを確認した。
-- 横overflow、アプリconsole error/warning、page error、外部通信0。想定されたReview19 alert1回とdownload3回のみ。Service Workerを遮断するPlaywright設定由来のwarning2件は別記し、PWA runtime確認には数えない。
-- AGENTS.md / root SQL9本は9-25 ZIPとbyte-identical。productionAnalysis、AreaCount engine、通常rate、天候・夏17時補正、先行値引、reference/transition、storage主要実装もbytes不変。hook差分はbuilder名のimportと2呼出しだけ。
-- 親・担当agentの実行ログでGPT-6 Astra / Ultraを確認。制限時には停止し、再開時も同設定を再確認した。
+- 全 `check:*` **59/59 PASS**。packageのcheck名との集合一致を確認。更新した既存UI checkは35/35 PASS、通常Done summary、rate snapshot、Review19、storage、export、weather、夏17時、fixed-time等もPASS。
+- TypeScript / production build / PWA generateSW PASS（101 modules、precache10）。chunk sizeとBrowserslist dataの既存build警告あり。
+- changed-file focused ESLint **0 errors / 0 warnings**。full lint **9 errors / 7 warnings**は9-26既存分と一致し、file/rule/severity/message比較で新規diagnostic 0。
+- Edge production preview 390×844で夏15/17・normal15/17・手動曜日override・ObonのDone表示を確認。上部referenceConditionLabelは1つ、下側の今日の曜日／値引時刻panelはなし、全12エリアの一覧を維持。数値率を持つ完了fixtureでも一覧表示を確認した。
+- AreaJudgeScreenの既存の基準曜日・時刻panelを実ブラウザで確認。横overflow、console error/warning、page error、外部通信、予期しないdialog/download/popupは0。
+- src96本中の変更はDoneScreenとAppRouterの2本だけ。他94本は9-26 ZIPとbyte-identical。表示panelと専用の未使用依存の削除以外の本体差分がないことを検査した。AGENTS.md、root SQL9本、build/schema生成処理もbyte-identical。
+- GPT-6 Astra / Ultraのみを使用。制限時は停止し、再開時に実行記録で同設定を確認した。
 
-未確認: 実Supabase通信・mutation、インストール済みPWA実機、実ユーザー端末・長時間background復帰。通常値引・夏17時等の今回の回帰は自動testで確認し、全通常フローの実ブラウザ再実行はしていない。
+未確認: 実店舗端末、インストール済みPWA、実Supabase通信。今回のブラウザ確認は隔離fixtureで行い、値引計算・Review19・保存・export全運用の実ブラウザ再実行はしていない（コード非変更＋全checkで回帰確認）。
 
-証跡: `work/review19human26/checks.json`、各check log、`lint-comparison26.json`、`protected-source-proof26.json`、`browser-work/browser-results26.json`。完成ZIP検査・SHAは `outputs/RELEASE_REPORT_2026.8.9-26.md` / `ZIP_VALIDATION_2026.8.9-26.json`。
+証跡: `work/doneLabel27/checks.json`、`lint-comparison27.json`、`source-proof27.json`、`browser-work/browser-results27.json`。ZIP再open検査・SHAは `outputs/ZIP_VALIDATION_2026.8.9-27.json` / `RELEASE_REPORT_2026.8.9-27.md`。
+
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -355,7 +357,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-26.md`（9-25 baselineは `CHANGE_REPORT_2026.8.9-25.md`）
+4. `CHANGE_REPORT_2026.8.9-27.md`（9-26 baselineは `CHANGE_REPORT_2026.8.9-26.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

@@ -7,8 +7,6 @@ type DoneScreenProps = {
   onReturnHome: () => void;
   onStart1830?: () => void;
   referenceConditionLabel?: string;
-  referenceText?: string;
-  timeText?: string;
   summaryItems: DoneSummaryItem[];
   showDailyDataActions?: boolean;
   memo?: string;
@@ -37,59 +35,11 @@ const summaryRowStyle: CSSProperties = {
   fontSize: 13,
 };
 
-function getReferenceBaseText(referenceText: string): string {
-  return referenceText.replace(/を基準に考えて$/, "");
-}
-
-function getReferenceWeekdayBaseText(referenceText: string, timeText: string): string {
-  const baseText = getReferenceBaseText(referenceText);
-  const suffix = `の${timeText}`;
-  return baseText.endsWith(suffix)
-    ? baseText.slice(0, -suffix.length)
-    : baseText;
-}
-
-function BasisTimeMiniPanel({
-  referenceText,
-  timeText,
-}: {
-  referenceText: string;
-  timeText: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: 4,
-        padding: "10px 12px",
-        borderRadius: 10,
-        background: "#f7f7f7",
-        border: "1px solid #e0e0e0",
-        fontSize: 13,
-        color: "#333",
-        lineHeight: 1.5,
-        marginBottom: 12,
-      }}
-    >
-      <div>
-        <strong>今日の曜日：</strong>
-        {getReferenceWeekdayBaseText(referenceText, timeText)}
-      </div>
-      <div>
-        <strong>値引時刻：</strong>
-        {timeText}
-      </div>
-    </div>
-  );
-}
-
 export function DoneScreen({
   onGoBack,
   onReturnHome,
   onStart1830,
   referenceConditionLabel,
-  referenceText,
-  timeText,
   summaryItems,
   showDailyDataActions = false,
   memo = "",
@@ -184,10 +134,6 @@ export function DoneScreen({
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
             全エリアの値引率
           </div>
-
-          {referenceText && timeText ? (
-            <BasisTimeMiniPanel referenceText={referenceText} timeText={timeText} />
-          ) : null}
 
           <div
             style={{

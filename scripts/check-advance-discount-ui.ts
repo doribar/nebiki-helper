@@ -237,16 +237,14 @@ test("Done without a label remains compatible and adds no empty reference block"
   }
 });
 
-test("Done reference label coexists with the unchanged legacy summary reference and rates", () => {
+test("Done keeps the single top reference label and rates without duplicate weekday/time", () => {
   const rendered = renderDone({
     referenceConditionLabel: "夏・木曜日・17時",
-    referenceText: "木曜日の17時を基準に考えて", timeText: "17時",
     summaryItems: [{ areaId: "bento_men", areaName: "弁当・麺", judgeText: "普通", rateText: "20%", manyRateText: "30%", normalRateText: "20%" }],
   });
-  assert.ok(rendered.markup.includes("夏・木曜日・17時"));
+  assert.equal(rendered.markup.split("夏・木曜日・17時").length - 1, 1);
   assert.match(rendered.markup, /全エリアの値引率/);
-  assert.match(rendered.markup, /<strong>今日の曜日：<\/strong>木曜日/);
-  assert.match(rendered.markup, /<strong>値引時刻：<\/strong>17時/);
+  assert.doesNotMatch(rendered.markup, /今日の曜日：|値引時刻：/);
   assert.match(rendered.markup, /多い → 30%/);
   assert.match(rendered.markup, /どちらでもない → 20%/);
 });

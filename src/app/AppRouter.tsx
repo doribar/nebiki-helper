@@ -263,9 +263,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
               ? () => actions.startNextDoneSession()
               : undefined
           }
-          referenceText={derived.basisGuide.referenceText}
           referenceConditionLabel={derived.basisGuide.referenceConditionLabel}
-          timeText={derived.timeText}
           showDailyDataActions={
             state.session?.discountTime === "20" &&
             Boolean(state.finalizedDayRecordId)
