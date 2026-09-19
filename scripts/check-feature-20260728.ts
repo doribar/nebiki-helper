@@ -261,10 +261,7 @@ test("19時・日次の全件／最新／direct exportを分離する", () => {
 
   assert.match(hookSource, /if \(records\.length === 0\) return false/);
   assert.match(hookSource, /if \(!payload \|\| payload\.records\.length === 0\) return false/);
-  assert.match(
-    hookSource,
-    /await persistFinalizedDayMemo\(recordId, memo\)/,
-  );
+  assert.doesNotMatch(hookSource, /persistFinalizedDayMemo|exportCompletedDailyData/);
   assert.match(hookSource, /state\.screen !== "review19_done"/);
 });
 
@@ -280,25 +277,23 @@ test("注意事項は-10%商品と+10%商品を各1項目へ統合", () => {
   ]);
 });
 
-test("設定PIN UIを廃止し4つの分離出力ボタンを表示", () => {
+test("設定PINと独立日次出力UIを廃止し19時チェックの出力を維持", () => {
   assert.equal(settingsSource.includes("adminSettings"), false);
   assert.equal(settingsSource.includes("type=\"password\""), false);
   assert.equal(settingsSource.includes("PIN"), false);
   for (const label of [
     "19:00チェックデータを全件出力",
     "最新の19:00チェックデータを出力",
-    "1日データを全件出力",
-    "最新の1日データを出力",
   ]) {
     assert.ok(settingsSource.includes(label), label);
   }
   assert.match(settingsSource, /role="status"/);
   assert.match(appSource, /onExportAllReview19Data=\{app\.actions\.exportAllReview19Data\}/);
   assert.match(appSource, /onExportLatestReview19Data=\{app\.actions\.exportLatestReview19Data\}/);
-  assert.match(appSource, /onExportAllDailyData=\{app\.actions\.exportAllDailyData\}/);
-  assert.match(appSource, /onExportLatestDailyData=\{app\.actions\.exportLatestDailyData\}/);
+  assert.doesNotMatch(settingsSource, /1日データを全件出力|最新の1日データを出力/);
+  assert.doesNotMatch(appSource, /onExportAllDailyData|onExportLatestDailyData/);
   assert.match(routerSource, /onExportReview19Data=\{actions\.exportCompletedReview19Data\}/);
-  assert.match(routerSource, /actions\.exportCompletedDailyData\(memo\)/);
+  assert.doesNotMatch(routerSource, /exportCompletedDailyData/);
 });
 
 test("20:30定番個数はnull・0を区別し不正値を拒否", () => {

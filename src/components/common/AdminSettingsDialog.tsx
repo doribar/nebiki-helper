@@ -15,11 +15,8 @@ type ExportAction = () => boolean | Promise<boolean>;
 
 type AdminSettingsDialogProps = {
   review19Count?: number;
-  dailyCount?: number;
   onExportAllReview19Data?: ExportAction;
   onExportLatestReview19Data?: ExportAction;
-  onExportAllDailyData?: ExportAction;
-  onExportLatestDailyData?: ExportAction;
   cloudSync?: {
     pendingCount: number;
     errorDetails: PendingSupabaseSyncErrorDetails;
@@ -73,11 +70,8 @@ function getAttemptCountText(group: PendingSupabaseSyncErrorGroup): string {
 
 export function AdminSettingsDialog({
   review19Count = 0,
-  dailyCount = 0,
   onExportAllReview19Data,
   onExportLatestReview19Data,
-  onExportAllDailyData,
-  onExportLatestDailyData,
   cloudSync,
   onSyncLocalDataToSupabase,
   onGetStorageUsageDiagnostic,
@@ -233,7 +227,7 @@ export function AdminSettingsDialog({
 
         <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>保存データ</div>
         <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
-          19:00チェックと1日データは、別々のJSONとして出力します。
+          19:00チェックデータをJSONとして出力します。
         </div>
 
         <section style={{ marginBottom: 18 }}>
@@ -256,30 +250,6 @@ export function AdminSettingsDialog({
               style={exportButtonStyle}
             >
               最新の19:00チェックデータを出力
-            </button>
-          </div>
-        </section>
-
-        <section style={{ marginBottom: 18 }}>
-          <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 900 }}>
-            1日データ（{dailyCount}件）
-          </div>
-          <div style={{ display: "grid", gap: 8 }}>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void runExport(onExportAllDailyData, "1日データがありません。")}
-              style={exportButtonStyle}
-            >
-              1日データを全件出力
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void runExport(onExportLatestDailyData, "1日データがありません。")}
-              style={exportButtonStyle}
-            >
-              最新の1日データを出力
             </button>
           </div>
         </section>
@@ -330,8 +300,6 @@ export function AdminSettingsDialog({
               headroom概算：{formatStorageKiB(storageDiagnostic.localStorage.headroomBytes)}
               <br />
               IndexedDB Review19：{storageDiagnostic.archive.review19Count ?? "取得不可"}件
-              <br />
-              IndexedDB 1日データ：{storageDiagnostic.archive.finalizedDayCount ?? "取得不可"}件
               <br />
               IndexedDB session履歴：{storageDiagnostic.archive.dailySessionSnapshotCount ?? "取得不可"}件
               <br />

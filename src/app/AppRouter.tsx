@@ -64,8 +64,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           onStartReview19={actions.startReview19Manually}
           now={testNow ?? undefined}
           onOpenSettings={onOpenSettings}
-          previousDayDiscardTarget={derived.previousDayDiscardTarget}
-          onSavePreviousDayDiscardCount={actions.savePreviousDayDiscardCount}
           demandCycle={derived.demandCycle}
           summerModeAvailable={isSummerModeAvailable(state.sessionDraft.date)}
           canChangeDemandCycle={derived.canChangeDemandCycle}
@@ -264,19 +262,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
               : undefined
           }
           referenceConditionLabel={derived.basisGuide.referenceConditionLabel}
-          showDailyDataActions={
-            state.session?.discountTime === "20" &&
-            Boolean(state.finalizedDayRecordId)
-          }
-          memo={derived.finalizedDayMemo}
-          onSaveMemo={actions.saveFinalizedDayMemo}
-          onExportDailyData={
-            state.finalizedDayRecordId
-              ? (memo) => {
-                  return actions.exportCompletedDailyData(memo);
-                }
-              : undefined
-          }
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
         />

@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-27",
+  "version": "2026.8.9-28",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -66,7 +66,8 @@
     "check:advance-discount-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-advance-discount-ui.ts",
     "check:advance-discount-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-advance-discount-flow.ts",
     "check:summer17-comfort": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-summer17-comfort.ts",
-    "check:summer17-comfort-integration": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-summer17-comfort-integration.ts"
+    "check:summer17-comfort-integration": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-summer17-comfort-integration.ts",
+    "check:daily-ui-removal": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daily-ui-removal.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

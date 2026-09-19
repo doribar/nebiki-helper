@@ -198,18 +198,18 @@ test("27. UIに19:00チェック対象外操作がない", () => {
   assert.equal(routerSource.includes("markReview19NotApplicable"), false);
   assert.equal(hookSource.includes("markReview19NotApplicable"), false);
 });
-test("28. 19時チェックと1日データを全件・最新の4導線へ分離", () => {
+test("28. 19時チェックの全件・最新・完了後出力を維持し日次出力導線は廃止", () => {
   for (const label of [
     "19:00チェックデータを全件出力",
     "最新の19:00チェックデータを出力",
-    "1日データを全件出力",
-    "最新の1日データを出力",
   ]) {
     assert.ok(settingsSource.includes(label));
   }
   assert.equal(settingsSource.includes("全データを出力"), false);
+  assert.equal(settingsSource.includes("1日データを全件出力"), false);
+  assert.equal(settingsSource.includes("最新の1日データを出力"), false);
   assert.ok(routerSource.includes("onExportReview19Data={actions.exportCompletedReview19Data}"));
-  assert.ok(routerSource.includes("actions.exportCompletedDailyData(memo)"));
+  assert.equal(routerSource.includes("exportCompletedDailyData"), false);
 });
 test("29. 天候入力の予報キーは16〜21時だけ", () => {
   assert.deepEqual(Object.keys(createDefaultHourlyForecasts()), ["16", "17", "18", "19", "20", "21"]);

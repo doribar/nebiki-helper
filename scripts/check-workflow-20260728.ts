@@ -160,15 +160,14 @@ test("AreaJudgeから天候入力へ戻る場合だけ確認し、PIN UIは残�
   assert.equal(source("src/components/common/AdminSettingsDialog.tsx").includes("PIN"), false);
 });
 
-test("前日廃棄・最終メモ・各完了画面の1件出力UIを接続", () => {
-  assert.ok(startSource.includes("廃棄個数を入力"));
-  assert.ok(startSource.includes("対象日："));
-  assert.match(startSource, /discardCountText === "" \? null/);
-  assert.ok(doneSource.includes("任意メモ"));
-  assert.ok(doneSource.includes("1日データを出力"));
-  assert.match(hookSource, /patch: \{ memo \}/);
-  assert.match(hookSource, /patch: \{ discardCount: count \}/);
-  assert.match(routerSource, /actions\.exportCompletedDailyData\(memo\)/);
+test("前日日次の廃棄入力・最終メモ・日次出力UIを廃止し内部確定を維持", () => {
+  assert.doesNotMatch(startSource, /廃棄個数を入力|previousDayDiscardTarget|discardCountText/);
+  assert.doesNotMatch(doneSource, /任意メモ|1日データを出力|onSaveMemo|onExportDailyData/);
+  assert.doesNotMatch(hookSource, /persistFinalizedDayMemo|savePreviousDayDiscardCount|exportCompletedDailyData/);
+  assert.doesNotMatch(routerSource, /previousDayDiscardTarget|onSaveMemo|onExportDailyData/);
+  assert.match(hookSource, /initializeArchivedFinalizedDay/);
+  assert.match(hookSource, /replaceArchivedFinalizedDay/);
+  assert.match(routerSource, /onExportReview19Data=\{actions\.exportCompletedReview19Data\}/);
 });
 
 console.log(`\n画面遷移・修正・日次確定回帰テスト: ${passed}/8件成功`);

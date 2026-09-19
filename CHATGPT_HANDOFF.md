@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-27）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-28）
 
-最終更新: 2026-09-19 JST
+最終更新: 2026-09-20 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260919-1807.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260919-1807.zip` |
-| appVersion | `2026.8.9-27` |
-| buildId | `build-20260918-120201-jst` |
+| ZIP | `nebiki-helper-20260920-0848.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260920-0848.zip` |
+| appVersion | `2026.8.9-28` |
+| buildId | `build-20260919-231318-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260919-1807.zip.sha256` / `RELEASE_REPORT_2026.8.9-27.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260920-0848.zip.sha256` / `RELEASE_REPORT_2026.8.9-28.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/doneLabel27/nebiki-helper`。package versionだけを9-27へ進め、buildIdは従来どおりViteからJSTで生成する。schema 3、version/build生成方法は非変更。
+application rootは成果物workspace内の `work/dailyUi28/nebiki-helper`。package versionは9-28、buildIdは従来どおりViteからJSTで生成する。schema 3、version/build生成方法は非変更。
 
-比較基準は9-26 ZIP `nebiki-helper-20260915-0201.zip`（SHA-256 `2f8ca857a5f604f110ed245749c97a4b5a3cccc0cb9a3b2f3660c51d3cd1d519`）。9-27は通常DoneScreenの「全エリアの値引率」内の重複曜日・時刻panelだけを削除した。上部referenceConditionLabelと一覧は維持する。値引計算・Review19・履歴・保存・JSON export、SQL9本、AGENTS.mdは非変更。詳細は `CHANGE_REPORT_2026.8.9-27.md`。
+比較基準は9-27 ZIP `nebiki-helper-20260919-1807.zip`（SHA-256 `d8e925978776e8ac7fa31535f65e9e5507d6bd43609093c951a94b10af3a20d5`）。9-28はユーザー向けの「1日データ」出力・メモ・前日廃棄入力だけを撤去。内部finalized/daySnapshot/archive、Review19とそのJSON出力、productionAnalysis、履歴・値引計算は維持。詳細は `CHANGE_REPORT_2026.8.9-28.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\doneLabel27\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\dailyUi28\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -188,7 +188,7 @@ quickは既存 `judgeCurrentArea()` / `applyAreaJudgeSelection()` と保存経�
 | `DailySessionSnapshot` / `Review19Snapshot` | `areas[areaId].humanEvaluationDetails.evaluationAdjustment`。`buildAreaSnapshotsFromState()` がdeep copyし、`areaCountEvaluation` / `areaCountDecisionBasis` / `rateDecisionSnapshot` と同じarea snapshot内に保持する。 |
 | `AreaCountRecord` | `humanEvaluationDetails.evaluationAdjustment`。`suggestedEvaluation` / `userJudge` / `decisionBasis` 等と同じrecord内に保持する。 |
 | `Review19Result.daySnapshot` | `sessions[].areas[areaId].humanEvaluationDetails.evaluationAdjustment` と `areaCountRecords[].humanEvaluationDetails.evaluationAdjustment`。`createReview19DaySnapshot()` は同日・同cycleのrecordを収集し、sessionは `screen === "done"` または `sessionEndReason === "auto_time_transition"` のものだけを含める。 |
-| finalized day / 日次export | `StoredFinalizedDayData` はdaySnapshotを展開した形で `sessions` / `areaCountRecords` を保持する。全件日次exportは `records[]`、単日exportは `daySnapshot` 配下にこれらを保持する。 |
+| 内部finalized day / 旧形式の互換builder | `StoredFinalizedDayData` はdaySnapshotを展開した形で `sessions` / `areaCountRecords` を保持する。旧全件日次形式は `records[]`、旧単日形式は `daySnapshot` 配下にこれらを保持する。9-28ではユーザー向け日次export導線を撤去し、互換builderと内部保存は維持。 |
 | Review19 export / cloud | 対象 `Review19Result` に含まれる `snapshot.areas` / `daySnapshot.sessions` / `daySnapshot.areaCountRecords` 内のmetadataを保持する。exportでは `records[]`、cloudでは `review19_records.payload` 配下となる。 |
 | AreaCount cloud | `area_count_records.record_details.humanEvaluationDetails.evaluationAdjustment`。`buildRemoteAreaCountDetails()` が元recordの `humanEvaluationDetails` をdeep copyする。 |
 
@@ -291,6 +291,15 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-28: ユーザー向け「1日データ」機能を撤去
+
+- 通常Doneの「1日データを出力」・メモ入力/保存、設定の日次全件/最新出力・日次件数表示、Startの前日廃棄個数入力を削除。上部referenceConditionLabel、全エリア値引率一覧、戻る/home/18:30手動開始は維持。
+- 廃棄入力は前日のfinalized recordだけに依存し、値引計算・Review19・productionAnalysisの入力ではないため、UIと専用hook/APIのみ削除。過去recordの `memo` / `discardCount` は読み込み・保持する。
+- 日次download handlerと専用state/props/helper、旧未使用統合download actionを削除。Review19の完了時・設定全件/最新の3出力導線は既存builderとdownload処理を維持する。
+- `finalizedDayData`、20:30完了時の確定保存/失敗gate、`finalizedDayRecordId`、archive hydration、営業日/cycle判断、snapshot retention、AreaCount backfillは内部機能として維持。手動日次出力を廃止しても、これらの保存処理は必要。
+- 日次・統合JSONのpure builder、過去metadata正規化、archive patch APIは互換と既存回帰検証のため維持。これらからユーザーが日次データを表示・downloadするUI/actionはない。
+- 保存容量診断とSupabase同期は維持。設定診断の「IndexedDB 1日データ」表示行のみ削除し、内部の件数計測/診断payloadは変更しない。
+
 ### 9-24: 通常Done基準ラベル・15/17先行値引
 
 - 通常 `DoneScreen` に `derived.basisGuide.referenceConditionLabel` を表示する。RateDisplayと同じ既存formatter / resolved referenceを使用し、手動曜日指定、holiday / Obon等の解決、summer / normalを尊重する。Review19DoneScreenは非変更。
@@ -313,17 +322,18 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*` **59/59 PASS**。packageのcheck名との集合一致を確認。更新した既存UI checkは35/35 PASS、通常Done summary、rate snapshot、Review19、storage、export、weather、夏17時、fixed-time等もPASS。
-- TypeScript / production build / PWA generateSW PASS（101 modules、precache10）。chunk sizeとBrowserslist dataの既存build警告あり。
-- changed-file focused ESLint **0 errors / 0 warnings**。full lint **9 errors / 7 warnings**は9-26既存分と一致し、file/rule/severity/message比較で新規diagnostic 0。
-- Edge production preview 390×844で夏15/17・normal15/17・手動曜日override・ObonのDone表示を確認。上部referenceConditionLabelは1つ、下側の今日の曜日／値引時刻panelはなし、全12エリアの一覧を維持。数値率を持つ完了fixtureでも一覧表示を確認した。
-- AreaJudgeScreenの既存の基準曜日・時刻panelを実ブラウザで確認。横overflow、console error/warning、page error、外部通信、予期しないdialog/download/popupは0。
-- src96本中の変更はDoneScreenとAppRouterの2本だけ。他94本は9-26 ZIPとbyte-identical。表示panelと専用の未使用依存の削除以外の本体差分がないことを検査した。AGENTS.md、root SQL9本、build/schema生成処理もbyte-identical。
-- GPT-6 Astra / Ultraのみを使用。制限時は停止し、再開時に実行記録で同設定を確認した。
+- 全 `check:*` **60/60 PASS**（既存59本＋専用1本）。専用UI撤去checkは **21/21 PASS**。packageのcheck名との集合一致を確認。旧UIを要求する7既存testの期待/境界を更新し、domainの互換性assertは維持。
+- TypeScript / production build / PWA generateSW PASS（100 modules、precache10）。chunk sizeとBrowserslist dataの既存build警告あり。
+- changed-file focused ESLint **0 errors / 4 existing warnings**。full lint **9 errors / 7 warnings**は9-27とfile/rule/severity/message比較で一致し、新規diagnostic 0。
+- Edge production preview 390×844で通常Done6条件＋20:30 Doneの基準ラベル/12エリア一覧を維持し、日次メモ・出力UIなしを確認。前日finalized記録があるStartでも廃棄入力なし、旧メモ/廃棄値はarchiveに保持。
+- 20:30の12残数を実入力し、内部finalized archive1件を保存、reload後の保持を確認。Review19も12エリアの人間評価を実入力・保存し、完了/設定全件/最新からJSONを取得してparse（1/4/1件）。最新recordは3出力で一致し、daySnapshot/productionAnalysisを保持。
+- 横overflow、アプリconsole error/warning、pageerror、外部通信、popupなし。既存Review19案内alert1件と要求した3downloadのみ。隔離用Service WorkerブロックによるPlaywright警告11件は別記録し、アプリ警告と混同しない。スクリーンショット10枚の目視確認済み。
+- src96本中7本だけ変更。他89本、root SQL9本、AGENTS.md、version/build/schema生成処理は9-27 ZIPとbyte-identical。AST比較でもReview19生成/保存/出力、同期/backfill、session遷移、保存形式85型が不変。内部finalize関数は失敗メッセージと不要UI ref代入の削除だけ。
+- GPT-6 Astra / Ultraのみを使用。使用制限時に中断し、再開時に実行記録で同設定を再確認した。
 
-未確認: 実店舗端末、インストール済みPWA、実Supabase通信。今回のブラウザ確認は隔離fixtureで行い、値引計算・Review19・保存・export全運用の実ブラウザ再実行はしていない（コード非変更＋全checkで回帰確認）。
+未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。ブラウザ検証は隔離したfixtureで行い、外部通信は遮断した。その他の15/17/18:30/20時台・夏17時天候・quick・fixed-time・storage等の回帰は全checkと非変更コード比較で確認。
 
-証跡: `work/doneLabel27/checks.json`、`lint-comparison27.json`、`source-proof27.json`、`browser-work/browser-results27.json`。ZIP再open検査・SHAは `outputs/ZIP_VALIDATION_2026.8.9-27.json` / `RELEASE_REPORT_2026.8.9-27.md`。
+証跡: `work/dailyUi28/checks.json`、`lint-comparison28.json`、`source-proof28.json`、`browser-work/browser-results28.json`、`browser-work/browser-proof28.json`。ZIP再open検査とSHAはZIP外の `outputs/ZIP_VALIDATION_2026.8.9-28.json` / `RELEASE_REPORT_2026.8.9-28.md`。
 
 
 ## 13. 既知課題、検討中だが未実装の案
@@ -357,7 +367,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-27.md`（9-26 baselineは `CHANGE_REPORT_2026.8.9-26.md`）
+4. `CHANGE_REPORT_2026.8.9-28.md`（9-27 baselineは `CHANGE_REPORT_2026.8.9-27.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

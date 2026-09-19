@@ -885,17 +885,8 @@ export type UseNebikiAppDerived = {
   review19ReferenceLines: string[];
   review19ReferenceLabel: string | null;
   editableAreaCounts: EditableAreaCountItem[];
-  finalizedDayMemo: string;
-  previousDayDiscardTarget: {
-    date: string;
-    count: number | null;
-  } | null;
   dataExport: {
     review19Count: number;
-    dailyCount: number;
-  };
-  allDataExport: {
-    totalCount: number;
   };
   cloudSync: {
     pendingCount: number;
@@ -961,17 +952,11 @@ export type UseNebikiAppActions = {
     latestExcludedAreaId?: AreaId,
   ) => Promise<void>;
   startAreaCountCorrection: (areaId: AreaId) => void;
-  saveFinalizedDayMemo: (memo: string | null) => Promise<void>;
-  savePreviousDayDiscardCount: (count: number | null) => Promise<void>;
   exportAllReview19Data: () => boolean;
   exportLatestReview19Data: () => boolean;
-  exportAllDailyData: () => Promise<boolean>;
-  exportLatestDailyData: () => Promise<boolean>;
   exportCompletedReview19Data: () => boolean;
-  exportCompletedDailyData: (memo: string | null) => Promise<boolean>;
   start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
-  exportAllData: () => void;
   syncLocalDataToSupabase: () => Promise<SupabaseBackfillResult>;
   getStorageUsageDiagnostic: () => Promise<NebikiStorageUsageDiagnostic>;
   startReview19Manually: () => void;

@@ -263,17 +263,17 @@ test("multi-download preparation failure returns false without clicking", () => 
   assert.equal(clickCount, 0);
 });
 
-test("existing two all-data buttons are reused", () => {
+test("Review19 keeps cycle-separated all export while daily UI export is removed", () => {
   assert.equal(
     (settingsSource.match(/onExportAllReview19Data/g) ?? []).length,
     3,
   );
   assert.equal(
     (settingsSource.match(/onExportAllDailyData/g) ?? []).length,
-    3,
+    0,
   );
   assert.match(hookSource, /buildAllReview19DataExportPayloadsByDemandCycle/);
-  assert.match(hookSource, /buildAllFinalizedDayDataExportPayloadsByDemandCycle/);
+  assert.doesNotMatch(hookSource, /buildAllFinalizedDayDataExportPayloadsByDemandCycle/);
 });
 
 console.log(`Cycle-separated export checks passed: ${passed}/7`);

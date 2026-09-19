@@ -322,11 +322,8 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
       {settingsOpen ? (
         <AdminSettingsDialog
           review19Count={app.derived.dataExport.review19Count}
-          dailyCount={app.derived.dataExport.dailyCount}
           onExportAllReview19Data={app.actions.exportAllReview19Data}
           onExportLatestReview19Data={app.actions.exportLatestReview19Data}
-          onExportAllDailyData={app.actions.exportAllDailyData}
-          onExportLatestDailyData={app.actions.exportLatestDailyData}
           cloudSync={app.derived.cloudSync}
           onSyncLocalDataToSupabase={app.actions.syncLocalDataToSupabase}
           onGetStorageUsageDiagnostic={app.actions.getStorageUsageDiagnostic}

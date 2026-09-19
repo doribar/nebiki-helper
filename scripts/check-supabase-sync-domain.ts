@@ -1103,9 +1103,10 @@ await test("hook integration is local-first, fixed-isolated, and retry-safe", ()
     "const retryPendingCloudSync = useCallback",
   );
   const retryEnd = hookSource.indexOf(
-    "if (!lastFinalizedDayDataRef.current",
+    "const [areaJudgeSelection, setAreaJudgeSelection]",
     retryStart,
   );
+  assert.ok(retryStart >= 0 && retryEnd > retryStart);
   const retryBlock = hookSource.slice(retryStart, retryEnd);
   assert.ok(retryBlock.includes("if (isTestMode)"));
   assert.ok(retryBlock.includes("let result = { ...firstPass }"));

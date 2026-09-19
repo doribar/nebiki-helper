@@ -227,30 +227,17 @@ const routerSource = fs.readFileSync(
   "utf8",
 );
 
-test("export persists the current memo before creating the download payload", () => {
-  const start = hookSource.indexOf(
-    "function exportCompletedDailyData(memo: string | null)",
-  );
-  const end = hookSource.indexOf("async function exportAllData", start);
-  const body = hookSource.slice(start, end);
-  assert.ok(start >= 0 && end > start);
-  assert.ok(body.includes("persistFinalizedDayMemo(recordId, memo)"));
-  assert.ok(body.includes("if (!record || record.recordId !== recordId) return false"));
-  assert.ok(
-    body.indexOf("persistFinalizedDayMemo(recordId, memo)") <
-      body.indexOf("downloadJsonFile("),
-  );
-  assert.ok(
-    body.includes("buildDirectFinalizedDayDataExportPayload({ record, exportedAt })"),
-  );
+test("the hook no longer exposes memo writes or standalone daily downloads", () => {
+  assert.doesNotMatch(hookSource, /persistFinalizedDayMemo|saveFinalizedDayMemo|exportCompletedDailyData/);
+  assert.match(hookSource, /function exportCompletedReview19Data/);
+  assert.match(hookSource, /buildDirectReview19DataExportPayload/);
 });
 
-test("the done screen passes the unsaved current memo and keeps its save button", () => {
-  assert.ok(doneSource.includes('memoText === "" ? null : memoText'));
-  assert.ok(doneSource.includes("await onExportDailyData?.("));
-  assert.ok(doneSource.includes("メモを保存"));
-  assert.ok(doneSource.includes('role="alert"'));
-  assert.ok(routerSource.includes("actions.exportCompletedDailyData(memo)"));
+test("the done screen has no memo editor or daily export wiring", () => {
+  assert.doesNotMatch(doneSource, /memoText|onExportDailyData|メモを保存|final-day-memo/);
+  assert.doesNotMatch(routerSource, /finalizedDayMemo|onSaveMemo|exportCompletedDailyData/);
+  assert.match(doneSource, /onGoBack/);
+  assert.match(doneSource, /onReturnHome/);
 });
 
-console.log(`\nMemo-before-export regression tests: ${passed}/8 passed`);
+console.log(`\nLegacy memo compatibility and UI removal tests: ${passed}/8 passed`);
