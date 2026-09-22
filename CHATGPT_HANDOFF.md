@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-28）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-29）
 
-最終更新: 2026-09-20 JST
+最終更新: 2026-09-22 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260920-0848.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260920-0848.zip` |
-| appVersion | `2026.8.9-28` |
-| buildId | `build-20260919-231318-jst` |
+| ZIP | `nebiki-helper-20260922-0132.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260922-0132.zip` |
+| appVersion | `2026.8.9-29` |
+| buildId | `build-20260921-202716-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260920-0848.zip.sha256` / `RELEASE_REPORT_2026.8.9-28.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260922-0132.zip.sha256` / `RELEASE_REPORT_2026.8.9-29.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/dailyUi28/nebiki-helper`。package versionは9-28、buildIdは従来どおりViteからJSTで生成する。schema 3、version/build生成方法は非変更。
+application rootは成果物workspace内の `work/longHoliday29/nebiki-helper`。package versionは9-29、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
 
-比較基準は9-27 ZIP `nebiki-helper-20260919-1807.zip`（SHA-256 `d8e925978776e8ac7fa31535f65e9e5507d6bd43609093c951a94b10af3a20d5`）。9-28はユーザー向けの「1日データ」出力・メモ・前日廃棄入力だけを撤去。内部finalized/daySnapshot/archive、Review19とそのJSON出力、productionAnalysis、履歴・値引計算は維持。詳細は `CHANGE_REPORT_2026.8.9-28.md`。
+比較基準は9-28 ZIP `nebiki-helper-20260920-0848.zip`（SHA-256 `6c425dc4cd28090cdc3b0943fb0ef944eadeff9f7d5cdc27960f8feb7592b9bf`）。9-29は4日以上の土日祝連休の内部日17時だけ、個別量referenceとエリア残数比較を金土へ揃える。三連休、他時刻、率/天候、過去履歴の分類は維持。詳細は `CHANGE_REPORT_2026.8.9-29.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\dailyUi28\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\longHoliday29\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -134,15 +134,25 @@ legacy migrationは次の順で行う。
 
 個別量referenceの優先順:
 
-1. 三連休中日（17時以降。15時は実曜日）
-2. Obon
-3. 非祝日の祝日前日
-4. 法定祝日/振替休日
-5. 実曜日
+1. 三連休中日（17時以降。15時は実曜日。既存の「ちょうど3日」判定を維持）
+2. 4日以上続く土日祝連休の内部日、かつ17時だけ（9-29）
+3. Obon
+4. 非祝日の祝日前日
+5. 法定祝日/振替休日
+6. 実曜日
 
 Obonは毎年8月13日〜16日。`isObon=true`、`calendarCondition="obon"` として法定祝日とは別に保存し、現行需要判断はholiday-equivalent。Obonだけで三連休中日扱いせず、8月12日をObon前日にしない。導入前recordを遡及変更しない。
 
-祝日/Obonは日曜reference、祝日前日は金土group。実曜日と採用referenceは別metadataとして保持する。
+上位の三連休/長期連休ルールに該当しない祝日/Obonは日曜reference、祝日前日は金土group。実曜日と採用referenceは別metadataとして保持する。
+
+### 9-29: 長期連休内部の17時は金土reference
+
+- `isLongHolidayMiddle()` は既存 `isJapaneseHolidayOrWeekend()` を再利用する。当日・前日・翌日が休日で、前々日または翌々日も休日なら4日以上のブロック内部。初日・最終日・ちょうど3日は対象外。Obonだけの日を休日ブロックへ加えない。
+- 個別量は `getIndividualAmountReferenceContext()` の三連休分岐の後で17時だけ金土group。表示は「金曜日・土曜日の17時を基準に考えて」、短いラベルは共通formatterによる「金曜日・土曜日・17時」（summerは先頭に夏）。
+- 残数は `getAreaCountComparisonWeekdayGroup()` とrecommendationの比較basis/force fallbackへ17時限定適用。同曜日データが3件以上あっても対象日は金土を使う。中央値/減少率アルゴリズムは変更しない。
+- **履歴recordの分類** `getAreaCountFallbackWeekdayGroup()`、そのnormalizerと書込経路は維持。新しい比較先選択によって過去recordを再分類しない。新規の `areaCountDecisionBasis` / calendar `areaCountReference` には実際に採用した金土比較を保存する。
+- 既存JSON構造のkind/reasonに `long_holiday_middle` を許可するだけで、field/schemaを追加しない。既存contextはそのまま保持。calendarContext欠損の旧snapshotを復元する2経路は `applyLongHolidayRule: false` で旧referenceを再現する。このflagは保存fieldではない。
+- 2026-09-20/21/22の17時が対象。9/19は初日、9/23は最終日で対象外。15/18:30/19:30/20:30とReview19の19時referenceは非変更。
 
 9-19の対象UIは共通の `formatReferenceConditionLabel()` で短いreference labelを作る。エリア手動判定・値引率表示は、既存の `getIndividualAmountReferenceContext()` で解決したcontextをformatterへ渡す。
 
@@ -322,18 +332,20 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*` **60/60 PASS**（既存59本＋専用1本）。専用UI撤去checkは **21/21 PASS**。packageのcheck名との集合一致を確認。旧UIを要求する7既存testの期待/境界を更新し、domainの互換性assertは維持。
+- 全 `check:*` **61/61 PASS**（既存60本＋専用1本）。専用checkは **17/17 PASS**。packageの全check名との集合一致を確認。旧GW中盤17時の期待1件を新仕様へ更新し、15/18:30/19:30/20:30の旧基準を同testで追加確認。
 - TypeScript / production build / PWA generateSW PASS（100 modules、precache10）。chunk sizeとBrowserslist dataの既存build警告あり。
-- changed-file focused ESLint **0 errors / 4 existing warnings**。full lint **9 errors / 7 warnings**は9-27とfile/rule/severity/message比較で一致し、新規diagnostic 0。
-- Edge production preview 390×844で通常Done6条件＋20:30 Doneの基準ラベル/12エリア一覧を維持し、日次メモ・出力UIなしを確認。前日finalized記録があるStartでも廃棄入力なし、旧メモ/廃棄値はarchiveに保持。
-- 20:30の12残数を実入力し、内部finalized archive1件を保存、reload後の保持を確認。Review19も12エリアの人間評価を実入力・保存し、完了/設定全件/最新からJSONを取得してparse（1/4/1件）。最新recordは3出力で一致し、daySnapshot/productionAnalysisを保持。
-- 横overflow、アプリconsole error/warning、pageerror、外部通信、popupなし。既存Review19案内alert1件と要求した3downloadのみ。隔離用Service WorkerブロックによるPlaywright警告11件は別記録し、アプリ警告と混同しない。スクリーンショット10枚の目視確認済み。
-- src96本中7本だけ変更。他89本、root SQL9本、AGENTS.md、version/build/schema生成処理は9-27 ZIPとbyte-identical。AST比較でもReview19生成/保存/出力、同期/backfill、session遷移、保存形式85型が不変。内部finalize関数は失敗メッセージと不要UI ref代入の削除だけ。
-- GPT-6 Astra / Ultraのみを使用。使用制限時に中断し、再開時に実行記録で同設定を再確認した。
+- changed-file focused ESLint **0 errors / 0 warnings**。full lint **既存9 errors / 7 warnings**、9-28とのfile/rule/severity/message比較で新規diagnostic 0。
+- 専用checkは9/19〜24、単独祝日/祝日前/平日/3連休、翌日が非法定休日の日曜である長期連休土曜、同曜日3件以上から金土固定、normal/summer、旧保存context/欠損context復元/export/cloud用純粋JSON往復、新kind正規化、productionAnalysisを確認。非17時64条件・率/天候/先行率720条件も9-28の固定goldenと一致。
+- 独立baseline比較は2025〜2030年の2,191日×全5時刻、normal/summer×6天候条件。基本率・天候関連解決131,460件、基準説明の非reference部分131,460件、global -5/0/+5を含む先行率394,380件が一致。合計762,514assert PASS、個別量reference差分は長期連休内部17時の18日だけ。
+- 追加境界監査112assert PASS。2028-05-06/2029-05-05では、同土曜3件・中央値100が存在しても、対象17時は金土6件・中央値55を採用。旧record分類/normalizationは不変で、保存済みcontextと旧snapshot復元はbaseline一致。
+- Edge production preview 390×844で10ケース・40画面表示・10履歴比較PASS。9/21・22の通常/夏17時は先行指示→AreaJudge→RateDisplay→次エリアの操作、および別完了fixtureのDoneで金土表示。9/23、15時、7/19三連休を対照確認。fixtureの採用中央値は対象金土60、最終日10、15時30、三連休中間35。
+- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/download/popupは0。隔離のService WorkerブロックによるPlaywright警告30件は別記録。スクリーンショット50枚保存、代表6枚を目視確認。
+- src96本中5本だけ変更。他91本、root SQL9本、AGENTS.md、version/build/schema生成処理は9-28 ZIPとbyte-identical。三連休判定、履歴record分類/normalizer、率engine、Review19 operational flow、productionAnalysisは維持。保存済みreferenceを新ルールで遡及書換えするmigrationは追加しない。
+- GPT-6 Astra / Ultraのみ使用。制限時に中断し、再開時に実行設定を確認した。
 
-未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。ブラウザ検証は隔離したfixtureで行い、外部通信は遮断した。その他の15/17/18:30/20時台・夏17時天候・quick・fixed-time・storage等の回帰は全checkと非変更コード比較で確認。
+未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。実ブラウザは隔離fixtureを使用し外部通信を遮断した。cloud互換確認は純粋serializationの往復で、実際の送受信ではない。
 
-証跡: `work/dailyUi28/checks.json`、`lint-comparison28.json`、`source-proof28.json`、`browser-work/browser-results28.json`、`browser-work/browser-proof28.json`。ZIP再open検査とSHAはZIP外の `outputs/ZIP_VALIDATION_2026.8.9-28.json` / `RELEASE_REPORT_2026.8.9-28.md`。
+証跡: `work/longHoliday29/checks.json`、`lint-comparison29.json`、`source-proof29.json`、`edge-proof29.json`、`baseline-integrity29.json`、`browser-work/browser-results29.json`、`browser-work/BROWSER_REPORT_29.md`。ZIP再openとSHAはZIP外のrelease報告/検査JSONに記録。
 
 
 ## 13. 既知課題、検討中だが未実装の案
@@ -367,7 +379,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-28.md`（9-27 baselineは `CHANGE_REPORT_2026.8.9-27.md`）
+4. `CHANGE_REPORT_2026.8.9-29.md`（9-28 baselineは `CHANGE_REPORT_2026.8.9-28.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

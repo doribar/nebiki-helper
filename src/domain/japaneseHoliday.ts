@@ -209,3 +209,21 @@ export function isThreeDayHolidayMiddle(dateString: string): boolean {
     !isJapaneseHolidayOrWeekend(addDaysToDateString(dateString, 2))
   );
 }
+
+/**
+ * 土日・祝日・振替休日が4日以上続くブロックの内部日（初日・最終日を除く）。
+ * 当日と前後1日が休日で、さらに前々日か翌々日が休日なら4日以上となる。
+ * ちょうど3日の中日判定とは排他的で、お盆だけの日は休日に含めない。
+ */
+export function isLongHolidayMiddle(dateString: string): boolean {
+  if (!parseDateString(dateString)) return false;
+  return (
+    isJapaneseHolidayOrWeekend(dateString) &&
+    isJapaneseHolidayOrWeekend(addDaysToDateString(dateString, -1)) &&
+    isJapaneseHolidayOrWeekend(addDaysToDateString(dateString, 1)) &&
+    (
+      isJapaneseHolidayOrWeekend(addDaysToDateString(dateString, -2)) ||
+      isJapaneseHolidayOrWeekend(addDaysToDateString(dateString, 2))
+    )
+  );
+}

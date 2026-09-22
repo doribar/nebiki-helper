@@ -20,6 +20,7 @@ import {
   isDayBeforeJapaneseHoliday,
   isHolidayBeforeNormalWeekday,
   isJapaneseHolidayOrObserved,
+  isLongHolidayMiddle,
   isNormalWeekday,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
@@ -268,6 +269,14 @@ export function getAreaCountComparisonWeekdayGroup(params: {
   applyObonRule?: boolean;
 }): ActualWeekdayGroup {
   const recordGroup = getAreaCountFallbackWeekdayGroup(params);
+  if (recordGroup === "三連休中日") return recordGroup;
+  if (
+    params.discountTime === "17" &&
+    typeof params.date === "string" &&
+    isLongHolidayMiddle(params.date)
+  ) {
+    return "金土";
+  }
   if (recordGroup !== "翌日平日祝日") return recordGroup;
   return params.discountTime === "15" ? "金土日" : "火木日";
 }
@@ -1573,7 +1582,13 @@ export function getAreaCountRecommendation(params: {
   const discountTime = params.discountTime as AreaCountDiscountTime;
   const date = params.date as string;
   const actualWeekday = getActualWeekdayLabel(params.weekday);
-  const actualWeekdayGroup = getAreaCountFallbackWeekdayGroup({
+  const useLongHolidayMiddleReference =
+    discountTime === "17" && isLongHolidayMiddle(date);
+  // Override today's reference only. Historical record grouping/normalization
+  // stays unchanged so adopting this rule does not reclassify saved history.
+  const actualWeekdayGroup = useLongHolidayMiddleReference
+    ? "金土"
+    : getAreaCountFallbackWeekdayGroup({
     weekday: params.weekday,
     discountTime,
     date,
@@ -1589,7 +1604,7 @@ export function getAreaCountRecommendation(params: {
     actualWeekdayGroup === "翌日平日祝日";
   const useObonReference =
     params.applyObonRule !== false && isObonDate(date);
-  const forceFallbackWeekdayGroup = shouldForceAreaCountFallbackWeekdayGroup({
+  const forceFallbackWeekdayGroup = useLongHolidayMiddleReference || shouldForceAreaCountFallbackWeekdayGroup({
     weekday: params.weekday,
     date,
     applyObonRule: params.applyObonRule,

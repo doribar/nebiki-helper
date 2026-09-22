@@ -14,6 +14,7 @@ import {
   isDayBeforeJapaneseHoliday,
   isJapaneseHolidayOrObserved,
   isJapaneseHolidayOrWeekend,
+  isLongHolidayMiddle,
   isThreeDayHolidayMiddle,
 } from "./japaneseHoliday.ts";
 import { isObonDate } from "./obon.ts";
@@ -71,6 +72,7 @@ function getActualWeekdayText(weekday: number): string {
 
 export type IndividualAmountReferenceKind =
   | "three_day_holiday_middle"
+  | "long_holiday_middle"
   | "day_before_holiday"
   | "obon"
   | "holiday"
@@ -93,7 +95,7 @@ export type IndividualAmountReferenceContext = {
 
 /**
  * 個別量判断で表示・保存する曜日基準を、同じ優先順位で解決する。
- * 三連休中日（17時以降）→お盆→非祝日の祝日前日→祝日当日→実曜日の順。
+ * 三連休中日（17時以降）→4日以上の連休内部（17時だけ）→お盆→祝日前日→祝日→実曜日。
  * 三連休中日の15時は、従来どおり実曜日を使う。
  */
 export function getIndividualAmountReferenceContext(params: {
@@ -101,6 +103,8 @@ export function getIndividualAmountReferenceContext(params: {
   weekday: number;
   discountTime: DiscountTime;
   applyObonRule?: boolean;
+  /** False preserves the old reference when reconstructing missing historical metadata. */
+  applyLongHolidayRule?: boolean;
 }): IndividualAmountReferenceContext {
   const timeText = getBasisTimeText(params.discountTime);
   const isThreeDayHolidayMiddleDate =
@@ -122,6 +126,23 @@ export function getIndividualAmountReferenceContext(params: {
       referenceDiscountTime: params.discountTime,
       reason: "three_day_holiday_middle",
       referenceText: "通常の日曜夜と金曜・土曜夜の中間を基準に考えて",
+    };
+  }
+
+  if (
+    params.applyLongHolidayRule !== false &&
+    params.discountTime === "17" &&
+    typeof params.date === "string" &&
+    isLongHolidayMiddle(params.date)
+  ) {
+    return {
+      kind: "long_holiday_middle",
+      comparisonMode: "weekday_group",
+      referenceWeekday: null,
+      referenceWeekdayGroup: "金土",
+      referenceDiscountTime: params.discountTime,
+      reason: "long_holiday_middle",
+      referenceText: `金曜日・土曜日の${timeText}を基準に考えて`,
     };
   }
 

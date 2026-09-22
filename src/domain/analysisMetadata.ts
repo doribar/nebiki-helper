@@ -320,6 +320,7 @@ function normalizeIndividualAmountReference(
   const kind = raw.kind;
   const validKind =
     kind === "three_day_holiday_middle" ||
+    kind === "long_holiday_middle" ||
     kind === "day_before_holiday" ||
     kind === "holiday" ||
     kind === "obon" ||
@@ -650,6 +651,8 @@ export function buildSessionAnalysisCalendarContext(params: {
   manualWeekdayOverride: boolean;
   /** False is reserved for reconstructing a persisted legacy snapshot. */
   applyObonRule?: boolean;
+  /** Historical reconstruction must not infer the new rule from an old missing context. */
+  applyLongHolidayRule?: boolean;
   areaDecisionBases: readonly {
     areaId: AreaId;
     basis?: AreaCountDecisionBasis;
@@ -663,6 +666,7 @@ export function buildSessionAnalysisCalendarContext(params: {
     weekday: params.weekday,
     discountTime: params.discountTime,
     applyObonRule,
+    applyLongHolidayRule: params.applyLongHolidayRule,
   });
   const individualAmountReference: CalendarIndividualAmountReference[] = [
     { ...individual, sessionStartedAt: params.sessionStartedAt },
@@ -1518,6 +1522,7 @@ export function buildSessionCalendarContextFromSnapshot(
     // A persisted snapshot without context is reconstructed according to the
     // app version that created its session, never from today's app version.
     applyObonRule: supportsObonCalendarRule(snapshot.session.appVersion),
+    applyLongHolidayRule: false,
     areaDecisionBases,
   });
 }

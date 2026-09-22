@@ -570,6 +570,7 @@ function normalizeReview19Snapshot(
           // Rebuild a missing context from the session's own rule generation,
           // not from the version that happens to be loading it now.
           applyObonRule: supportsObonCalendarRule(cloned.session.appVersion),
+          applyLongHolidayRule: false,
           areaDecisionBases: Object.values(cloned.areas).map((area) => ({
             areaId: area.areaId,
             basis: area.areaCountDecisionBasis,

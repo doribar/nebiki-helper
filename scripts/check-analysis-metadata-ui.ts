@@ -139,16 +139,26 @@ test("三連休中日の既存特殊基準を祝日前日より優先", () => {
   );
 });
 
-test("祝日当日かつ翌日も祝日の場合は祝日前日扱いせず日曜基準", () => {
+test("長期連休中盤の17時だけ金土基準とし他時刻の祝日基準を維持", () => {
   const context = getIndividualAmountReferenceContext({
     date: "2026-05-04",
     weekday: 1,
     discountTime: "17",
   });
-  assert.equal(context.kind, "holiday");
-  assert.equal(context.referenceWeekday, 0);
-  assert.equal(context.referenceWeekdayGroup, null);
-  assert.equal(context.referenceText, "日曜日の17時を基準に考えて");
+  assert.equal(context.kind, "long_holiday_middle");
+  assert.equal(context.comparisonMode, "weekday_group");
+  assert.equal(context.referenceWeekday, null);
+  assert.equal(context.referenceWeekdayGroup, "金土");
+  assert.equal(context.referenceText, "金曜日・土曜日の17時を基準に考えて");
+  for (const [discountTime, timeText] of [
+    ["15", "15時"], ["18", "18時30分"], ["19", "19時30分"], ["20", "20時30分"],
+  ] as const) {
+    const unchanged = getIndividualAmountReferenceContext({ date: "2026-05-04", weekday: 1, discountTime });
+    assert.equal(unchanged.kind, "holiday");
+    assert.equal(unchanged.referenceWeekday, 0);
+    assert.equal(unchanged.referenceWeekdayGroup, null);
+    assert.equal(unchanged.referenceText, `日曜日の${timeText}を基準に考えて`);
+  }
   assert.equal(
     shouldShowDayBeforeHolidayNotice({
       sessionDate: "2026-05-04",
