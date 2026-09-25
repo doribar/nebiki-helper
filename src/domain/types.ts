@@ -327,6 +327,12 @@ export type ProductAdjustmentPolicySnapshot = {
   unpopularPercent: 10;
   advertisementPercent: -10;
   advertisementMode: "always";
+  /** 現場で適用する商品別ルール。旧snapshotの欠損から補完しない。 */
+  slightlyUnpopular?: {
+    adjustmentPercent: 10;
+    minimumActualCount: 10;
+    splitPackTarget: "large_only";
+  };
 };
 
 /**

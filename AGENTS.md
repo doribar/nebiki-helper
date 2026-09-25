@@ -14,6 +14,7 @@
 - 保存済みデータとの後方互換を優先し、過去recordを現在ロジックで遡及書換えしない。
 - `dataSchemaVersion` を必要なく上げない。optional fieldで安全に拡張できる場合は既存schemaを維持する。
 - Supabase / DB schema / SQL / RLS / grant / trigger / unique keyを必要なく変更しない。SQLを変更しないreleaseでは既存SQL artifactの同一性を確認する。
+- Supabaseで `public` schemaに新規tableを作成するmigrationでは、2026-10-30以降はData API権限が自動付与されない前提で扱う。Data API経由で利用する場合は、用途に必要なrole（`anon` / `authenticated` / `service_role`）へ必要最小限の `GRANT` を明示し、RLS / policyも同時に確認する。既存tableや不要なroleへ予防的に権限を広げない。
 - IndexedDB historical archiveとlocalStorage operational headroomの責務分離を壊さない。richなremote/historical dataをlocalStorageへ大量再展開しない。
 - current、unsynced、remote未確認、または唯一のauthoritative dataを容量都合で削除しない。App/hook/componentへraw localStorage writeを追加しない。
 - Review19のauthoritative archive、lightweight outbox、pendingなし正本のdirect rescue、legacy pending互換を維持する。

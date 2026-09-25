@@ -265,8 +265,8 @@ test("19時・日次の全件／最新／direct exportを分離する", () => {
   assert.match(hookSource, /state\.screen !== "review19_done"/);
 });
 
-test("注意事項は-10%商品と+10%商品を各1項目へ統合", () => {
-  assert.equal(FULL_MODE_NOTICE_ITEMS.length, 5);
+test("既存の商品補正注意を維持し、やや不人気の条件を独立表示", () => {
+  assert.equal(FULL_MODE_NOTICE_ITEMS.length, 6);
   const minusItems = FULL_MODE_NOTICE_TEXTS.filter((text) => text.includes("-10%"));
   const plusItems = FULL_MODE_NOTICE_TEXTS.filter((text) => text.includes("+10%"));
   assert.deepEqual(minusItems, [
@@ -274,6 +274,7 @@ test("注意事項は-10%商品と+10%商品を各1項目へ統合", () => {
   ]);
   assert.deepEqual(plusItems, [
     "見た目が悪い個別商品・不人気な商品は、表示値引率に+10%",
+    "やや不人気な商品は、実際に10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%（小パックは補正なし）",
   ]);
 });
 

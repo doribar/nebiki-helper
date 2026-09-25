@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-29）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-30）
 
-最終更新: 2026-09-22 JST
+最終更新: 2026-09-25 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260922-0132.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260922-0132.zip` |
-| appVersion | `2026.8.9-29` |
-| buildId | `build-20260921-202716-jst` |
+| ZIP | `nebiki-helper-20260925-0128.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260925-0128.zip` |
+| appVersion | `2026.8.9-30` |
+| buildId | `build-20260924-202114-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260922-0132.zip.sha256` / `RELEASE_REPORT_2026.8.9-29.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260925-0128.zip.sha256` / `RELEASE_REPORT_2026.8.9-30.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/longHoliday29/nebiki-helper`。package versionは9-29、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
+application rootは成果物workspace内の `work/productPolicy30/nebiki-helper`。package versionは9-30、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
 
-比較基準は9-28 ZIP `nebiki-helper-20260920-0848.zip`（SHA-256 `6c425dc4cd28090cdc3b0943fb0ef944eadeff9f7d5cdc27960f8feb7592b9bf`）。9-29は4日以上の土日祝連休の内部日17時だけ、個別量referenceとエリア残数比較を金土へ揃える。三連休、他時刻、率/天候、過去履歴の分類は維持。詳細は `CHANGE_REPORT_2026.8.9-29.md`。
+比較基準は9-29 ZIP `nebiki-helper-20260922-0132.zip`（SHA-256 `957ce75ba9b46af4de2d0b4eac0eee266fb4d08831f1bfb95922e5f5c8bb3667`）。9-30は現場で適用する商品policy「やや不人気」を注意事項と新規snapshot metadataへ追加する。旧snapshotへ新policyを補完せず、率計算は非変更。詳細は `CHANGE_REPORT_2026.8.9-30.md`。`AGENTS.md` は直前にユーザーが依頼したSupabase新規table/Data APIの最小権限ルールを含む修正版をそのまま採用している。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\longHoliday29\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\productPolicy30\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -212,6 +212,15 @@ quickは既存 `judgeCurrentArea()` / `applyAreaJudgeSelection()` と保存経�
 
 rate計算の正本は `discount.ts`、`weekdayBase.ts`、`rateDecisionSnapshot.ts`、`globalDiscountAdjustment.ts`。
 
+### 9-30: 商品policy「やや不人気」
+
+- 通常商品の中間区分として、実際に10個以上（10を含む）ある場合だけ表示率へ+10 percentage points。9個以下は補正なし。大小パックに分かれる場合は大パックだけが対象で、小パックは補正しない。
+- 既存と同じ現場適用の注意事項であり、商品入力・商品別保存・自動計算の機能は追加しない。不人気/見た目が悪い+10、定番/夜売れる/広告-10の既存文言とmetadataは維持する。
+- 新規 `rateDecisionSnapshot.otherAdjustments.productPolicy.slightlyUnpopular` は `{ adjustmentPercent: 10, minimumActualCount: 10, splitPackTarget: "large_only" }`。`minimumActualCount` は商品実数の条件であり、エリア残数カウント上限とは別。型はoptionalでschema 3を維持する。
+- normal/late/early/finalの新規snapshot builderは既存のpolicy保存位置へ記録する。これは個別商品への適用実績や自動加算ではなく、その時点のpolicy metadata。20:30 forced ruleを含む表示率・計算は変更しない。
+- normalizerは入力に存在するpolicyだけを検証・複製する。旧snapshotにこのfieldがなければ欠損のまま読み込み/exportし、過去recordを遡及変更しない。新規metadataは既存session/daySnapshot/Review19/export等のsnapshot伝播経路を使用する。
+- 注意事項は `fullMode.ts` の既存segment/太字方式で表示。エリア5段階評価、同一商品の10個カウント上限、先行指示の「多い商品10個以上」、weather/reference/Review19/productionAnalysisは非変更。
+
 ### 9-25: 夏17時の快適方向上限
 
 - `weekdayBase.ts` の `applyComfortNegativeLimit()` が唯一の制限判定。rawを-2〜+2に制限し、既存の15時・雨抑制を先に適用した後、`demandCycle === "summer" && discountTime === "17"` の乾燥条件だけraw負値を-2（-10%）まで許可する。raw -1なら-5%、0/正方向は従来どおり。
@@ -332,20 +341,18 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*` **61/61 PASS**（既存60本＋専用1本）。専用checkは **17/17 PASS**。packageの全check名との集合一致を確認。旧GW中盤17時の期待1件を新仕様へ更新し、15/18:30/19:30/20:30の旧基準を同testで追加確認。
-- TypeScript / production build / PWA generateSW PASS（100 modules、precache10）。chunk sizeとBrowserslist dataの既存build警告あり。
-- changed-file focused ESLint **0 errors / 0 warnings**。full lint **既存9 errors / 7 warnings**、9-28とのfile/rule/severity/message比較で新規diagnostic 0。
-- 専用checkは9/19〜24、単独祝日/祝日前/平日/3連休、翌日が非法定休日の日曜である長期連休土曜、同曜日3件以上から金土固定、normal/summer、旧保存context/欠損context復元/export/cloud用純粋JSON往復、新kind正規化、productionAnalysisを確認。非17時64条件・率/天候/先行率720条件も9-28の固定goldenと一致。
-- 独立baseline比較は2025〜2030年の2,191日×全5時刻、normal/summer×6天候条件。基本率・天候関連解決131,460件、基準説明の非reference部分131,460件、global -5/0/+5を含む先行率394,380件が一致。合計762,514assert PASS、個別量reference差分は長期連休内部17時の18日だけ。
-- 追加境界監査112assert PASS。2028-05-06/2029-05-05では、同土曜3件・中央値100が存在しても、対象17時は金土6件・中央値55を採用。旧record分類/normalizationは不変で、保存済みcontextと旧snapshot復元はbaseline一致。
-- Edge production preview 390×844で10ケース・40画面表示・10履歴比較PASS。9/21・22の通常/夏17時は先行指示→AreaJudge→RateDisplay→次エリアの操作、および別完了fixtureのDoneで金土表示。9/23、15時、7/19三連休を対照確認。fixtureの採用中央値は対象金土60、最終日10、15時30、三連休中間35。
-- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/download/popupは0。隔離のService WorkerブロックによるPlaywright警告30件は別記録。スクリーンショット50枚保存、代表6枚を目視確認。
-- src96本中5本だけ変更。他91本、root SQL9本、AGENTS.md、version/build/schema生成処理は9-28 ZIPとbyte-identical。三連休判定、履歴record分類/normalizer、率engine、Review19 operational flow、productionAnalysisは維持。保存済みreferenceを新ルールで遡及書換えするmigrationは追加しない。
-- GPT-6 Astra / Ultraのみ使用。制限時に中断し、再開時に実行設定を確認した。
+- 全 `check:*` **62/62 PASS**。package.jsonの全check名と実行結果の集合一致を確認。専用テスト **10/10 PASS**。
+- 専用テストはpolicyの条件/値/大小パック、旧5商品補正、4モードの新旧snapshot、厳密な不正値拒否、独立clone/freeze、state復元、実Review19 export、schema 3、同一商品上限と先行率、実TSXの注意事項表示を確認。
+- 9-29との独立比較 **6,480条件・19,440 assertions PASS**。新規snapshotは新policy以外一致、旧snapshot正規化は完全一致、新snapshotはJSON往復一致。
+- TypeScript / production build / PWA generateSW PASS。100 modules、precache10。chunk sizeとBrowserslist dataの既存build警告あり。
+- focused ESLint **0 errors / 0 warnings**。全体lintはbaselineと同じ **9 errors / 7 warnings**。file/rule/severity/messageで新規diagnostic **0**。message内の作業root絶対pathだけを統一し、本文・行番号・source抜粋は変更せず比較。
+- Microsoft Edge production previewの自動操作（headless、390×844）で通常15時・夏17時の初回注意事項/通常表示/次エリア表示を確認。OKと「終わった」の操作、新規確定snapshotへのpolicy保存、既存注意事項の維持を確認。代表スクリーンショットも目視確認。
+- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/download/popupは0。隔離用Service Workerブロックに伴うPlaywright警告2件は別記録。
+- GPT-6 Astra / Ultraのみ使用。利用制限で中断後、再開時も実行設定を確認。
 
-未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。実ブラウザは隔離fixtureを使用し外部通信を遮断した。cloud互換確認は純粋serializationの往復で、実際の送受信ではない。
+未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。ブラウザは隔離fixtureと固定時計を使った自動確認で、実店舗データの操作ではない。
 
-証跡: `work/longHoliday29/checks.json`、`lint-comparison29.json`、`source-proof29.json`、`edge-proof29.json`、`baseline-integrity29.json`、`browser-work/browser-results29.json`、`browser-work/BROWSER_REPORT_29.md`。ZIP再openとSHAはZIP外のrelease報告/検査JSONに記録。
+証跡: `work/productPolicy30/checks.json`, `baseline-comparison30.json`, `lint-comparison30.json`, `browser-work/browser-results30.json`。ZIP再open検査とSHA-256はZIP外のrelease報告・検査JSONに記録する。
 
 
 ## 13. 既知課題、検討中だが未実装の案
@@ -379,7 +386,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-29.md`（9-28 baselineは `CHANGE_REPORT_2026.8.9-28.md`）
+4. `CHANGE_REPORT_2026.8.9-30.md`（9-29 baselineは `CHANGE_REPORT_2026.8.9-29.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

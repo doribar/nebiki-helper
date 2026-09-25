@@ -406,9 +406,23 @@ function assertExportJsonCharacterization(): void {
         : value
   );
 
-  assert.equal(json.length, 34742);
+  // New snapshots add only this policy. Pin its two export copies, then keep
+  // the pre-extension golden for every other byte of the payload.
+  let newPolicyCopies = 0;
+  const legacyJson = JSON.stringify(JSON.parse(json), (key, value) => {
+    if (key !== "slightlyUnpopular") return value;
+    assert.deepEqual(value, {
+      adjustmentPercent: 10,
+      minimumActualCount: 10,
+      splitPackTarget: "large_only",
+    });
+    newPolicyCopies += 1;
+    return undefined;
+  });
+  assert.equal(newPolicyCopies, 2);
+  assert.equal(legacyJson.length, 34742);
   assert.equal(
-    createHash("sha256").update(json).digest("hex"),
+    createHash("sha256").update(legacyJson).digest("hex"),
     "f43b1708f17e37ba1d3ab32bd9bfa0786b67d7a36dc65db272a1c8f108d282a4",
   );
   assert.deepEqual(Object.keys(bundle.automatic), [

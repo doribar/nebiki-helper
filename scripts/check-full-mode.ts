@@ -151,9 +151,11 @@ test("14. 10個以上専用計算コードを削除", () => {
   assert.equal(discountSource.includes("manyThreshold"), false);
 });
 
-test("15. 注意事項は補正商品を統合した5項目", () => {
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 5);
-  assert.equal(FULL_MODE_NOTICE_TEXTS.some((text) => text.includes("10個以上")), false);
+test("15. 注意事項は既存5項目とやや不人気の条件付き補正", () => {
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 6);
+  assert.deepEqual(FULL_MODE_NOTICE_TEXTS.filter((text) => text.includes("10個以上")), [
+    "やや不人気な商品は、実際に10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%（小パックは補正なし）",
+  ]);
 });
 test("16. -10%商品を1項目へ統合", () => assert.ok(FULL_MODE_NOTICE_TEXTS.includes("定番商品・夜によく売れる商品・広告商品は、表示値引率から-10%")));
 test("17. -10%商品の分類を維持", () => {

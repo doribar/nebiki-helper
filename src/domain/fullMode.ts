@@ -25,6 +25,16 @@ export const FULL_MODE_NOTICE_ITEMS: readonly (readonly FullModeNoticeSegment[])
     { text: "+10%", emphasis: true },
   ],
   [
+    { text: "やや不人気な商品", emphasis: true },
+    { text: "は、実際に" },
+    { text: "10個以上", emphasis: true },
+    { text: "ある場合のみ表示値引率に" },
+    { text: "+10%", emphasis: true },
+    { text: "。大パックと小パックに分かれている場合は" },
+    { text: "大パックのみ+10%", emphasis: true },
+    { text: "（小パックは補正なし）" },
+  ],
+  [
     { text: "多い・少ないの判断", emphasis: true },
     { text: "は、残り数だけでなく" },
     { text: "商品の減り方", emphasis: true },

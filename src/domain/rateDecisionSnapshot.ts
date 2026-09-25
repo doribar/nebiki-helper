@@ -33,6 +33,11 @@ export const PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT = Object.freeze({
   unpopularPercent: 10,
   advertisementPercent: -10,
   advertisementMode: "always",
+  slightlyUnpopular: Object.freeze({
+    adjustmentPercent: 10,
+    minimumActualCount: 10,
+    splitPackTarget: "large_only",
+  }),
 } satisfies ProductAdjustmentPolicySnapshot);
 
 type NonFinalCalculationMode = Exclude<RateDecisionCalculationMode, "final">;
@@ -290,7 +295,31 @@ function cloneProductPolicy(
   ) {
     return undefined;
   }
-  return { ...PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT };
+  let slightlyUnpopular: ProductAdjustmentPolicySnapshot["slightlyUnpopular"];
+  if (raw.slightlyUnpopular !== undefined) {
+    if (
+      !isRecord(raw.slightlyUnpopular) ||
+      raw.slightlyUnpopular.adjustmentPercent !== 10 ||
+      raw.slightlyUnpopular.minimumActualCount !== 10 ||
+      raw.slightlyUnpopular.splitPackTarget !== "large_only"
+    ) {
+      return undefined;
+    }
+    slightlyUnpopular = {
+      adjustmentPercent: raw.slightlyUnpopular.adjustmentPercent,
+      minimumActualCount: raw.slightlyUnpopular.minimumActualCount,
+      splitPackTarget: raw.slightlyUnpopular.splitPackTarget,
+    };
+  }
+  return {
+    staplePercent: raw.staplePercent,
+    nightSellerPercent: raw.nightSellerPercent,
+    poorAppearancePercent: raw.poorAppearancePercent,
+    unpopularPercent: raw.unpopularPercent,
+    advertisementPercent: raw.advertisementPercent,
+    advertisementMode: raw.advertisementMode,
+    ...(slightlyUnpopular ? { slightlyUnpopular } : {}),
+  };
 }
 
 function getLegacyAreaJudgeAdjustment(
@@ -492,7 +521,7 @@ export function buildRateDecisionSnapshot(
     areaCountAdjustmentPercent,
     legacyAreaJudgeAdjustmentPercent,
     otherAdjustments: {
-      productPolicy: { ...PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT },
+      productPolicy: cloneProductPolicy(PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT)!,
     },
     normalRateBeforeLimitsPercent,
     manyRateBeforeLimitsPercent,
@@ -588,7 +617,7 @@ export function buildFinalDiscountGuideSnapshot(
     areaCountAdjustmentPercent: 0,
     legacyAreaJudgeAdjustmentPercent: 0,
     otherAdjustments: {
-      productPolicy: { ...PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT },
+      productPolicy: cloneProductPolicy(PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT)!,
     },
     normalRateBeforeLimitsPercent: normalRatePercent,
     manyRateBeforeLimitsPercent: manyRatePercent,
@@ -714,12 +743,9 @@ export function normalizeRateDecisionSnapshot(
     "displayedManyRatePercent",
   ] as const;
   if (numericKeys.some((key) => !isFiniteNumber(raw[key]))) return undefined;
-  if (
-    !isRecord(raw.otherAdjustments) ||
-    !cloneProductPolicy(raw.otherAdjustments.productPolicy)
-  ) {
-    return undefined;
-  }
+  if (!isRecord(raw.otherAdjustments)) return undefined;
+  const productPolicy = cloneProductPolicy(raw.otherAdjustments.productPolicy);
+  if (!productPolicy) return undefined;
   const limits = cloneLimits(raw.limits);
   const resolvedWeather = cloneResolvedWeather(raw.resolvedWeather);
   if (!limits || !resolvedWeather) return undefined;
@@ -770,7 +796,7 @@ export function normalizeRateDecisionSnapshot(
     legacyAreaJudgeAdjustmentPercent:
       raw.legacyAreaJudgeAdjustmentPercent as number,
     otherAdjustments: {
-      productPolicy: { ...PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT },
+      productPolicy,
     },
     normalRateBeforeLimitsPercent: raw.normalRateBeforeLimitsPercent as number,
     manyRateBeforeLimitsPercent: raw.manyRateBeforeLimitsPercent as number,

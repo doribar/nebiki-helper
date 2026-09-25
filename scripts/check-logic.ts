@@ -2871,13 +2871,13 @@ const totalChecks = 91;
     getCanonicalUrlForLegacyHash({ pathname: '/app/', search: '', hash: '' }),
     null,
   );
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 5);
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 6);
   passed += 1;
 }
 
 
 {
-  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 5);
+  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 6);
   assert.equal(FULL_MODE_NOTICE_TEXTS[0], '残り2個の商品は「多い」にしない');
   assert.equal(
     FULL_MODE_NOTICE_TEXTS[2],

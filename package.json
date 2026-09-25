@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-29",
+  "version": "2026.8.9-30",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -68,7 +68,8 @@
     "check:summer17-comfort": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-summer17-comfort.ts",
     "check:summer17-comfort-integration": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-summer17-comfort-integration.ts",
     "check:daily-ui-removal": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daily-ui-removal.ts",
-    "check:long-holiday-reference": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-long-holiday-reference.ts"
+    "check:long-holiday-reference": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-long-holiday-reference.ts",
+    "check:slightly-unpopular-policy": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-slightly-unpopular-policy.ts"
   },
   "dependencies": {
     "react": "^19.2.4",
