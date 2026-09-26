@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAdvanceDiscountRate } from "../domain/advanceDiscount.ts";
+import { getColdDeliGuide } from "../domain/coldDeliGuide.ts";
 import type {
   AppState,
   AreaId,
@@ -1287,6 +1288,11 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
             applyObonRule,
           }),
           ratePercent: advanceDiscountRate,
+          coldDeliGuide: getColdDeliGuide({
+            session: state.session,
+            resolvedWeather: sessionSourceResolvedWeather,
+            isFixedTimeMode: isTestMode,
+          }),
         }
       : null;
   const currentAreaName = state.currentAreaId ? getAreaName(state.currentAreaId) : null;

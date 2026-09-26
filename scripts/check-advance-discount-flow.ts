@@ -8,6 +8,7 @@ import { NORMAL_ROUTE } from "../src/domain/area.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { lockDemandCycleForDate } from "../src/domain/demandCycleStorage.ts";
+import { addDaysToDateString, isJapaneseHolidayOrWeekend } from "../src/domain/japaneseHoliday.ts";
 import { normalizeGlobalDiscountAdjustmentPercent } from "../src/domain/globalDiscountAdjustment.ts";
 import { cloneHourlyForecasts, createDefaultHourlyForecasts, resolveWeatherInputForDiscount } from "../src/domain/hourlyWeather.ts";
 import { appendNavigationHistory, cloneAppState, cloneSkipRecords, createNavigationSnapshot } from "../src/domain/navigationHistory.ts";
@@ -249,6 +250,15 @@ for (const time of ["15", "17"] as const) {
       restoredHook((app) => {
         assert.equal(app.state.screen, expected);
         assert.equal(Boolean(app.derived.advanceDiscountInstruction), pending);
+        if (pending) {
+          const highCount = 2 + Number(isJapaneseHolidayOrWeekend(addDaysToDateString(DATE, 1)));
+          assert.deepEqual(app.derived.advanceDiscountInstruction?.coldDeliGuide,
+            time === "15"
+              ? { discountTime: "15", highCount, lowCount: highCount - 1 }
+              : { discountTime: "17", ratePercent: 30 });
+        }
+        assert.equal(JSON.stringify(app.state).includes("coldDeliGuide"), false);
+        assert.equal([...memory.values.values()].some((value) => value.includes("coldDeliGuide")), false);
         assert.deepEqual(json(app.state.areaProgressMap), json(normalizeLoadedState(h.state, h.state.sessionDraft).areaProgressMap));
       });
       // Recover through the real startup checkpoint selection after a start/reset crash.
@@ -257,6 +267,8 @@ for (const time of ["15", "17"] as const) {
         assert.equal(fromCheckpoint.state.screen, expected);
         assert.equal(fromCheckpoint.state.session?.startedAt, h.state.session?.startedAt);
         assert.equal(Boolean(fromCheckpoint.derived.advanceDiscountInstruction), pending);
+        assert.equal(fromCheckpoint.derived.advanceDiscountInstruction?.coldDeliGuide?.discountTime,
+          pending ? time : undefined);
       });
     }
   });
