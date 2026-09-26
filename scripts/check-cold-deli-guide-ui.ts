@@ -7,7 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import type { AdvanceDiscountScreen } from "../src/components/screens/AdvanceDiscountScreen.tsx";
 import type { PrimaryButton } from "../src/components/layout/PrimaryButton.tsx";
-import type { ColdDeliGuide } from "../src/domain/coldDeliGuide.ts";
+import { getColdDeliGuide, type ColdDeliGuide } from "../src/domain/coldDeliGuide.ts";
+import { createDefaultHourlyForecasts, resolveWeatherInputForDiscount } from "../src/domain/hourlyWeather.ts";
 
 // Load the production TSX and its actual local dependencies, as in check-advance-discount-ui.
 const componentModules = new Map<string, Record<string, unknown>>();
@@ -107,6 +108,28 @@ function assertColdContentRestrictions(section: ScreenElement): void {
   assert.doesNotMatch(markup, /当日切れ|10個以上|[+＋]10\s*[%％]|やや不人気|エリア残数|AreaCount/);
   assert.doesNotMatch(markup, /<(input|textarea|select|button)\b/);
 }
+type ColdDeliGuide15 = Extract<ColdDeliGuide, { discountTime: "15" }>;
+const baselineRates15 = {
+  highRatePercent: 20, highFewRatePercent: 15, lowRatePercent: 10, lowFewRatePercent: 5,
+};
+function assertFifteenGuide(guide: ColdDeliGuide15): void {
+  const label = "木曜日・15時";
+  const rendered = renderScreen({ referenceConditionLabel: label, coldDeliGuide: Object.freeze(guide) });
+  assertOriginalInstruction(rendered, label, 30);
+  const section = coldSection(rendered);
+  const groups = elements(section).find((node) => (node.props.style as React.CSSProperties | undefined)?.display === "grid");
+  assert.ok(groups);
+  const pairs = React.Children.toArray(groups.props.children as React.ReactNode) as ScreenElement[];
+  assert.deepEqual(pairs.map((pair) =>
+    React.Children.toArray(pair.props.children as React.ReactNode).map(nodeText),
+  ), [
+    [`${guide.highCount}個以上 → ${guide.highRatePercent}%`, `少ないエリア → ${guide.highFewRatePercent}%`],
+    [`${guide.lowCount}個 → ${guide.lowRatePercent}%`, `少ないエリア → ${guide.lowFewRatePercent}%`],
+  ]);
+  assert.equal(nodeText(section), `冷惣菜${guide.highCount}個以上 → ${guide.highRatePercent}%少ないエリア → ${guide.highFewRatePercent}%${guide.lowCount}個 → ${guide.lowRatePercent}%少ないエリア → ${guide.lowFewRatePercent}%`);
+  assert.doesNotMatch(renderToStaticMarkup(section), /後回し|すべて|条件|場合|翌日|補正|自分で|足して/);
+  assertColdContentRestrictions(section);
+}
 
 let passed = 0;
 function test(name: string, run: () => void): void {
@@ -123,28 +146,51 @@ const thresholdCases = [
 ];
 for (const fixture of thresholdCases) {
   test(`15: ${fixture.name} renders concrete supplied thresholds and their separate few-area rates`, () => {
-    const guide = Object.freeze<ColdDeliGuide>({ discountTime: "15", highCount: fixture.highCount, lowCount: fixture.lowCount });
-    const label = "木曜日・15時";
-    const rendered = renderScreen({ referenceConditionLabel: label, coldDeliGuide: guide });
-    assertOriginalInstruction(rendered, label, 30);
-    const section = coldSection(rendered);
-    const groups = elements(section).find((node) => (node.props.style as React.CSSProperties | undefined)?.display === "grid");
-    assert.ok(groups);
-    const pairs = React.Children.toArray(groups.props.children as React.ReactNode) as ScreenElement[];
-    assert.deepEqual(pairs.map((pair) =>
-      React.Children.toArray(pair.props.children as React.ReactNode).map(nodeText),
-    ), [
-      [`${fixture.highCount}個以上 → 20%`, "少ないエリア → 15%"],
-      [`${fixture.lowCount}個 → 10%`, "少ないエリア → 5%"],
-    ]);
-    assert.equal(nodeText(section), `冷惣菜${fixture.highCount}個以上 → 20%少ないエリア → 15%${fixture.lowCount}個 → 10%少ないエリア → 5%`);
-    assert.doesNotMatch(renderToStaticMarkup(section), /後回し|すべて|条件|場合|翌日|補正/);
-    assertColdContentRestrictions(section);
+    assertFifteenGuide({ discountTime: "15", highCount: fixture.highCount, lowCount: fixture.lowCount, ...baselineRates15 });
   });
 }
 
-for (const ratePercent of [25, 30] as const) {
-  test(`17: all cold deli displays ${ratePercent}% with a timing note and no lower few-area rate`, () => {
+// These are already-calculated display props from the requested examples; domain checks verify their calculation.
+const rateCases15 = [
+  { name: "weather 0 / global 0", highCount: 2, lowCount: 1, rates: [20, 15, 10, 5] },
+  { name: "weather +5 / global 0", highCount: 2, lowCount: 1, rates: [25, 20, 15, 10] },
+  { name: "weather 0 / global +5", highCount: 2, lowCount: 1, rates: [25, 20, 15, 10] },
+  { name: "weather +10 / global +5", highCount: 2, lowCount: 1, rates: [35, 30, 25, 20] },
+  { name: "weather +10 / global -5", highCount: 3, lowCount: 2, rates: [30, 25, 20, 15] },
+  { name: "weather -10 / global +5", highCount: 2, lowCount: 1, rates: [25, 20, 15, 10] },
+  { name: "weather -10 / global -5", highCount: 3, lowCount: 2, rates: [20, 15, 10, 5] },
+  { name: "user display example: weather +5 / global +5", highCount: 2, lowCount: 1, rates: [30, 25, 20, 15] },
+];
+for (const fixture of rateCases15) {
+  test(`15: next weekday / ${fixture.name} displays all four supplied final rates`, () => {
+    const [highRatePercent, highFewRatePercent, lowRatePercent, lowFewRatePercent] = fixture.rates;
+    assertFifteenGuide({
+      discountTime: "15", highCount: fixture.highCount, lowCount: fixture.lowCount,
+      highRatePercent, highFewRatePercent, lowRatePercent, lowFewRatePercent,
+    });
+  });
+}
+
+const rateCases17 = [
+  { name: "weather 0 / global 0", ratePercent: 30 },
+  { name: "weather +5 / global 0", ratePercent: 35 },
+  { name: "weather 0 / global +5", ratePercent: 35 },
+  { name: "user display example: weather +10 / global +5", ratePercent: 45 },
+  { name: "weather +10 / global -5", ratePercent: 40 },
+  { name: "weather +20 / global +5 capped by helper", ratePercent: 50 },
+  { name: "weather +20 / global 0", ratePercent: 50 },
+  { name: "weather +20 / global -5", ratePercent: 50 },
+  { name: "next holiday / weather -10 / global 0", ratePercent: 25 },
+  { name: "next holiday / weather -10 / global -5", ratePercent: 25 },
+  { name: "next holiday / weather -10 / global +5", ratePercent: 30 },
+  { name: "next holiday / weather -5 / global -5", ratePercent: 25 },
+  { name: "next holiday / weather -5 / global 0", ratePercent: 30 },
+  { name: "next holiday / weather -5 / global +5", ratePercent: 35 },
+  { name: "next weekday / weather -10 / global -5", ratePercent: 30 },
+  { name: "next weekday / weather -10 / global +5", ratePercent: 35 },
+];
+for (const { name, ratePercent } of rateCases17) {
+  test(`17: ${name} displays supplied ${ratePercent}% with a timing note and no lower few-area rate`, () => {
     const rendered = renderScreen({ coldDeliGuide: { discountTime: "17", ratePercent } });
     assertOriginalInstruction(rendered, "夏・金曜日・土曜日・17時", 30);
     const section = coldSection(rendered);
@@ -157,6 +203,54 @@ for (const ratePercent of [25, 30] as const) {
     assertColdContentRestrictions(section);
   });
 }
+
+test("supplied final 50% and fractional cold deli rates render unchanged without UI arithmetic", () => {
+  assertFifteenGuide({
+    discountTime: "15", highCount: 3, lowCount: 2,
+    highRatePercent: 50, highFewRatePercent: 50, lowRatePercent: 49.5, lowFewRatePercent: 44.5,
+  });
+  for (const ratePercent of [49.5, 50]) {
+    const section = coldSection(renderScreen({ coldDeliGuide: { discountTime: "17", ratePercent } }));
+    assert.equal(nodeText(section), `冷惣菜すべて → ${ratePercent}%少ないエリア・判断に迷う場合は後回しにしてください。`);
+    assertColdContentRestrictions(section);
+  }
+});
+
+test("production helper supplies final 50% rates to the unchanged presentation", () => {
+  const hourlyForecasts = createDefaultHourlyForecasts();
+  for (const entry of Object.values(hourlyForecasts)) {
+    entry.weather = "snow";
+    entry.tempC = 25;
+    entry.windMs = 2;
+  }
+  const resolvedWeather = resolveWeatherInputForDiscount({ hourlyForecasts, afterRainSky: null }, "17");
+  const session = {
+    date: "2026-09-04", weekday: 5, discountTime: "17" as const,
+    demandCycle: "normal" as const, globalDiscountAdjustmentPercent: 5 as const,
+  };
+  const seventeen = getColdDeliGuide({ session, resolvedWeather, isFixedTimeMode: false });
+  assert.deepEqual(seventeen, { discountTime: "17", ratePercent: 50 });
+  const rendered = renderScreen({ coldDeliGuide: seventeen });
+  assertOriginalInstruction(rendered, "夏・金曜日・土曜日・17時", 30);
+  assert.equal(nodeText(coldSection(rendered)), "冷惣菜すべて → 50%少ないエリア・判断に迷う場合は後回しにしてください。");
+  assert.doesNotMatch(rendered.markup, /55[%％]|上限|キャップ|cap/i);
+
+  // Synthetic resolved weather reaches 15:00 cap boundaries that current real
+  // weather (W <= 20) cannot reach; production weather semantics stay unchanged.
+  for (const [bonus, rates] of [
+    [35.5, [50, 50, 45.5, 40.5]], [45.5, [50, 50, 50, 50]],
+  ] as const) {
+    const fifteen = getColdDeliGuide({
+      session: { ...session, discountTime: "15", globalDiscountAdjustmentPercent: 0 },
+      resolvedWeather: { ...resolvedWeather, tempLevel: "28to30", precipitationRateBonus: bonus },
+      isFixedTimeMode: false,
+    });
+    assert.ok(fifteen?.discountTime === "15");
+    assert.deepEqual([fifteen.highRatePercent, fifteen.highFewRatePercent,
+      fifteen.lowRatePercent, fifteen.lowFewRatePercent], rates);
+    assertFifteenGuide(fifteen);
+  }
+});
 
 test("omitted, undefined and null guide preserve the original screen without an empty cold deli section", () => {
   const original = renderScreen();
@@ -173,8 +267,10 @@ test("cold deli rates stay independent of the existing supplied advance rate and
   for (const label of ["木曜日・15時", "夏・木曜日・15時", "日曜日・17時", "夏・日曜日・金曜日・土曜日・中間・17時"]) {
     for (const rate of [0, 5, 30, 50]) {
       for (const guide of [
-        { discountTime: "15", highCount: 4, lowCount: 3 },
+        { discountTime: "15", highCount: 4, lowCount: 3, ...baselineRates15 },
+        { discountTime: "15", highCount: 4, lowCount: 3, highRatePercent: 35, highFewRatePercent: 30, lowRatePercent: 25, lowFewRatePercent: 20 },
         { discountTime: "17", ratePercent: 25 },
+        { discountTime: "17", ratePercent: 45 },
       ] satisfies ColdDeliGuide[]) {
         const original = renderScreen({ referenceConditionLabel: label, ratePercent: rate });
         const rendered = renderScreen({ referenceConditionLabel: label, ratePercent: rate, coldDeliGuide: guide });
@@ -182,8 +278,8 @@ test("cold deli rates stay independent of the existing supplied advance rate and
         assert.deepEqual(instructionLines(rendered).map((line) => renderToStaticMarkup(line)),
           instructionLines(original).map((line) => renderToStaticMarkup(line)));
         const expected = guide.discountTime === "15"
-          ? "冷惣菜4個以上 → 20%少ないエリア → 15%3個 → 10%少ないエリア → 5%"
-          : "冷惣菜すべて → 25%少ないエリア・判断に迷う場合は後回しにしてください。";
+          ? `冷惣菜4個以上 → ${guide.highRatePercent}%少ないエリア → ${guide.highFewRatePercent}%3個 → ${guide.lowRatePercent}%少ないエリア → ${guide.lowFewRatePercent}%`
+          : `冷惣菜すべて → ${guide.ratePercent}%少ないエリア・判断に迷う場合は後回しにしてください。`;
         assert.equal(nodeText(coldSection(rendered)), expected);
       }
     }
@@ -192,8 +288,10 @@ test("cold deli rates stay independent of the existing supplied advance rate and
 
 test("the same single PrimaryButton remains after the cold deli guide and invokes only its existing callback", () => {
   for (const coldDeliGuide of [
-    { discountTime: "15", highCount: 2, lowCount: 1 },
+    { discountTime: "15", highCount: 2, lowCount: 1, ...baselineRates15 },
+    { discountTime: "15", highCount: 2, lowCount: 1, highRatePercent: 35, highFewRatePercent: 30, lowRatePercent: 25, lowFewRatePercent: 20 },
     { discountTime: "17", ratePercent: 30 },
+    { discountTime: "17", ratePercent: 45 },
   ] satisfies ColdDeliGuide[]) {
     let continued = 0;
     const onContinue = () => { continued += 1; };
@@ -225,8 +323,10 @@ test("cold deli presentation adds no inputs, app state, storage or network depen
   assert.doesNotMatch(readFileSync(screenUrl, "utf8"),
     /\b(?:useState|useReducer|useEffect|useLayoutEffect|localStorage|sessionStorage|indexedDB|fetch|XMLHttpRequest)\b/);
   for (const coldDeliGuide of [
-    { discountTime: "15", highCount: 4, lowCount: 3 },
+    { discountTime: "15", highCount: 4, lowCount: 3, ...baselineRates15 },
+    { discountTime: "15", highCount: 4, lowCount: 3, highRatePercent: 35, highFewRatePercent: 30, lowRatePercent: 25, lowFewRatePercent: 20 },
     { discountTime: "17", ratePercent: 25 },
+    { discountTime: "17", ratePercent: 45 },
   ] satisfies ColdDeliGuide[]) {
     const rendered = renderScreen({ coldDeliGuide });
     assert.doesNotMatch(rendered.markup, /<(input|textarea|select|form)\b|contenteditable|商品名|残数入力/);
@@ -236,8 +336,10 @@ test("cold deli presentation adds no inputs, app state, storage or network depen
 
 test("the guide preserves mobile wrapping without fixed sizes or horizontal overflow styles", () => {
   for (const coldDeliGuide of [
-    { discountTime: "15", highCount: 4, lowCount: 3 },
+    { discountTime: "15", highCount: 4, lowCount: 3, ...baselineRates15 },
+    { discountTime: "15", highCount: 4, lowCount: 3, highRatePercent: 35, highFewRatePercent: 30, lowRatePercent: 25, lowFewRatePercent: 20 },
     { discountTime: "17", ratePercent: 30 },
+    { discountTime: "17", ratePercent: 45 },
   ] satisfies ColdDeliGuide[]) {
     const rendered = renderScreen({ referenceConditionLabel: "夏・日曜日・金曜日・土曜日・中間・17時", coldDeliGuide });
     const main = rendered.nodes.find((node) => node.type === "main");

@@ -1,4 +1,4 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-31）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-33）
 
 最終更新: 2026-09-26 JST
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260926-2134.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260926-2134.zip` |
-| appVersion | `2026.8.9-31` |
-| buildId | `build-20260926-212826-jst` |
+| ZIP | `nebiki-helper-20260926-2236.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260926-2236.zip` |
+| appVersion | `2026.8.9-33` |
+| buildId | `build-20260926-223018-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260926-2134.zip.sha256` / `RELEASE_REPORT_2026.8.9-31.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260926-2236.zip.sha256` / `RELEASE_REPORT_2026.8.9-33.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/coldDeli31/nebiki-helper`。package versionは9-31、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
+application rootは成果物workspace内の `work/coldDeli33/nebiki-helper`。package versionは9-33、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
 
-比較基準は9-30 ZIP `nebiki-helper-20260925-0128.zip`（SHA-256 `d003aff375d682ef1dd3388327e2072d96598f426e814b6979f524058f57f0d7`）。9-31は15/17時の先行値引画面へ冷惣菜ガイドを追加する表示変更。通常値引計算・保存・Review19は非変更。詳細は `CHANGE_REPORT_2026.8.9-31.md`。`AGENTS.md` はSupabase新規table/Data APIの最小権限ルールを含む9-30版とbyte-identical。
+比較基準は9-32 ZIP `nebiki-helper-20260926-2209.zip`（SHA-256 `88e1ebd57e8acfcc3bbf862c8ad27622c389b025b935362a04c09370b81f3f46`）。9-33は冷惣菜ガイドの全5率へ、独自ルール・プラス補正を反映した最後に50%上限を適用する。その他の計算・画面・保存は非変更。詳細は `CHANGE_REPORT_2026.8.9-33.md`。`AGENTS.md` は9-32版とbyte-identicalで、過去CHANGE REPORTも変更していない。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\coldDeli31\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\coldDeli33\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -319,13 +319,16 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 日次・統合JSONのpure builder、過去metadata正規化、archive patch APIは互換と既存回帰検証のため維持。これらからユーザーが日次データを表示・downloadするUI/actionはない。
 - 保存容量診断とSupabase同期は維持。設定診断の「IndexedDB 1日データ」表示行のみ削除し、内部の件数計測/診断payloadは変更しない。
 
-### 9-31: 15/17の冷惣菜ガイド
+### 9-31導入 / 9-32プラス補正 / 9-33上限: 15/17の冷惣菜ガイド
 
-- 天候確定後の既存 `AdvanceDiscountScreen` 内に「冷惣菜」の独立sectionを追加。元の先行値引3行・表示率・赤い強調・「エリア別値引へ進む」は非変更。18:30以降、Review19、fixed-timeには表示しない。
-- 15時の上段個数は `2 + 翌日が土日祝なら1 + globalが-5なら1`、下段はその1個少ない数。具体的な「N個以上 → 20%」「N個 → 10%」だけを表示し、各行に「少ないエリア → 15% / 5%」を添える。global+5は個数に影響しない。少ないエリアで個数は変えない。
-- 17時は「すべて → 30%」。翌日が土日祝、かつ `weather=-10 OR (weather=-5 AND global=-5)` の場合だけ25%。global-5単独/天候-5単独/翌日平日は30%。weather-10はglobal+5でも条件を満たす。少ないエリア向けの率低下はなく、「少ないエリア・判断に迷う場合は後回しにしてください。」とタイミングだけ補足。
-- `getColdDeliGuide()` はsession実日付の翌日を既存 `addDaysToDateString / isJapaneseHolidayOrWeekend` で判定。手動weekday/referenceやお盆需要区分を休日の代わりに使わない。17時の天候補正は先行値引と同じ解決済みweatherを `getWeekdayBaseInfo(...).baseRateBonus` で取得する。
-- 商品数の入力や評価はせず、derivedの表示値のみを作る。冷惣菜専用state/key/snapshotやAreaCountを生成しない。通常rate・天候core・保存形式は非変更。冷惣菜sectionへ「当日切れ」や「10個以上+10%」のルールを追加していない。
+- 既存 `AdvanceDiscountScreen` 内の「冷惣菜」section。元の先行値引3行・率計算・赤い強調・「エリア別値引へ進む」は非変更。18:30以降、Review19、fixed-timeは非表示。
+- `getColdDeliGuide()` は15/17とも、既存hookの `sessionSourceResolvedWeather`（気温snapshot反映済み）を `getWeekdayBaseInfo(...).baseRateBonus` に渡して、解決済み天候合計Wを取得。雨など個々のプラス要素を足し直さない。Gはsession.globalDiscountAdjustmentPercentを既存normalizerで正規化し、欠損/不正値は0。
+- 追加分は `max(W,0) + max(G,0)`。W/Gを先に合算して相殺しない。global+5は率へ一度だけ加算し、global-5は率から引かず以下の独自条件にだけ使う。
+- 15時: 上段個数は `2 + 翌日が土日祝なら1 + G=-5なら1`、下段は1個少ない数。加算前率は20/15/10/5（上段/上段少ないエリア/下段/下段少ないエリア）。4率それぞれへ同じ追加分を加え、各最終値を独立に50%で制限して表示。通常エリアの上限適用後の率から5を引いて少ないエリアを作らない。W/G+5で個数範囲を変更しない。
+- 17時: 元W/Gで `翌日土日祝 AND (W=-10 OR (W=-5 AND G=-5))` なら基準25%、それ以外は30%。その後に追加分を加算し、最後に50%上限を適用。翌日休日・W=-10/G=+5は25+5=30%。少ないエリア向けの率低下はなく、既存の「少ないエリア・判断に迷う場合は後回しにしてください。」を維持。
+- 翌日の休日はsession実日付から既存 `addDaysToDateString / isJapaneseHolidayOrWeekend` を使用。手動weekday、個人の休日、reference、お盆需要区分で代替しない。
+- 9-33の最終式は `min(50, B + max(W,0) + max(G,0))`。15時4率・17時1率それぞれ、加算後に上限を適用する。既存の雪によるW=+20/G=+5では17時30+20+5=55→50%。50%以下は9-32と同一で丸めは追加しない。通常値引engineの上限や20:30 forced ruleは非変更。
+- 商品数入力や冷惣菜専用state/key/snapshot/AreaCountは増やさず、既存derivedだけで完結。保存形式・過去データ・Review19は非変更。冷惣菜へ「当日切れ」「10個以上+10%」を追加していない。
 
 ### 9-24: 通常Done基準ラベル・15/17先行値引
 
@@ -349,20 +352,21 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*` **64/64 PASS**。package.jsonの全check名と実行結果の集合一致を確認。
-- 冷惣菜専用: domain **31/31 PASS**、UI **11/11 PASS**。15時4パターン、global+5/欠損、土日/祝日/振替/国民の休日/年跨ぎ、17時30/25条件と負例、既存天候補正・気温snapshotの利用、対象外時刻/fixed-time、非保存・非破壊を確認。
-- 既存先行値引: 計算 **15/15**、UI **35/35**、flow **30/30 PASS**。flowへ冷惣菜derived表示とcurrent/checkpoint復元・永続化非追加の検証を追加。通常rate、Review19、productionAnalysis、商品policy、履歴、schema/export等の全既存checkもPASS。
-- 9-30 ZIPとのbyte比較: 既存96 source中94本が同一。変更2本は画面とhookの表示配線だけ。新規helper1本。hookはimportと既存derivedへの表示データ追加のみ。通常値引計算・weather/calendar・storage・snapshot型/保存・Review19・productionAnalysisは非変更。
+- 全 `check:*` **64/64 PASS**。package.jsonの全check名と実行結果の集合一致。
+- 冷惣菜domain **70/70**、UI **35/35 PASS**。17時55→50、50/45/40/30/25維持、15時4率の独立上限、50未満/ちょうど50/50超、丸めなし、個数条件、対象外画面・非保存を確認。15時の全率上限境界は、通常の天候計算を変更せず、合成resolved-weatherの大きな補正値を使う境界testとして区別する。
+- 9-32の実helperとの独立比較 **185,284条件 PASS**。有効な既存天候入力で、新値は各率ごとに `min(50, 9-32値)` と一致し、個数/表示対象/その他出力は同一。既存先行値引率も新旧一致。
+- 先行値引の計算 **15/15**、UI **35/35**、flow **48/48 PASS**。初回天候確定・戻り/再確定・current/checkpoint/reload復元、元の案内、session保持・保存非追加を確認。Review19/productionAnalysis/storage/export/fixed-time等の既存checkもPASS。
+- 9-32 ZIPとのbyte比較: 全97 source中96本同一。変更はcoldDeliGuide.tsの5箇所に `Math.min(50, ...)` を加えただけ。逆変換すると旧helperと完全一致。UI/hook・通常rate・weather/global・calendar・型/保存・Review19はbyte-identical。
 - TypeScript / production build / PWA generateSW PASS。101 modules、precache10。chunk sizeとBrowserslist dataの既存build警告あり。
-- focused ESLint **0 errors / 4 existing warnings**。全体lintは9-30と同じ **9 errors / 7 warnings**。file/rule/severity/message比較で新規diagnostic **0**。message内の作業root絶対pathだけを統一し、本文・行番号・source抜粋は変更せず比較。
-- Microsoft Edge production preview自動操作（headless、390×844）**16/16 PASS**。15時4条件をnormal/summerで確認し、17時30/25条件と負例、既存案内の維持、reload復元、既存ボタンからarea_judgeへの進行、session保持・冷惣菜専用保存なしを確認。代表スクリーンショットも目視確認。
-- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/download/popupは0。検証用Service Workerブロックに伴うPlaywright警告32件は別記録。
-- SQL9本、AGENTS.md、vite.config.ts、dataVersion.tsは9-30 baselineとbyte-identical。Supabase/SQL/schemaの変更なし。
+- focused ESLint **0 errors / 0 warnings**。全体lintは9-32と同じ **9 errors / 7 warnings**。file/rule/severity/message比較で新規diagnostic **0**（message内の作業root絶対pathだけ統一）。
+- Microsoft Edge production preview自動操作（headless、390×844）**12/12 PASS**。実coreで解決したW=+20/G=+5の「すべて → 50%」、戻る/再確定/reload後の50%、50%未満のケース、既存先行値引率の不変を確認。代表スクリーンショットも目視確認。
+- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/download/popupは0。検証用Service WorkerブロックのPlaywright警告24件は別計上。
+- SQL9本、AGENTS.md、過去のCHANGE_REPORT全件、version/build生成方法・dataSchemaVersionは9-32 baselineとbyte-identical。依存関係・check一覧は非変更。
 - GPT-6 Astra / Ultraのみ使用。
 
-未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。ブラウザは隔離fixtureと固定時計によるソフトウェア自動検証で、実店舗データの操作ではない。18:30以降・Review19・fixed-timeの非表示は自動testで確認。
+未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。ブラウザは隔離fixtureと固定時計によるソフトウェア自動検証。対象外時刻・Review19・fixed-timeは自動testで確認し、本ブラウザ検証の対象外。
 
-証跡: `work/coldDeli31/checks.json`, `baseline-comparison31.json`, `lint-comparison31.json`, `browser-work/browser-results31.json`。ZIP再open検査とSHA-256はZIP外のrelease報告・検査JSONに記録する。
+証跡: `work/coldDeli33/checks.json`, `baseline-comparison33.json`, `comparison-work/baseline-rate-comparison33.json`, `lint-comparison33.json`, `browser-work/browser-results33.json`。ZIP再open検査とSHA-256はZIP外のrelease報告・検査JSONに記録。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -395,7 +399,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-31.md`（9-30 baselineは `CHANGE_REPORT_2026.8.9-30.md`）
+4. `CHANGE_REPORT_2026.8.9-33.md`（9-32 baselineは `CHANGE_REPORT_2026.8.9-32.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

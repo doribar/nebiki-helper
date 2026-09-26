@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getColdDeliGuide } from "../src/domain/coldDeliGuide.ts";
+import { getColdDeliGuide, type ColdDeliGuide } from "../src/domain/coldDeliGuide.ts";
 import {
   createDefaultHourlyForecasts,
   resolveWeatherInputForDiscount,
@@ -57,6 +57,26 @@ function guide(
   });
 }
 
+function expectedFifteen(
+  highCount: number,
+  lowCount: number,
+  rates: readonly [number, number, number, number] = [20, 15, 10, 5],
+): Extract<ColdDeliGuide, { discountTime: "15" }> {
+  return {
+    discountTime: "15", highCount, lowCount,
+    highRatePercent: rates[0], highFewRatePercent: rates[1],
+    lowRatePercent: rates[2], lowFewRatePercent: rates[3],
+  };
+}
+
+const weatherForBonus: Record<-10 | -5 | 0 | 5 | 10, Partial<ResolvedWeatherInput>> = {
+  [-10]: { tempLevel: "21to25" },
+  [-5]: { tempLevel: "26to27" },
+  0: {},
+  5: { tempLevel: "34to35" },
+  10: { tempLevel: "36orMore" },
+};
+
 let passed = 0;
 function test(name: string, run: () => void): void {
   run();
@@ -75,9 +95,7 @@ for (const scenario of [
       discountTime: "15",
       date: scenario.date,
       globalDiscountAdjustmentPercent: scenario.adjustment,
-    }), {
-      discountTime: "15", highCount: scenario.highCount, lowCount: scenario.lowCount,
-    });
+    }), expectedFifteen(scenario.highCount, scenario.lowCount));
   });
 }
 
@@ -86,10 +104,63 @@ test("15時の全体+5と旧session補正欠損は個数境界へ加算しない
     for (const adjustment of [5, undefined] as const) {
       assert.deepEqual(guide({
         discountTime: "15", date, globalDiscountAdjustmentPercent: adjustment,
-      }), { discountTime: "15", highCount, lowCount: highCount - 1 });
+      }), expectedFifteen(highCount, highCount - 1,
+        adjustment === 5 ? [25, 20, 15, 10] : [20, 15, 10, 5]));
     }
   }
 });
+
+for (const scenario of [
+  { weatherBonus: 0, global: 0, rates: [20, 15, 10, 5], counts: [2, 3] },
+  { weatherBonus: 5, global: 0, rates: [25, 20, 15, 10], counts: [2, 3] },
+  { weatherBonus: 0, global: 5, rates: [25, 20, 15, 10], counts: [2, 3] },
+  { weatherBonus: 5, global: 5, rates: [30, 25, 20, 15], counts: [2, 3] },
+  { weatherBonus: 10, global: 5, rates: [35, 30, 25, 20], counts: [2, 3] },
+  { weatherBonus: 10, global: -5, rates: [30, 25, 20, 15], counts: [3, 4] },
+  { weatherBonus: -10, global: 5, rates: [25, 20, 15, 10], counts: [2, 3] },
+  { weatherBonus: -10, global: -5, rates: [20, 15, 10, 5], counts: [3, 4] },
+] as const) {
+  test(`15時 天候${scenario.weatherBonus}/全体${scenario.global}を相殺せず4率へ加算`, () => {
+    for (const demandCycle of ["normal", "summer"] as const) {
+      [THURSDAY, FRIDAY].forEach((date, index) => {
+        const weather = { ...neutralWeather, ...weatherForBonus[scenario.weatherBonus] };
+        assert.equal(getWeekdayBaseInfo(5, "15", weather, date, demandCycle).baseRateBonus,
+          scenario.weatherBonus);
+        const highCount = scenario.counts[index];
+        assert.deepEqual(guide({
+          date, discountTime: "15", demandCycle,
+          globalDiscountAdjustmentPercent: scenario.global,
+        }, weather), expectedFifteen(highCount, highCount - 1, scenario.rates));
+      });
+    }
+  });
+}
+
+for (const scenario of [
+  { weatherBonus: 0, global: 0, date: FRIDAY, rate: 30 },
+  { weatherBonus: 5, global: 0, date: FRIDAY, rate: 35 },
+  { weatherBonus: 0, global: 5, date: FRIDAY, rate: 35 },
+  { weatherBonus: 10, global: 5, date: FRIDAY, rate: 45 },
+  { weatherBonus: 10, global: -5, date: FRIDAY, rate: 40 },
+  { weatherBonus: -10, global: 0, date: FRIDAY, rate: 25 },
+  { weatherBonus: -10, global: -5, date: FRIDAY, rate: 25 },
+  { weatherBonus: -10, global: 5, date: FRIDAY, rate: 30 },
+  { weatherBonus: -5, global: -5, date: FRIDAY, rate: 25 },
+  { weatherBonus: -5, global: 0, date: FRIDAY, rate: 30 },
+  { weatherBonus: -5, global: 5, date: FRIDAY, rate: 35 },
+  { weatherBonus: -10, global: -5, date: THURSDAY, rate: 30 },
+  { weatherBonus: -10, global: 5, date: THURSDAY, rate: 35 },
+] as const) {
+  test(`17時 ${scenario.date} 天候${scenario.weatherBonus}/全体${scenario.global}は判定後${scenario.rate}%`, () => {
+    const weather = { ...neutralWeather, ...weatherForBonus[scenario.weatherBonus] };
+    assert.equal(getWeekdayBaseInfo(5, "17", weather, scenario.date, "summer").baseRateBonus,
+      scenario.weatherBonus);
+    assert.deepEqual(guide({
+      date: scenario.date, demandCycle: "summer",
+      globalDiscountAdjustmentPercent: scenario.global,
+    }, weather), { discountTime: "17", ratePercent: scenario.rate });
+  });
+}
 
 for (const scenario of [
   { name: "翌日土曜", date: "2026-09-04", holiday: true },
@@ -106,11 +177,7 @@ for (const scenario of [
     for (let weekday = 0; weekday <= 6; weekday += 1) {
       assert.deepEqual(guide({
         date: scenario.date, weekday, discountTime: "15",
-      }), {
-        discountTime: "15",
-        highCount: scenario.holiday ? 3 : 2,
-        lowCount: scenario.holiday ? 2 : 1,
-      });
+      }), expectedFifteen(scenario.holiday ? 3 : 2, scenario.holiday ? 2 : 1));
       assert.deepEqual(guide({
         date: scenario.date, weekday, globalDiscountAdjustmentPercent: -5,
       }, { tempLevel: "21to25" }), {
@@ -125,18 +192,19 @@ type WeatherCase = {
   demandCycle: DemandCycle;
   weather: Partial<ResolvedWeatherInput>;
   bonus: number;
-  rates: readonly [25 | 30, 25 | 30, 25 | 30];
+  rates: readonly [number, number, number];
+  weekdayRates: readonly [number, number, number];
 };
 const weatherCases: WeatherCase[] = [
-  { name: "通常・無補正", demandCycle: "normal", weather: {}, bonus: 0, rates: [30, 30, 30] },
-  { name: "通常・快適乾燥", demandCycle: "normal", weather: { tempLevel: "21to25" }, bonus: -5, rates: [25, 30, 30] },
-  { name: "夏・超快適乾燥", demandCycle: "summer", weather: { tempLevel: "21to25" }, bonus: -10, rates: [25, 25, 25] },
-  { name: "夏・快適乾燥", demandCycle: "summer", weather: { tempLevel: "26to27" }, bonus: -5, rates: [25, 30, 30] },
-  { name: "夏・無補正", demandCycle: "summer", weather: {}, bonus: 0, rates: [30, 30, 30] },
-  { name: "通常・快適でも雨", demandCycle: "normal", weather: { tempLevel: "21to25", nearTermWeather: "rain", precipitationRateBonus: 5 }, bonus: 5, rates: [30, 30, 30] },
-  { name: "夏・超快適でも継続雨", demandCycle: "summer", weather: { tempLevel: "21to25", nearTermWeather: "rain", precipitationRateBonus: 10 }, bonus: 10, rates: [30, 30, 30] },
-  { name: "夏・雪", demandCycle: "summer", weather: { tempLevel: "21to25", nearTermWeather: "snow", precipitationRateBonus: 15 }, bonus: 15, rates: [30, 30, 30] },
-  { name: "通常・暑い", demandCycle: "normal", weather: { tempLevel: "36orMore" }, bonus: 10, rates: [30, 30, 30] },
+  { name: "通常・無補正", demandCycle: "normal", weather: {}, bonus: 0, rates: [30, 30, 35], weekdayRates: [30, 30, 35] },
+  { name: "通常・快適乾燥", demandCycle: "normal", weather: { tempLevel: "21to25" }, bonus: -5, rates: [25, 30, 35], weekdayRates: [30, 30, 35] },
+  { name: "夏・超快適乾燥", demandCycle: "summer", weather: { tempLevel: "21to25" }, bonus: -10, rates: [25, 25, 30], weekdayRates: [30, 30, 35] },
+  { name: "夏・快適乾燥", demandCycle: "summer", weather: { tempLevel: "26to27" }, bonus: -5, rates: [25, 30, 35], weekdayRates: [30, 30, 35] },
+  { name: "夏・無補正", demandCycle: "summer", weather: {}, bonus: 0, rates: [30, 30, 35], weekdayRates: [30, 30, 35] },
+  { name: "通常・快適でも雨", demandCycle: "normal", weather: { tempLevel: "21to25", nearTermWeather: "rain", precipitationRateBonus: 5 }, bonus: 5, rates: [35, 35, 40], weekdayRates: [35, 35, 40] },
+  { name: "夏・超快適でも継続雨", demandCycle: "summer", weather: { tempLevel: "21to25", nearTermWeather: "rain", precipitationRateBonus: 10 }, bonus: 10, rates: [40, 40, 45], weekdayRates: [40, 40, 45] },
+  { name: "夏・雪", demandCycle: "summer", weather: { tempLevel: "21to25", nearTermWeather: "snow", precipitationRateBonus: 15 }, bonus: 15, rates: [45, 45, 50], weekdayRates: [45, 45, 50] },
+  { name: "通常・暑い", demandCycle: "normal", weather: { tempLevel: "36orMore" }, bonus: 10, rates: [40, 40, 45], weekdayRates: [40, 40, 45] },
 ];
 
 for (const scenario of weatherCases) {
@@ -151,7 +219,7 @@ for (const scenario of weatherCases) {
       assert.deepEqual(guide({
         date: THURSDAY, demandCycle: scenario.demandCycle,
         globalDiscountAdjustmentPercent: adjustment,
-      }, scenario.weather), { discountTime: "17", ratePercent: 30 });
+      }, scenario.weather), { discountTime: "17", ratePercent: scenario.weekdayRates[index] });
     });
   });
 }
@@ -163,9 +231,15 @@ test("17時は全体補正欠損を-5と見なさず、cycle欠損は既存norma
   assert.deepEqual(guide({ demandCycle: undefined, globalDiscountAdjustmentPercent: -5 }, {
     tempLevel: "21to25",
   }), { discountTime: "17", ratePercent: 25 });
+  assert.deepEqual(guide({ discountTime: "15", globalDiscountAdjustmentPercent: undefined }, {
+    tempLevel: "36orMore",
+  }), expectedFifteen(3, 2, [30, 25, 20, 15]));
+  assert.deepEqual(guide({ globalDiscountAdjustmentPercent: undefined }, {
+    tempLevel: "36orMore",
+  }), { discountTime: "17", ratePercent: 40 });
 });
 
-test("17時は既存時間別天候を再解決せずnormal/summerの乾燥・雨を使う", () => {
+test("15/17時はnormal/summerそれぞれの既存時間別天候の合計補正を使う", () => {
   for (const demandCycle of ["normal", "summer"] as const) {
     for (const weatherKind of ["sunny", "rain"] as const) {
       const hourlyForecasts = createDefaultHourlyForecasts();
@@ -175,15 +249,20 @@ test("17時は既存時間別天候を再解決せずnormal/summerの乾燥・�
         entry.windMs = 2;
       }
       const raw: WeatherInput = { hourlyForecasts, afterRainSky: null };
-      const resolvedWeather = resolveWeatherInputForDiscount(raw, "17");
-      assert.equal(getWeekdayBaseInfo(5, "17", resolvedWeather, FRIDAY, demandCycle).baseRateBonus,
-        weatherKind === "rain" ? 10 : demandCycle === "summer" ? -10 : -5);
-      assert.deepEqual(getColdDeliGuide({
-        session: session({ demandCycle }), resolvedWeather, isFixedTimeMode: false,
-      }), {
-        discountTime: "17",
-        ratePercent: demandCycle === "summer" && weatherKind === "sunny" ? 25 : 30,
-      });
+      for (const discountTime of ["15", "17"] as const) {
+        const resolvedWeather = resolveWeatherInputForDiscount(raw, discountTime);
+        const bonus = weatherKind === "rain"
+          ? discountTime === "15" ? 5 : 10
+          : discountTime === "15" || demandCycle === "summer" ? -10 : -5;
+        assert.equal(getWeekdayBaseInfo(5, discountTime, resolvedWeather, FRIDAY, demandCycle).baseRateBonus,
+          bonus);
+        assert.deepEqual(getColdDeliGuide({
+          session: session({ discountTime, demandCycle, globalDiscountAdjustmentPercent: 5 }),
+          resolvedWeather, isFixedTimeMode: false,
+        }), discountTime === "15"
+          ? expectedFifteen(3, 2, weatherKind === "rain" ? [30, 25, 20, 15] : [25, 20, 15, 10])
+          : { discountTime: "17", ratePercent: weatherKind === "rain" ? 45 : demandCycle === "summer" ? 30 : 35 });
+      }
     }
   }
 });
@@ -207,15 +286,147 @@ test("17時は気温低下snapshotを含む既存補正値を使用する", () =
 });
 
 test("15時はnormal/summerや天候補正を個数条件へ適用しない", () => {
-  const mustNotReadWeather = new Proxy(neutralWeather, {
-    get() { throw new Error("15時の冷惣菜ガイドは天候を参照しない"); },
-  });
   for (const demandCycle of ["normal", "summer"] as const) {
-    assert.deepEqual(getColdDeliGuide({
-      session: session({ discountTime: "15", demandCycle, globalDiscountAdjustmentPercent: -5 }),
-      resolvedWeather: mustNotReadWeather, isFixedTimeMode: false,
-    }), { discountTime: "15", highCount: 4, lowCount: 3 });
+    for (const tempLevel of ["21to25", "36orMore"] as const) {
+      assert.deepEqual(guide({
+        discountTime: "15", demandCycle, globalDiscountAdjustmentPercent: -5,
+      }, { tempLevel }), expectedFifteen(4, 3,
+        tempLevel === "36orMore" ? [30, 25, 20, 15] : [20, 15, 10, 5]));
+    }
   }
+});
+
+test("15時の雨+5と快適度-5は合計0として扱い、雨のプラスだけを再加算しない", () => {
+  const weather: ResolvedWeatherInput = {
+    ...neutralWeather, nearTermWeather: "rain", precipitationRateBonus: 5,
+    tempLevel: "21to25",
+  };
+  for (const demandCycle of ["normal", "summer"] as const) {
+    assert.equal(getWeekdayBaseInfo(5, "15", weather, FRIDAY, demandCycle).baseRateBonus, 0);
+    assert.deepEqual(guide({
+      discountTime: "15", demandCycle, globalDiscountAdjustmentPercent: 5,
+    }, weather), expectedFifteen(3, 2, [25, 20, 15, 10]));
+  }
+});
+
+test("風と未来天候を含む既存補正の合計を使い、個々のプラス要素を足し直さない", () => {
+  const weather: ResolvedWeatherInput = {
+    ...neutralWeather, windLevel: "5orMore", weatherPointShift: -1,
+    weatherPointScore: 6, weatherPointRangeText: "19〜21時",
+  };
+  for (const demandCycle of ["normal", "summer"] as const) {
+    for (const discountTime of ["15", "17"] as const) {
+      assert.equal(getWeekdayBaseInfo(5, discountTime, weather, FRIDAY, demandCycle).baseRateBonus, 0);
+      assert.deepEqual(guide({
+        discountTime, demandCycle, globalDiscountAdjustmentPercent: 5,
+      }, weather), discountTime === "15"
+        ? expectedFifteen(3, 2, [25, 20, 15, 10])
+        : { discountTime: "17", ratePercent: 35 });
+    }
+  }
+});
+
+test("15/17時の気温snapshotを既存補正に反映してからプラス分を加算する", () => {
+  for (const discountTime of ["15", "17"] as const) {
+    const temperatureComfortAnalysis = evaluateTemperatureComfort({
+      date: FRIDAY, discountTime, tempLevel: "34to35",
+      previous: { date: FRIDAY, discountTime: "15", tempLevel: "36orMore", temperatureFalling: false },
+    });
+    assert.equal(temperatureComfortAnalysis.temperaturePointSuppressed, discountTime === "17");
+    const weather: ResolvedWeatherInput = {
+      ...neutralWeather, tempLevel: "34to35", temperatureComfortAnalysis,
+    };
+    assert.equal(getWeekdayBaseInfo(5, discountTime, weather, FRIDAY, "normal").baseRateBonus,
+      discountTime === "15" ? 5 : 0);
+    assert.deepEqual(guide({ discountTime, globalDiscountAdjustmentPercent: 5 }, weather),
+      discountTime === "15"
+        ? expectedFifteen(3, 2, [30, 25, 20, 15])
+        : { discountTime: "17", ratePercent: 35 });
+  }
+});
+
+test("既存の継続雪W=+20は全体-5/0/+5の全てで17時の最終率が50%となる", () => {
+  const hourlyForecasts = createDefaultHourlyForecasts();
+  for (const entry of Object.values(hourlyForecasts)) {
+    entry.weather = "snow";
+    entry.tempC = 25;
+    entry.windMs = 2;
+  }
+  for (const discountTime of ["15", "17"] as const) {
+    const resolvedWeather = resolveWeatherInputForDiscount({ hourlyForecasts, afterRainSky: null }, discountTime);
+    assert.equal(getWeekdayBaseInfo(5, discountTime, resolvedWeather, FRIDAY, "normal").baseRateBonus, 20);
+    for (const globalDiscountAdjustmentPercent of [-5, 0, 5] as const) {
+      assert.deepEqual(getColdDeliGuide({
+        session: session({ discountTime, globalDiscountAdjustmentPercent }),
+        resolvedWeather, isFixedTimeMode: false,
+      }), discountTime === "15"
+        ? expectedFifteen(globalDiscountAdjustmentPercent === -5 ? 4 : 3,
+          globalDiscountAdjustmentPercent === -5 ? 3 : 2,
+          globalDiscountAdjustmentPercent === 5 ? [45, 40, 35, 30] : [40, 35, 30, 25])
+        : { discountTime: "17", ratePercent: 50 });
+    }
+  }
+});
+
+// Real hourly-weather inputs currently produce at most W=20. These deliberately
+// synthetic resolved-weather fixtures exercise each final-rate cap independently
+// through the existing numeric weather field, without production hooks or changes.
+for (const scenario of [
+  { bonus: 29.5, rates: [49.5, 44.5, 39.5, 34.5] },
+  { bonus: 30, rates: [50, 45, 40, 35] },
+  { bonus: 30.5, rates: [50, 45.5, 40.5, 35.5] },
+  { bonus: 34.5, rates: [50, 49.5, 44.5, 39.5] },
+  { bonus: 35, rates: [50, 50, 45, 40] },
+  { bonus: 35.5, rates: [50, 50, 45.5, 40.5] },
+  { bonus: 39.5, rates: [50, 50, 49.5, 44.5] },
+  { bonus: 40, rates: [50, 50, 50, 45] },
+  { bonus: 40.5, rates: [50, 50, 50, 45.5] },
+  { bonus: 44.5, rates: [50, 50, 50, 49.5] },
+  { bonus: 45, rates: [50, 50, 50, 50] },
+  { bonus: 45.5, rates: [50, 50, 50, 50] },
+] as const) {
+  test(`15時 synthetic resolved weatherの追加${scenario.bonus}で各率を独立に50%上限とする`, () => {
+    for (const demandCycle of ["normal", "summer"] as const) {
+      for (const global of [-5, 0, 5] as const) {
+        const weather: ResolvedWeatherInput = {
+          ...neutralWeather, nearTermWeather: "rain",
+          precipitationRateBonus: scenario.bonus - Math.max(global, 0),
+        };
+        assert.equal(getWeekdayBaseInfo(5, "15", weather, FRIDAY, demandCycle).baseRateBonus,
+          scenario.bonus - Math.max(global, 0));
+        const highCount = global === -5 ? 4 : 3;
+        assert.deepEqual(guide({
+          discountTime: "15", demandCycle, globalDiscountAdjustmentPercent: global,
+        }, weather), expectedFifteen(highCount, highCount - 1, scenario.rates));
+      }
+    }
+  });
+}
+
+test("17時 synthetic resolved weatherの49.5/50/50.5%を丸めず最後に上限制御する", () => {
+  for (const global of [-5, 0, 5] as const) {
+    for (const [addition, expected] of [[19.5, 49.5], [20, 50], [20.5, 50]] as const) {
+      const weather: ResolvedWeatherInput = {
+        ...neutralWeather, nearTermWeather: "rain",
+        precipitationRateBonus: addition - Math.max(global, 0),
+      };
+      assert.equal(getWeekdayBaseInfo(5, "17", weather, FRIDAY, "normal").baseRateBonus,
+        addition - Math.max(global, 0));
+      assert.deepEqual(guide({ globalDiscountAdjustmentPercent: global }, weather),
+        { discountTime: "17", ratePercent: expected });
+    }
+  }
+});
+
+test("既存天候経路の数値へ冷惣菜独自の丸めを追加しない", () => {
+  const weather: ResolvedWeatherInput = {
+    ...neutralWeather, nearTermWeather: "rain", precipitationRateBonus: 0.5,
+  };
+  assert.equal(getWeekdayBaseInfo(5, "15", weather, FRIDAY, "normal").baseRateBonus, 0.5);
+  assert.deepEqual(guide({ discountTime: "15", globalDiscountAdjustmentPercent: 5 }, weather),
+    expectedFifteen(3, 2, [25.5, 20.5, 15.5, 10.5]));
+  assert.deepEqual(guide({ globalDiscountAdjustmentPercent: 5 }, weather),
+    { discountTime: "17", ratePercent: 35.5 });
 });
 
 test("fixed-time・session未開始・18:30/19:30/20:30は天候を読まず対象外", () => {
@@ -261,7 +472,7 @@ test("AreaCount・中央値・商品属性・数量・quick/decrease・raw天候
       resolvedWeather: neutralWeather, isFixedTimeMode: false,
     });
     assert.deepEqual(getColdDeliGuide(input), discountTime === "15"
-      ? { discountTime: "15", highCount: 3, lowCount: 2 }
+      ? expectedFifteen(3, 2)
       : { discountTime: "17", ratePercent: 30 });
   }
 });
@@ -276,9 +487,7 @@ test("表示計算はlocalStorage・sessionStorage・IndexedDBへアクセスし
         get() { throw new Error(`冷惣菜ガイドから${name}へアクセスした`); },
       });
     }
-    assert.deepEqual(guide({ discountTime: "15" }), {
-      discountTime: "15", highCount: 3, lowCount: 2,
-    });
+    assert.deepEqual(guide({ discountTime: "15" }), expectedFifteen(3, 2));
     assert.deepEqual(guide({ demandCycle: "summer" }, { tempLevel: "21to25" }), {
       discountTime: "17", ratePercent: 25,
     });
@@ -306,11 +515,11 @@ test("繰返し計算は入力・解決済み天候・気温snapshotを変更し
     const before = JSON.stringify(input);
     for (let index = 0; index < 3; index += 1) {
       assert.deepEqual(getColdDeliGuide(input), discountTime === "15"
-        ? { discountTime: "15", highCount: 3, lowCount: 2 }
+        ? expectedFifteen(3, 2)
         : { discountTime: "17", ratePercent: 25 });
     }
     assert.equal(JSON.stringify(input), before);
   }
 });
 
-console.log(`Cold deli guide checks passed: ${passed}/31`);
+console.log(`Cold deli guide checks passed: ${passed}/${passed}`);

@@ -195,6 +195,30 @@ function restoredHook(verify: (app: ReturnType<typeof useNebikiApp>) => void): v
   assert.equal(renderToString(createElement(Probe)), "<span>restored</span>");
 }
 
+function expectedColdGuide(state: AppState) {
+  assert.ok(state.session);
+  const session = state.session;
+  const weather = resolveSessionTemperatureComfort({
+    date: session.date, discountTime: session.discountTime, weather: session.weather,
+    snapshots: [], existingAnalysis: session.temperatureComfortAnalysis,
+    legacyUnresolvedTempLevel: session.legacyUnresolvedTempLevel,
+  }).resolvedWeather;
+  const weatherBonus = getWeekdayBaseInfo(session.weekday, session.discountTime,
+    weather, session.date, session.demandCycle).baseRateBonus;
+  const global = normalizeGlobalDiscountAdjustmentPercent(session.globalDiscountAdjustmentPercent);
+  const addition = Math.max(weatherBonus, 0) + Math.max(global, 0);
+  const holiday = isJapaneseHolidayOrWeekend(addDaysToDateString(session.date, 1));
+  if (session.discountTime === "15") {
+    const highCount = 2 + Number(holiday) + Number(global === -5);
+    return { discountTime: "15", highCount, lowCount: highCount - 1,
+      highRatePercent: Math.min(50, 20 + addition), highFewRatePercent: Math.min(50, 15 + addition),
+      lowRatePercent: Math.min(50, 10 + addition), lowFewRatePercent: Math.min(50, 5 + addition) };
+  }
+  assert.equal(session.discountTime, "17");
+  const base = holiday && (weatherBonus === -10 || (weatherBonus === -5 && global === -5)) ? 25 : 30;
+  return { discountTime: "17", ratePercent: Math.min(50, base + addition) };
+}
+
 for (const time of ["15", "17"] as const) {
   for (const cycle of ["normal", "summer"] as const) {
     test(`${time}/${cycle}: confirmation waits for both explicit actions and preserves unmeasured work`, () => {
@@ -251,11 +275,7 @@ for (const time of ["15", "17"] as const) {
         assert.equal(app.state.screen, expected);
         assert.equal(Boolean(app.derived.advanceDiscountInstruction), pending);
         if (pending) {
-          const highCount = 2 + Number(isJapaneseHolidayOrWeekend(addDaysToDateString(DATE, 1)));
-          assert.deepEqual(app.derived.advanceDiscountInstruction?.coldDeliGuide,
-            time === "15"
-              ? { discountTime: "15", highCount, lowCount: highCount - 1 }
-              : { discountTime: "17", ratePercent: 30 });
+          assert.deepEqual(app.derived.advanceDiscountInstruction?.coldDeliGuide, expectedColdGuide(h.state));
         }
         assert.equal(JSON.stringify(app.state).includes("coldDeliGuide"), false);
         assert.equal([...memory.values.values()].some((value) => value.includes("coldDeliGuide")), false);
@@ -313,6 +333,79 @@ for (const time of ["15", "17"] as const) {
       assert.equal(h.state.session?.startedAt, startedAt);
       assert.equal(h.state.areaProgressMap[NORMAL_ROUTE[0]].areaCount, 19);
       assert.equal(h.state.areaProgressMap[NORMAL_ROUTE[0]].areaCountEvaluation, "slightly_many");
+    });
+  }
+}
+
+for (const time of ["15", "17"] as const) {
+  for (const cycle of ["normal", "summer"] as const) {
+    for (const global of [-5, 0, 5] as const) {
+      test(`${time}/${cycle}/global${global}: cold guide rates survive initial confirmation, condition return and reload`, () => {
+        const h = harness({ state: fresh(time, cycle) });
+        h.context.globalDiscountAdjustmentPercent = global;
+        h.request(); h.confirm(); h.persist();
+        const expectedGuide = expectedColdGuide(h.state);
+        const initialSession = json(h.state.session);
+        let originalAdvanceRate: number | undefined;
+        const verify = (app: ReturnType<typeof useNebikiApp>) => {
+          assert.equal(app.state.screen, "advance_discount");
+          assert.deepEqual(app.derived.advanceDiscountInstruction?.coldDeliGuide, expectedGuide);
+          assert.deepEqual(json(app.state.session), initialSession);
+          assert.equal(JSON.stringify(app.state).includes("coldDeliGuide"), false);
+          assert.equal([...memory.values.values()].some((value) => value.includes("coldDeliGuide")), false);
+          if (originalAdvanceRate === undefined) originalAdvanceRate = app.derived.advanceDiscountInstruction?.ratePercent;
+          else assert.equal(app.derived.advanceDiscountInstruction?.ratePercent, originalAdvanceRate);
+        };
+        restoredHook(verify);
+        restoredHook(verify);
+        h.edit(); h.request(); h.confirm(); h.persist();
+        assert.deepEqual(expectedColdGuide(h.state), expectedGuide);
+        restoredHook(verify);
+        assert.equal(h.snapshots.length, 0);
+        assertUnmeasured(h.state);
+        h.proceed();
+        assert.equal(h.state.screen, "area_judge");
+        assert.deepEqual(json(h.state.session), initialSession);
+      });
+    }
+  }
+}
+
+for (const cycle of ["normal", "summer"] as const) {
+  for (const global of [-5, 0, 5] as const) {
+    test(`17/${cycle}/continuous snow/global${global}: final 50% survives confirmation, condition return and reload`, () => {
+      const state = fresh("17", cycle);
+      for (const entry of Object.values(state.sessionDraft.weather.hourlyForecasts)) {
+        entry.weather = "snow";
+        entry.tempC = 25;
+        entry.windMs = 2;
+      }
+      const h = harness({ state });
+      h.context.globalDiscountAdjustmentPercent = global;
+      h.request(); h.confirm(); h.persist();
+      assert.ok(h.state.session);
+      const resolved = resolveWeatherInputForDiscount(h.state.session.weather, "17");
+      assert.equal(getWeekdayBaseInfo(h.state.session.weekday, "17", resolved, DATE, cycle).baseRateBonus, 20);
+      const expectedGuide = { discountTime: "17", ratePercent: 50 };
+      assert.deepEqual(expectedColdGuide(h.state), expectedGuide);
+      const initialSession = json(h.state.session);
+      const verify = (app: ReturnType<typeof useNebikiApp>) => {
+        assert.equal(app.state.screen, "advance_discount");
+        assert.deepEqual(app.derived.advanceDiscountInstruction?.coldDeliGuide, expectedGuide);
+        assert.deepEqual(json(app.state.session), initialSession);
+        assert.equal(JSON.stringify(app.state).includes("coldDeliGuide"), false);
+        assert.equal([...memory.values.values()].some((value) => value.includes("coldDeliGuide")), false);
+      };
+      restoredHook(verify);
+      restoredHook(verify);
+      h.edit(); h.request(); h.confirm(); h.persist();
+      restoredHook(verify);
+      assert.deepEqual(expectedColdGuide(h.state), expectedGuide);
+      assert.equal(h.snapshots.length, 0);
+      assertUnmeasured(h.state);
+      h.proceed();
+      assert.equal(h.state.screen, "area_judge");
+      assert.deepEqual(json(h.state.session), initialSession);
     });
   }
 }

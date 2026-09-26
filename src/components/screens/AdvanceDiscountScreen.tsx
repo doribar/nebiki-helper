@@ -47,12 +47,12 @@ export function AdvanceDiscountScreen({
             {coldDeliGuide.discountTime === "15" ? (
               <div style={{ display: "grid", gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>{coldDeliGuide.highCount}個以上 → 20%</div>
-                  <div style={{ marginLeft: 12, fontSize: 16, color: "#555" }}>少ないエリア → 15%</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{coldDeliGuide.highCount}個以上 → {coldDeliGuide.highRatePercent}%</div>
+                  <div style={{ marginLeft: 12, fontSize: 16, color: "#555" }}>少ないエリア → {coldDeliGuide.highFewRatePercent}%</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>{coldDeliGuide.lowCount}個 → 10%</div>
-                  <div style={{ marginLeft: 12, fontSize: 16, color: "#555" }}>少ないエリア → 5%</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{coldDeliGuide.lowCount}個 → {coldDeliGuide.lowRatePercent}%</div>
+                  <div style={{ marginLeft: 12, fontSize: 16, color: "#555" }}>少ないエリア → {coldDeliGuide.lowFewRatePercent}%</div>
                 </div>
               </div>
             ) : (
