@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-33）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-34）
 
-最終更新: 2026-09-26 JST
+最終更新: 2026-09-27 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260926-2236.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260926-2236.zip` |
-| appVersion | `2026.8.9-33` |
-| buildId | `build-20260926-223018-jst` |
+| ZIP | `nebiki-helper-20260927-1115.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-20260927-1115.zip` |
+| appVersion | `2026.8.9-34` |
+| buildId | `build-20260927-111101-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260926-2236.zip.sha256` / `RELEASE_REPORT_2026.8.9-33.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-20260927-1115.zip.sha256` / `RELEASE_REPORT_2026.8.9-34.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/coldDeli33/nebiki-helper`。package versionは9-33、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
+application rootは成果物workspace内の `work/advanceText34/nebiki-helper`。package versionは9-34、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
 
-比較基準は9-32 ZIP `nebiki-helper-20260926-2209.zip`（SHA-256 `88e1ebd57e8acfcc3bbf862c8ad27622c389b025b935362a04c09370b81f3f46`）。9-33は冷惣菜ガイドの全5率へ、独自ルール・プラス補正を反映した最後に50%上限を適用する。その他の計算・画面・保存は非変更。詳細は `CHANGE_REPORT_2026.8.9-33.md`。`AGENTS.md` は9-32版とbyte-identicalで、過去CHANGE REPORTも変更していない。
+比較基準は9-33 ZIP `nebiki-helper-20260926-2236.zip`（SHA-256 `4dcc9baf35c51c63ad6e80d6532cd0c8d6ec85bc0adaed3b2bc31c75e2b25865`）。9-34は先行値引文中の「10個以上」の赤字化と、冷惣菜15時の下段個数列挙のみ。計算・条件・保存は非変更。詳細は `CHANGE_REPORT_2026.8.9-34.md`。`AGENTS.md` は9-33とbyte-identicalで、過去CHANGE REPORTも変更していない。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\coldDeli33\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\advanceText34\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -319,12 +319,12 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 日次・統合JSONのpure builder、過去metadata正規化、archive patch APIは互換と既存回帰検証のため維持。これらからユーザーが日次データを表示・downloadするUI/actionはない。
 - 保存容量診断とSupabase同期は維持。設定診断の「IndexedDB 1日データ」表示行のみ削除し、内部の件数計測/診断payloadは変更しない。
 
-### 9-31導入 / 9-32プラス補正 / 9-33上限: 15/17の冷惣菜ガイド
+### 9-31導入 / 9-32プラス補正 / 9-33上限 / 9-34個数表示: 15/17の冷惣菜ガイド
 
-- 既存 `AdvanceDiscountScreen` 内の「冷惣菜」section。元の先行値引3行・率計算・赤い強調・「エリア別値引へ進む」は非変更。18:30以降、Review19、fixed-timeは非表示。
+- 既存 `AdvanceDiscountScreen` 内の「冷惣菜」section。元の先行値引3行の文言・率計算・「エリア別値引へ進む」を維持。9-34で「多い」・率に加え「10個以上」だけを既存の赤字で強調し、「ある商品を」は通常色のまま。18:30以降、Review19、fixed-timeは非表示。
 - `getColdDeliGuide()` は15/17とも、既存hookの `sessionSourceResolvedWeather`（気温snapshot反映済み）を `getWeekdayBaseInfo(...).baseRateBonus` に渡して、解決済み天候合計Wを取得。雨など個々のプラス要素を足し直さない。Gはsession.globalDiscountAdjustmentPercentを既存normalizerで正規化し、欠損/不正値は0。
 - 追加分は `max(W,0) + max(G,0)`。W/Gを先に合算して相殺しない。global+5は率へ一度だけ加算し、global-5は率から引かず以下の独自条件にだけ使う。
-- 15時: 上段個数は `2 + 翌日が土日祝なら1 + G=-5なら1`、下段は1個少ない数。加算前率は20/15/10/5（上段/上段少ないエリア/下段/下段少ないエリア）。4率それぞれへ同じ追加分を加え、各最終値を独立に50%で制限して表示。通常エリアの上限適用後の率から5を引いて少ないエリアを作らない。W/G+5で個数範囲を変更しない。
+- 15時: 上段個数は `2 + 翌日が土日祝なら1 + G=-5なら1`。helperの下段lowCountは従来どおり上段より1個少ない数を保持する。9-34の下段表示は、上段highCountを元に1〜highCount-1個を「1個」「1個・2個」「1個・2個・3個」と列挙する。少ないエリアの表示には個数を付けない。加算前率は20/15/10/5（上段/上段少ないエリア/下段/下段少ないエリア）。4率それぞれへ同じ追加分を加え、各最終値を独立に50%で制限して表示。通常エリアの上限適用後の率から5を引いて少ないエリアを作らない。W/G+5で個数範囲を変更しない。
 - 17時: 元W/Gで `翌日土日祝 AND (W=-10 OR (W=-5 AND G=-5))` なら基準25%、それ以外は30%。その後に追加分を加算し、最後に50%上限を適用。翌日休日・W=-10/G=+5は25+5=30%。少ないエリア向けの率低下はなく、既存の「少ないエリア・判断に迷う場合は後回しにしてください。」を維持。
 - 翌日の休日はsession実日付から既存 `addDaysToDateString / isJapaneseHolidayOrWeekend` を使用。手動weekday、個人の休日、reference、お盆需要区分で代替しない。
 - 9-33の最終式は `min(50, B + max(W,0) + max(G,0))`。15時4率・17時1率それぞれ、加算後に上限を適用する。既存の雪によるW=+20/G=+5では17時30+20+5=55→50%。50%以下は9-32と同一で丸めは追加しない。通常値引engineの上限や20:30 forced ruleは非変更。
@@ -334,7 +334,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 通常 `DoneScreen` に `derived.basisGuide.referenceConditionLabel` を表示する。RateDisplayと同じ既存formatter / resolved referenceを使用し、手動曜日指定、holiday / Obon等の解決、summer / normalを尊重する。Review19DoneScreenは非変更。
 - 通常15/17の新しいsession開始では、天候確認を確定した後 `screen: "advance_discount"` に入り、`AdvanceDiscountScreen` を表示する。18/19/20、Review19、fixed-timeには追加しない。
-- 文面は「夏・木曜日・17時を基準に考えて」「多い商品のうち10個以上ある商品を」「10％で引いてください」の形でlabel・rateを動的表示。「多い」は既存RateDisplayと同じ赤、操作は「エリア別値引へ進む」。
+- 文面は「夏・木曜日・17時を基準に考えて」「多い商品のうち10個以上ある商品を」「10％で引いてください」の形でlabel・rateを動的表示。9-34では「多い」・率・「10個以上」は既存RateDisplayと同じ赤、「ある商品を」は通常色。操作は「エリア別値引へ進む」。
 - `getAdvanceDiscountRate()` は `getBaseRate()` + `getWeekdayBaseInfo(...resolvedWeather...).baseRateBonus` + 商品が多い固定10を、`applyGlobalDiscountAdjustmentToRate()` でsessionのglobal補正を加算し共通0〜50%へ制限する。0以下も必ず「0％で引いてください」と数値表示する。既存エリア画面の「引かない」は非変更。
 - このhelperはsessionのdate / weekday / discountTime / demandCycle / globalと既存解決済みweatherだけを受け取る。AreaCount / median / area評価 / quick / decrease / 商品個別policyを参照せず、lateTimeBonus / early-next補正も新画面の式に加えない。新画面のlabelはsessionの時刻を既存 `getReferenceConditionLabel()` で解決する。
 - 押下までは新画面のまま保存・復元し、`continueAfterAdvanceDiscount()` で既存current area / normal-flow入口へ進む。session・area mapを変更せず、架空のAreaCount・評価・完了snapshotを作らない。既存current / checkpoint / runtime保存を使い、新flagやstorage keyは増やさない。
@@ -353,20 +353,19 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 ## 12. 最新releaseの検証結果
 
 - 全 `check:*` **64/64 PASS**。package.jsonの全check名と実行結果の集合一致。
-- 冷惣菜domain **70/70**、UI **35/35 PASS**。17時55→50、50/45/40/30/25維持、15時4率の独立上限、50未満/ちょうど50/50超、丸めなし、個数条件、対象外画面・非保存を確認。15時の全率上限境界は、通常の天候計算を変更せず、合成resolved-weatherの大きな補正値を使う境界testとして区別する。
-- 9-32の実helperとの独立比較 **185,284条件 PASS**。有効な既存天候入力で、新値は各率ごとに `min(50, 9-32値)` と一致し、個数/表示対象/その他出力は同一。既存先行値引率も新旧一致。
-- 先行値引の計算 **15/15**、UI **35/35**、flow **48/48 PASS**。初回天候確定・戻り/再確定・current/checkpoint/reload復元、元の案内、session保持・保存非追加を確認。Review19/productionAnalysis/storage/export/fixed-time等の既存checkもPASS。
-- 9-32 ZIPとのbyte比較: 全97 source中96本同一。変更はcoldDeliGuide.tsの5箇所に `Math.min(50, ...)` を加えただけ。逆変換すると旧helperと完全一致。UI/hook・通常rate・weather/global・calendar・型/保存・Review19はbyte-identical。
+- 先行値引UI **35/35**、冷惣菜UI **35/35 PASS**。赤字spanが「10個以上」で終わり「ある商品を」は通常色であること、上段境界2/3/4に対する列挙、上段・少ないエリア・17時・既存ボタンの維持を確認。
+- 冷惣菜domain **70/70**、先行値引計算 **15/15**、flow **48/48 PASS**。天候/globalプラス分、50%上限、個数境界、reload/再確定、Review19/productionAnalysis/storage/export/fixed-time等も既存checkでPASS。
+- 9-33 ZIPとのbyte比較: 全97 source中96本同一。production差分はAdvanceDiscountScreenの赤字spanと下段個数表記のみ。coldDeliGuideを含むdomain全件、hook・router・型・保存・Review19はbyte-identical。
 - TypeScript / production build / PWA generateSW PASS。101 modules、precache10。chunk sizeとBrowserslist dataの既存build警告あり。
-- focused ESLint **0 errors / 0 warnings**。全体lintは9-32と同じ **9 errors / 7 warnings**。file/rule/severity/message比較で新規diagnostic **0**（message内の作業root絶対pathだけ統一）。
-- Microsoft Edge production preview自動操作（headless、390×844）**12/12 PASS**。実coreで解決したW=+20/G=+5の「すべて → 50%」、戻る/再確定/reload後の50%、50%未満のケース、既存先行値引率の不変を確認。代表スクリーンショットも目視確認。
-- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/download/popupは0。検証用Service WorkerブロックのPlaywright警告24件は別計上。
-- SQL9本、AGENTS.md、過去のCHANGE_REPORT全件、version/build生成方法・dataSchemaVersionは9-32 baselineとbyte-identical。依存関係・check一覧は非変更。
+- focused ESLint **0 errors / 0 warnings**。全体lintは9-33と同じ **9 errors / 7 warnings**。file/rule/severity/message比較で新規diagnostic **0**（message内の作業root絶対pathだけ統一）。
+- Microsoft Edge production preview自動操作（headless、390×844）**8/8 PASS**。上段境界2/3/4、赤字の範囲と後続文字の通常色、元の案内と率、17時の50%上限、reloadとエリアフローへの遷移を確認。代表スクリーンショットも目視確認。
+- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/download/popupは0。検証用Service WorkerブロックのPlaywright警告16件は別計上。
+- SQL9本、AGENTS.md、過去CHANGE_REPORT全件、version/build生成方法・dataSchemaVersionは9-33とbyte-identical。依存関係・check一覧は非変更。
 - GPT-6 Astra / Ultraのみ使用。
 
 未確認: 実店舗端末、インストール済みPWA、実Supabase通信、長時間background復帰。ブラウザは隔離fixtureと固定時計によるソフトウェア自動検証。対象外時刻・Review19・fixed-timeは自動testで確認し、本ブラウザ検証の対象外。
 
-証跡: `work/coldDeli33/checks.json`, `baseline-comparison33.json`, `comparison-work/baseline-rate-comparison33.json`, `lint-comparison33.json`, `browser-work/browser-results33.json`。ZIP再open検査とSHA-256はZIP外のrelease報告・検査JSONに記録。
+証跡: `work/advanceText34/checks.json`, `baseline-comparison34.json`, `lint-comparison34.json`, `browser-work/browser-results34.json`。ZIP再open検査とSHA-256はZIP外のrelease報告・検査JSONに記録。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -399,7 +398,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-33.md`（9-32 baselineは `CHANGE_REPORT_2026.8.9-32.md`）
+4. `CHANGE_REPORT_2026.8.9-34.md`（9-33 baselineは `CHANGE_REPORT_2026.8.9-33.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

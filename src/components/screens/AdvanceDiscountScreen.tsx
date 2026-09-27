@@ -15,6 +15,9 @@ export function AdvanceDiscountScreen({
   onContinue,
 }: AdvanceDiscountScreenProps) {
   const manyColor = "#ff0000";
+  const coldDeliLowCountText = coldDeliGuide?.discountTime === "15"
+    ? Array.from({ length: coldDeliGuide.highCount - 1 }, (_, index) => `${index + 1}個`).join("・")
+    : "";
 
   return (
     <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
@@ -31,7 +34,7 @@ export function AdvanceDiscountScreen({
         <div style={{ display: "grid", gap: 12, fontSize: 18, fontWeight: 700, lineHeight: 1.7 }}>
           <div>{referenceConditionLabel}を基準に考えて</div>
           <div>
-            <span style={{ color: manyColor, fontWeight: 700 }}>多い</span>商品のうち10個以上ある商品を
+            <span style={{ color: manyColor, fontWeight: 700 }}>多い</span>商品のうち<span style={{ color: manyColor, fontWeight: 700 }}>10個以上</span>ある商品を
           </div>
           <div>
             <span style={{ color: manyColor, fontWeight: 700 }}>{ratePercent}％</span>で引いてください
@@ -51,7 +54,7 @@ export function AdvanceDiscountScreen({
                   <div style={{ marginLeft: 12, fontSize: 16, color: "#555" }}>少ないエリア → {coldDeliGuide.highFewRatePercent}%</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>{coldDeliGuide.lowCount}個 → {coldDeliGuide.lowRatePercent}%</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{coldDeliLowCountText} → {coldDeliGuide.lowRatePercent}%</div>
                   <div style={{ marginLeft: 12, fontSize: 16, color: "#555" }}>少ないエリア → {coldDeliGuide.lowFewRatePercent}%</div>
                 </div>
               </div>

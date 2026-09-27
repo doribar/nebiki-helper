@@ -169,7 +169,7 @@ for (const rate of [0, 5, 30, 50]) {
   });
 }
 
-test("Advance many and rate use the existing RateDisplay red and bold style", () => {
+test("Advance emphasizes only many, 10-or-more and the rate with the existing RateDisplay red and bold style", () => {
   const current = renderScreen(() => RuntimeRateScreen({
     weekdayText: "木曜日", timeText: "17時", areaName: "弁当・麺", discountTime: "17",
     basisGuide: { referenceText: "木曜日の17時を基準に考えて", referenceConditionLabel: "木曜日・17時" },
@@ -179,7 +179,10 @@ test("Advance many and rate use the existing RateDisplay red and bold style", ()
   const currentMany = current.nodes.find((node) => node.type === "span" && nodeText(node) === "多い");
   assert.ok(currentMany);
   const rendered = renderAdvance("木曜日・17時");
-  for (const text of ["多い", "30％"]) {
+  assert.deepEqual(rendered.nodes.filter((node) =>
+    (node.props.style as React.CSSProperties | undefined)?.color === "#ff0000",
+  ).map(nodeText), ["多い", "10個以上", "30％"]);
+  for (const text of ["多い", "10個以上", "30％"]) {
     const emphasis = rendered.nodes.find((node) => node.type === "span" && nodeText(node) === text);
     assert.ok(emphasis);
     assert.deepEqual(
@@ -188,6 +191,12 @@ test("Advance many and rate use the existing RateDisplay red and bold style", ()
     );
     assert.ok(rendered.markup.includes(renderToStaticMarkup(emphasis)));
   }
+  const countLine = instructionLines(rendered)[1];
+  const countParts = React.Children.toArray(countLine.props.children as React.ReactNode);
+  assert.deepEqual(countParts.map(nodeText), ["多い", "商品のうち", "10個以上", "ある商品を"]);
+  assert.equal(countParts[1], "商品のうち", "connecting text remains outside red spans");
+  assert.equal(countParts[3], "ある商品を", "the red count span ends before the trailing text");
+  assert.equal((countLine.props.style as React.CSSProperties | undefined)?.color, undefined);
   assert.match(current.markup, /font-size:18px;font-weight:700;line-height:1.7;color:#ff0000/);
   assert.match(rendered.markup, /font-size:18px;font-weight:700;line-height:1.7/);
 });

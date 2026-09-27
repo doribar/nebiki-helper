@@ -97,7 +97,10 @@ function assertOriginalInstruction(rendered: ReturnType<typeof renderScreen>, la
     `${label}を基準に考えて`, "多い商品のうち10個以上ある商品を", `${rate}％で引いてください`,
   ]);
   assert.match(rendered.markup, /font-size:18px;font-weight:700;line-height:1.7/);
-  for (const text of ["多い", `${rate}％`]) {
+  assert.deepEqual(elements(lines).filter((node) =>
+    (node.props.style as React.CSSProperties | undefined)?.color === "#ff0000",
+  ).map(nodeText), ["多い", "10個以上", `${rate}％`]);
+  for (const text of ["多い", "10個以上", `${rate}％`]) {
     const emphasis = elements(lines).find((node) => node.type === "span" && nodeText(node) === text);
     assert.ok(emphasis);
     assert.deepEqual({ ...emphasis.props.style as React.CSSProperties }, { color: "#ff0000", fontWeight: 700 });
@@ -112,7 +115,7 @@ type ColdDeliGuide15 = Extract<ColdDeliGuide, { discountTime: "15" }>;
 const baselineRates15 = {
   highRatePercent: 20, highFewRatePercent: 15, lowRatePercent: 10, lowFewRatePercent: 5,
 };
-function assertFifteenGuide(guide: ColdDeliGuide15): void {
+function assertFifteenGuide(guide: ColdDeliGuide15, expectedLowerLabel: string): void {
   const label = "木曜日・15時";
   const rendered = renderScreen({ referenceConditionLabel: label, coldDeliGuide: Object.freeze(guide) });
   assertOriginalInstruction(rendered, label, 30);
@@ -124,9 +127,9 @@ function assertFifteenGuide(guide: ColdDeliGuide15): void {
     React.Children.toArray(pair.props.children as React.ReactNode).map(nodeText),
   ), [
     [`${guide.highCount}個以上 → ${guide.highRatePercent}%`, `少ないエリア → ${guide.highFewRatePercent}%`],
-    [`${guide.lowCount}個 → ${guide.lowRatePercent}%`, `少ないエリア → ${guide.lowFewRatePercent}%`],
+    [`${expectedLowerLabel} → ${guide.lowRatePercent}%`, `少ないエリア → ${guide.lowFewRatePercent}%`],
   ]);
-  assert.equal(nodeText(section), `冷惣菜${guide.highCount}個以上 → ${guide.highRatePercent}%少ないエリア → ${guide.highFewRatePercent}%${guide.lowCount}個 → ${guide.lowRatePercent}%少ないエリア → ${guide.lowFewRatePercent}%`);
+  assert.equal(nodeText(section), `冷惣菜${guide.highCount}個以上 → ${guide.highRatePercent}%少ないエリア → ${guide.highFewRatePercent}%${expectedLowerLabel} → ${guide.lowRatePercent}%少ないエリア → ${guide.lowFewRatePercent}%`);
   assert.doesNotMatch(renderToStaticMarkup(section), /後回し|すべて|条件|場合|翌日|補正|自分で|足して/);
   assertColdContentRestrictions(section);
 }
@@ -139,27 +142,27 @@ function test(name: string, run: () => void): void {
 }
 
 const thresholdCases = [
-  { name: "next weekday / adjustment 0", highCount: 2, lowCount: 1 },
-  { name: "next weekend or holiday / adjustment 0", highCount: 3, lowCount: 2 },
-  { name: "next weekday / adjustment -5", highCount: 3, lowCount: 2 },
-  { name: "next weekend or holiday / adjustment -5", highCount: 4, lowCount: 3 },
+  { name: "next weekday / adjustment 0", highCount: 2, lowCount: 1, lowerLabel: "1個" },
+  { name: "next weekend or holiday / adjustment 0", highCount: 3, lowCount: 2, lowerLabel: "1個・2個" },
+  { name: "next weekday / adjustment -5", highCount: 3, lowCount: 2, lowerLabel: "1個・2個" },
+  { name: "next weekend or holiday / adjustment -5", highCount: 4, lowCount: 3, lowerLabel: "1個・2個・3個" },
 ];
 for (const fixture of thresholdCases) {
-  test(`15: ${fixture.name} renders concrete supplied thresholds and their separate few-area rates`, () => {
-    assertFifteenGuide({ discountTime: "15", highCount: fixture.highCount, lowCount: fixture.lowCount, ...baselineRates15 });
+  test(`15: ${fixture.name} lists every lower count below the supplied upper threshold with separate few-area rates`, () => {
+    assertFifteenGuide({ discountTime: "15", highCount: fixture.highCount, lowCount: fixture.lowCount, ...baselineRates15 }, fixture.lowerLabel);
   });
 }
 
 // These are already-calculated display props from the requested examples; domain checks verify their calculation.
 const rateCases15 = [
-  { name: "weather 0 / global 0", highCount: 2, lowCount: 1, rates: [20, 15, 10, 5] },
-  { name: "weather +5 / global 0", highCount: 2, lowCount: 1, rates: [25, 20, 15, 10] },
-  { name: "weather 0 / global +5", highCount: 2, lowCount: 1, rates: [25, 20, 15, 10] },
-  { name: "weather +10 / global +5", highCount: 2, lowCount: 1, rates: [35, 30, 25, 20] },
-  { name: "weather +10 / global -5", highCount: 3, lowCount: 2, rates: [30, 25, 20, 15] },
-  { name: "weather -10 / global +5", highCount: 2, lowCount: 1, rates: [25, 20, 15, 10] },
-  { name: "weather -10 / global -5", highCount: 3, lowCount: 2, rates: [20, 15, 10, 5] },
-  { name: "user display example: weather +5 / global +5", highCount: 2, lowCount: 1, rates: [30, 25, 20, 15] },
+  { name: "weather 0 / global 0", highCount: 2, lowCount: 1, lowerLabel: "1個", rates: [20, 15, 10, 5] },
+  { name: "weather +5 / global 0", highCount: 2, lowCount: 1, lowerLabel: "1個", rates: [25, 20, 15, 10] },
+  { name: "weather 0 / global +5", highCount: 2, lowCount: 1, lowerLabel: "1個", rates: [25, 20, 15, 10] },
+  { name: "weather +10 / global +5", highCount: 2, lowCount: 1, lowerLabel: "1個", rates: [35, 30, 25, 20] },
+  { name: "weather +10 / global -5", highCount: 3, lowCount: 2, lowerLabel: "1個・2個", rates: [30, 25, 20, 15] },
+  { name: "weather -10 / global +5", highCount: 2, lowCount: 1, lowerLabel: "1個", rates: [25, 20, 15, 10] },
+  { name: "weather -10 / global -5", highCount: 3, lowCount: 2, lowerLabel: "1個・2個", rates: [20, 15, 10, 5] },
+  { name: "user display example: weather +5 / global +5", highCount: 2, lowCount: 1, lowerLabel: "1個", rates: [30, 25, 20, 15] },
 ];
 for (const fixture of rateCases15) {
   test(`15: next weekday / ${fixture.name} displays all four supplied final rates`, () => {
@@ -167,7 +170,7 @@ for (const fixture of rateCases15) {
     assertFifteenGuide({
       discountTime: "15", highCount: fixture.highCount, lowCount: fixture.lowCount,
       highRatePercent, highFewRatePercent, lowRatePercent, lowFewRatePercent,
-    });
+    }, fixture.lowerLabel);
   });
 }
 
@@ -208,7 +211,7 @@ test("supplied final 50% and fractional cold deli rates render unchanged without
   assertFifteenGuide({
     discountTime: "15", highCount: 3, lowCount: 2,
     highRatePercent: 50, highFewRatePercent: 50, lowRatePercent: 49.5, lowFewRatePercent: 44.5,
-  });
+  }, "1個・2個");
   for (const ratePercent of [49.5, 50]) {
     const section = coldSection(renderScreen({ coldDeliGuide: { discountTime: "17", ratePercent } }));
     assert.equal(nodeText(section), `冷惣菜すべて → ${ratePercent}%少ないエリア・判断に迷う場合は後回しにしてください。`);
@@ -248,7 +251,8 @@ test("production helper supplies final 50% rates to the unchanged presentation",
     assert.ok(fifteen?.discountTime === "15");
     assert.deepEqual([fifteen.highRatePercent, fifteen.highFewRatePercent,
       fifteen.lowRatePercent, fifteen.lowFewRatePercent], rates);
-    assertFifteenGuide(fifteen);
+    assert.deepEqual([fifteen.highCount, fifteen.lowCount], [3, 2], "numeric helper thresholds remain unchanged");
+    assertFifteenGuide(fifteen, "1個・2個");
   }
 });
 
@@ -278,7 +282,7 @@ test("cold deli rates stay independent of the existing supplied advance rate and
         assert.deepEqual(instructionLines(rendered).map((line) => renderToStaticMarkup(line)),
           instructionLines(original).map((line) => renderToStaticMarkup(line)));
         const expected = guide.discountTime === "15"
-          ? `冷惣菜4個以上 → ${guide.highRatePercent}%少ないエリア → ${guide.highFewRatePercent}%3個 → ${guide.lowRatePercent}%少ないエリア → ${guide.lowFewRatePercent}%`
+          ? `冷惣菜4個以上 → ${guide.highRatePercent}%少ないエリア → ${guide.highFewRatePercent}%1個・2個・3個 → ${guide.lowRatePercent}%少ないエリア → ${guide.lowFewRatePercent}%`
           : `冷惣菜すべて → ${guide.ratePercent}%少ないエリア・判断に迷う場合は後回しにしてください。`;
         assert.equal(nodeText(coldSection(rendered)), expected);
       }
