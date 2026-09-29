@@ -46,6 +46,27 @@ function getLabelLines(evaluation: AreaCountEvaluation): string[] {
   return label.startsWith("やや") ? ["やや", label.slice(2)] : [label];
 }
 
+type HumanEvaluationSelectorProps = {
+  ariaLabel: string;
+  disabled?: boolean;
+  layout: "stacked" | "compact";
+  resetKey?: string;
+  value?: HumanEvaluationDetails | null;
+  showRateAdjustments?: boolean;
+  onLongPressActivated?: () => void;
+} & (
+  | {
+      interactionMode?: "long-press";
+      onCommit: (selection: HumanEvaluationSelection) => void;
+      onSelectionChange?: never;
+    }
+  | {
+      interactionMode: "tap-toggle";
+      onSelectionChange: (selection: HumanEvaluationSelection | null) => void;
+      onCommit?: never;
+    }
+);
+
 export function HumanEvaluationSelector({
   ariaLabel,
   disabled = false,
@@ -54,17 +75,10 @@ export function HumanEvaluationSelector({
   value,
   showRateAdjustments = false,
   onLongPressActivated,
+  interactionMode,
   onCommit,
-}: {
-  ariaLabel: string;
-  disabled?: boolean;
-  layout: "stacked" | "compact";
-  resetKey?: string;
-  value?: HumanEvaluationDetails | null;
-  showRateAdjustments?: boolean;
-  onLongPressActivated?: () => void;
-  onCommit: (selection: HumanEvaluationSelection) => void;
-}) {
+  onSelectionChange,
+}: HumanEvaluationSelectorProps) {
   const effectiveResetKey = resetKey ?? ariaLabel;
   const [intermediateSelection, setIntermediateSelection] = useState<{
     resetKey: string;
@@ -75,6 +89,7 @@ export function HumanEvaluationSelector({
     setIntermediateSelection({ resetKey: effectiveResetKey, value: null });
   }
   const firstSelection =
+    interactionMode !== "tap-toggle" &&
     intermediateSelection.resetKey === effectiveResetKey
       ? intermediateSelection.value
       : null;
@@ -174,11 +189,11 @@ export function HumanEvaluationSelector({
     // resetKey変更時は描画上ただちにidle扱いにし、外部gesture資源だけを後始末する。
     clearPendingPress();
     clearClickSuppression();
-  }, [clearClickSuppression, clearPendingPress, effectiveResetKey]);
+  }, [clearClickSuppression, clearPendingPress, effectiveResetKey, interactionMode]);
 
   const commit = (first: AreaCountEvaluation, second?: AreaCountEvaluation) => {
     const selection = createHumanEvaluationSelection(first, second);
-    if (!selection) return;
+    if (!selection || interactionMode === "tap-toggle") return;
     cancelIntermediateSelection();
     onCommit(selection);
   };
@@ -211,6 +226,8 @@ export function HumanEvaluationSelector({
     } catch {
       // Pointer capture非対応・既に無効なpointerでもtimer/cancel経路は維持する。
     }
+    // タップ切替では移動・cancelの保護だけを共用し、長押し処理は開始しない。
+    if (interactionMode === "tap-toggle") return;
     const pointerId = event.pointerId;
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
@@ -291,12 +308,28 @@ export function HumanEvaluationSelector({
     }
   };
 
+  const selections: AreaCountEvaluation[] = value?.humanEvaluationSelections ?? [];
   const handleClick = (evaluation: AreaCountEvaluation) => {
     if (suppressNextClickRef.current) {
       suppressNextClickRef.current = false;
       return;
     }
     if (disabled) return;
+    if (interactionMode === "tap-toggle") {
+      if (selections.includes(evaluation)) {
+        const remaining = selections.filter((selection) => selection !== evaluation);
+        onSelectionChange(
+          remaining.length > 0 ? createHumanEvaluationSelection(remaining[0]) : null,
+        );
+        return;
+      }
+      if (selections.length >= 2) return;
+      const selection = selections.length === 0
+        ? createHumanEvaluationSelection(evaluation)
+        : createHumanEvaluationSelection(selections[0], evaluation);
+      if (selection) onSelectionChange(selection);
+      return;
+    }
     if (firstSelection === null) {
       commit(evaluation);
       return;
@@ -308,7 +341,7 @@ export function HumanEvaluationSelector({
   const allowedSecondChoices = firstSelection
     ? new Set(getHumanEvaluationSecondChoices(firstSelection))
     : null;
-  const committedSelections = new Set(value?.humanEvaluationSelections ?? []);
+  const committedSelections = new Set(selections);
   const isCompact = layout === "compact";
   const containerStyle: CSSProperties = isCompact
     ? {
@@ -348,7 +381,13 @@ export function HumanEvaluationSelector({
             option.value === firstSelection || committedSelections.has(option.value);
           const invalidSecond =
             allowedSecondChoices !== null && !allowedSecondChoices.has(option.value);
-          const optionDisabled = disabled || invalidSecond;
+          const invalidToggle =
+            interactionMode === "tap-toggle" &&
+            !committedSelections.has(option.value) &&
+            (selections.length >= 2 ||
+              (selections.length === 1 &&
+                !getHumanEvaluationSecondChoices(selections[0]).includes(option.value)));
+          const optionDisabled = disabled || invalidSecond || invalidToggle;
           const labelLines = getLabelLines(option.value);
           return (
             <button
@@ -392,7 +431,7 @@ export function HumanEvaluationSelector({
                 userSelect: "none",
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
-                opacity: invalidSecond ? 0.45 : 1,
+                opacity: invalidSecond || invalidToggle ? 0.45 : 1,
               }}
             >
               {isCompact ? (

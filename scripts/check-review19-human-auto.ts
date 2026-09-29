@@ -808,7 +808,8 @@ test("入力画面は共通9段階selectorを使い中央値・自動評価を�
   assert.ok(review19Source.includes("HumanEvaluationSelector"));
   assert.ok(review19Source.includes('ariaLabel="人間目線の9段階残数評価"'));
   assert.ok(review19Source.includes('layout="compact"'));
-  assert.ok(review19Source.includes("onLongPressActivated={cancelSwipeGesture}"));
+  assert.ok(review19Source.includes('interactionMode="tap-toggle"'));
+  assert.ok(review19Source.includes("onSelectionChange={(selection) =>"));
   assert.ok(selectorSource.includes("evaluationText"));
   for (const value of [
     'value: "many"',

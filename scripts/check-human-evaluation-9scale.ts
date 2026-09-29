@@ -413,7 +413,7 @@ test("Review19 records raw odd/even observations without resolving for discount"
   }
 });
 
-test("both manual UIs retain one shared five-button selector and long-press safeguards", () => {
+test("both manual UIs share five buttons while only Review19 opts into tap-toggle", () => {
   const selectorSource = readFileSync(
     new URL("../src/components/common/HumanEvaluationSelector.tsx", import.meta.url),
     "utf8",
@@ -461,10 +461,13 @@ test("both manual UIs retain one shared five-button selector and long-press safe
     assert.match(source, /import\s+\{\s*HumanEvaluationSelector\s*\}/);
     assert.equal((source.match(/<HumanEvaluationSelector\b/g) ?? []).length, 1);
     assert.ok(source.includes(`layout="${layout}"`), `${name} lost ${layout} layout`);
-    assert.ok(
-      source.includes("onLongPressActivated={cancelSwipeGesture}"),
-      `${name} no longer cancels swipe after a long press`,
-    );
+    if (name === "AreaJudge") {
+      assert.ok(source.includes("onLongPressActivated={cancelSwipeGesture}"));
+      assert.ok(!source.includes('interactionMode="tap-toggle"'));
+    } else {
+      assert.ok(source.includes('interactionMode="tap-toggle"'));
+      assert.ok(source.includes("onSelectionChange={(selection) =>"));
+    }
   }
 });
 

@@ -143,7 +143,7 @@ export function Review19Screen({
     : null;
   const [humanEvaluationDraft, setHumanEvaluationDraft] = useState<{
     key: string;
-    details: HumanEvaluationDetails;
+    details: HumanEvaluationDetails | null;
   } | null>(null);
   const humanEvaluationDetails =
     humanEvaluationDraft?.key === activeHumanEvaluationKey
@@ -663,21 +663,29 @@ export function Review19Screen({
               >
                 売場を見た残数評価
               </div>
-              <HumanEvaluationSelector
-                ariaLabel="人間目線の9段階残数評価"
-                disabled={countCalculatorResult === null}
-                layout="compact"
-                resetKey={activeHumanEvaluationKey ?? activeItem.areaId}
-                value={humanEvaluationDetails}
-                onLongPressActivated={cancelSwipeGesture}
-                onCommit={(selection) => {
-                  if (!activeHumanEvaluationKey) return;
-                  setHumanEvaluationDraft({
-                    key: activeHumanEvaluationKey,
-                    details: createDisplayHumanEvaluationDetails(selection),
-                  });
-                }}
-              />
+              <div onTouchStart={(event) => {
+                cancelSwipeGesture();
+                event.stopPropagation();
+              }}>
+                <HumanEvaluationSelector
+                  ariaLabel="人間目線の9段階残数評価"
+                  disabled={countCalculatorResult === null}
+                  layout="compact"
+                  interactionMode="tap-toggle"
+                  resetKey={activeHumanEvaluationKey ?? activeItem.areaId}
+                  value={humanEvaluationDetails}
+                  onSelectionChange={(selection) => {
+                    if (!activeHumanEvaluationKey) return;
+                    setHumanEvaluationDraft({
+                      key: activeHumanEvaluationKey,
+                      details: selection ? createDisplayHumanEvaluationDetails(selection) : null,
+                    });
+                  }}
+                />
+                <div style={{ marginTop: 8, fontSize: 12, color: "#555", lineHeight: 1.5 }}>
+                  タップで選択・解除。迷う場合は隣り合う2つを選択。
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={completeCountEntry}
