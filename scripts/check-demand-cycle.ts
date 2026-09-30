@@ -372,22 +372,26 @@ test("07. 戻る操作と自動遷移でもサイクルが維持される", () =
   assert.ok(readRepoFile("src/hooks/useNebikiApp.ts").includes("demandCycle: activeDemandCycle"));
 });
 
-test("08. 通常履歴は夏判定へ混ざらない", () => {
+test("08. 夏判定が通常の残数履歴を参照する", () => {
   const result = recommendation({
     records: recordsForDates(CURRENT_YEAR_WEEKDAYS.slice(0, 3), 99, "normal"),
     demandCycle: "summer",
   });
-  assert.equal(result.status, "insufficient");
-  assert.equal(result.sampleSize, 0);
+  assert.equal(result.status, "ready");
+  assert.equal(result.sampleSize, 3);
+  assert.equal(result.medianCount, 99);
+  assert.equal(result.demandCycle, "summer");
 });
 
-test("09. 夏履歴は通常判定へ混ざらない", () => {
+test("09. 通常判定が夏の残数履歴を参照する", () => {
   const result = recommendation({
     records: recordsForDates(CURRENT_YEAR_WEEKDAYS.slice(0, 3), 9, "summer"),
     demandCycle: "normal",
   });
-  assert.equal(result.status, "insufficient");
-  assert.equal(result.sampleSize, 0);
+  assert.equal(result.status, "ready");
+  assert.equal(result.sampleSize, 3);
+  assert.equal(result.medianCount, 9);
+  assert.equal(result.demandCycle, "normal");
 });
 
 test("10. 需要サイクルなし履歴は通常として扱われる", () => {
@@ -443,9 +447,9 @@ test("11. 19時チェック・日次スナップショット・エクスポー�
   assert.equal(exported.records[0]?.demandCycle, "summer");
 });
 
-test("12. 20時30分中央値もサイクル別になる", () => {
+test("12. 20時30分中央値もサイクル共通になる", () => {
   const normal = recordsForDates(
-    CURRENT_YEAR_WEEKDAYS.slice(0, 3),
+    PRIOR_YEAR_WEEKDAYS.slice(0, 3),
     90,
     "normal",
     "20",
@@ -466,23 +470,23 @@ test("12. 20時30分中央値もサイクル別になる", () => {
     demandCycle: "summer",
     discountTime: "20",
   });
-  assert.equal(normalResult.medianCount, 90);
-  assert.equal(summerResult.medianCount, 9);
+  assert.equal(normalResult.medianCount, 50);
+  assert.equal(summerResult.medianCount, 50);
+  assert.equal(normalResult.sampleSize, 6);
+  assert.equal(summerResult.sampleSize, 6);
 });
 
-test("13. 減少率履歴もサイクル別になる", () => {
+test("13. 減少率履歴もサイクル共通になる", () => {
   const records: AreaCountRecord[] = [];
-  for (const date of CURRENT_YEAR_WEEKDAYS.slice(0, 3)) {
+  for (const [index, date] of CURRENT_YEAR_WEEKDAYS.entries()) {
+    const demandCycle = index % 2 === 0 ? "summer" : "normal";
     records.push(
-      makeRecord({ date, count: 10, demandCycle: "summer", discountTime: "15" }),
-      makeRecord({ date, count: 2, demandCycle: "summer", discountTime: "17" }),
-      makeRecord({ date, count: 10, demandCycle: "normal", discountTime: "15" }),
-      makeRecord({ date, count: 10, demandCycle: "normal", discountTime: "17" }),
+      makeRecord({ date, count: 10, demandCycle, discountTime: "15" }),
+      makeRecord({ date, count: 2, demandCycle, discountTime: "17" }),
     );
   }
   records.push(
     makeRecord({ date: TARGET_DATE, count: 10, demandCycle: "summer", discountTime: "15" }),
-    makeRecord({ date: TARGET_DATE, count: 10, demandCycle: "normal", discountTime: "15" }),
   );
 
   const summer = recommendation({ records, demandCycle: "summer", count: 6 });
@@ -490,13 +494,15 @@ test("13. 減少率履歴もサイクル別になる", () => {
   assert.equal(summer.status, "ready");
   assert.equal(normal.status, "ready");
   assertApproximately(summer.decreaseRecommendation?.medianDecreaseRate, 0.8);
-  assertApproximately(normal.decreaseRecommendation?.medianDecreaseRate, 0);
+  assertApproximately(normal.decreaseRecommendation?.medianDecreaseRate, 0.8);
   assert.equal(summer.decreaseRecommendation?.direction, "more_many");
-  assert.equal(normal.decreaseRecommendation?.direction, "more_few");
+  assert.equal(normal.decreaseRecommendation?.direction, "more_many");
+  assert.equal(normal.decreaseRecommendation?.sampleSize, 4);
+  assert.equal(summer.decreaseRecommendation?.sampleSize, 4);
 });
 
 for (const [number, count] of [[14, 0], [15, 1], [16, 2]] as const) {
-  test(`${String(number).padStart(2, "0")}. 今年の夏グループ${count}件では手動判定`, () => {
+  test(`${String(number).padStart(2, "0")}. 通年グループ${count}件では手動判定`, () => {
     const records = recordsForDates(
       CURRENT_YEAR_GROUP_OTHER_DAYS.slice(0, count),
       10,
@@ -509,7 +515,7 @@ for (const [number, count] of [[14, 0], [15, 1], [16, 2]] as const) {
   });
 }
 
-test("17. 今年の夏グループ3件でグループ自動判定を開始する", () => {
+test("17. 通年グループ3件でグループ自動判定を開始する", () => {
   const result = recommendation({
     records: recordsForDates(
       CURRENT_YEAR_GROUP_OTHER_DAYS.slice(0, 3),
@@ -523,24 +529,25 @@ test("17. 今年の夏グループ3件でグループ自動判定を開始する
   assert.equal(result.sampleSize, 3);
 });
 
-test("18. 前年以前に大量の夏データがあっても今年0〜2件なら手動", () => {
+test("18. 前年以前の夏データも通年グループの開始件数へ含める", () => {
   const records = [
     ...recordsForDates(PRIOR_YEAR_GROUP_OTHER_DAYS.slice(0, 10), 80, "summer"),
     ...recordsForDates(CURRENT_YEAR_GROUP_OTHER_DAYS.slice(0, 2), 10, "summer"),
   ];
   const result = recommendation({ records, demandCycle: "summer" });
-  assert.equal(result.status, "insufficient");
-  assert.equal(result.sampleSize, 2);
+  assert.equal(result.status, "ready");
+  assert.equal(result.sampleSize, 12);
+  assert.equal(result.comparisonMode, "fallback_group");
 });
 
-test("19. 前年以前の夏データは今年の3件判定へ含まれない", () => {
+test("19. 前年以前も直近の通年短期履歴へ含める", () => {
   const records = [
     ...recordsForDates(PRIOR_YEAR_GROUP_OTHER_DAYS.slice(0, 6), 80, "summer"),
     ...recordsForDates(CURRENT_YEAR_GROUP_OTHER_DAYS.slice(0, 2), 10, "summer"),
   ];
   const result = recommendation({ records, demandCycle: "summer" });
-  assert.equal(result.sampleSize, 2);
-  assert.ok(result.matchedRecords.every((record) => yearForDate(record.date) === 2027));
+  assert.equal(result.sampleSize, 8);
+  assert.ok(result.matchedRecords.some((record) => yearForDate(record.date) < 2027));
 });
 
 test("20. 同じ曜日が3件未満でグループが3件以上ならグループ判定", () => {
@@ -598,46 +605,46 @@ test("23. 現行の祝日・強制グループ例外が維持される", () => {
   assert.equal(result.comparisonMode, "fallback_group");
 });
 
-test("24. 夏短期は今年の夏データだけ", () => {
+test("24. 夏短期も今年と前年を共通参照する", () => {
   const records = [
     ...recordsForDates(CURRENT_YEAR_WEEKDAYS.slice(0, 3), 10, "summer"),
     ...recordsForDates(PRIOR_YEAR_WEEKDAYS.slice(0, 3), 100, "summer"),
   ];
   const result = recommendation({ records, demandCycle: "summer" });
-  assert.equal(result.shortMedianCount, 10);
-  assert.equal(result.shortSampleSize, 3);
-  assert.ok(result.matchedRecords.every((record) => yearForDate(record.date) === 2027));
+  assert.equal(result.shortMedianCount, 55);
+  assert.equal(result.shortSampleSize, 6);
+  assert.ok(result.matchedRecords.some((record) => yearForDate(record.date) < 2027));
 });
 
-test("25. 夏短期へ前年夏が混ざらない", () => {
+test("25. 夏短期へ前年夏も直近16件以内なら含める", () => {
   const records = [
     ...recordsForDates(CURRENT_YEAR_WEEKDAYS.slice(0, 3), 10, "summer"),
     ...recordsForDates(PRIOR_YEAR_WEEKDAYS.slice(0, 8), 100, "summer"),
   ];
   const result = recommendation({ records, demandCycle: "summer" });
-  assert.equal(result.shortSampleSize, 3);
-  assert.equal(result.shortMedianCount, 10);
-  assert.equal(result.matchedRecords.some((record) => yearForDate(record.date) < 2027), false);
+  assert.equal(result.shortSampleSize, 11);
+  assert.equal(result.shortMedianCount, 100);
+  assert.equal(result.matchedRecords.some((record) => yearForDate(record.date) < 2027), true);
 });
 
-test("26. 夏長期は前年以前の夏データだけ", () => {
+test("26. 夏長期も今年と前年を共通参照する", () => {
   const records = [
     ...recordsForDates(CURRENT_YEAR_WEEKDAYS.slice(0, 3), 10, "summer"),
     ...recordsForDates(PRIOR_YEAR_WEEKDAYS.slice(0, 3), 15, "summer"),
   ];
   const result = recommendation({ records, demandCycle: "summer" });
-  assert.equal(result.longSampleSize, 3);
-  assert.equal(result.longMedianCount, 15);
+  assert.equal(result.longSampleSize, 6);
+  assert.equal(result.longMedianCount, 13);
 });
 
-test("27. 夏長期へ今年の夏データが混ざらない", () => {
+test("27. 夏長期へ今年の夏データも含める", () => {
   const records = [
     ...recordsForDates(CURRENT_YEAR_WEEKDAYS.slice(0, 4), 1, "summer"),
     ...recordsForDates(PRIOR_YEAR_WEEKDAYS.slice(0, 3), 20, "summer"),
   ];
   const result = recommendation({ records, demandCycle: "summer" });
-  assert.equal(result.longSampleSize, 3);
-  assert.equal(result.longMedianCount, 20);
+  assert.equal(result.longSampleSize, 7);
+  assert.equal(result.longMedianCount, 1);
 });
 
 test("28. 前年以前の夏データなしでも今年3件で自動判定できる", () => {
@@ -647,16 +654,14 @@ test("28. 前年以前の夏データなしでも今年3件で自動判定でき
   });
   assert.equal(result.status, "ready");
   assert.equal(result.comparisonMode, "weekday");
-  assert.equal(result.longSampleSize, 0);
-  assert.equal(result.longMedianCount, undefined);
+  assert.equal(result.longSampleSize, 3);
+  assert.equal(result.longMedianCount, 10);
   assert.equal(result.medianCount, 10);
 });
 
-test("29. 同じ曜日判定では今年短期と前年以前長期の最大2個ガードが働く", () => {
-  const records = [
-    ...recordsForDates(CURRENT_YEAR_WEEKDAYS.slice(0, 3), 10, "summer"),
-    ...recordsForDates(PRIOR_YEAR_WEEKDAYS.slice(0, 3), 15, "summer"),
-  ];
+test("29. 同曜日の通年ローリング短期・長期へ最大2個ガードが働く", () => {
+  const dates = collectDates({ before: TARGET_DATE, weekday: TARGET_WEEKDAY, count: 52, yearMatches: () => true });
+  const records = dates.map((date, index) => makeRecord({ date, count: index < 16 ? 10 : 15, demandCycle: index % 2 ? "summer" : "normal" }));
   const result = recommendation({ records, demandCycle: "summer" });
   assert.equal(result.comparisonMode, "weekday");
   assert.equal(result.shortMedianCount, 10);
@@ -665,11 +670,9 @@ test("29. 同じ曜日判定では今年短期と前年以前長期の最大2個
   assert.equal(result.medianDownGuardApplied, true);
 });
 
-test("30. 曜日グループ判定では長期ガードを適用しない", () => {
-  const records = [
-    ...recordsForDates(CURRENT_YEAR_GROUP_OTHER_DAYS.slice(0, 3), 10, "summer"),
-    ...recordsForDates(PRIOR_YEAR_GROUP_OTHER_DAYS.slice(0, 3), 15, "summer"),
-  ];
+test("30. 通年曜日グループ判定では長期ガードを適用しない", () => {
+  const dates = collectDates({ before: TARGET_DATE, weekday: 3, count: 52, yearMatches: () => true, weekdayGroup: TARGET_GROUP });
+  const records = dates.map((date, index) => makeRecord({ date, count: index < 16 ? 10 : 15, demandCycle: index % 2 ? "summer" : "normal" }));
   const result = recommendation({ records, demandCycle: "summer" });
   assert.equal(result.comparisonMode, "fallback_group");
   assert.equal(result.shortMedianCount, 10);

@@ -800,7 +800,7 @@ export function AreaJudgeScreen({
                     lineHeight: 1.6,
                   }}
                 >
-                  夏季モード基準：夏の残数基準で手動判定します。
+                  残数基準で手動判定します。
                 </div>
               ) : null}
               <BasisTimeMiniPanel

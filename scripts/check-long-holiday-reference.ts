@@ -269,10 +269,9 @@ test("土曜3件が十分でも内部17時は金曜3件と合算し、土曜単�
   }
 });
 
-test("金土履歴不足を同曜日履歴で補わず、normalとsummerは混ぜない", () => {
+test("金土履歴不足を同曜日履歴で補わず、夏の金土履歴は共通参照する", () => {
   const date = "2026-09-21";
   const records = history(2026).filter((record) => record.actualWeekday === "月");
-  records.push(...history(2026, "17", "summer"));
   const result = recommendation(date, records);
   assert.equal(result.status, "insufficient");
   assert.equal(result.comparisonMode, "fallback_group");
@@ -282,6 +281,14 @@ test("金土履歴不足を同曜日履歴で補わず、normalとsummerは混�
   const stored = calendar(date, buildAreaCountDecisionBasis({ recommendation: result }));
   assert.equal(stored.areaCountReference[0]?.referenceWeekdayGroup, "金土");
   assert.equal(stored.areaCountReference[0]?.reason, "insufficient_history");
+  records.push(...history(2026, "17", "summer"));
+  const shared = recommendation(date, records);
+  assert.equal(shared.status, "ready");
+  assert.equal(shared.comparisonMode, "fallback_group");
+  assert.equal(shared.actualWeekdayGroup, "金土");
+  assert.equal(shared.medianCount, 20);
+  assert.ok(shared.matchedRecords.every((record) => record.actualWeekday === "金" || record.actualWeekday === "土"));
+  assert.ok(shared.matchedRecords.every((record) => record.demandCycle === "summer"));
 });
 
 test("三連休は従来の中間referenceを優先し、前後日にも長期ルールを広げない", () => {
@@ -424,17 +431,21 @@ test("productionAnalysisは同じ観測値と判断を持つ新旧calendarContex
   assert.equal(legacy.areas.bento_men.areaCountEvaluation, current.areas.bento_men.areaCountEvaluation);
 });
 
-// Captured from the verified 2026.8.9-28 source before this change. These fixed
-// fingerprints keep this check self-contained; no old checkout is read at run time.
-const GOLDEN_NON17 = "d36c310dd3a14df208fbf42b2e21e530a2385b5c23f64b67b81e99367738e687";
+// Reference/insufficient semantics were rechecked against the verified 9-35
+// baseline. Only summaryText/detailLines are omitted because 9-36 intentionally
+// removes summer-only history wording. All reference and calculation fields
+// remain pinned; no old checkout is needed when this check runs.
+const GOLDEN_NON17 = "b0b546a1476a57f4483cc7e169bce952af576141d10cd967b20cbe29c098626f";
 const GOLDEN_RATES = "6627b95b633e13e93beb137abd3ed315fe4167ea38d3ff64ed396f345156ad67";
 const goldenDates = ["2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2028-05-06", "2029-05-05"];
 
-test("非17時のreference・履歴比較・履歴不足表示64条件は9-28の実結果と同一", () => {
+test("非17時のreference・履歴比較・履歴不足条件64条件はbaselineと同一", () => {
   const values: unknown[] = [];
   for (const date of goldenDates) for (const demandCycle of ["normal", "summer"] as const) for (const discountTime of ["15", "18", "19", "20"] as const) {
     const params = paramsFor(date, discountTime);
-    values.push([params, demandCycle, getIndividualAmountReferenceContext(params), getAreaCountFallbackWeekdayGroup(params), getAreaCountComparisonWeekdayGroup(params), recommendation(date, [], discountTime, demandCycle)]);
+    const result = recommendation(date, [], discountTime, demandCycle);
+    const semantics = Object.fromEntries(Object.entries(result).filter(([key]) => key !== "summaryText" && key !== "detailLines"));
+    values.push([params, demandCycle, getIndividualAmountReferenceContext(params), getAreaCountFallbackWeekdayGroup(params), getAreaCountComparisonWeekdayGroup(params), semantics]);
   }
   assert.equal(values.length, 64);
   assert.equal(hash(values), GOLDEN_NON17);

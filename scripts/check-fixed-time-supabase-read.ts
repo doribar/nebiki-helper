@@ -36,7 +36,7 @@ function record(params: {
 const normalHistory = ["2026-07-23", "2026-07-30", "2026-08-06"].map(
   (date) => record({ date, count: 100, demandCycle: "normal" }),
 );
-const summerHistory = ["2026-07-23", "2026-07-30", "2026-08-06"].map(
+const summerHistory = ["2026-07-02", "2026-07-09", "2026-08-13"].map(
   (date) => record({ date, count: 10, demandCycle: "summer" }),
 );
 const productionLocalOnly = record({
@@ -83,7 +83,7 @@ await test("2. production mode retains the existing local plus remote merge", ()
   assert.equal(source.records.some((item) => item.count === 999), true);
 });
 
-await test("3. fixed-time normal and summer medians stay separated", () => {
+await test("3. fixed-time normal and summer use the same shared medians", () => {
   const source = resolveAreaCountHistorySource({
     mode: "fixed_time_readonly",
     remoteResults,
@@ -108,12 +108,15 @@ await test("3. fixed-time normal and summer medians stay separated", () => {
   });
   assert.equal(normal.status, "ready");
   assert.equal(summer.status, "ready");
-  assert.equal(normal.medianCount, 100);
-  assert.equal(summer.medianCount, 10);
+  assert.equal(normal.medianCount, 55);
+  assert.equal(summer.medianCount, 55);
   assert.equal(normal.suggestedEvaluation, "few");
-  assert.equal(summer.suggestedEvaluation, "normal");
-  assert.equal(normal.matchedRecords.every((item) => item.demandCycle === "normal"), true);
-  assert.equal(summer.matchedRecords.every((item) => item.demandCycle === "summer"), true);
+  assert.equal(summer.suggestedEvaluation, "few");
+  assert.equal(normal.sampleSize, 6);
+  assert.deepEqual(normal.matchedRecords, summer.matchedRecords);
+  assert.deepEqual(new Set(normal.matchedRecords.map((item) => item.demandCycle)), new Set(["normal", "summer"]));
+  assert.equal(normal.demandCycle, "normal");
+  assert.equal(summer.demandCycle, "summer");
 });
 
 await test("4. fixed-time uses exactly the normal recommendation algorithm", () => {

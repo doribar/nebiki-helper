@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-35）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-36）
 
-最終更新: 2026-09-28 JST
+最終更新: 2026-09-30 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-20260928-2206.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-20260928-2206.zip` |
-| appVersion | `2026.8.9-35` |
-| buildId | `build-20260928-215944-jst` |
+| ZIP | `nebiki-helper-2026.8.9-36.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-36.zip` |
+| appVersion | `2026.8.9-36` |
+| buildId | `build-20260930-170743-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-20260928-2206.zip.sha256` / `RELEASE_REPORT_2026.8.9-35.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-2026.8.9-36.zip.sha256` / `RELEASE_REPORT_2026.8.9-36.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/review19Tap35/nebiki-helper`。package versionは9-35、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
+application rootは成果物workspace内の `work/areaCountYearRound36/nebiki-helper`。package versionは9-36、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
 
-比較基準は9-34 ZIP `nebiki-helper-20260927-1115.zip`（SHA-256 `dd4d657cc5723a1f1cfeedbb250d7847cf093b8cdd5a7be419e11e11f1a09bf6`）。9-35はReview19の人間評価だけを通常タップで選択/解除する。通常画面の長押し、評価変換、確定保存、計算・条件・保存形式は非変更。詳細は `CHANGE_REPORT_2026.8.9-35.md`。`AGENTS.md` は9-34とbyte-identicalで、過去CHANGE REPORTも変更していない。
+比較基準は9-35 ZIP `nebiki-helper-20260928-2206.zip`（SHA-256 `726198bd1678c96e88135c3a77f7006d146c9a7848824775e869fff34b08f2a7`）。9-36はAreaCount判断用履歴だけをnormal/summer通年共通へ変更した。保存metadata/cycle別export、夏固有の値引条件、productionAnalysisは維持。詳細は `CHANGE_REPORT_2026.8.9-36.md`。AGENTS.mdは9-35後に更新されたversion名release規則を保持し、今回非変更。過去CHANGE REPORTは変更していない。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19Tap35\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\areaCountYearRound36\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -127,8 +127,18 @@ legacy migrationは次の順で行う。
 - rate adjustment: `+10 / +5 / 0 / -5 / -10` percentage points
 - 同weekday履歴を優先し、不足時だけ既存weekday groupへfallbackする。
 - groupは月水、火木/火木日、金土日/金土等で時刻により変わる。祝日、祝日前日、三連休中日には専用比較がある。
-- `normal` / `summer` は履歴、remote query、settingを完全分離。cycle欠損legacy recordは互換上normalとして読むが、物理書換えしない。
+- AreaCount判断用履歴はnormal/summer通年共通。保存metadata、remote cycle別query、setting、cycle別exportは維持。cycle欠損legacy recordは互換上normalとして読み、物理書換えしない。
 - 値引率画面の `中央値判定：○○` はhuman override前のauto。履歴不足を普通へ偽装せず、表示値を再度rate計算へ適用しない。
+
+### 9-36: AreaCount判断用履歴は通年共通
+
+- `getAreaCountRecommendation()` はnormal/summer両方の履歴を参照する。過去日と当日の取得、減り方の前時刻lookupからcycle filterを外し、summerの当年short/前年以前long分離も廃止した。両cycleとも同一比較条件の直近16件をshort、直近52件をlongへ使う。履歴の並びは従来normalと同じrecordedAt順で、当日・未来日は過去中央値へ入れない。
+- 同曜日3件以上を優先し、未満なら現行group、groupも3件未満ならinsufficient。混在normal2+summer2なら同曜日4件。short < longの場合だけ `max(short, long-2)` を採用し、group fallbackはguardなし。三連休の50/50合成、4日以上連休内部17時の比較先、Obon/calendarは維持する。
+- 新しい `dedupeLatestAreaCountCalculationRecordsByDateAreaTime()` は計算時だけ同一営業日・area・時刻を1観測へ寄せる。保存identity内の既存canonical mergeを再利用し、recordedAt、sessionStartedAt、richness、deterministic fingerprintで正式な観測を選ぶ。3件以上の同identityコピーも入力順で結果が変わらないようraw copyを安定順序へ並べてからmergeする。異なる保存identity間でmetadataを補完せず、選んだ観測自身のcycle/decisionを保持する。入力と保存済みrecordは書き換えない。
+- 減り方補正の過去時刻間sampleと当日前時刻は通年のcanonical観測から取得。対象area、20ポイント差、1段補正は維持する。20:30の参照中央値も同じ母集団を使うが、30/40/50型、40/50型、all50、個数別の業務ruleは非変更。
+- `buildReview19HistoryStatistics()` へ渡す過去Review19由来の一時AreaCountも両cycleを含め、各recordの元cycleを保持する。この一時recordは保存しない。結果は引き続き履歴統計だけで、廃止済みautoEvaluationを生成しない。正式なhuman raw9、tap-toggle、完了、JSON形式、productionAnalysisの判定定義は非変更。
+- 保存・archive・remote identity・Supabase `demand_cycle`・session/snapshot/Review19/rateDecisionSnapshot/exportはnormal/summer metadataを維持する。remoteは従来のcycle別2queryをmemory mergeする方式で、production local-first/失敗時継続/fixed-time READ ONLYは非変更。normal/summer別JSON exportも維持する。
+- 履歴説明は「同じ曜日の記録」「短期中央値」「長期中央値」等の共通文言。夏の手動残数noteは「残数基準で手動判定します。」、mode ON/OFF確認は共通履歴を使う旨へ変更。実際の夏専用reference label・human even解決・summer17 dry快適上限-10%・7/1〜9/30 gate/lockは維持する。
 
 ## 6. calendar、reference、summer / normal
 
@@ -270,7 +280,7 @@ productionAnalysis:
 
 Review19は12エリアの19時実残数と正式評価human raw9、履歴統計、daySnapshot、calendar/weather、productionAnalysisを持つ。19時input画面は既存9段階の人間入力と短いreference labelを維持し、自動判定結果を表示しない。baseline UIにも自動結果表示はなく、今回の変更は入力・最終保存時の自動判定fieldの生成・保存・採用を止めるもの。
 
-9-26では `buildReview19HistoryStatistics()` が従来の19時履歴選択・共通中央値計算を再利用し、`pickReview19HistoryStatistics()` のallowlistで履歴統計だけを取り出す。通常15/17の中央値エンジンは変更しない。新規Review19の `autoEvaluation` / `autoEvaluationStatus` は生成・補完しない。互換用の既存field名 `autoEvaluationBasis` は残すが、新規保存内容はruleVersion、標本充足status、cycle、weekday/group、比較方式・三連休参照、中央値・標本数、短期/長期統計・中央値下落guardのみ。5段階base/final評価、閾値、値引補正、減少補正は含めない。
+9-26以降 `buildReview19HistoryStatistics()` は19時履歴・共通中央値計算を再利用し（9-36から両cycleの通年履歴）、`pickReview19HistoryStatistics()` のallowlistで履歴統計だけを取り出す。Review19の正式評価には中央値を使わない。新規Review19の `autoEvaluation` / `autoEvaluationStatus` は生成・補完しない。互換用の既存field名 `autoEvaluationBasis` は残すが、新規保存内容はruleVersion、標本充足status、cycle、weekday/group、比較方式・三連休参照、中央値・標本数、短期/長期統計・中央値下落guardのみ。5段階base/final評価、閾値、値引補正、減少補正は含めない。
 
 `recommendationStatus` と `area_count_median_v1` は統計の充足状態・計算由来を示す内部metadataで、Review19の採用評価ではない。人間評価の正式な値は `humanEvaluationDetails.humanEvaluationScore9`、`humanEvaluation` は奇数段階の旧5段階互換値。偶数段階を5段階へ丸めない。
 
@@ -361,26 +371,27 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*` **65/65 PASS**（既存64 + 今回専用1）。package.jsonの全check名と実行結果の集合一致。
-- `check:review19-tap-selection` **41/41 PASS**。実TSXと既存domainを読み込むstate/effect/event harnessで、単独5種、隣接4ペアの両順序、各解除、全解除、不正追加、pointerup/click二重発火なし、長押しタイマー非起動、残数validation、既存評価の編集、全解除のnull保持、完了payload、戻る/スキップ/修正とarea/scope分離、従来long-pressを確認。DOM文字列の確認だけでなく実handlerと再描画を実行する。実ブラウザのnative event検証は別途下記。
-- human 9-scale **15/15**、Review19 human/history **31/31 PASS**。既存互換・保存/archive/outbox/export・productionAnalysis・通常rate・先行/冷惣菜・fixed-time等のcheckもPASS。
-- TypeScript / production build / PWA generateSW PASS。101 modules、precache10。chunk sizeとBrowserslist dataの既存build警告あり。
-- focused ESLintは **3 errors / 3 warnings**（Review19Screenの既存診断のみ）、新規 **0**。変更selectorとtest3本は0 errors/warnings。全体lintは9-34と同じ **9 errors / 7 warnings**。file/rule/severity/message比較で新規・消失diagnostic **0**（message内の作業root絶対pathだけ統一）。既知lint修正は今回の範囲外。
-- Microsoft Edge production preview（headless、390×844）**18項目 PASS**。マウスとタッチそれぞれ単独5種+隣接ペア8順序、解除/全解除/無効選択、Enter/Space、700ms touch hold、pointercancel、縦横gesture、短い間隔の操作、戻る/修正/スキップを確認。gesture後も同じactive areaであることを確認。
-- ブラウザでmouse/touch各12エリアを完了し、単独/中間raw9・選択順・scale・Review19 resolutionをJSONとIndexedDBで確認。完了直後とreload後の計4downloadをparse・比較。Review19 auto判定の再生成なし。AreaJudge/Rate手動画面は499msでidle、500msで従来中間モードになることも実ブラウザで確認。
-- 横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/popupは0。6件の既存Review19自動遷移alertと4件のJSON downloadは意図した操作。Service Workerブロックによる検証環境警告10件は別計上。入力・隣接2項目選択・完了の画像も目視確認。
-- 9-34 ZIPとのbyte比較: production97 source中95本同一。変更はselectorとReview19画面のdraft型/selector表示blockだけ。Review19確定/移動関数、humanEvaluation変換、hook/router/storage、他画面、swipe hook、全domainは非変更。
-- SQL9本、AGENTS.md、過去CHANGE_REPORT全件、version/build生成方法・schema3は9-34とbyte-identical。依存関係は非変更。
-- GPT-6 Astra / Ultraのみ使用。
+- 全 `check:*` **66/66 PASS**。package.jsonの全check名と実行集合一致。今回専用: `AreaCount year-round checks passed: 44/44`。
+- 専用testは両cycle参照、mixed2+2、rolling16/52、年分離撤去、6/30→7/1・9/30→10/1、long guard/group、cycle跨ぎ重複/最新revision/richness/入力順/非破壊、減り方、20:30、Review19参考統計、cycle metadata/別export/Supabase payload、夏固有のmanual/weather/gateを検証する。
+- 実9-35/9-36エンジンのnormal単独・重複なし **3840ケース**でrecommendation全体が一致。calendar境界、時刻、area、sample数、count閾値、減り方を含む。証跡 `calculation-comparison36.json`。
+- TypeScript / production build / PWA generateSW PASS。101 modules、precache10。既存のchunk size/Browserslist data警告あり。
+- focused ESLint **1 errors / 0 warnings**、新規0。全体lint **9 errors / 7 warnings**。9-35とfile/rule/severity/message比較で新規diagnostic0（message内の絶対rootだけ統一）。既存診断は今回修正しない。
+- Microsoft Edge production preview（headless、390×844）**23項目 PASS**。normalでsummer履歴、summerでnormal履歴、混在2+2/重複、履歴不足説明、area→rate、保存/完了/reload、mode境界の前日record参照を検証。境界fixtureは前日と同じ比較条件を明示的weekday overrideで維持し、曜日groupの変更とcycle参照の変更を切り分けた。
+- browserではAreaCountのlocal-first journal、migration後IndexedDB、日次snapshot/rate snapshot/sessionのcycle・appVersion/buildId/schema、元履歴非破壊を確認。横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/downloadは0。SWをブロックした隔離検証環境の警告は別計上。
+- 準備中に減り方の数学的20ポイント境界（40%→60%）で既存の浮動小数点丸めにより補正なしになるケースを観測した。9-35の同条件でも同結果で、今回は判定式を変更していない。詳細はbrowser報告を参照。
+- production97 source中93本が9-35とbyte-identical。hook/router/storage/remote/archive、productionAnalysis、weather/rate/quick/coldDeli/fixed-timeは非変更。SQL9本、過去CHANGE_REPORT、version/build生成方法、schema3、依存関係を維持。
+- AGENTS.mdは9-35 release後にユーザーが承認したversion名release規則を含む現行版とbyte-identical。9-36で編集していない。9-35 ZIP内の旧時刻名規則へ戻していない。
+- GPT-6.1 Sol / Ultraのみ使用（並列agentを含む）。
 
-未確認: 実店舗端末の物理タッチ、インストール済みPWA、実Supabase通信、長時間background復帰。ブラウザは隔離fixtureと固定時計によるソフトウェア自動検証。保存互換は既存testと隔離されたブラウザarchive/exportで検証した。
+未確認: 実Supabase通信、インストール済みPWA、実店舗データ・物理端末、長時間background復帰。browserは隔離した合成履歴と固定時計による検証。
 
-証跡: `work/review19Tap35/checks.json`, `check-review19-tap-selection.log`, `baseline-comparison35.json`, `lint-comparison35.json`, `browser-work/browser-results35.json`, `browser-work/BROWSER_REPORT_35.md`。ZIP再open検査とSHA-256はZIP外のrelease報告・検査JSONへ記録。
+証跡: `work/areaCountYearRound36/checks.json`, `check-area-count-year-round.log`, `baseline-comparison36.json`, `calculation-comparison36.json`, `lint-comparison36.json`, `browser-work/browser-results36.json`。ZIP再open検査とSHA-256は外部release報告/検査JSONに記録。
 
 ## 13. 既知課題、検討中だが未実装の案
 
 既知課題:
 
+- 減り方の厳密な20ポイント境界には既存の浮動小数点差がある（40%→60%では `0.4 + 0.2` が `0.6000000000000001` となり補正なし）。9-35との同結果を確認済み。今回の通年化では判定式を変更していない。
 - full project ESLintに既存9 errors / 7 warnings。
 - `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、全51本より少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
@@ -408,7 +419,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-35.md`（9-34 baselineは `CHANGE_REPORT_2026.8.9-34.md`）
+4. `CHANGE_REPORT_2026.8.9-36.md`（9-35 baselineは `CHANGE_REPORT_2026.8.9-35.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

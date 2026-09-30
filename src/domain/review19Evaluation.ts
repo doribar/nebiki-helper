@@ -105,15 +105,11 @@ function resolveReview19RecordCalendarContext(
 function buildHistoricalReview19AreaCountRecords(params: {
   areaId: AreaId;
   date: string;
-  demandCycle: DemandCycle;
   historicalRecords: readonly Review19Result[];
 }): AreaCountRecord[] {
   return params.historicalRecords.flatMap((record): AreaCountRecord[] => {
     if (record.review19Status !== "recorded") return [];
     if (record.date >= params.date) return [];
-    if (normalizeDemandCycle(record.demandCycle) !== params.demandCycle) {
-      return [];
-    }
     if (record.excludedAreaIds.includes(params.areaId)) return [];
 
     const count = record.areaCounts[params.areaId];
@@ -135,7 +131,7 @@ function buildHistoricalReview19AreaCountRecords(params: {
         dataSchemaVersion: record.dataSchemaVersion,
         appVersion: record.appVersion,
         buildId: record.buildId,
-        demandCycle: params.demandCycle,
+        demandCycle: normalizeDemandCycle(record.demandCycle),
         date: record.date,
         sessionStartedAt: record.sessionStartedAt,
         recordedAt,
@@ -159,7 +155,7 @@ function buildHistoricalReview19AreaCountRecords(params: {
  * 19:00チェックの実測残数を、過去の19:00チェックだけと比較する。
  *
  * 変換したAreaCountRecordは既存中央値エンジンへ渡すためだけの一時値で、
- * 通常の残数履歴、夏履歴、Supabaseへは保存しない。
+ * 通常・夏季共通の履歴統計へ使用し、残数履歴やSupabaseへは保存しない。
  */
 export function buildReview19HistoryStatistics(params: {
   areaId: AreaId;
@@ -176,7 +172,6 @@ export function buildReview19HistoryStatistics(params: {
   const records = buildHistoricalReview19AreaCountRecords({
     areaId: params.areaId,
     date: params.date,
-    demandCycle,
     historicalRecords: params.historicalRecords,
   });
   const recommendation = getAreaCountRecommendation({

@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-35",
+  "version": "2026.8.9-36",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -72,7 +72,8 @@
     "check:slightly-unpopular-policy": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-slightly-unpopular-policy.ts",
     "check:cold-deli-guide": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-cold-deli-guide.ts",
     "check:cold-deli-guide-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-cold-deli-guide-ui.ts",
-    "check:review19-tap-selection": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-tap-selection.ts"
+    "check:review19-tap-selection": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-tap-selection.ts",
+    "check:area-count-year-round": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-year-round.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

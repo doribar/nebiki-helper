@@ -776,8 +776,8 @@ export function StartScreen({
       demandCycle === "summer" ? "normal" : "summer";
     const confirmed = window.confirm(
       nextDemandCycle === "summer"
-        ? "夏季モードをONにします。\n今年の夏季モードの同条件データが3件溜まるまでは手動判定になります。"
-        : "夏季モードをOFFにします。\n保存済みの通常履歴を再利用します。",
+        ? "夏季モードをONにします。\n残数判定には通常・夏季共通の履歴を使用します。"
+        : "夏季モードをOFFにします。\n残数判定には通常・夏季共通の履歴を使用します。",
     );
     if (!confirmed) return;
     onChangeDemandCycle(nextDemandCycle);

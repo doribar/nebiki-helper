@@ -230,7 +230,8 @@ test("夏季モードの手動エリア判定へ基準を明示", () => {
   const areaScreen = source("src/components/screens/AreaJudgeScreen.tsx");
   const router = source("src/app/AppRouter.tsx");
   assert.match(areaScreen, /demandCycle === "summer"/);
-  assert.match(areaScreen, /夏季モード基準：夏の残数基準で手動判定します。/);
+  assert.match(areaScreen, /残数基準で手動判定します。/);
+  assert.doesNotMatch(areaScreen, /夏の残数基準|今年の夏季モード/);
   assert.doesNotMatch(areaScreen, /夏の\{weekdayText\}・\{timeText\}/);
   assert.match(router, /<AreaJudgeScreen[\s\S]*?demandCycle=\{derived\.demandCycle\}/);
 });

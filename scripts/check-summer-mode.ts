@@ -228,6 +228,7 @@ test("13. UIから旧ユーザー名称を除去し、夏季モード表示を�
   assertNoUserFacingLegacyCycleName(appSource);
   assertNoUserFacingLegacyCycleName(hookSource);
   assert.match(startSource, /夏季モード/);
+  assert.match(startSource, /残数判定には通常・夏季共通の履歴を使用します。/);
   assert.match(hookSource, /isSummerModeAvailable/);
   assert.match(hookSource, /loadFixedTimeDemandCycleState/);
   assert.match(hookSource, /saveFixedTimeDemandCycleState/);

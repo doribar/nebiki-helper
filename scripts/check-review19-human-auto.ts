@@ -513,14 +513,15 @@ test("今日自身の19:00残数を中央値母集団へ含めない", () => {
   assert.ok(result.autoEvaluationBasis.sampleSize < 3);
 });
 
-test("通常と夏季モードの19:00履歴を混ぜない", () => {
+test("通常と夏季モードの19:00履歴を共通参照し重複日は1件にする", () => {
   const normalOnly = makeStatistics({
     date: "2026-08-03",
     weekday: 1,
     demandCycle: "summer",
     records: mondayNormalHistory,
   });
-  assert.equal(normalOnly.autoEvaluationBasis.recommendationStatus, "insufficient");
+  assert.equal(normalOnly.autoEvaluationBasis.recommendationStatus, "ready");
+  assert.equal(normalOnly.autoEvaluationBasis.sampleSize, 3);
 
   const summerHistory = mondayNormalHistory.map((record) => ({
     ...record,
@@ -569,7 +570,7 @@ test("必要3件未満は統計のinsufficientを保持し自動判定を補完�
   assert.equal(result.autoEvaluationBasis.requiredSampleSize, 3);
 });
 
-test("夏季モードの今年2件へ前年履歴を足しても開始3件に数えない", () => {
+test("夏季モードでも前年履歴を開始3件へ数える", () => {
   const records = [
     makeReview19Record({ date: "2026-07-06", count: 10, demandCycle: "summer" }),
     makeReview19Record({ date: "2026-07-13", count: 10, demandCycle: "summer" }),
@@ -582,11 +583,12 @@ test("夏季モードの今年2件へ前年履歴を足しても開始3件に数
     demandCycle: "summer",
     records,
   });
-  assert.equal(result.autoEvaluationBasis.recommendationStatus, "insufficient");
-  assert.equal(result.autoEvaluationBasis.sampleSize, 2);
+  assert.equal(result.autoEvaluationBasis.recommendationStatus, "ready");
+  assert.equal(result.autoEvaluationBasis.sampleSize, 4);
+  assert.equal(result.autoEvaluationBasis.medianCount, 15);
 });
 
-test("夏季モードは今年3件で開始し前年以前をlongとして分離する", () => {
+test("夏季モードも今年と前年を同じローリング短期・長期へ使う", () => {
   const records = [
     makeReview19Record({ date: "2026-07-06", count: 10, demandCycle: "summer" }),
     makeReview19Record({ date: "2026-07-13", count: 10, demandCycle: "summer" }),
@@ -600,11 +602,11 @@ test("夏季モードは今年3件で開始し前年以前をlongとして分離
     records,
   });
   assert.equal(result.autoEvaluationBasis.recommendationStatus, "ready");
-  assert.equal(result.autoEvaluationBasis.shortSampleSize, 3);
-  assert.equal(result.autoEvaluationBasis.longSampleSize, 1);
+  assert.equal(result.autoEvaluationBasis.shortSampleSize, 4);
+  assert.equal(result.autoEvaluationBasis.longSampleSize, 4);
   assert.equal(result.autoEvaluationBasis.shortMedianCount, 10);
-  assert.equal(result.autoEvaluationBasis.longMedianCount, 15);
-  assert.equal(result.autoEvaluationBasis.medianCount, 13);
+  assert.equal(result.autoEvaluationBasis.longMedianCount, 10);
+  assert.equal(result.autoEvaluationBasis.medianCount, 10);
 });
 
 test("旧JSONの人間評価と中央値評価が異なっても双方を上書きせず保持する", () => {

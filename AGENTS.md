@@ -30,6 +30,8 @@
 - TypeScript、production build、PWA generateSWを確認する。既知baselineと新規lint問題を区別する。
 - 実ブラウザ確認と自動testだけの確認を区別し、未確認事項を「確認済み」と書かない。
 - 完了報告だけで済ませず、依頼されたコード、build、文書、ZIP等の実成果物を生成して検査する。
-- release ZIP名はJSTで必ず `nebiki-helper-YYYYMMDD-HHMM.zip` とし、`fixed`、`final`、`repacked` 等を付けない。
+- 次回releaseから、ZIP名は `nebiki-helper-{appVersion}.zip` とする（例: `nebiki-helper-2026.8.9-36.zip`）。時刻ではなく実際のappVersionで統一し、`fixed`、`final`、`repacked` 等を付けない。
+- SHA-256ファイルは `nebiki-helper-{appVersion}.zip.sha256`、release報告は `RELEASE_REPORT_{appVersion}.md`、ZIP検査結果は `ZIP_VALIDATION_{appVersion}.json` とする。生成処理、SHA-256ファイル内の対象名、文書・検査結果のZIP参照名も揃える。
+- 作成時刻は従来どおりJSTのbuildIdとrelease報告に記録する。同一versionの完成ZIPを別内容で上書きせず、内容を変更して再releaseする場合はappVersionを上げる。過去releaseの成果物名・報告は遡及変更しない。
 - ZIPへ `node_modules`、`.env`、cache、nested ZIP、credential、不要なtest artifactを含めない。全entry pathは `/` を使い、Windows backslashを入れない。
 - ZIP生成後は完成ZIPそのものを再openし、`ZipFile.testzip()`、duplicate、invalid/traversal、single root、backslash、秘密情報、除外物、dist/PWA成果物、version/build metadata、SHA-256を確認する。
