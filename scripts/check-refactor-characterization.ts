@@ -223,7 +223,10 @@ function assertTimeBoundaries(): void {
   for (const [discountTime, hour, minute, expected] of [
     ["17", 18, 0, "18"],
     ["17", 18, 24, "18"],
-    ["17", 18, 25, null],
+    ["17", 18, 25, "18"],
+    ["17", 18, 30, "18"],
+    ["17", 18, 40, "18"],
+    ["17", 18, 54, "18"],
     ["18", 19, 0, "19"],
     ["18", 19, 24, "19"],
     ["18", 19, 25, null],
@@ -409,7 +412,14 @@ function assertExportJsonCharacterization(): void {
   // New snapshots add only this policy. Pin its two export copies, then keep
   // the pre-extension golden for every other byte of the payload.
   let newPolicyCopies = 0;
+  let expectedRouteCopies = 0;
   const legacyJson = JSON.stringify(JSON.parse(json), (key, value) => {
+    if (key === "expectedAreaIds") {
+      assert.ok(Array.isArray(value));
+      assert.equal(value.includes("autumn"), false);
+      expectedRouteCopies += 1;
+      return undefined;
+    }
     if (key !== "slightlyUnpopular") return value;
     assert.deepEqual(value, {
       adjustmentPercent: 10,
@@ -420,6 +430,7 @@ function assertExportJsonCharacterization(): void {
     return undefined;
   });
   assert.equal(newPolicyCopies, 2);
+  assert.ok(expectedRouteCopies > 0);
   assert.equal(legacyJson.length, 34742);
   assert.equal(
     createHash("sha256").update(legacyJson).digest("hex"),

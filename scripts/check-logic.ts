@@ -24,7 +24,10 @@ import {
   shouldReserveEarlyNextMinus5OnAutoTransition,
 } from '../src/domain/earlyNextMinus5.ts';
 import { getNextPendingCandidate, getPendingResumeScreen } from '../src/domain/pending.ts';
-import { AREA_MASTERS, DONE_SUMMARY_ROUTE, NORMAL_ROUTE } from '../src/domain/area.ts';
+import { getAreaMasters, getDoneSummaryRoute, getNormalRoute } from '../src/domain/area.ts';
+const AREA_MASTERS = getAreaMasters('2026-07-15');
+const DONE_SUMMARY_ROUTE = getDoneSummaryRoute('2026-07-15');
+const NORMAL_ROUTE = getNormalRoute('2026-07-15');
 import {
   appendReview19RecordInMemory,
   buildReview19DataQuality,
@@ -2624,8 +2627,18 @@ const totalChecks = 91;
       manualDiscountTimeOverride: false,
       nowMs: at(18, 25),
     }),
-    null
+    '18'
   );
+  for (const [hours, minutes] of [[18, 30], [18, 40], [18, 54]]) {
+    assert.equal(
+      getEarlyNextMinus5TargetDiscountTime({
+        discountTime: '17',
+        manualDiscountTimeOverride: false,
+        nowMs: at(hours, minutes),
+      }),
+      '18'
+    );
+  }
   passed += 1;
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type {
   AreaCountEvaluation,
   AreaId,
@@ -292,12 +292,14 @@ export function AreaJudgeScreen({
   const areaCountCalculatorResult = calculateAdditionResult(
     areaCountCalculatorText,
   );
-  const areaCountRecommendation =
+  const areaCountRecommendation = useMemo(() =>
     areaCountAssistEnabled &&
     parsedAreaCount !== null &&
     getAreaCountRecommendation
       ? getAreaCountRecommendation(parsedAreaCount)
-      : null;
+      : null,
+    [areaCountAssistEnabled, parsedAreaCount, getAreaCountRecommendation],
+  );
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
   const correctionAreaCounts =

@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-36）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-37）
 
-最終更新: 2026-09-30 JST
+最終更新: 2026-10-01 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-36.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-36.zip` |
-| appVersion | `2026.8.9-36` |
-| buildId | `build-20260930-170743-jst` |
+| ZIP | `nebiki-helper-2026.8.9-37.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-37.zip` |
+| appVersion | `2026.8.9-37` |
+| buildId | `build-20261001-205943-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-2026.8.9-36.zip.sha256` / `RELEASE_REPORT_2026.8.9-36.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `outputs/nebiki-helper-2026.8.9-37.zip.sha256` / `RELEASE_REPORT_2026.8.9-37.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/areaCountYearRound36/nebiki-helper`。package versionは9-36、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
+application rootは成果物workspace内の `work/performanceSeasonal37/nebiki-helper`。package versionは9-37、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
 
-比較基準は9-35 ZIP `nebiki-helper-20260928-2206.zip`（SHA-256 `726198bd1678c96e88135c3a77f7006d146c9a7848824775e869fff34b08f2a7`）。9-36はAreaCount判断用履歴だけをnormal/summer通年共通へ変更した。保存metadata/cycle別export、夏固有の値引条件、productionAnalysisは維持。詳細は `CHANGE_REPORT_2026.8.9-36.md`。AGENTS.mdは9-35後に更新されたversion名release規則を保持し、今回非変更。過去CHANGE REPORTは変更していない。
+比較基準は9-36 ZIP `nebiki-helper-2026.8.9-36.zip`（SHA-256 `2439c08d5705fede2d4a5ebcb2ba6f16f6163b0e93f556d88639f197269007df`）。9-35 ZIPは性能比較にも使用した。9-37は履歴前処理の再利用、17時early-next継続、夏商品の名称/秋商品季節枠と過去互換を変更。詳細は `CHANGE_REPORT_2026.8.9-37.md`。AGENTS.md・過去CHANGE REPORTは非変更。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\areaCountYearRound36\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\performanceSeasonal37\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -39,7 +39,7 @@ application rootは成果物workspace内の `work/areaCountYearRound36/nebiki-he
 翌日廃棄の目安は理想5点以下、許容10点以下、10点超は改善対象。19時に売場が薄すぎる状態と、20時半額でも捌けないほど残る状態の双方を避ける。
 
 - 値引session: 15:00、17:00、18:30、19:30、20:30
-- Review19: 19:00時点の12エリア残数と人間評価。主に15時・17時判断と製造量の評価地点。
+- Review19: 19:00時点の対象エリア残数と人間評価（6〜11月12、12〜5月11。過去保存routeは保持）。主に15時・17時判断と製造量の評価地点。
 - 18:30: ユーザー本人が夜値引を担当する日の専用枠。Review19の主評価対象ではない。
 - 天候入力: 16時〜21時。fresh起動時は最初の欄へ自動scrollせず、入力後は次欄へ進む。
 
@@ -139,6 +139,16 @@ legacy migrationは次の順で行う。
 - `buildReview19HistoryStatistics()` へ渡す過去Review19由来の一時AreaCountも両cycleを含め、各recordの元cycleを保持する。この一時recordは保存しない。結果は引き続き履歴統計だけで、廃止済みautoEvaluationを生成しない。正式なhuman raw9、tap-toggle、完了、JSON形式、productionAnalysisの判定定義は非変更。
 - 保存・archive・remote identity・Supabase `demand_cycle`・session/snapshot/Review19/rateDecisionSnapshot/exportはnormal/summer metadataを維持する。remoteは従来のcycle別2queryをmemory mergeする方式で、production local-first/失敗時継続/fixed-time READ ONLYは非変更。normal/summer別JSON exportも維持する。
 - 履歴説明は「同じ曜日の記録」「短期中央値」「長期中央値」等の共通文言。夏の手動残数noteは「残数基準で手動判定します。」、mode ON/OFF確認は共通履歴を使う旨へ変更。実際の夏専用reference label・human even解決・summer17 dry快適上限-10%・7/1〜9/30 gate/lockは維持する。
+
+### 9-37: 履歴前処理の再利用・17時early-next継続・季節商品
+
+- AreaCountは `prepareAreaCountCalculationPopulation()` でnormalize/canonical化・area/time索引を履歴変更時だけ作る。hookは `[areaCountRecords]` のuseMemo、recommendation callbackはarea/date/time/weekday/cycle等の明示依存useCallback、AreaJudgeはcount/callbackをuseMemoする。30秒clock、電卓表示等の同条件renderで全履歴を再構築しない。
+- prepared populationは呼出側が明示的に渡す不変snapshot。内部索引はprivate WeakMap、返す選択履歴は独立clone。従来のpreparedなし呼出は毎回freshに計算し、入力配列のin-place変更にも対応する。保存のcycle-aware canonical merge、通年計算時の1観測化、16/52・3件・group/long guard・decrease・20:30の意味は変更しない。
+- Review19履歴も `prepareReview19HistoryPopulation()` へまとめて準備し、local/remote arrayが置き換わったときだけmemory mergeと前処理を再実行する。統計だけを返し、廃止済みの5段階auto判定は復活させない。archive/outbox/localStorage/Supabaseの責務は変更しない。
+- 17時sessionのearly-nextは18:00以降に `effectiveRateDiscountTime="18"` / `calculationMode="early_next_minus5"` を使い続ける。旧18:25上限を廃止。別session・既存manual time override/fixed-timeでは従来どおり対象外、Review19 weather/input/doneではhookの明示flow guardで終了する。通常Doneの現時点表示は継続。18:55 Review19、18:30 manual only、次時刻skip予約、保存済みsnapshot非書換えを維持する。
+- `ryomi` のIDは維持し、master表示名だけ「夏商品」。新規 `autumn`「秋商品」は独立ID。6〜9月はryomi、10〜11月はautumn、12〜5月は季節枠なし。新sessionはsession日付を基準に、天ぷらとコロッケ系の間へ片方だけ置く。通常/Done/Review19/dataQuality/exportで対象数12/12/11を揃える。
+- 保存済みroute/map/expectedAreaIdsを尊重し、9-36以前の10月11エリアへ秋商品の欠測を捏造しない。Review19Result/Review19Check/Review19DaySnapshotへschema3互換optional `expectedAreaIds` を保持し、legacyは保存証拠と当時の季節枠から解決する。legacyの `areaName:"涼味商品"` は物理変更しない。現masterから表示する画面と新snapshotは「夏商品」。ryomiとautumnのhistory/median/Review/analysis/backfillは独立、autumn3件未満は既存insufficient/manual。
+- 巡回のunfinished priority順と表示用canonical順を分け、Done/Review19/日次snapshotでは保存された季節slotの通常業務順を使う。他エリアの順を変えない。productionAnalysisの判定関数・定義はbyte-identical、追加エリアを渡す対象範囲だけ拡張。
 
 ## 6. calendar、reference、summer / normal
 
@@ -278,7 +288,7 @@ productionAnalysis:
 
 ### 保存・完了
 
-Review19は12エリアの19時実残数と正式評価human raw9、履歴統計、daySnapshot、calendar/weather、productionAnalysisを持つ。19時input画面は既存9段階の人間入力と短いreference labelを維持し、自動判定結果を表示しない。baseline UIにも自動結果表示はなく、今回の変更は入力・最終保存時の自動判定fieldの生成・保存・採用を止めるもの。
+Review19は保存された季節routeの19時実残数と正式評価human raw9、履歴統計、daySnapshot、calendar/weather、productionAnalysisを持つ。19時input画面は既存9段階の人間入力と短いreference labelを維持し、自動判定結果を表示しない。baseline UIにも自動結果表示はなく、今回の変更は入力・最終保存時の自動判定fieldの生成・保存・採用を止めるもの。
 
 9-26以降 `buildReview19HistoryStatistics()` は19時履歴・共通中央値計算を再利用し（9-36から両cycleの通年履歴）、`pickReview19HistoryStatistics()` のallowlistで履歴統計だけを取り出す。Review19の正式評価には中央値を使わない。新規Review19の `autoEvaluation` / `autoEvaluationStatus` は生成・補完しない。互換用の既存field名 `autoEvaluationBasis` は残すが、新規保存内容はruleVersion、標本充足status、cycle、weekday/group、比較方式・三連休参照、中央値・標本数、短期/長期統計・中央値下落guardのみ。5段階base/final評価、閾値、値引補正、減少補正は含めない。
 
@@ -371,21 +381,19 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*` **66/66 PASS**。package.jsonの全check名と実行集合一致。今回専用: `AreaCount year-round checks passed: 44/44`。
-- 専用testは両cycle参照、mixed2+2、rolling16/52、年分離撤去、6/30→7/1・9/30→10/1、long guard/group、cycle跨ぎ重複/最新revision/richness/入力順/非破壊、減り方、20:30、Review19参考統計、cycle metadata/別export/Supabase payload、夏固有のmanual/weather/gateを検証する。
-- 実9-35/9-36エンジンのnormal単独・重複なし **3840ケース**でrecommendation全体が一致。calendar境界、時刻、area、sample数、count閾値、減り方を含む。証跡 `calculation-comparison36.json`。
-- TypeScript / production build / PWA generateSW PASS。101 modules、precache10。既存のchunk size/Browserslist data警告あり。
-- focused ESLint **1 errors / 0 warnings**、新規0。全体lint **9 errors / 7 warnings**。9-35とfile/rule/severity/message比較で新規diagnostic0（message内の絶対rootだけ統一）。既存診断は今回修正しない。
-- Microsoft Edge production preview（headless、390×844）**23項目 PASS**。normalでsummer履歴、summerでnormal履歴、混在2+2/重複、履歴不足説明、area→rate、保存/完了/reload、mode境界の前日record参照を検証。境界fixtureは前日と同じ比較条件を明示的weekday overrideで維持し、曜日groupの変更とcycle参照の変更を切り分けた。
-- browserではAreaCountのlocal-first journal、migration後IndexedDB、日次snapshot/rate snapshot/sessionのcycle・appVersion/buildId/schema、元履歴非破壊を確認。横overflow、アプリconsole error/warning、pageerror、外部通信、予期しないdialog/downloadは0。SWをブロックした隔離検証環境の警告は別計上。
-- 準備中に減り方の数学的20ポイント境界（40%→60%）で既存の浮動小数点丸めにより補正なしになるケースを観測した。9-35の同条件でも同結果で、今回は判定式を変更していない。詳細はbrowser報告を参照。
-- production97 source中93本が9-35とbyte-identical。hook/router/storage/remote/archive、productionAnalysis、weather/rate/quick/coldDeli/fixed-timeは非変更。SQL9本、過去CHANGE_REPORT、version/build生成方法、schema3、依存関係を維持。
-- AGENTS.mdは9-35 release後にユーザーが承認したversion名release規則を含む現行版とbyte-identical。9-36で編集していない。9-35 ZIP内の旧時刻名規則へ戻していない。
+- 全 `check:*` **69/69 PASS**。専用: 性能7/7、17時early-next14/14、季節商品30/30。全check名集合はpackage.jsonと一致。
+- 9-36との全出力比較 **1260 recommendation + 32 Review19統計一致**。mixed cycle、重複revision、date exclusion、calendar/group/long guard、減り方/20:30を含む。入力非破壊を確認。恒久performance testは500/1000/2000件で100回のcount変更時にraw履歴読取0・全件sortなし、cache更新/戻り値独立性・実hook/AreaJudge memoの時計再renderと条件変更を検証する。
+- TypeScript / production build / PWA generateSW PASS（101 modules、precache10）。従来の大chunk/Browserslist data警告は残る。version/build生成方法・schema3は非変更。
+- focused ESLint **1 errors / 4 warnings**、全体 **9 errors / 7 warnings**。9-36 baselineとfile/rule/severity/message比較、新規error/warning **0**。既存AreaJudge effect error、hook4warnings等を含む既知診断は変更しない。
+- Edge production preview（headless、390×844）**13 scenario groups / 502 actions PASS**。四季境界通常→Done→18:55Review→全エリアhuman入力→4件の実JSONdownload/parse、17:59〜18:54の実snapshot・weather/global一回・next/back/reload/既存snapshot保持、500/1000/2000件rich混在履歴のstart/weather/AreaJudge/calculator/rate/next/back/全Done/Reviewを確認。
+- browser action Performance API: 500件median15ms/p9541ms/max61ms、1000件17/55/72ms、2000件21/76/91ms（各78action）。500件のlong taskは0、1000件は起動時66msが1件、2000件は起動時146msと操作中50/51/52/53/56/62/62msが7件。新規raw9 metadataを含む約0.54/1.07/2.15MBの履歴で、初期hydrate/準備や保存側のmain-thread作業は残る。pointerupから表示/次frameまでの自動操作往復を含む時間で、pure React commit/実店舗端末性能ではない。横overflow、アプリconsole error/warning、pageerror、不要外部通信0。既存Review alert8件、要求したJSONdownload4件のみ。SWblocked環境warning9件はアプリ診断と別計上。
+- 実店舗JSON（2026-10-01、1Review・AreaCount22件）をread-only確認。tempura18:11/onigiri18:22はeffective18、fry_chicken18:27はeffective17へ戻っており旧18:25上限と一致する。実JSONのwarm100回は9-35=85.55ms、9-36=87.98ms、9-37prepared=1.68ms。実JSONは当日分だけで店舗の過去archiveを含まず、全店舗履歴の体感latency原因すべてを断定しない。入力ファイルbytesは維持。
+- production97 source中81本が9-36とbyte-identical。変更16本は今回性能/early/季節互換に限定。SQL9本、AGENTS.md、過去CHANGE_REPORT、rate/weather/quick/冷惣菜/商品policy/productionAnalysis定義/remote/SQL責務・version/build生成方法を維持。
 - GPT-6.1 Sol / Ultraのみ使用（並列agentを含む）。
 
-未確認: 実Supabase通信、インストール済みPWA、実店舗データ・物理端末、長時間background復帰。browserは隔離した合成履歴と固定時計による検証。
+未確認: 実Supabase通信、インストール済みPWA、実店舗物理端末・native touch・長時間background復帰、実店舗の全過去archiveを使った性能。browserは隔離synthetic data/Date固定時計、タイマー/Performance APIは実時間。通常季節シナリオの他エリアは完了fixture、Review全観測と性能シナリオ全エリアはUI入力。
 
-証跡: `work/areaCountYearRound36/checks.json`, `check-area-count-year-round.log`, `baseline-comparison36.json`, `calculation-comparison36.json`, `lint-comparison36.json`, `browser-work/browser-results36.json`。ZIP再open検査とSHA-256は外部release報告/検査JSONに記録。
+証跡: `work/performanceSeasonal37/checks.json`, `lint-comparison37.json`, `baseline-comparison37.json`, `benchmark-comparison37.json`, `actual-performance37.json`, `calculation-comparison37.json`, `browser-work/browser-results37.json`。ZIP再open検査/SHAは外部release報告/検査JSONへ記録。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -419,7 +427,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-36.md`（9-35 baselineは `CHANGE_REPORT_2026.8.9-35.md`）
+4. `CHANGE_REPORT_2026.8.9-37.md`（9-36 baselineは `CHANGE_REPORT_2026.8.9-36.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

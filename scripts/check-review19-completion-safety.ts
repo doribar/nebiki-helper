@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { NORMAL_ROUTE } from "../src/domain/area.ts";
+import { getNormalRoute } from "../src/domain/area.ts";
+const NORMAL_ROUTE = getNormalRoute("2026-08-15");
 import {
   persistCompletedReview19LocalFirst,
 } from "../src/domain/review19CompletionStorage.ts";

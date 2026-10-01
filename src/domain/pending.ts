@@ -1,4 +1,4 @@
-import { NORMAL_ROUTE, getAreaName, getAreaOrder } from "./area.ts";
+import { getAreaRouteFromStoredIds, getAreaName, getAreaOrder } from "./area.ts";
 import type {
   AreaId,
   AreaProgress,
@@ -45,19 +45,20 @@ function getLastDistinctDeferredBeforeCurrent(
 }
 
 function pickNextPendingByRouteDirection(params: {
+  route: readonly AreaId[];
   items: AreaProgress[];
   referenceAreaId: AreaId;
   deferredAreaIds: AreaId[];
 }): AreaProgress | null {
   const itemMap = new Map(params.items.map((item) => [item.areaId, item]));
-  const referenceIndex = NORMAL_ROUTE.indexOf(params.referenceAreaId);
+  const referenceIndex = params.route.indexOf(params.referenceAreaId);
   if (referenceIndex === -1) return null;
 
   const previousAreaId = getLastDistinctDeferredBeforeCurrent(
     params.deferredAreaIds,
     params.referenceAreaId
   );
-  const previousIndex = previousAreaId ? NORMAL_ROUTE.indexOf(previousAreaId) : -1;
+  const previousIndex = previousAreaId ? params.route.indexOf(previousAreaId) : -1;
   const direction = previousIndex === -1 || previousIndex === referenceIndex
     ? 1
     : referenceIndex > previousIndex
@@ -67,10 +68,10 @@ function pickNextPendingByRouteDirection(params: {
   const scan = (step: 1 | -1): AreaProgress | null => {
     for (
       let index = referenceIndex + step;
-      index >= 0 && index < NORMAL_ROUTE.length;
+      index >= 0 && index < params.route.length;
       index += step
     ) {
-      const areaId = NORMAL_ROUTE[index];
+      const areaId = params.route[index];
       const progress = itemMap.get(areaId);
       if (progress) return progress;
     }
@@ -89,6 +90,7 @@ function hasRouteDirectionHistory(
 }
 
 function pickNextPending(params: {
+  route: readonly AreaId[];
   items: AreaProgress[];
   referenceAreaId: AreaId;
   deferredAreaIds: AreaId[];
@@ -104,6 +106,7 @@ function pickNextPending(params: {
 
   if (candidates.length > 1 && hasRouteDirectionHistory(params.deferredAreaIds, params.referenceAreaId)) {
     return pickNextPendingByRouteDirection({
+      route: params.route,
       items: candidates,
       referenceAreaId: params.referenceAreaId,
       deferredAreaIds: params.deferredAreaIds,
@@ -112,6 +115,7 @@ function pickNextPending(params: {
 
   if ((params.allCandidatesAreDeferred || params.allRouteAreasArePending) && candidates.length > 1) {
     return pickNextPendingByRouteDirection({
+      route: params.route,
       items: candidates,
       referenceAreaId: params.referenceAreaId,
       deferredAreaIds: params.deferredAreaIds,
@@ -126,7 +130,9 @@ export function getNextPendingCandidate(params: {
   referenceAreaId: AreaId;
   deferredAreaIds?: AreaId[];
   preferredReason?: PendingReason | null;
+  normalFlowOrder?: readonly AreaId[];
 }): PendingAreaCandidate | null {
+  const route = params.normalFlowOrder ?? getAreaRouteFromStoredIds(undefined, Object.keys(params.areaProgressMap));
   const deferredSet = new Set(params.deferredAreaIds ?? []);
   const allPendingWithCurrent = Object.values(params.areaProgressMap).filter((p) => {
     return p.status === "skipped_manual" || p.status === "postponed_few";
@@ -157,13 +163,14 @@ export function getNextPendingCandidate(params: {
         : fewAll;
 
   const picked = pickNextPending({
+    route,
     items: prioritized,
     referenceAreaId: params.referenceAreaId,
     deferredAreaIds: params.deferredAreaIds ?? [],
     allCandidatesAreDeferred,
     allRouteAreasArePending:
       allPendingWithCurrent.filter((progress) => progress.status === "skipped_manual").length ===
-      NORMAL_ROUTE.length,
+      route.length,
   });
   if (!picked) return null;
 

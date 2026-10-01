@@ -4,7 +4,9 @@ import {
   upsertAreaCountRecord,
 } from '../src/domain/areaCountHistory.ts';
 import type { AreaCountRecord } from '../src/domain/areaCountHistory.ts';
-import { LEGACY_AREA_MASTERS, NORMAL_ROUTE } from '../src/domain/area.ts';
+import { getAreaMasters, getNormalRoute } from '../src/domain/area.ts';
+const NORMAL_ROUTE = getNormalRoute('2026-07-18');
+const LEGACY_AREA_MASTERS = getAreaMasters('2026-07-18');
 import { getNormalTimeRateDisplay } from '../src/domain/discount.ts';
 import {
   createDefaultHourlyForecasts,

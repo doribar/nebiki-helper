@@ -3,6 +3,8 @@ import {
   getActualWeekdayLabel,
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
+  prepareAreaCountCalculationPopulation,
+  type AreaCountCalculationPopulation,
   type AreaCountDecisionBasis,
   type AreaCountRecord,
 } from "./areaCountHistory.ts";
@@ -151,6 +153,72 @@ function buildHistoricalReview19AreaCountRecords(params: {
   });
 }
 
+declare const review19HistoryPopulationBrand: unique symbol;
+
+export type Review19HistoryPopulation = {
+  readonly recordCount: number;
+  readonly areaObservationCount: number;
+  readonly [review19HistoryPopulationBrand]: true;
+};
+
+const preparedReview19Populations = new WeakMap<
+  Review19HistoryPopulation,
+  AreaCountCalculationPopulation
+>();
+
+/** Resolve historical calendar/weekday metadata once for all Review19 areas. */
+export function prepareReview19HistoryPopulation(
+  historicalRecords: readonly Review19Result[],
+): Review19HistoryPopulation {
+  const records: AreaCountRecord[] = [];
+  for (const record of historicalRecords) {
+    if (record.review19Status !== "recorded") continue;
+    const weekday = resolveReview19RecordWeekday(record);
+    if (weekday === null) continue;
+    const calendarContext = resolveReview19RecordCalendarContext(record);
+    const applyObonRule = calendarContext
+      ? calendarContext.isObon === true ||
+        calendarContext.calendarCondition === "obon"
+      : supportsObonCalendarRule(record.appVersion);
+    const actualWeekday = getActualWeekdayLabel(weekday);
+    const actualWeekdayGroup = getAreaCountFallbackWeekdayGroup({
+      weekday,
+      discountTime: REVIEW19_DISCOUNT_TIME,
+      date: record.date,
+      applyObonRule,
+    });
+    for (const [rawAreaId, count] of Object.entries(record.areaCounts)) {
+      const areaId = rawAreaId as AreaId;
+      if (record.excludedAreaIds.includes(areaId)) continue;
+      if (typeof count !== "number" || !Number.isFinite(count) || count < 0) continue;
+      const recordedAt = resolveAreaCountRecordedAt(record, areaId);
+      if (recordedAt === null) continue;
+      records.push({
+        dataSchemaVersion: record.dataSchemaVersion,
+        appVersion: record.appVersion,
+        buildId: record.buildId,
+        demandCycle: normalizeDemandCycle(record.demandCycle),
+        date: record.date,
+        sessionStartedAt: record.sessionStartedAt,
+        recordedAt,
+        areaId,
+        discountTime: REVIEW19_DISCOUNT_TIME,
+        actualWeekday,
+        actualWeekdayGroup,
+        calendarContext,
+        count: Math.max(0, Math.round(count)),
+      });
+    }
+  }
+  const preparedPopulation = prepareAreaCountCalculationPopulation(records);
+  const preparedHistory = Object.freeze({
+    recordCount: historicalRecords.length,
+    areaObservationCount: preparedPopulation.recordCount,
+  }) as Review19HistoryPopulation;
+  preparedReview19Populations.set(preparedHistory, preparedPopulation);
+  return preparedHistory;
+}
+
 /**
  * 19:00チェックの実測残数を、過去の19:00チェックだけと比較する。
  *
@@ -164,18 +232,23 @@ export function buildReview19HistoryStatistics(params: {
   weekday: number;
   demandCycle: DemandCycle;
   historicalRecords: readonly Review19Result[];
+  preparedHistory?: Review19HistoryPopulation;
   applyObonRule?: boolean;
 }): {
   autoEvaluationBasis: AreaCountDecisionBasis;
 } {
   const demandCycle = normalizeDemandCycle(params.demandCycle);
-  const records = buildHistoricalReview19AreaCountRecords({
+  const preparedPopulation = params.preparedHistory
+    ? preparedReview19Populations.get(params.preparedHistory)
+    : undefined;
+  const records = preparedPopulation ? [] : buildHistoricalReview19AreaCountRecords({
     areaId: params.areaId,
     date: params.date,
     historicalRecords: params.historicalRecords,
   });
   const recommendation = getAreaCountRecommendation({
     records,
+    preparedPopulation,
     areaId: params.areaId,
     discountTime: REVIEW19_DISCOUNT_TIME,
     weekday: params.weekday,

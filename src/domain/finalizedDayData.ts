@@ -5,7 +5,7 @@ import type {
   Review19Snapshot,
 } from "./types.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
-import { getNormalRoute } from "./area.ts";
+import { getExpectedAreaIdsForStoredRecord } from "./area.ts";
 import {
   buildAnalysisWeatherContext,
   buildDayAnalysisCalendarContext,
@@ -181,7 +181,7 @@ export function normalizeReview19DaySnapshotDemandCycle(
   const rebuiltProductionAnalysis = buildProductionAnalysis({
     date: cloned.date,
     demandCycle,
-    areaIds: getNormalRoute(cloned.date),
+    areaIds: getExpectedAreaIdsForStoredRecord(cloned.date, cloned),
     areaCountRecords: cloned.areaCountRecords,
     sessions: cloned.sessions,
     review19Check,
@@ -189,7 +189,7 @@ export function normalizeReview19DaySnapshotDemandCycle(
   cloned.productionAnalysis = mergeProductionAnalyses({
     persisted: cloned.productionAnalysis,
     rebuilt: rebuiltProductionAnalysis,
-    areaIds: getNormalRoute(cloned.date),
+    areaIds: getExpectedAreaIdsForStoredRecord(cloned.date, cloned),
   });
   if (review19Check) {
     review19Check.productionAnalysis = cloned.productionAnalysis;

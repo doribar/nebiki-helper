@@ -15,7 +15,7 @@ import type {
   SessionDraft,
   WeatherInput,
 } from "../../domain/types";
-import { AREA_MASTERS, NORMAL_ROUTE } from "../../domain/area";
+import { ALL_AREA_IDS, getNormalRoute, getAreaRouteFromStoredIds, isKnownAreaId } from "../../domain/area";
 import { normalizeRateDecisionSnapshot } from "../../domain/rateDecisionSnapshot.ts";
 import {
   evaluateTemperatureComfort,
@@ -65,10 +65,13 @@ export function createInitialSessionDraft(): SessionDraft {
   };
 }
 
-export function createInitialAreaProgressMap(): Record<AreaId, AreaProgress> {
-  return AREA_MASTERS.reduce((acc, area) => {
-    acc[area.id] = {
-      areaId: area.id,
+export function createInitialAreaProgressMap(
+  dateLike?: string | Date | null,
+  areaIds: readonly AreaId[] = getNormalRoute(dateLike),
+): Record<AreaId, AreaProgress> {
+  return areaIds.reduce((acc, areaId) => {
+    acc[areaId] = {
+      areaId,
       status: "unstarted",
       areaJudge: null,
     };
@@ -77,7 +80,7 @@ export function createInitialAreaProgressMap(): Record<AreaId, AreaProgress> {
 }
 
 export function isValidAreaId(value: unknown): value is AreaId {
-  return typeof value === "string" && NORMAL_ROUTE.includes(value as AreaId);
+  return isKnownAreaId(value);
 }
 
 function isValidAreaStatus(value: unknown): value is AreaProgress["status"] {
@@ -203,14 +206,21 @@ export function normalizeReview19ExcludedAreaIds(raw: unknown): AreaId[] {
   return [...unique];
 }
 
-export function normalizeNormalFlowOrder(raw: unknown): AreaId[] {
+export function normalizeNormalFlowOrder(
+  raw: unknown,
+  dateLike?: string | Date | null,
+  storedAreaIds?: readonly unknown[],
+): AreaId[] {
   const normalized: AreaId[] = [];
+  const route = storedAreaIds?.length
+    ? getAreaRouteFromStoredIds(dateLike, storedAreaIds)
+    : getNormalRoute(dateLike);
 
   if (Array.isArray(raw)) {
     for (const value of raw) {
       if (
         isValidAreaId(value) &&
-        NORMAL_ROUTE.includes(value) &&
+        value !== "balance_bento" &&
         !normalized.includes(value)
       ) {
         normalized.push(value);
@@ -218,7 +228,11 @@ export function normalizeNormalFlowOrder(raw: unknown): AreaId[] {
     }
   }
 
-  for (const areaId of NORMAL_ROUTE) {
+  // A saved route defines its seasonal slot; do not append the current month.
+  const savedRoute = normalized.length > 0
+    ? getAreaRouteFromStoredIds(dateLike, normalized)
+    : route;
+  for (const areaId of savedRoute) {
     if (!normalized.includes(areaId)) normalized.push(areaId);
   }
 
@@ -240,20 +254,23 @@ export function removeReview19ExcludedAreaId(
 }
 
 export function normalizeAreaProgressMap(
-  raw?: Partial<Record<string, AreaProgress>> | null
+  raw?: Partial<Record<string, AreaProgress>> | null,
+  dateLike?: string | Date | null,
+  areaIds?: readonly AreaId[],
 ): Record<AreaId, AreaProgress> {
-  const base = createInitialAreaProgressMap();
+  const base = createInitialAreaProgressMap(dateLike, areaIds);
 
   if (!raw || typeof raw !== "object") {
     return base;
   }
 
-  for (const area of AREA_MASTERS) {
-    const progress = raw[area.id];
+  for (const areaId of ALL_AREA_IDS) {
+    const progress = raw[areaId];
     if (!progress || typeof progress !== "object") continue;
 
-    base[area.id] = {
-      ...base[area.id],
+    base[areaId] = {
+      ...base[areaId],
+      areaId,
       status: isValidAreaStatus(progress.status) ? progress.status : "unstarted",
       areaJudge: isValidAreaJudge(progress.areaJudge) ? progress.areaJudge : null,
       areaCount:
@@ -408,8 +425,8 @@ export function createInitialState(
       ...initialSessionDraft,
       demandCycle: normalizeDemandCycle(initialSessionDraft.demandCycle),
     },
-    areaProgressMap: createInitialAreaProgressMap(),
-    normalFlowOrder: [...NORMAL_ROUTE],
+    areaProgressMap: createInitialAreaProgressMap(initialSessionDraft.date),
+    normalFlowOrder: getNormalRoute(initialSessionDraft.date),
     currentAreaId: null,
     lastReferenceAreaId: null,
     currentFlow: "normal",
@@ -664,7 +681,11 @@ export function normalizeLoadedState(
   delete loadedWithoutLegacyTrainingFields.trainingStep;
   delete loadedWithoutLegacyTrainingFields.trainingStepConfig;
 
-  const areaProgressMap = normalizeAreaProgressMap(loaded.areaProgressMap);
+  const savedDate = loaded.session?.date ?? loaded.sessionDraft?.date ?? initialSessionDraft.date;
+  const normalFlowOrder = normalizeNormalFlowOrder(
+    loaded.normalFlowOrder, savedDate, Object.keys(loaded.areaProgressMap ?? {}),
+  );
+  const areaProgressMap = normalizeAreaProgressMap(loaded.areaProgressMap, savedDate, normalFlowOrder);
   const currentAreaId = isValidAreaId(loaded.currentAreaId)
     ? loaded.currentAreaId
     : null;
@@ -716,7 +737,7 @@ export function normalizeLoadedState(
     session,
     sessionDraft,
     areaProgressMap,
-    normalFlowOrder: normalizeNormalFlowOrder((loaded as Partial<AppState>).normalFlowOrder),
+    normalFlowOrder,
     currentAreaId,
     lastReferenceAreaId,
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",

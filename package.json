@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-36",
+  "version": "2026.8.9-37",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -73,7 +73,10 @@
     "check:cold-deli-guide": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-cold-deli-guide.ts",
     "check:cold-deli-guide-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-cold-deli-guide-ui.ts",
     "check:review19-tap-selection": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-tap-selection.ts",
-    "check:area-count-year-round": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-year-round.ts"
+    "check:area-count-year-round": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-year-round.ts",
+    "check:early-next-17-continuity": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-early-next-17-continuity.ts",
+    "check:seasonal-areas": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-seasonal-areas.ts",
+    "check:area-count-performance": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-performance.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

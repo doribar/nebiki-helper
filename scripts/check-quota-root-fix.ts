@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { NORMAL_ROUTE } from "../src/domain/area.ts";
+import { getNormalRoute } from "../src/domain/area.ts";
+const NORMAL_ROUTE = getNormalRoute("2026-08-24");
 import {
   AREA_COUNT_LOCAL_CACHE_BYTE_BUDGET,
   estimateAreaCountCacheBytes,

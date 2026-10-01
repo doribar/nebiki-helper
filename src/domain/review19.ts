@@ -1,4 +1,4 @@
-import { NORMAL_ROUTE, getAreaName, getNormalRoute } from "./area.ts";
+import { ALL_AREA_IDS, getAreaName, getNormalRoute, getAreaRouteFromStoredIds, getExpectedAreaIdsForStoredRecord, normalizeAreaIds, isKnownAreaId } from "./area.ts";
 import {
   normalizeAreaCountDecisionBasis,
   normalizeAreaCountRecords,
@@ -71,7 +71,7 @@ function normalizeExcludedAreaIds(raw: unknown): AreaId[] {
 
   const unique = new Set<AreaId>();
   for (const value of raw) {
-    if (NORMAL_ROUTE.includes(value as AreaId)) {
+    if (isKnownAreaId(value)) {
       unique.add(value as AreaId);
     }
   }
@@ -112,7 +112,7 @@ export function getReview19RatingScore(
 export function createReview19RatingScores(
   ratings: Record<AreaId, Review19Rating>,
 ): Record<AreaId, Review19RatingScore> {
-  return NORMAL_ROUTE.reduce(
+  return normalizeAreaIds(Object.keys(ratings)).reduce(
     (acc, areaId) => {
       acc[areaId] = getReview19RatingScore(ratings[areaId]);
       return acc;
@@ -121,8 +121,8 @@ export function createReview19RatingScores(
   );
 }
 
-export function createDefaultReview19Ratings(): Record<AreaId, Review19Rating> {
-  return NORMAL_ROUTE.reduce(
+export function createDefaultReview19Ratings(areaIds: readonly AreaId[] = getNormalRoute()): Record<AreaId, Review19Rating> {
+  return areaIds.reduce(
     (acc, areaId) => {
       acc[areaId] = "just_right";
       return acc;
@@ -211,7 +211,9 @@ export function createInitialReview19Result(params: {
   reviewStartedAt?: string;
   sourceUpdatedAt?: string;
   excludedAreaIds?: AreaId[];
+  expectedAreaIds?: readonly AreaId[];
 }): Review19Result {
+  const expectedAreaIds = normalizeAreaIds(params.expectedAreaIds ?? getNormalRoute(params.date));
   const excludedAreaIds = normalizeExcludedAreaIds(params.excludedAreaIds ?? []);
   const sourceUpdatedAt = getReview19SourceUpdatedAt({
     sourceUpdatedAt: params.sourceUpdatedAt,
@@ -222,6 +224,7 @@ export function createInitialReview19Result(params: {
   return {
     ...getCurrentDataVersionInfo(),
     review19Status: "recorded",
+    expectedAreaIds,
     date: params.date,
     demandCycle: normalizeDemandCycle(params.demandCycle),
     sessionStartedAt: params.sessionStartedAt,
@@ -238,6 +241,7 @@ export function createInitialReview19Result(params: {
     excludeReasons: createExcludeReasons(excludedAreaIds),
     dataQuality: buildReview19DataQuality({
       date: params.date,
+      expectedAreaIds,
       areaCounts: {},
       areaEvaluations: {},
       excludedAreaIds,
@@ -252,6 +256,7 @@ export function buildReview19DataQuality(params: {
   areaEvaluations: Partial<Record<AreaId, Review19AreaEvaluation>>;
   excludedAreaIds: AreaId[];
   review19Status?: "recorded" | "not_applicable";
+  expectedAreaIds?: readonly AreaId[];
 }): Review19DataQuality {
   if (params.review19Status === "not_applicable") {
     return {
@@ -272,7 +277,7 @@ export function buildReview19DataQuality(params: {
     };
   }
 
-  const expectedAreaIds = getNormalRoute(params.date);
+  const expectedAreaIds = normalizeAreaIds(params.expectedAreaIds ?? getNormalRoute(params.date));
   const areaEvaluations = params.areaEvaluations;
   const excludedAreaIdSet = new Set(params.excludedAreaIds);
   const recordedAreaIds = expectedAreaIds.filter((areaId) => {
@@ -316,11 +321,12 @@ export function buildReview19DataQuality(params: {
   };
 }
 
-export function getReview19AreaItems(): Array<{
+export function getReview19AreaItems(dateLike?: string | Date | null, areaIds?: readonly AreaId[]): Array<{
   areaId: AreaId;
   areaName: string;
 }> {
-  return NORMAL_ROUTE.map((areaId) => ({
+  const route = areaIds ? getAreaRouteFromStoredIds(dateLike, areaIds) : getNormalRoute(dateLike);
+  return route.map((areaId) => ({
     areaId,
     areaName: getAreaName(areaId),
   }));
@@ -385,7 +391,7 @@ function normalizeReview19AreaEvaluations(
   const normalized: Partial<Record<AreaId, Review19AreaEvaluation>> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return normalized;
 
-  for (const areaId of NORMAL_ROUTE) {
+  for (const areaId of ALL_AREA_IDS) {
     const value = (raw as Partial<Record<AreaId, unknown>>)[areaId];
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
 
@@ -583,13 +589,16 @@ function normalizeReview19Snapshot(
 
 function normalizeLegacyReview19Ratings(
   raw: unknown,
+  date: string,
 ): Record<AreaId, Review19Rating> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
 
-  const ratings = createDefaultReview19Ratings();
+  const ratings = createDefaultReview19Ratings(getExpectedAreaIdsForStoredRecord(date, {
+    areaCounts: raw,
+  }));
   let hasValidRating = false;
 
-  for (const areaId of NORMAL_ROUTE) {
+  for (const areaId of ALL_AREA_IDS) {
     const rating = (raw as Partial<Record<AreaId, unknown>>)[areaId];
     if (!isValidReview19Rating(rating)) continue;
     ratings[areaId] = rating;
@@ -605,7 +614,7 @@ function normalizeReview19RatingData(params: {
   ratings: unknown;
   hasAreaCountsField: boolean;
 }): Pick<Review19Result, "ratingStatus" | "ratings" | "ratingScores"> {
-  const legacyRatings = normalizeLegacyReview19Ratings(params.ratings);
+  const legacyRatings = normalizeLegacyReview19Ratings(params.ratings, params.date);
   const explicitlyRecorded = params.ratingStatus === "recorded";
   const explicitlyNotCollected = params.ratingStatus === "not_collected";
   const predatesCountInput = params.date < REVIEW19_COUNT_INPUT_STARTED_DATE;
@@ -639,6 +648,7 @@ function normalizeReview19DayCheckSnapshot(
     return undefined;
   }
 
+  const expectedAreaIds = getExpectedAreaIdsForStoredRecord(date, raw);
   const ratingData = normalizeReview19RatingData({
     date,
     ratingStatus: raw.ratingStatus,
@@ -685,12 +695,13 @@ function normalizeReview19DayCheckSnapshot(
   ]);
   const productionAnalysis = normalizeProductionAnalysis(
     raw.productionAnalysis,
-    getNormalRoute(date),
+    expectedAreaIds,
   );
 
   return JSON.parse(JSON.stringify({
     ...raw,
     ...dataVersion,
+    expectedAreaIds,
     demandCycle,
     calendarContext,
     analysisWeatherContext,
@@ -712,6 +723,7 @@ function normalizeReview19DayCheckSnapshot(
         : {},
     dataQuality: buildReview19DataQuality({
       date,
+      expectedAreaIds,
       areaCounts,
       areaEvaluations,
       excludedAreaIds,
@@ -764,6 +776,7 @@ function normalizeReview19DaySnapshot(
   if (raw.version !== 1) return undefined;
   if (typeof raw.capturedAt !== "string" || typeof raw.date !== "string") return undefined;
 
+  const expectedAreaIds = getExpectedAreaIdsForStoredRecord(raw.date, raw);
   const rawSessions = Array.isArray(raw.sessions) ? raw.sessions : [];
   const firstSession = rawSessions[0] as DailySessionSnapshot | undefined;
   const demandCycle = normalizeDemandCycle(
@@ -822,7 +835,7 @@ function normalizeReview19DaySnapshot(
   const rebuiltProductionAnalysis = buildProductionAnalysis({
     date: raw.date,
     demandCycle,
-    areaIds: getNormalRoute(raw.date),
+    areaIds: expectedAreaIds,
     areaCountRecords,
     sessions,
     review19Check,
@@ -830,7 +843,7 @@ function normalizeReview19DaySnapshot(
   const productionAnalysis = mergeProductionAnalyses({
     persisted: raw.productionAnalysis,
     rebuilt: rebuiltProductionAnalysis,
-    areaIds: getNormalRoute(raw.date),
+    areaIds: expectedAreaIds,
   });
   if (review19Check) {
     review19Check.productionAnalysis = productionAnalysis;
@@ -839,6 +852,7 @@ function normalizeReview19DaySnapshot(
   return JSON.parse(JSON.stringify({
     ...raw,
     ...normalizeDataVersionInfo(raw),
+    expectedAreaIds,
     demandCycle,
     calendarContext,
     analysisWeatherContext,
@@ -881,7 +895,7 @@ function normalizeReview19AreaCounts(
   const result: Partial<Record<AreaId, number>> = {};
   if (!raw || typeof raw !== "object") return result;
 
-  for (const areaId of NORMAL_ROUTE) {
+  for (const areaId of ALL_AREA_IDS) {
     const value = (raw as Partial<Record<AreaId, unknown>>)[areaId];
     if (typeof value !== "number" || !Number.isFinite(value)) continue;
     const rounded = Math.max(0, Math.round(value));
@@ -893,14 +907,14 @@ function normalizeReview19AreaCounts(
 
 function normalizeAreaCountRecordedAt(
   raw: unknown,
-  date: string,
+  _date: string,
   excludedAreaIds: AreaId[],
 ): Partial<Record<AreaId, string>> {
   const result: Partial<Record<AreaId, string>> = {};
   if (!raw || typeof raw !== "object") return result;
   const excludedAreaIdSet = new Set(excludedAreaIds);
 
-  for (const areaId of getNormalRoute(date)) {
+  for (const areaId of ALL_AREA_IDS) {
     if (excludedAreaIdSet.has(areaId)) continue;
     const value = (raw as Partial<Record<AreaId, unknown>>)[areaId];
     if (typeof value === "string") result[areaId] = value;
@@ -916,6 +930,7 @@ export function normalizeReview19Result(
   if (typeof raw.date !== "string" || typeof raw.sessionStartedAt !== "string")
     return null;
 
+  const expectedAreaIds = getExpectedAreaIdsForStoredRecord(raw.date, raw);
   const rawExcludedAreaIds = normalizeExcludedAreaIds(
     (raw as Partial<Review19Result>).excludedAreaIds,
   );
@@ -932,6 +947,7 @@ export function normalizeReview19Result(
     sessionStartedAt: raw.sessionStartedAt,
     demandCycle,
     excludedAreaIds: rawExcludedAreaIds,
+    expectedAreaIds,
   });
 
   const ratingData = normalizeReview19RatingData({
@@ -996,7 +1012,7 @@ export function normalizeReview19Result(
   const productionAnalysis = mergeProductionAnalyses({
     persisted: raw.productionAnalysis,
     rebuilt: daySnapshot?.productionAnalysis,
-    areaIds: getNormalRoute(raw.date),
+    areaIds: expectedAreaIds,
   });
 
   return {
@@ -1020,6 +1036,7 @@ export function normalizeReview19Result(
     excludeReasons,
     dataQuality: buildReview19DataQuality({
       date: raw.date,
+      expectedAreaIds,
       areaCounts,
       areaEvaluations,
       excludedAreaIds: base.excludedAreaIds,
@@ -1054,7 +1071,7 @@ function materializeLegacyReview19AreaEvaluationsForExport(
   areaEvaluations: Partial<Record<AreaId, Review19AreaEvaluation>> | undefined,
 ): void {
   if (!areaEvaluations) return;
-  for (const areaId of NORMAL_ROUTE) {
+  for (const areaId of ALL_AREA_IDS) {
     const evaluation = areaEvaluations[areaId];
     if (
       !evaluation ||
@@ -1073,7 +1090,7 @@ function materializeLegacyManualAreaSnapshotsForExport(
   areas: Record<AreaId, Review19AreaSnapshot> | undefined,
 ): void {
   if (!areas) return;
-  for (const areaId of NORMAL_ROUTE) {
+  for (const areaId of ALL_AREA_IDS) {
     const area = areas[areaId];
     if (
       !area ||

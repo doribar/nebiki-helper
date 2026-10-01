@@ -18,7 +18,7 @@ import type {
   AreaCountDecisionBasis,
   AreaCountRecord,
 } from "../../domain/areaCountHistory.ts";
-import { DONE_SUMMARY_ROUTE, getAreaName, getNormalRoute } from "../../domain/area";
+import { getAreaName, getAreaRouteFromStoredIds, getExpectedAreaIdsForStoredRecord } from "../../domain/area";
 import { getBasisGuideDisplay, getWeekdayBaseInfo } from "../../domain/weekdayBase";
 import { getFinalTimeGuide, getFinalTimeInstructionSteps } from "../../domain/discount";
 import { loadReview19Records } from "../../domain/storage";
@@ -78,6 +78,7 @@ function cloneDailySessionSnapshotWithDemandCycle(
 
 function buildAreaSnapshotsFromState(params: {
   areaProgressMap: Record<AreaId, AreaProgress>;
+  areaIds: readonly AreaId[];
   doneSummaryItems: DoneSummaryItem[];
   excludedAreaIds?: AreaId[];
   demandCycle: DemandCycle;
@@ -88,7 +89,7 @@ function buildAreaSnapshotsFromState(params: {
   }, {} as Record<AreaId, DoneSummaryItem>);
   const excludedAreaIdSet = new Set(params.excludedAreaIds ?? []);
 
-  return DONE_SUMMARY_ROUTE.reduce((acc, areaId) => {
+  return [...params.areaIds].reverse().reduce((acc, areaId) => {
     const progress = params.areaProgressMap[areaId];
     const summary = doneSummaryByArea[areaId];
     const rateDecisionSnapshot = progress?.rateDecisionSnapshot
@@ -179,6 +180,7 @@ export function createDailySessionSnapshot(params: {
   const session = params.state.session;
   if (!session) return null;
   const demandCycle = normalizeDemandCycle(session.demandCycle);
+  const areaIds = getAreaRouteFromStoredIds(session.date, params.state.normalFlowOrder ?? Object.keys(params.state.areaProgressMap));
   const calendarContext = buildSessionAnalysisCalendarContext({
     date: session.date,
     weekday: session.weekday,
@@ -186,7 +188,7 @@ export function createDailySessionSnapshot(params: {
     sessionStartedAt: session.startedAt,
     manualWeekdayOverride: session.manualWeekdayOverride,
     applyObonRule: supportsObonCalendarRule(session.appVersion),
-    areaDecisionBases: DONE_SUMMARY_ROUTE.map((areaId) => ({
+    areaDecisionBases: areaIds.map((areaId) => ({
       areaId,
       basis: params.state.areaProgressMap[areaId]?.areaCountDecisionBasis,
     })),
@@ -241,6 +243,7 @@ export function createDailySessionSnapshot(params: {
       bonusResultText: params.basisGuide.bonusResultText,
     },
     areas: buildAreaSnapshotsFromState({
+      areaIds,
       areaProgressMap: params.state.areaProgressMap,
       doneSummaryItems: params.doneSummaryItems,
       excludedAreaIds: params.state.review19ExcludedAreaIds,
@@ -263,7 +266,7 @@ export function buildFinalSessionDoneSummaryItems(params: {
   areaProgressMap: Record<AreaId, AreaProgress>;
   comfortScore: number;
 }): DoneSummaryItem[] {
-  return DONE_SUMMARY_ROUTE.map((areaId) => {
+  return getAreaRouteFromStoredIds(params.session.date, Object.keys(params.areaProgressMap)).reverse().map((areaId) => {
     const progress = params.areaProgressMap[areaId];
     const guide = getFinalTimeGuide({
       weekday: params.session.weekday,
@@ -321,6 +324,7 @@ export function selectLatestReview19DayCheck(
 
   return {
     version: 1,
+    expectedAreaIds: latest.expectedAreaIds,
     dataSchemaVersion: latest.dataSchemaVersion,
     appVersion: latest.appVersion,
     buildId: latest.buildId,
@@ -443,10 +447,11 @@ export function createReview19DaySnapshot(params: {
     review19Check?.snapshot?.analysisWeatherContext,
     ...sessions.toReversed().map((session) => session.analysisWeatherContext),
   ]);
+  const expectedAreaIds = getExpectedAreaIdsForStoredRecord(params.date, { sessions, review19Check, areaCountRecords });
   const productionAnalysis = buildProductionAnalysis({
     date: params.date,
     demandCycle,
-    areaIds: getNormalRoute(params.date),
+    areaIds: expectedAreaIds,
     areaCountRecords,
     sessions,
     review19Check,
@@ -464,6 +469,7 @@ export function createReview19DaySnapshot(params: {
     version: 1,
     ...getCurrentDataVersionInfo(),
     capturedAt: params.capturedAt,
+    expectedAreaIds,
     date: params.date,
     demandCycle,
     calendarContext,
@@ -490,7 +496,9 @@ export function createReview19Snapshot(params: {
   doneSummaryItems: DoneSummaryItem[];
 }): Review19Snapshot {
   const demandCycle = normalizeDemandCycle(params.session.demandCycle);
+  const areaIds = getAreaRouteFromStoredIds(params.session.date, Object.keys(params.areaProgressMap));
   const areas = buildAreaSnapshotsFromState({
+    areaIds,
     areaProgressMap: params.areaProgressMap,
     doneSummaryItems: params.doneSummaryItems,
     excludedAreaIds: params.excludedAreaIds,
@@ -503,7 +511,7 @@ export function createReview19Snapshot(params: {
     sessionStartedAt: params.session.startedAt,
     manualWeekdayOverride: params.session.manualWeekdayOverride,
     applyObonRule: supportsObonCalendarRule(params.session.appVersion),
-    areaDecisionBases: DONE_SUMMARY_ROUTE.map((areaId) => ({
+    areaDecisionBases: areaIds.map((areaId) => ({
       areaId,
       basis: params.areaProgressMap[areaId]?.areaCountDecisionBasis,
     })),

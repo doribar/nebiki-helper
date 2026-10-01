@@ -1,5 +1,5 @@
 import type { AreaId, AreaProgress } from "../../domain/types";
-import { NORMAL_ROUTE } from "../../domain/area";
+import { getAreaRouteFromStoredIds } from "../../domain/area";
 import { isAutoSkipNoticePending } from "./autoSkipFlow.ts";
 
 function isNormalFlowWorkArea(progress: AreaProgress | undefined): boolean {
@@ -17,7 +17,7 @@ export function getNormalFlowScreenForArea(
 
 export function getFirstNormalFlowAreaId(
   areaProgressMap: Record<AreaId, AreaProgress>,
-  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE,
+  normalFlowOrder: readonly AreaId[] = getAreaRouteFromStoredIds(undefined, Object.keys(areaProgressMap)),
 ): AreaId | null {
   return (
     normalFlowOrder.find((areaId) =>
@@ -29,7 +29,7 @@ export function getFirstNormalFlowAreaId(
 export function getNextNormalFlowAreaId(
   areaProgressMap: Record<AreaId, AreaProgress>,
   currentAreaId: AreaId,
-  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE,
+  normalFlowOrder: readonly AreaId[] = getAreaRouteFromStoredIds(undefined, Object.keys(areaProgressMap)),
 ): AreaId | null {
   const currentIndex = normalFlowOrder.indexOf(currentAreaId);
   const afterCurrent =
@@ -47,7 +47,7 @@ export function getNextNormalFlowAreaId(
 export function getNextNormalFlowAreaIdWithWrap(
   areaProgressMap: Record<AreaId, AreaProgress>,
   currentAreaId: AreaId,
-  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE,
+  normalFlowOrder: readonly AreaId[] = getAreaRouteFromStoredIds(undefined, Object.keys(areaProgressMap)),
 ): AreaId | null {
   return (
     getNextNormalFlowAreaId(areaProgressMap, currentAreaId, normalFlowOrder) ??
@@ -59,7 +59,7 @@ export function getNextNormalFlowAreaIdWithWrap(
 export function hasRemainingNormalFlowArea(
   areaProgressMap: Record<AreaId, AreaProgress>,
   currentAreaId: AreaId,
-  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE,
+  normalFlowOrder: readonly AreaId[] = getAreaRouteFromStoredIds(undefined, Object.keys(areaProgressMap)),
 ): boolean {
   return normalFlowOrder.some((areaId) => {
     return (

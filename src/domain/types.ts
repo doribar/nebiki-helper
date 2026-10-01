@@ -35,6 +35,7 @@ export type AreaId =
   | "onigiri"
   | "balance_bento" // legacy: older saved data
   | "ryomi"
+  | "autumn"
   | "chuka_fish"
   | "yakitori"
   | "fry_chicken"
@@ -686,6 +687,8 @@ export type DailySessionSnapshot = {
 
 export type Review19DayCheckSnapshot = {
   version: 1;
+  /** Route captured at creation; optional for schema-3 legacy records. */
+  expectedAreaIds?: AreaId[];
   dataSchemaVersion?: number;
   appVersion?: string;
   buildId?: string;
@@ -716,6 +719,7 @@ export type Review19DayCheckSnapshot = {
 
 export type Review19DaySnapshot = {
   version: 1;
+  expectedAreaIds?: AreaId[];
   dataSchemaVersion?: number;
   appVersion?: string;
   buildId?: string;
@@ -736,6 +740,7 @@ export type Review19DaySnapshot = {
 };
 
 export type Review19Result = {
+  expectedAreaIds?: AreaId[];
   dataSchemaVersion?: number;
   appVersion?: string;
   buildId?: string;

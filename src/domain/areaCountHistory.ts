@@ -1048,18 +1048,89 @@ export function dedupeLatestAreaCountCalculationRecordsByDateAreaTime(
   });
 }
 
+declare const areaCountCalculationPopulationBrand: unique symbol;
+
+/** Explicit immutable history snapshot; create again when history changes. */
+export type AreaCountCalculationPopulation = {
+  readonly recordCount: number;
+  readonly [areaCountCalculationPopulationBrand]: true;
+};
+
+type PreparedAreaCountData = {
+  recordsByAreaTime: Map<AreaId, Map<AreaCountDiscountTime, AreaCountRecord[]>>;
+  recordsByObservation: Map<string, AreaCountRecord>;
+};
+
+// Only explicit prepared handles are keys. Raw mutable input arrays are never
+// cached, and unused history generations can be garbage collected.
+const preparedAreaCountPopulations = new WeakMap<
+  AreaCountCalculationPopulation,
+  PreparedAreaCountData
+>();
+
+function freezeCalculationValue(value: unknown): void {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return;
+  for (const child of Object.values(value)) freezeCalculationValue(child);
+  Object.freeze(value);
+}
+
+function getCalculationObservationKey(params: {
+  date: string;
+  areaId: AreaId;
+  discountTime: AreaCountDiscountTime;
+}): string {
+  return JSON.stringify([params.date, params.areaId, params.discountTime]);
+}
+
+/**
+ * Normalize and canonicalize once per explicit history generation. The same
+ * 9-36 canonical policy is used; persistence records and metadata are untouched.
+ * Index sorting is stable, preserving the canonical order for timestamp ties.
+ */
+export function prepareAreaCountCalculationPopulation(
+  records: readonly AreaCountRecord[],
+): AreaCountCalculationPopulation {
+  const calculationRecords = dedupeLatestAreaCountCalculationRecordsByDateAreaTime(
+    normalizeAreaCountRecords(records),
+  );
+  const recordsByAreaTime = new Map<AreaId, Map<AreaCountDiscountTime, AreaCountRecord[]>>();
+  const recordsByObservation = new Map<string, AreaCountRecord>();
+  for (const record of calculationRecords) {
+    freezeCalculationValue(record);
+    let timeRecords = recordsByAreaTime.get(record.areaId);
+    if (!timeRecords) {
+      timeRecords = new Map();
+      recordsByAreaTime.set(record.areaId, timeRecords);
+    }
+    let matchingRecords = timeRecords.get(record.discountTime);
+    if (!matchingRecords) {
+      matchingRecords = [];
+      timeRecords.set(record.discountTime, matchingRecords);
+    }
+    matchingRecords.push(record);
+    recordsByObservation.set(getCalculationObservationKey(record), record);
+  }
+  for (const timeRecords of recordsByAreaTime.values()) {
+    for (const matchingRecords of timeRecords.values()) {
+      matchingRecords.sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+      Object.freeze(matchingRecords);
+    }
+  }
+  const population = Object.freeze({
+    recordCount: calculationRecords.length,
+  }) as AreaCountCalculationPopulation;
+  preparedAreaCountPopulations.set(population, {
+    recordsByAreaTime,
+    recordsByObservation,
+  });
+  return population;
+}
+
 function getHistoricalAreaCountRecords(
   records: AreaCountRecord[],
   currentDate: string,
 ): AreaCountRecord[] {
   return records.filter((record) => record.date < currentDate);
-}
-
-function getCurrentDateAreaCountRecords(
-  records: AreaCountRecord[],
-  currentDate: string,
-): AreaCountRecord[] {
-  return records.filter((record) => record.date === currentDate);
 }
 
 function getMedian(values: number[]): number {
@@ -1215,20 +1286,14 @@ function getPreviousDiscountTimeForDecrease(params: {
   return null;
 }
 
-function getLatestRecord(records: AreaCountRecord[], params: {
+function getLatestRecord(records: ReadonlyMap<string, AreaCountRecord>, params: {
   date: string;
   areaId: AreaId;
   discountTime: AreaCountDiscountTime;
 }): AreaCountRecord | null {
   // The calculation population already contains one formal observation per
   // business date/area/time, including when persisted cycles differ.
-  return records.find((record) => {
-    return (
-      record.date === params.date &&
-      record.areaId === params.areaId &&
-      record.discountTime === params.discountTime
-    );
-  }) ?? null;
+  return records.get(getCalculationObservationKey(params)) ?? null;
 }
 
 type ReferenceRecords = {
@@ -1260,17 +1325,17 @@ function getReferenceRecords(params: {
         record.discountTime === params.discountTime &&
         record.actualWeekday === params.actualWeekday
       );
-    })
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
-  const sameWeekdayLongRecords = params.longRecords
+    });
+  const sameWeekdayLongRecords = params.longRecords === params.shortRecords
+    ? sameWeekdayAllRecords
+    : params.longRecords
     .filter((record) => {
       return (
         record.areaId === params.areaId &&
         record.discountTime === params.discountTime &&
         record.actualWeekday === params.actualWeekday
       );
-    })
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+    });
 
   if (!params.forceFallbackWeekdayGroup && sameWeekdayAllRecords.length >= REQUIRED_SAMPLE_SIZE) {
     return {
@@ -1291,17 +1356,17 @@ function getReferenceRecords(params: {
         record.discountTime === params.discountTime &&
         record.actualWeekdayGroup === params.fallbackWeekdayGroup
       );
-    })
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
-  const fallbackLongRecords = params.longRecords
+    });
+  const fallbackLongRecords = params.longRecords === params.shortRecords
+    ? fallbackAllRecords
+    : params.longRecords
     .filter((record) => {
       return (
         record.areaId === params.areaId &&
         record.discountTime === params.discountTime &&
         record.actualWeekdayGroup === params.fallbackWeekdayGroup
       );
-    })
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+    });
 
   return {
     matchedRecords: fallbackAllRecords.slice(-SHORT_REFERENCE_RECORDS),
@@ -1480,7 +1545,7 @@ function getThreeDayHolidayMiddleReference(params: {
 }
 
 function getDecreaseRecommendation(params: {
-  records: AreaCountRecord[];
+  records: ReadonlyMap<string, AreaCountRecord>;
   referenceCurrentRecords: AreaCountRecord[];
   date: string;
   areaId: AreaId;
@@ -1582,7 +1647,8 @@ function getDecreaseRecommendation(params: {
 }
 
 export function getAreaCountRecommendation(params: {
-  records: AreaCountRecord[];
+  records: readonly AreaCountRecord[];
+  preparedPopulation?: AreaCountCalculationPopulation;
   areaId: AreaId | null;
   discountTime: DiscountTime | null | undefined;
   weekday: number | null | undefined;
@@ -1649,16 +1715,17 @@ export function getAreaCountRecommendation(params: {
   });
   // エリア判定の比較サンプルは「今日より前」の履歴だけを使う。
   // 同じ日・同じエリア・同じ時刻で複数記録がある場合は、最新の1件だけを採用する。
-  // 呼び出し元がローカル・Supabase・混在データのどれでも、比較直前に
-  // 旧曜日グループを現行仕様へ正規化してから参照する。
-  const calculationRecords = dedupeLatestAreaCountCalculationRecordsByDateAreaTime(
-    normalizeAreaCountRecords(params.records),
-  );
+  // Explicit preparation lets repeated count/render calls reuse the normalized
+  // immutable population. Compatibility calls prepare fresh, including when a
+  // caller mutates its input array in place between calls.
+  const preparedData = (params.preparedPopulation
+    ? preparedAreaCountPopulations.get(params.preparedPopulation)
+    : undefined) ?? preparedAreaCountPopulations.get(
+    prepareAreaCountCalculationPopulation(params.records),
+  )!;
+  const calculationRecords = preparedData.recordsByAreaTime
+    .get(areaId)?.get(discountTime) ?? [];
   const historicalRecords = getHistoricalAreaCountRecords(
-    calculationRecords,
-    date,
-  );
-  const currentDateRecords = getCurrentDateAreaCountRecords(
     calculationRecords,
     date,
   );
@@ -1666,10 +1733,6 @@ export function getAreaCountRecommendation(params: {
   // comparison-condition selection takes the latest 16/52 records below.
   const shortReferenceRecords = historicalRecords;
   const longReferenceRecords = historicalRecords;
-  const recordsForDecrease = [
-    ...shortReferenceRecords,
-    ...currentDateRecords,
-  ];
   const middleReferenceResult = actualWeekdayGroup === "三連休中日"
     ? getThreeDayHolidayMiddleReference({
         shortRecords: shortReferenceRecords,
@@ -1696,7 +1759,10 @@ export function getAreaCountRecommendation(params: {
           comparisonMode: "holiday_before_normal_weekday",
         }
       : standardReference);
-  const { matchedRecords, comparisonMode } = reference;
+  // Recommendation results remain independent mutable copies, as in 9-36;
+  // changing a returned record cannot affect the next prepared calculation.
+  const matchedRecords = reference.matchedRecords.map(cloneAreaCountRecord);
+  const { comparisonMode } = reference;
 
   if (!reference.hasValidReference) {
     const middleReference = reference.threeDayHolidayMiddleReference;
@@ -1843,7 +1909,7 @@ export function getAreaCountRecommendation(params: {
   }
 
   const decreaseRecommendation = getDecreaseRecommendation({
-    records: recordsForDecrease,
+    records: preparedData.recordsByObservation,
     referenceCurrentRecords: matchedRecords,
     date,
     areaId,

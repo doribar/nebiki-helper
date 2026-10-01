@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import ts from "typescript";
-import { NORMAL_ROUTE } from "../src/domain/area.ts";
+import { NORMAL_ROUTE, getNormalRoute, getAreaRouteFromStoredIds } from "../src/domain/area.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { lockDemandCycleForDate } from "../src/domain/demandCycleStorage.ts";
@@ -115,7 +115,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     nextSessionSkipRecords: [], lastSessionWeather: null, lastUsedSessionDraft: initial.sessionDraft,
     dailyMessageState: normalizeDailyMessageState(null), areaJudgeSelection: null, undoSnapshot: null,
     getRuntimeNow: () => options.now ?? at(Number(initial.sessionDraft.discountTime)),
-    NORMAL_ROUTE, formatLocalDate, cloneHourlyForecasts, cloneSkipRecords,
+    NORMAL_ROUTE, getNormalRoute, getAreaRouteFromStoredIds, formatLocalDate, cloneHourlyForecasts, cloneSkipRecords,
     getCurrentDataVersionInfo, normalizeDemandCycle, normalizeGlobalDiscountAdjustmentPercent,
     supportsObonCalendarRule, lockDemandCycleForDate, resolveSessionTemperatureComfort,
     consumeSkipRecordsInMemory, createTimeSwitchPlan, createInitialAreaProgressMap,

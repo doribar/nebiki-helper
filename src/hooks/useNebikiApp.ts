@@ -37,8 +37,8 @@ import {
   shouldShowThreeDayHolidayMiddleNotice,
 } from "../domain/dayBeforeHolidayNotice.ts";
 import {
-  DONE_SUMMARY_ROUTE,
-  NORMAL_ROUTE,
+  getNormalRoute,
+  getAreaRouteFromStoredIds,
   getAreaName,
 } from "../domain/area";
 import {
@@ -102,7 +102,11 @@ import {
   getReview19AreaItems,
   REVIEW19_EXCLUDE_REASON_TEXT,
 } from "../domain/review19.ts";
-import { buildReview19HistoryStatistics } from "../domain/review19Evaluation.ts";
+import {
+  buildReview19HistoryStatistics,
+  prepareReview19HistoryPopulation,
+  type Review19HistoryPopulation,
+} from "../domain/review19Evaluation.ts";
 import type { StoredFinalizedDayData } from "../domain/finalizedDayData.ts";
 import {
   buildAllReview19DataExportPayloadsByDemandCycle,
@@ -125,6 +129,7 @@ import {
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecordIdentity,
   getAreaCountRecommendation as buildAreaCountRecommendation,
+  prepareAreaCountCalculationPopulation,
   getAreaCountSameItemLimit,
   isAreaCountAssistTarget,
   mergeAreaCountRecordCollections,
@@ -545,6 +550,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
     isTestMode ? [] : getHistoricalAreaCountRecords()
   );
+  const areaCountCalculationPopulation = useMemo(
+    () => prepareAreaCountCalculationPopulation(areaCountRecords),
+    [areaCountRecords],
+  );
 
   function persistAreaCountRecordSafely(
     record: AreaCountRecord,
@@ -581,6 +590,37 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     initialArchiveSnapshotRef.current.finalizedDayRecords,
   );
   const remoteReview19HistoryRef = useRef<Review19Result[]>([]);
+  const review19HistoryPopulationRef = useRef<{
+    localRecords: Review19Result[];
+    remoteRecords: Review19Result[];
+    isTestMode: boolean;
+    historicalRecords: Review19Result[];
+    preparedHistory: Review19HistoryPopulation;
+  } | null>(null);
+  // Historical arrays are replaced at the archive/remote write boundaries.
+  // Reuse their merged, prepared snapshot across all area confirmations.
+  const getPreparedReview19History = useCallback(() => {
+    const localRecords = archivedReview19RecordsRef.current;
+    const remoteRecords = remoteReview19HistoryRef.current;
+    const cached = review19HistoryPopulationRef.current;
+    if (cached && cached.localRecords === localRecords &&
+        cached.remoteRecords === remoteRecords && cached.isTestMode === isTestMode) {
+      return cached;
+    }
+    const historicalRecords = isTestMode ? [] : mergeReview19MedianHistory({
+      localRecords,
+      remoteRecords,
+    });
+    const prepared = {
+      localRecords,
+      remoteRecords,
+      isTestMode,
+      historicalRecords,
+      preparedHistory: prepareReview19HistoryPopulation(historicalRecords),
+    };
+    review19HistoryPopulationRef.current = prepared;
+    return prepared;
+  }, [isTestMode]);
   const review19SaveInFlightRef = useRef(false);
   const finalizationInFlightRef = useRef(false);
 
@@ -1357,7 +1397,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
 ]);
 
   const earlyNextMinus5Info = useMemo(() => {
-    if (!state.session) return null;
+    if (!state.session || state.screen === "review19_weather" ||
+      state.screen === "review19" || state.screen === "review19_done") return null;
 
     const targetDiscountTime = getEarlyNextMinus5TargetDiscountTime({
       discountTime: state.session.discountTime,
@@ -1400,6 +1441,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     };
   }, [
     state.session,
+    state.screen,
     nowMs,
     lastSessionWeather,
     isTestMode,
@@ -1453,7 +1495,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     return minutes >= 16 * 60 ? 5 : 0;
   }
 
-  // 17時基準の18:00〜18:24は、+5%ではなく18時30分値引率-5%で表示する。
+  // 17時session継続中の18:00以降は、+5%ではなく18時30分値引率-5%で表示する。
   if (state.session.discountTime === "17") {
     return 0;
   }
@@ -1639,7 +1681,7 @@ const lateSkipNotice = useMemo(() => {
       });
     }
 
-    return DONE_SUMMARY_ROUTE.map((areaId) => {
+    return getAreaRouteFromStoredIds(session.date, state.normalFlowOrder ?? Object.keys(state.areaProgressMap)).reverse().map((areaId) => {
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
@@ -1697,6 +1739,7 @@ const lateSkipNotice = useMemo(() => {
   }, [
     state.session,
     state.areaProgressMap,
+    state.normalFlowOrder,
     weekdayBaseInfo.weekdayShift,
   ]);
 
@@ -1788,7 +1831,7 @@ const lateSkipNotice = useMemo(() => {
   const review19Items = useMemo(() => {
     const excludedAreaIdSet = new Set(state.review19?.excludedAreaIds ?? []);
 
-    return getReview19AreaItems().map((item) => {
+    return getReview19AreaItems(state.review19?.date, state.review19?.expectedAreaIds).map((item) => {
       const excludeReason = state.review19?.excludeReasons?.[item.areaId];
       return {
         ...item,
@@ -1874,7 +1917,7 @@ const lateSkipNotice = useMemo(() => {
   const cloudSyncErrorDetails = buildPendingSupabaseSyncErrorDetails(
     pendingCloudSyncItems,
   );
-  const editableAreaCounts = NORMAL_ROUTE.flatMap((areaId) => {
+  const editableAreaCounts = (state.normalFlowOrder ?? getAreaRouteFromStoredIds(state.session?.date, Object.keys(state.areaProgressMap))).flatMap((areaId) => {
     const count = state.areaProgressMap[areaId]?.areaCount;
     return typeof count === "number"
       ? [{ areaId, areaName: getAreaName(areaId), count }]
@@ -2721,6 +2764,8 @@ const lateSkipNotice = useMemo(() => {
         skippedRecords,
         targetDiscountTime: nextSession.discountTime,
         completedAt: startedAt,
+        date: nextSession.date,
+        areaIds: prev.normalFlowOrder,
       });
       const { areaProgressMap, normalFlowOrder } = timeSwitchPlan;
       const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap, normalFlowOrder);
@@ -2728,7 +2773,7 @@ const lateSkipNotice = useMemo(() => {
         prev.session.discountTime === "15" && nextSession.discountTime === "17"
           ? normalizeReview19ExcludedAreaIds([
               ...prev.review19ExcludedAreaIds,
-              ...NORMAL_ROUTE.filter((areaId) => prev.areaProgressMap[areaId]?.areaJudge === "few"),
+              ...(prev.normalFlowOrder ?? getAreaRouteFromStoredIds(prev.session.date, Object.keys(prev.areaProgressMap))).filter((areaId) => prev.areaProgressMap[areaId]?.areaJudge === "few"),
             ])
           : nextSession.discountTime === "15"
           ? []
@@ -2769,8 +2814,8 @@ const lateSkipNotice = useMemo(() => {
         areaCountCorrection: null,
       };
     } else {
-      let areaProgressMap = createInitialAreaProgressMap();
-      const normalFlowOrder = [...NORMAL_ROUTE];
+      const normalFlowOrder = getNormalRoute(nextSession.date);
+      let areaProgressMap = createInitialAreaProgressMap(nextSession.date, normalFlowOrder);
       if (nextSession.discountTime === "18" || nextSession.discountTime === "19") {
         const consumed = consumeSkipRecordsInMemory({
           currentRecords: nextSkipRecords,
@@ -2780,7 +2825,7 @@ const lateSkipNotice = useMemo(() => {
 
         nextSkipRecords = consumed.remainingRecords;
         areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-          consumed.skippedRecords
+          consumed.skippedRecords, nextSession.date, normalFlowOrder,
         );
       }
 
@@ -2930,9 +2975,10 @@ const lateSkipNotice = useMemo(() => {
       })
     : null;
 
-  function getCurrentAreaCountRecommendation(count: number) {
+  const getCurrentAreaCountRecommendation = useCallback((count: number) => {
     return buildAreaCountRecommendation({
       records: areaCountRecords,
+      preparedPopulation: areaCountCalculationPopulation,
       areaId: state.currentAreaId,
       discountTime: state.session?.discountTime,
       weekday: state.session?.weekday,
@@ -2941,7 +2987,16 @@ const lateSkipNotice = useMemo(() => {
       applyObonRule,
       count,
     });
-  }
+  }, [
+    areaCountRecords,
+    areaCountCalculationPopulation,
+    state.currentAreaId,
+    state.session?.discountTime,
+    state.session?.weekday,
+    state.session?.date,
+    state.session?.demandCycle,
+    applyObonRule,
+  ]);
 
   function markBentoJudgeGuideShown() {
     const shownDate = activeSessionDate;
@@ -2980,14 +3035,14 @@ const lateSkipNotice = useMemo(() => {
       return { record: null, storageFailed: false };
     }
 
-    const allFinalCountsEntered = NORMAL_ROUTE.every(
+    const allFinalCountsEntered = (params.nextState.normalFlowOrder ?? getAreaRouteFromStoredIds(session.date, Object.keys(params.nextState.areaProgressMap))).every(
       (areaId) => typeof params.nextState.areaProgressMap[areaId]?.areaCount === "number",
     );
     if (!allFinalCountsEntered) {
       return { record: null, storageFailed: false };
     }
 
-    const completedAreaProgressMap = NORMAL_ROUTE.reduce((acc, areaId) => {
+    const completedAreaProgressMap = (params.nextState.normalFlowOrder ?? getAreaRouteFromStoredIds(session.date, Object.keys(params.nextState.areaProgressMap))).reduce((acc, areaId) => {
       const progress = params.nextState.areaProgressMap[areaId];
       const guide = getFinalTimeGuide({
         weekday: session.weekday,
@@ -4054,12 +4109,7 @@ const lateSkipNotice = useMemo(() => {
     humanEvaluation?: AreaCountEvaluation,
     humanEvaluationSelection?: HumanEvaluationSelection,
   ) {
-    const historicalRecords = isTestMode
-      ? []
-      : mergeReview19MedianHistory({
-          localRecords: archivedReview19RecordsRef.current,
-          remoteRecords: remoteReview19HistoryRef.current,
-        });
+    const { historicalRecords, preparedHistory } = getPreparedReview19History();
     const recordedAt = getRuntimeNow().toISOString();
 
     setState((prev) => {
@@ -4100,6 +4150,7 @@ const lateSkipNotice = useMemo(() => {
             demandCycle,
             applyObonRule,
             historicalRecords,
+            preparedHistory,
           }),
         };
       } else {
@@ -4124,6 +4175,7 @@ const lateSkipNotice = useMemo(() => {
           excludeReasons: nextExcludeReasons,
           dataQuality: buildReview19DataQuality({
             date: prev.review19.date,
+            expectedAreaIds: prev.review19.expectedAreaIds,
             areaCounts: nextAreaCounts,
             areaEvaluations: nextAreaEvaluations,
             excludedAreaIds: nextExcludedAreaIds,
@@ -4167,6 +4219,7 @@ const lateSkipNotice = useMemo(() => {
           },
           dataQuality: buildReview19DataQuality({
             date: prev.review19.date,
+            expectedAreaIds: prev.review19.expectedAreaIds,
             areaCounts: nextAreaCounts,
             areaEvaluations: nextAreaEvaluations,
             excludedAreaIds: nextExcludedAreaIds,
@@ -4237,12 +4290,7 @@ const lateSkipNotice = useMemo(() => {
               state.sessionDraft.weekday,
             demandCycle,
             applyObonRule,
-            historicalRecords: isTestMode
-              ? []
-              : mergeReview19MedianHistory({
-                  localRecords: archivedReview19RecordsRef.current,
-                  remoteRecords: remoteReview19HistoryRef.current,
-                }),
+            ...getPreparedReview19History(),
           }),
         };
       } else {
@@ -4263,7 +4311,7 @@ const lateSkipNotice = useMemo(() => {
       delete areaCountRecordedAt[areaId];
     }
 
-    const excludedAreaIds = NORMAL_ROUTE.filter((areaId) =>
+    const excludedAreaIds = (state.review19.expectedAreaIds ?? getNormalRoute(state.review19.date)).filter((areaId) =>
       excludedAreaIdSet.has(areaId),
     );
     const recordedAt = state.review19.recordedAt ?? completedAt;
@@ -4286,6 +4334,7 @@ const lateSkipNotice = useMemo(() => {
     );
     const dataQuality = buildReview19DataQuality({
       date: state.review19.date,
+      expectedAreaIds: state.review19.expectedAreaIds,
       areaCounts: recordedAreaCounts,
       areaEvaluations,
       excludedAreaIds,
@@ -4492,8 +4541,10 @@ const lateSkipNotice = useMemo(() => {
       targetDiscountTime: "19",
     });
 
-    const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(consumed.skippedRecords);
-    const normalFlowOrder = [...NORMAL_ROUTE];
+    const normalFlowOrder = [...(state.normalFlowOrder ?? getAreaRouteFromStoredIds(nextSession.date, Object.keys(state.areaProgressMap)))];
+    const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
+      consumed.skippedRecords, nextSession.date, normalFlowOrder,
+    );
     const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap, normalFlowOrder);
 
     setState({

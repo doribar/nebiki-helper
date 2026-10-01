@@ -12,11 +12,9 @@ export function getEarlyNextMinus5TargetDiscountTime(params: {
   const now = new Date(params.nowMs);
   const minutes = now.getHours() * 60 + now.getMinutes();
 
-  if (
-    params.discountTime === "17" &&
-    minutes >= 18 * 60 &&
-    minutes < 18 * 60 + 25
-  ) {
+  // 17時sessionは18:25に自動終了しない。実際の次session/Review19への
+  // 移行まで先取りを維持し、Review19中の無効化は呼出側のflow stateで行う。
+  if (params.discountTime === "17" && minutes >= 18 * 60) {
     return "18";
   }
 
@@ -61,4 +59,3 @@ export function shouldReserveEarlyNextMinus5OnAutoTransition(params: {
     params.currentTargetDiscountTime === params.nextTargetDiscountTime
   );
 }
-

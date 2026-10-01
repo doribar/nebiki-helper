@@ -1,4 +1,4 @@
-import { getNormalRoute } from "./area.ts";
+import { getExpectedAreaIdsForStoredRecord } from "./area.ts";
 import type {
   AreaCountDataQuality,
   DiscountTime,
@@ -34,13 +34,20 @@ export function buildAutomaticDayExportDataQuality(params: {
   date: string;
   daySnapshot: Review19DaySnapshot;
 }): AutomaticDayExportDataQuality {
-  const expectedAreaIds = getNormalRoute(params.date);
-  const expectedAreaIdSet = new Set(expectedAreaIds);
+  const dayExpectedAreaIds = getExpectedAreaIdsForStoredRecord(params.date, params.daySnapshot);
+  const expectedAreaIdSet = new Set(dayExpectedAreaIds);
   const records = params.daySnapshot.areaCountRecords.filter((record) => {
     return record.date === params.date && expectedAreaIdSet.has(record.areaId);
   });
 
   const coverageByDiscountTime = DAY_EXPORT_DISCOUNT_TIMES.map((discountTime) => {
+    const sessionSnapshot = params.daySnapshot.sessions
+      .filter((session) => session.session.discountTime === discountTime)
+      .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
+      .at(-1);
+    const expectedAreaIds = sessionSnapshot
+      ? getExpectedAreaIdsForStoredRecord(params.date, { snapshot: sessionSnapshot })
+      : dayExpectedAreaIds;
     const countsByArea = new Map<string, number>();
     for (const record of records) {
       if (record.discountTime !== discountTime) continue;
@@ -52,10 +59,6 @@ export function buildAutomaticDayExportDataQuality(params: {
     const duplicateAreaIds = expectedAreaIds.filter((areaId) => {
       return (countsByArea.get(areaId) ?? 0) > 1;
     });
-    const sessionSnapshot = params.daySnapshot.sessions
-      .filter((session) => session.session.discountTime === discountTime)
-      .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
-      .at(-1);
     const processComplete = Boolean(
       sessionSnapshot &&
       expectedAreaIds.every((areaId) => {

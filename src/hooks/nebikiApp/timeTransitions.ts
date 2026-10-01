@@ -1,4 +1,4 @@
-import { NORMAL_ROUTE } from "../../domain/area.ts";
+import { getAreaRouteFromStoredIds } from "../../domain/area.ts";
 import type {
   AppState,
   AreaId,
@@ -29,9 +29,11 @@ export function getNextSkipTargetDiscountTime(
 }
 
 export function createAreaProgressMapWithAutoSkippedAreas(
-  skippedRecords: NextSessionSkipRecord[]
+  skippedRecords: NextSessionSkipRecord[],
+  dateLike?: string | Date | null,
+  areaIds?: readonly AreaId[],
 ): Record<AreaId, AreaProgress> {
-  const base = createInitialAreaProgressMap();
+  const base = createInitialAreaProgressMap(dateLike ?? skippedRecords[0]?.date, areaIds);
 
   for (const record of skippedRecords) {
     if (!isValidAreaId(record.areaId) || !base[record.areaId]) continue;
@@ -73,18 +75,21 @@ export function createTimeSwitchPlan(params: {
   skippedRecords: NextSessionSkipRecord[];
   targetDiscountTime: DiscountTime;
   completedAt?: string;
+  date?: string;
+  areaIds?: readonly AreaId[];
 }): {
   areaProgressMap: Record<AreaId, AreaProgress>;
   normalFlowOrder: AreaId[];
 } {
-  const areaProgressMap = createInitialAreaProgressMap();
+  const route = params.areaIds ?? getAreaRouteFromStoredIds(params.date, Object.keys(params.previousMap));
+  const areaProgressMap = createInitialAreaProgressMap(params.date, route);
   const unfinishedAreaIds = params.targetDiscountTime === "20"
     ? []
-    : NORMAL_ROUTE.filter((areaId) => isPreviousTimeUnfinished(params.previousMap[areaId]));
+    : route.filter((areaId) => isPreviousTimeUnfinished(params.previousMap[areaId]));
   const normalFlowOrder = normalizeNormalFlowOrder([
     ...unfinishedAreaIds,
-    ...NORMAL_ROUTE,
-  ]);
+    ...route,
+  ], params.date, route);
 
   const markAutoSkipped = (record: NextSessionSkipRecord) => {
     if (
@@ -147,7 +152,8 @@ export function finalizeUnmeasuredAreasForAutoTransition(
   state: AppState,
   finalizedAt: string,
 ): AppState {
-  const areaProgressMap = (state.normalFlowOrder ?? NORMAL_ROUTE).reduce((acc, areaId) => {
+  const route = state.normalFlowOrder ?? getAreaRouteFromStoredIds(state.session?.date, Object.keys(state.areaProgressMap));
+  const areaProgressMap = route.reduce((acc, areaId) => {
     const progress = acc[areaId];
     if (!progress || typeof progress.areaCount === "number") {
       if (progress && typeof progress.areaCount === "number") {
@@ -179,7 +185,7 @@ export function finalizeUnmeasuredAreasForAutoTransition(
 
 export function getFirstAvailableAreaId(
   areaProgressMap: Record<AreaId, AreaProgress>,
-  normalFlowOrder: readonly AreaId[] = NORMAL_ROUTE
+  normalFlowOrder: readonly AreaId[] = getAreaRouteFromStoredIds(undefined, Object.keys(areaProgressMap))
 ): AreaId | null {
   return normalFlowOrder.find((areaId) => areaProgressMap[areaId]?.status === "unstarted") ?? null;
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { NORMAL_ROUTE } from "../src/domain/area.ts";
+import { getNormalRoute } from "../src/domain/area.ts";
 import {
   enqueueReview19RecordForCloud,
   getReview19CloudIdentity,
@@ -49,7 +49,7 @@ function makeFinalReview(params: {
     demandCycle: params.demandCycle ?? "normal",
     sessionStartedAt: `${date}T09:00:00.000Z`,
     reviewStartedAt: `${date}T10:00:00.000Z`,
-    excludedAreaIds: [...NORMAL_ROUTE],
+    excludedAreaIds: getNormalRoute(date),
   });
   return {
     ...record,

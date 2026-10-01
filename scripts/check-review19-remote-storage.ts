@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { NORMAL_ROUTE } from "../src/domain/area.ts";
+import { getNormalRoute } from "../src/domain/area.ts";
+const NORMAL_ROUTE = getNormalRoute("2026-08-05");
 import {
   buildRemoteReview19Row,
   buildRemoteReview19Rows,
@@ -70,7 +71,7 @@ function buildRecord(params: {
     demandCycle: params.demandCycle ?? "normal",
     sessionStartedAt,
     reviewStartedAt: sessionStartedAt,
-    excludedAreaIds: params.complete === false ? [] : [...NORMAL_ROUTE],
+    excludedAreaIds: params.complete === false ? [] : getNormalRoute(params.date),
   });
 
   return params.recordedAt
@@ -87,7 +88,7 @@ function buildLegacyFiveScaleRecord(params: {
   recordedAt: string;
 }): Review19Result {
   const targetAreaId = NORMAL_ROUTE[0] as AreaId;
-  const excludedAreaIds = NORMAL_ROUTE.filter((areaId) => areaId !== targetAreaId);
+  const excludedAreaIds = getNormalRoute(params.date).filter((areaId) => areaId !== targetAreaId);
   const record = createInitialReview19Result({
     date: params.date,
     demandCycle: "normal",
