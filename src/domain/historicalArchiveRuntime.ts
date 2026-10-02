@@ -126,23 +126,33 @@ async function hydrateRuntime(
     resultFailure(finalizedDays) ??
     resultFailure(dailySessionSnapshots) ??
     resultFailure(areaCountRecords);
+  // Repository list methods already return detached canonical records. Merge
+  // again only when the operational journal contributes an overlapping source.
   const review19Records = review19.ok
-    ? mergeReview19Operations(review19.value, fallback.review19Records)
+    ? fallback.review19Records.length === 0
+      ? review19.value
+      : mergeReview19Operations(review19.value, fallback.review19Records)
     : fallback.review19Records;
   const finalizedDayRecords = finalizedDays.ok
-    ? selectAllFinalizedDayData([
+    ? fallback.finalizedDayRecords.length === 0
+      ? finalizedDays.value
+      : selectAllFinalizedDayData([
         ...finalizedDays.value,
         ...fallback.finalizedDayRecords,
       ])
     : fallback.finalizedDayRecords;
   const archivedDailySessionSnapshots = dailySessionSnapshots.ok
-    ? mergeDailySessionSnapshotArchiveOperations([
+    ? fallback.dailySessionSnapshots.length === 0
+      ? dailySessionSnapshots.value
+      : mergeDailySessionSnapshotArchiveOperations([
         ...dailySessionSnapshots.value,
         ...fallback.dailySessionSnapshots,
       ])
     : fallback.dailySessionSnapshots;
   const archivedAreaCountRecords = areaCountRecords.ok
-    ? mergeAreaCountRecordCollections(
+    ? fallback.areaCountRecords.length === 0
+      ? areaCountRecords.value
+      : mergeAreaCountRecordCollections(
         areaCountRecords.value,
         fallback.areaCountRecords,
       )
@@ -170,6 +180,11 @@ async function hydrateRuntime(
 
 export function getHistoricalArchiveRuntimeSnapshot(): HistoricalArchiveRuntimeSnapshot {
   return clone(snapshot);
+}
+
+/** Readiness checks do not need a detached copy of the historical payloads. */
+export function getHistoricalArchiveRuntimeStatus(): HistoricalArchiveRuntimeStatus {
+  return snapshot.status;
 }
 
 /**

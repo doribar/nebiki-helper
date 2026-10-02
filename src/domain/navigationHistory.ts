@@ -106,31 +106,31 @@ export function appendNavigationHistory(params: {
   history: NavigationSnapshot[];
   suppressHistoryPush: boolean;
 } {
-  const baseHistory = params.history.map(cloneNavigationSnapshot);
-
   if (!params.previousSnapshot) {
     return {
-      history: baseHistory,
+      history: params.history,
       suppressHistoryPush: params.suppressHistoryPush,
     };
   }
 
   if (!hasNavigationStateChanged(params.previousSnapshot.state, params.nextState)) {
     return {
-      history: baseHistory,
+      history: params.history,
       suppressHistoryPush: params.suppressHistoryPush,
     };
   }
 
   if (params.suppressHistoryPush) {
     return {
-      history: baseHistory,
+      history: params.history,
       suppressHistoryPush: false,
     };
   }
 
   return {
-    history: [...baseHistory, cloneNavigationSnapshot(params.previousSnapshot)],
+    // Entries are isolated when they enter history, and remain immutable there.
+    // Reuse existing entries instead of copying every saved AppState again.
+    history: [...params.history, cloneNavigationSnapshot(params.previousSnapshot)],
     suppressHistoryPush: false,
   };
 }
@@ -147,7 +147,7 @@ export function popNavigationHistory(history: NavigationSnapshot[]): {
   }
 
   return {
-    history: history.slice(0, -1).map(cloneNavigationSnapshot),
+    history: history.slice(0, -1),
     previousSnapshot: cloneNavigationSnapshot(history[history.length - 1]),
   };
 }

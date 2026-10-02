@@ -72,12 +72,12 @@ import {
   runStartupStorageHousekeeping,
   setArchivedFinalizedDatesForStorageRetention,
   upsertDailySessionSnapshotSafely,
+  readRawDailySessionSnapshotJournal,
 } from "../domain/storage";
 import {
   appendNavigationHistory,
   cloneAppState,
   cloneLastSessionWeatherRecord,
-  cloneNavigationSnapshot,
   cloneSkipRecords,
   createNavigationSnapshot,
   popNavigationHistory,
@@ -387,6 +387,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     startupHousekeepingCompletedRef.current = true;
   }
 
+  const [{ initialToday, initialDemandCycleState, initialGlobalDiscountAdjustmentState, initialLastUsedSessionDraft, initialLoadedState, initialWeatherConfirmationPending }] = useState(() => {
   const initialToday = formatLocalDate(getRuntimeNow());
   const initialDemandCycleState = normalizeDemandCycleStateForBusinessDate(
     isTestMode ? loadFixedTimeDemandCycleState() : loadDemandCycleState(),
@@ -423,6 +424,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
         sessionDraft: initialLoadedState?.sessionDraft,
         currentDate: initialToday,
       });
+
+    return { initialToday, initialDemandCycleState, initialGlobalDiscountAdjustmentState, initialLastUsedSessionDraft, initialLoadedState, initialWeatherConfirmationPending };
+  });
 
   const [state, setState] = useState<AppState>(() => {
     const normalizedBase = normalizeLoadedState(
@@ -465,7 +469,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
   );
   const nextSessionSkipRecordsRef = useRef<NextSessionSkipRecord[]>(
-    cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
+    nextSessionSkipRecords
   );
 
   function replaceNextSessionSkipRecords(records: NextSessionSkipRecord[]): void {
@@ -550,10 +554,12 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const [areaCountRecords, setAreaCountRecords] = useState<AreaCountRecord[]>(() =>
     isTestMode ? [] : getHistoricalAreaCountRecords()
   );
-  const areaCountCalculationPopulation = useMemo(
-    () => prepareAreaCountCalculationPopulation(areaCountRecords),
-    [areaCountRecords],
-  );
+  const areaCountCalculationPopulation = useMemo(() => {
+    // Preparation is synchronous on first use, so AreaJudge never sees a
+    // temporary insufficient result. Start/weather do not need this index.
+    let prepared: ReturnType<typeof prepareAreaCountCalculationPopulation> | null = null;
+    return { get: () => prepared ??= prepareAreaCountCalculationPopulation(areaCountRecords) };
+  }, [areaCountRecords]);
 
   function persistAreaCountRecordSafely(
     record: AreaCountRecord,
@@ -574,9 +580,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }
   const [review19RecordsVersion, setReview19RecordsVersion] = useState(0);
   const [finalizedDayDataVersion, setFinalizedDayDataVersion] = useState(0);
-  const initialArchiveSnapshotRef = useRef(
-    getHistoricalArchiveRuntimeSnapshot(),
-  );
+  const [initialArchiveSnapshot] = useState(() => getHistoricalArchiveRuntimeSnapshot());
+  const initialArchiveSnapshotRef = useRef(initialArchiveSnapshot);
   const [archivedReview19Records, setArchivedReview19Records] = useState<
     Review19Result[]
   >(() => initialArchiveSnapshotRef.current.review19Records);
@@ -640,6 +645,38 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     setFinalizedDayDataVersion((version) => version + 1);
   }, []);
   const [cloudSyncVersion, setCloudSyncVersion] = useState(0);
+  const [historyReadVersion, setHistoryReadVersion] = useState(0);
+  const savedDailySessionSnapshots = useMemo(() => {
+    void historyReadVersion;
+    void finalizedDayDataVersion;
+    return isTestMode ? [] : getHistoricalDailySessionSnapshots();
+  },
+    [isTestMode, historyReadVersion, finalizedDayDataVersion]);
+
+  // Keep derived memory views fresh at actual writes, including another tab.
+  useEffect(() => {
+    if (isTestMode) return;
+    const refresh = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage) return;
+      if (event.key === null || event.key === STORAGE_KEYS.dailySessionSnapshots ||
+          event.key === STORAGE_KEYS.review19SourceState ||
+          event.key === PENDING_SUPABASE_SYNC_STORAGE_KEY) {
+        setHistoryReadVersion((version) => version + 1);
+      }
+    };
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
+  }, [isTestMode]);
+
+  function persistDailySessionSnapshot(...args: Parameters<typeof upsertDailySessionSnapshotSafely>) {
+    const before = readRawDailySessionSnapshotJournal();
+    const result = upsertDailySessionSnapshotSafely(...args);
+    const after = readRawDailySessionSnapshotJournal();
+    // An unchanged completion snapshot must not invalidate its own weather
+    // basis and cause the completion effect to save again indefinitely.
+    if (result.ok && before !== after) setHistoryReadVersion((version) => version + 1);
+    return result;
+  }
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [lastBackfillResult, setLastBackfillResult] =
     useState<SupabaseBackfillResult | null>(null);
@@ -655,7 +692,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       run: () => saveReview19SourceState(cloneAppState(sourceState)),
     });
     reportStorageOperationFailures(context, result.attempts);
-    if (result.ok) return true;
+    if (result.ok) {
+      setHistoryReadVersion((version) => version + 1);
+      return true;
+    }
     window.alert(
       "19時チェック用の復元データを端末へ保存できませんでした。空き容量を確認して、もう一度操作してください。",
     );
@@ -718,6 +758,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
         retained,
       };
     } finally {
+      setCloudSyncVersion((version) => version + 1);
       setCloudSyncing(false);
     }
   }, [isTestMode]);
@@ -815,6 +856,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       if (cancelled) return;
 
       const areaResults = [normalArea, summerArea];
+      if (areaResults.some((result) => result.status === "ready" && result.records.length > 0)) {
       const localAreaRecords = getHistoricalAreaCountRecords();
       const remoteAreaRecords = mergeAreaCountRecordCollections(
         ...areaResults.map((result) =>
@@ -887,6 +929,12 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       const mergedAreaRecords = historySource.records;
       setAreaCountRecords(cloneAreaCountRecords(mergedAreaRecords));
 
+      } else {
+        setAreaCountRemoteLoadStatus(resolveAreaCountHistorySource({
+          mode: "production", remoteResults: areaResults,
+        }).remoteStatus);
+      }
+
       const remoteReview19Records = [normalReview19, summerReview19].flatMap(
         (result) => (result.status === "ready" ? result.records : []),
       );
@@ -943,24 +991,29 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     };
   }, [isTestMode, retryPendingCloudSync]);
 
+  const persistedAppState = useMemo(() => cloneAppState(state), [state]);
+  const serializedAppState = useMemo(() => JSON.stringify(persistedAppState), [persistedAppState]);
+
   useEffect(() => {
     // 動作確認モードでは入力結果を端末内のlocalStorageへ残さない。
     // 残数入力の確認で、本番用のセッション状態を汚さないため。
     if (isTestMode) return;
 
-    const persistenceResults = savePersistedNebikiStateWithAuxiliaryRecovery(
-      clonePersistedNebikiStateSnapshot({
+    const snapshot = clonePersistedNebikiStateSnapshot({
         currentSession: state,
         nextSessionSkipRecords,
         lastSessionWeather,
         lastUsedSessionDraft,
         dailyMessageState,
-      })
+      }, persistedAppState);
+    const serializedState = serializedAppState;
+    const persistenceResults = savePersistedNebikiStateWithAuxiliaryRecovery(
+      snapshot, { currentSessionSerialized: serializedState },
     );
 
     if (state.session) {
       persistenceResults.push(
-        saveWorkSessionCheckpointSafely(cloneAppState(state)),
+        saveWorkSessionCheckpointSafely(snapshot.currentSession, serializedState),
       );
     }
     reportStorageOperationFailures("app-state-effect", persistenceResults);
@@ -971,6 +1024,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     lastSessionWeather,
     lastUsedSessionDraft,
     dailyMessageState,
+    persistedAppState,
+    serializedAppState,
   ]);
 
   useEffect(() => {
@@ -1009,21 +1064,18 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       nextState: state,
       suppressHistoryPush: suppressHistoryPushRef.current,
     });
-
     screenHistoryRef.current = historyResult.history;
     suppressHistoryPushRef.current = historyResult.suppressHistoryPush;
-    previousRenderRef.current = buildNavigationSnapshot(state);
+    // AppState and its nested values are updated immutably. Retain references
+    // here; append/undo/restore own the independent snapshot copies.
+    previousRenderRef.current = {
+      state,
+      areaJudgeSelection,
+      resumeTargetScreen,
+      nextSessionSkipRecords: nextSessionSkipRecordsRef.current,
+      lastSessionWeather,
+    };
   }, [state, areaJudgeSelection, resumeTargetScreen, nextSessionSkipRecords, lastSessionWeather]);
-
-  useEffect(() => {
-    if (!previousRenderRef.current) return;
-
-    previousRenderRef.current = cloneNavigationSnapshot({
-      ...previousRenderRef.current,
-      nextSessionSkipRecords: cloneSkipRecords(nextSessionSkipRecords),
-      lastSessionWeather: cloneLastSessionWeatherRecord(lastSessionWeather),
-    });
-  }, [nextSessionSkipRecords, lastSessionWeather]);
 
   useEffect(() => {
     // 動作確認モードでは画面遷移状態もlocalStorageへ保存しない。
@@ -1040,7 +1092,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     reportStorageOperationFailures("runtime-state-effect", [runtimeResult]);
   }, [
     isTestMode,
-    state,
+    state.screen,
+    state.currentAreaId,
+    state.finalTimeStep,
     areaJudgeSelection,
     resumeTargetScreen,
     timeSwitchTarget,
@@ -1297,7 +1351,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       weather: state.session.weather,
       snapshots: isTestMode
         ? []
-        : getHistoricalDailySessionSnapshotsForDate(state.session.date),
+        : savedDailySessionSnapshots.filter((snapshot) => snapshot.session.date === state.session!.date),
       lastSessionWeather,
       existingAnalysis: state.session.temperatureComfortAnalysis,
       legacyUnresolvedTempLevel: state.session.legacyUnresolvedTempLevel,
@@ -1308,6 +1362,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     sessionSource.discountTime,
     lastSessionWeather,
     isTestMode,
+    savedDailySessionSnapshots,
   ]);
   const startDraftNearTermWeather = useMemo(() => {
     return getNearTermWeatherForDiscount(state.sessionDraft.weather, state.sessionDraft.discountTime);
@@ -1412,7 +1467,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       weather: state.session.weather,
       snapshots: isTestMode
         ? []
-        : getHistoricalDailySessionSnapshotsForDate(state.session.date),
+        : savedDailySessionSnapshots.filter((snapshot) => snapshot.session.date === state.session!.date),
       lastSessionWeather,
       previousSession: state.session,
     }).resolvedWeather;
@@ -1446,6 +1501,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     lastSessionWeather,
     isTestMode,
     applyObonRule,
+    savedDailySessionSnapshots,
   ]);
 
   useEffect(() => {
@@ -1810,7 +1866,7 @@ const lateSkipNotice = useMemo(() => {
     });
 
     if (snapshot) {
-      const snapshotWriteResult = upsertDailySessionSnapshotSafely(snapshot, {
+      const snapshotWriteResult = persistDailySessionSnapshot(snapshot, {
         protectedDate: snapshot.session.date,
       });
       reportStorageOperationFailures(
@@ -1897,14 +1953,17 @@ const lateSkipNotice = useMemo(() => {
     void finalizedDayDataVersion;
     return archivedFinalizedDayRecords;
   })();
-  const savedDailySessionSnapshots = getHistoricalDailySessionSnapshots();
-  const dataExport = {
-    review19Count: selectAllReview19Data(savedReview19Records).length,
-  };
-  void cloudSyncVersion;
-  const pendingCloudSyncItems = isTestMode
-    ? []
-    : loadPendingSupabaseSyncQueue();
+  const dataExport = useMemo(() => ({
+    review19Count: savedReview19Records.filter((record) => record.review19Status === "recorded").length,
+  }), [savedReview19Records]);
+  const pendingCloudSyncItems = useMemo(() => {
+    void cloudSyncVersion;
+    void historyReadVersion;
+    void areaCountRecords;
+    void review19RecordsVersion;
+    return isTestMode ? [] : loadPendingSupabaseSyncQueue();
+  },
+    [isTestMode, cloudSyncVersion, historyReadVersion, areaCountRecords, review19RecordsVersion]);
   const cloudSyncStatus = {
     pendingCount: pendingCloudSyncItems.length,
     areaCountPendingCount: pendingCloudSyncItems.filter(
@@ -1944,11 +2003,16 @@ const lateSkipNotice = useMemo(() => {
     demandCycleState,
     demandCycleDate,
   );
-  const savedReview19SourceState = isTestMode ? null : loadReview19SourceState();
+  const savedReview19SourceState = useMemo(() => {
+    void historyReadVersion;
+    void review19RecordsVersion;
+    return isTestMode ? null : loadReview19SourceState();
+  },
+    [isTestMode, historyReadVersion, review19RecordsVersion]);
   const hasCurrentStateRateSnapshot = Boolean(state.session) && Object.values(state.areaProgressMap).some(
     (progress) => Boolean(progress.rateDecisionSnapshot),
   );
-  const inferredOperationDemandCycleRaw = resolveDemandCycleFromEvidence(
+  const inferredOperationDemandCycleRaw = useMemo(() => resolveDemandCycleFromEvidence(
     demandCycleDate,
     [
       ...(state.session
@@ -2001,7 +2065,10 @@ const lateSkipNotice = useMemo(() => {
         ? [{ date: lastSessionWeather.date, demandCycle: lastSessionWeather.demandCycle }]
         : []),
     ],
-  );
+  ), [demandCycleDate, state.session, state.review19, hasCurrentStateRateSnapshot,
+    isTestMode, savedDailySessionSnapshots, savedFinalizedDayData,
+    savedReview19Records, areaCountRecords, savedReview19SourceState,
+    nextSessionSkipRecords, lastSessionWeather]);
   const inferredOperationDemandCycle = inferredOperationDemandCycleRaw
     ? summerModeAvailable
       ? inferredOperationDemandCycleRaw
@@ -2095,11 +2162,13 @@ const lateSkipNotice = useMemo(() => {
   useEffect(() => {
     if (!inferredOperationDemandCycle) return;
 
-    const nextDemandCycleState = lockDemandCycleForDate(
+    // Apply the same existing season normalization to the inferred lock.
+    // Outside summer, otherwise two effects repeatedly lock/unlock normal.
+    const nextDemandCycleState = normalizeDemandCycleStateForBusinessDate(lockDemandCycleForDate(
       demandCycleState,
       demandCycleDate,
       inferredOperationDemandCycle,
-    );
+    ), demandCycleDate);
     if (
       nextDemandCycleState.selectedCycle !== demandCycleState.selectedCycle ||
       nextDemandCycleState.lockedDate !== demandCycleState.lockedDate ||
@@ -2881,7 +2950,7 @@ const lateSkipNotice = useMemo(() => {
         doneSummaryItems: [],
       });
       if (!nightSnapshot) return;
-      const saved = upsertDailySessionSnapshotSafely(nightSnapshot, { protectedDate: nightSession.date });
+      const saved = persistDailySessionSnapshot(nightSnapshot, { protectedDate: nightSession.date });
       reportStorageOperationFailures("night-discount-session-start", saved.attempts);
       if (!saved.ok) {
         window.alert("18:30値引の開始記録を保存できませんでした。空き容量を確認して、もう一度操作してください。");
@@ -2978,7 +3047,7 @@ const lateSkipNotice = useMemo(() => {
   const getCurrentAreaCountRecommendation = useCallback((count: number) => {
     return buildAreaCountRecommendation({
       records: areaCountRecords,
-      preparedPopulation: areaCountCalculationPopulation,
+      preparedPopulation: areaCountCalculationPopulation.get(),
       areaId: state.currentAreaId,
       discountTime: state.session?.discountTime,
       weekday: state.session?.weekday,
@@ -3111,7 +3180,7 @@ const lateSkipNotice = useMemo(() => {
       return { record: null, storageFailed: false };
     }
 
-    const snapshotWriteResult = upsertDailySessionSnapshotSafely(
+    const snapshotWriteResult = persistDailySessionSnapshot(
       finalSessionSnapshot,
       { protectedDate: session.date },
     );
@@ -4483,6 +4552,7 @@ const lateSkipNotice = useMemo(() => {
         run: clearReview19SourceState,
       });
       reportStorageOperationFailures("review19-source-cleanup", [clearSourceResult]);
+      if (clearSourceResult.ok) setHistoryReadVersion((version) => version + 1);
     }
 
     setState((prev) => {
@@ -4697,7 +4767,7 @@ const lateSkipNotice = useMemo(() => {
         sessionEndReason: "auto_time_transition",
       });
       if (!isTestMode && interruptedSnapshot) {
-        const snapshotWriteResult = upsertDailySessionSnapshotSafely(
+        const snapshotWriteResult = persistDailySessionSnapshot(
           interruptedSnapshot,
           { protectedDate: interruptedSnapshot.session.date },
         );

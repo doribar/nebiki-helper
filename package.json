@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-37",
+  "version": "2026.8.9-38",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -76,7 +76,9 @@
     "check:area-count-year-round": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-year-round.ts",
     "check:early-next-17-continuity": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-early-next-17-continuity.ts",
     "check:seasonal-areas": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-seasonal-areas.ts",
-    "check:area-count-performance": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-performance.ts"
+    "check:area-count-performance": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-performance.ts",
+    "check:startup-archive-performance": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-startup-archive-performance.ts",
+    "check:interactive-persistence": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-interactive-persistence.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

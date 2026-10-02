@@ -477,7 +477,7 @@ function hookHarness(params: {
     basisGuide: input.basisGuide,
     lateTimeBonus: 0,
     capturedDoneSummaryItems: [],
-    upsertDailySessionSnapshotSafely: (snapshot: DailySessionSnapshot) => {
+    persistDailySessionSnapshot: (snapshot: DailySessionSnapshot) => {
       events.push("snapshot");
       snapshots.push(snapshot);
       if (params.snapshotSaveOk !== false) persistedSnapshots.push(snapshot);
@@ -686,7 +686,7 @@ for (const stage of ["snapshot", "source"] as const) {
     assert.equal(harness.events.some((event) => event.startsWith("open:")), false);
     assert.equal(harness.events.some((event) => event.includes("19時チェックの時間")), false);
     assert.equal((harness.context.autoTransitionInFlightKeyRef as { current: string | null }).current, null);
-    harness.context.upsertDailySessionSnapshotSafely = (snapshot: DailySessionSnapshot) => {
+    harness.context.persistDailySessionSnapshot = (snapshot: DailySessionSnapshot) => {
       harness.snapshots.push(snapshot);
       return { ok: true, attempts: [] };
     };
@@ -905,7 +905,7 @@ test("18 start snapshot failure retains the 17 source and permits retry without 
   const readSnapshots = harness.context.getHistoricalDailySessionSnapshotsForDate as
     (date: string) => DailySessionSnapshot[];
   assert.equal(hasStarted1830Session({ state: prior, now: at(18, 55), snapshots: readSnapshots(DATE) }), false);
-  harness.context.upsertDailySessionSnapshotSafely = () => ({ ok: true, attempts: [] });
+  harness.context.persistDailySessionSnapshot = () => ({ ok: true, attempts: [] });
   harness.start();
   assert.equal(harness.published.at(-1)?.session?.discountTime, "18");
 });
@@ -934,7 +934,7 @@ test("actual 18 start journal roundtrip survives current-state replacement witho
     const harness = manualStartHarness();
     harness.run();
     assert.equal(loadDailySessionSnapshots().length, 0);
-    harness.context.upsertDailySessionSnapshotSafely = upsertDailySessionSnapshotSafely;
+    harness.context.persistDailySessionSnapshot = upsertDailySessionSnapshotSafely;
     harness.start();
     const persisted = loadDailySessionSnapshots();
     assert.equal(persisted.length, 1);

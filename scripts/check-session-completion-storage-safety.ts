@@ -199,10 +199,12 @@ try {
       "utf8",
     ).replaceAll("\r\n", "\n");
     assert.equal(
-      [...source.matchAll(/\bupsertDailySessionSnapshotSafely\(/g)].length,
-      4,
+      [...source.matchAll(/\bpersistDailySessionSnapshot\(/g)].length,
+      5, // four callers plus the cache-invalidation wrapper declaration
+
     );
     assert.doesNotMatch(source, /\bupsertDailySessionSnapshot\(/);
+    assert.equal([...source.matchAll(/\bupsertDailySessionSnapshotSafely\(/g)].length, 1);
     assert.match(source, /daily-session-completion/);
     assert.match(source, /final-session-snapshot/);
     assert.match(source, /auto-time-transition-snapshot/);
@@ -218,7 +220,7 @@ try {
     const start = source.indexOf("function startNextDoneSession");
     const end = source.indexOf("function persistFinalizedDayMemo", start);
     const body = source.slice(start, end);
-    const persistenceIndex = body.indexOf("upsertDailySessionSnapshotSafely");
+    const persistenceIndex = body.indexOf("persistDailySessionSnapshot");
     const dialogIndex = body.indexOf("window.alert(buildAutoTimeSwitchDialogText");
     const openIndex = body.indexOf("openNextSessionInput(nextInfo.targetDiscountTime");
     assert.ok(persistenceIndex >= 0);

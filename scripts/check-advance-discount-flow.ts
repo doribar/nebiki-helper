@@ -128,7 +128,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     clonePersistedNebikiStateSnapshot, savePersistedNebikiStateWithAuxiliaryRecovery,
     saveWorkSessionCheckpointSafely, saveRuntimeStateSafely,
     getHistoricalDailySessionSnapshotsForDate: () => snapshots,
-    upsertDailySessionSnapshotSafely: (snapshot: DailySessionSnapshot) => {
+    persistDailySessionSnapshot: (snapshot: DailySessionSnapshot) => {
       snapshots.push(json(snapshot));
       return upsertDailySessionSnapshotSafely(snapshot, { protectedDate: DATE });
     },
@@ -168,6 +168,8 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     openNext: context.openNextSessionInput as (time: DiscountTime, options: { preserveCurrentSession: boolean; lockDiscountTime: boolean }) => boolean,
     navigate: () => runEffect("const historyResult = appendNavigationHistory", context),
     persist: () => {
+      context.persistedAppState = cloneAppState(context.state as AppState);
+      context.serializedAppState = JSON.stringify(context.persistedAppState);
       runEffect("app-state-effect", context);
       runEffect("runtime-state-effect", context);
       // The existing completion effect must not invent completed 15/17 snapshots.

@@ -446,9 +446,9 @@ export function clonePersistedNebikiStateSnapshot(params: {
   lastSessionWeather: LastSessionWeatherRecord | null;
   lastUsedSessionDraft: SessionDraft;
   dailyMessageState: DailyMessageState;
-}) {
+}, preparedCurrentSession?: AppState) {
   return {
-    currentSession: cloneAppState(params.currentSession),
+    currentSession: preparedCurrentSession ?? cloneAppState(params.currentSession),
     workSessionCheckpoint: null,
     runtimeState: null,
     nextSessionSkipRecords: cloneSkipRecords(params.nextSessionSkipRecords),

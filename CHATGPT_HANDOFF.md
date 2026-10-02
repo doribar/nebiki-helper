@@ -1,4 +1,4 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-37）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-38）
 
 最終更新: 2026-10-01 JST
 
@@ -10,22 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-37.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-37.zip` |
-| appVersion | `2026.8.9-37` |
-| buildId | `build-20261001-205943-jst` |
+| ZIP | `nebiki-helper-2026.8.9-38.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-38.zip` |
+| appVersion | `2026.8.9-38` |
+| buildId | `build-20261001-223736-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `outputs/nebiki-helper-2026.8.9-37.zip.sha256` / `RELEASE_REPORT_2026.8.9-37.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `.zip.sha256` / `RELEASE_REPORT_2026.8.9-38.md` を参照（自己参照回避） |
 
-application rootは成果物workspace内の `work/performanceSeasonal37/nebiki-helper`。package versionは9-37、buildIdは従来どおりViteからJSTで生成。schema 3、version/build生成方法は非変更。
-
-比較基準は9-36 ZIP `nebiki-helper-2026.8.9-36.zip`（SHA-256 `2439c08d5705fede2d4a5ebcb2ba6f16f6163b0e93f556d88639f197269007df`）。9-35 ZIPは性能比較にも使用した。9-37は履歴前処理の再利用、17時early-next継続、夏商品の名称/秋商品季節枠と過去互換を変更。詳細は `CHANGE_REPORT_2026.8.9-37.md`。AGENTS.md・過去CHANGE REPORTは非変更。
+application rootは `work/interactivePerformance38/nebiki-helper`。比較基準は9-37 ZIP `nebiki-helper-2026.8.9-37.zip`（SHA-256 `afa58fc16e0ca2428dbc420bcfcf383d339ee7bc3b2b18edc763d860ae3f1f23`）。9-38は起動/天候入力/保存のperformance修正だけ。業務計算、保存形式、schema3、version/buildId生成方式は維持。AGENTS.md・過去CHANGE_REPORT・SQL9本は非変更。詳細は `CHANGE_REPORT_2026.8.9-38.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\performanceSeasonal37\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\interactivePerformance38\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -149,6 +147,16 @@ legacy migrationは次の順で行う。
 - `ryomi` のIDは維持し、master表示名だけ「夏商品」。新規 `autumn`「秋商品」は独立ID。6〜9月はryomi、10〜11月はautumn、12〜5月は季節枠なし。新sessionはsession日付を基準に、天ぷらとコロッケ系の間へ片方だけ置く。通常/Done/Review19/dataQuality/exportで対象数12/12/11を揃える。
 - 保存済みroute/map/expectedAreaIdsを尊重し、9-36以前の10月11エリアへ秋商品の欠測を捏造しない。Review19Result/Review19Check/Review19DaySnapshotへschema3互換optional `expectedAreaIds` を保持し、legacyは保存証拠と当時の季節枠から解決する。legacyの `areaName:"涼味商品"` は物理変更しない。現masterから表示する画面と新snapshotは「夏商品」。ryomiとautumnのhistory/median/Review/analysis/backfillは独立、autumn3件未満は既存insufficient/manual。
 - 巡回のunfinished priority順と表示用canonical順を分け、Done/Review19/日次snapshotでは保存された季節slotの通常業務順を使う。他エリアの順を変えない。productionAnalysisの判定関数・定義はbyte-identical、追加エリアを渡す対象範囲だけ拡張。
+
+### 9-38: 起動直後の天候入力と復元処理の重複削減
+
+- 起動用設定・archive snapshotはlazy useStateで1回取得する。以前のuseRef引数の全archive deep cloneが毎renderで評価される処理を廃止。Review19件数は既に正規化済みのrecorded recordを数えるだけで、export builder/productionAnalysisをrenderから呼ばない。
+- 日次履歴・Review19 source・pendingの派生viewは実際の保存/同期/他タブstorage eventで更新する。日次wrapperはjournal bytesが変わった場合だけinvalidateし、Done completion effectの再保存循環を防ぐ。weather/early-nextの履歴参照も同じcached viewを使い、30秒clockで全履歴を再読込しない。業務確定handlerのfresh readは維持。
+- AreaCountのprivate WeakMap/prepared indexは維持。useMemo内のlazy get()で最初のrecommendation時に同期準備する。Start/weatherでは全件prepareせず、AreaJudgeの実計算より前に必ずreadyになる。Review19のlazy prepared履歴も維持。
+- navigationはscreen/area/finalTimeStepの変化を先に確認し、変化なしでは既存履歴をcloneしない。既に隔離された履歴entryは不変として共有し、追加/復元時に対象snapshotだけdeep copy。previousRenderRefはimmutable AppState参照を保持し、weather項目ごとに複製しない。
+- runtime effectはnavigation/undo等の実際のruntime条件だけに依存。current/checkpointには1回のnormalized snapshotとserializeを共用し、実localStorage bytesが一致すればwriteを省く。天候変更は従来どおり直ちに保存し、debounce/blur依存は導入しない。quota retry時や欠損copyは実storage比較で再保存する。
+- 期間外のnormal lockとseason-normalizationが交互に更新される既存effect循環を解消。inferred lock候補にも既存normalizeDemandCycleStateForBusinessDateを通すだけで、7〜9月の夏季gate・active cycle・値引率は変えない。
+- archive repositoryが既にcanonical化した結果は、対応legacy fallbackが空なら再mergeしない。legacy overlap/失敗時の復元経路・migrationのverify/delete順・clone getterの独立性は維持。
 
 ## 6. calendar、reference、summer / normal
 
@@ -381,26 +389,23 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全 `check:*` **69/69 PASS**。専用: 性能7/7、17時early-next14/14、季節商品30/30。全check名集合はpackage.jsonと一致。
-- 9-36との全出力比較 **1260 recommendation + 32 Review19統計一致**。mixed cycle、重複revision、date exclusion、calendar/group/long guard、減り方/20:30を含む。入力非破壊を確認。恒久performance testは500/1000/2000件で100回のcount変更時にraw履歴読取0・全件sortなし、cache更新/戻り値独立性・実hook/AreaJudge memoの時計再renderと条件変更を検証する。
-- TypeScript / production build / PWA generateSW PASS（101 modules、precache10）。従来の大chunk/Browserslist data警告は残る。version/build生成方法・schema3は非変更。
-- focused ESLint **1 errors / 4 warnings**、全体 **9 errors / 7 warnings**。9-36 baselineとfile/rule/severity/message比較、新規error/warning **0**。既存AreaJudge effect error、hook4warnings等を含む既知診断は変更しない。
-- Edge production preview（headless、390×844）**13 scenario groups / 502 actions PASS**。四季境界通常→Done→18:55Review→全エリアhuman入力→4件の実JSONdownload/parse、17:59〜18:54の実snapshot・weather/global一回・next/back/reload/既存snapshot保持、500/1000/2000件rich混在履歴のstart/weather/AreaJudge/calculator/rate/next/back/全Done/Reviewを確認。
-- browser action Performance API: 500件median15ms/p9541ms/max61ms、1000件17/55/72ms、2000件21/76/91ms（各78action）。500件のlong taskは0、1000件は起動時66msが1件、2000件は起動時146msと操作中50/51/52/53/56/62/62msが7件。新規raw9 metadataを含む約0.54/1.07/2.15MBの履歴で、初期hydrate/準備や保存側のmain-thread作業は残る。pointerupから表示/次frameまでの自動操作往復を含む時間で、pure React commit/実店舗端末性能ではない。横overflow、アプリconsole error/warning、pageerror、不要外部通信0。既存Review alert8件、要求したJSONdownload4件のみ。SWblocked環境warning9件はアプリ診断と別計上。
-- 実店舗JSON（2026-10-01、1Review・AreaCount22件）をread-only確認。tempura18:11/onigiri18:22はeffective18、fry_chicken18:27はeffective17へ戻っており旧18:25上限と一致する。実JSONのwarm100回は9-35=85.55ms、9-36=87.98ms、9-37prepared=1.68ms。実JSONは当日分だけで店舗の過去archiveを含まず、全店舗履歴の体感latency原因すべてを断定しない。入力ファイルbytesは維持。
-- production97 source中81本が9-36とbyte-identical。変更16本は今回性能/early/季節互換に限定。SQL9本、AGENTS.md、過去CHANGE_REPORT、rate/weather/quick/冷惣菜/商品policy/productionAnalysis定義/remote/SQL責務・version/build生成方法を維持。
-- GPT-6.1 Sol / Ultraのみ使用（並列agentを含む）。
+- 全check:* 71/71 PASS。恒久performance/recovery専用: startup6/6、interactive12/12。既存69本を含む。
+- 9-37との全出力1260 recommendation +32 Review19統計一致。9-36互換は9-37の同比較証跡と37/38計算コードbyte一致を併せて確認。rate/weather/calendar/AreaCount/Review19/productionAnalysis定義はbyte-identical。
+- TypeScript/production build/PWA generateSW PASS（101 modules、precache10）。focused ESLint0 errors/3 baseline warnings、full9 errors/6 warnings（9-37は9/7）、file/rule/severity/messageで新規0。
+- Edge production preview390×844、CPU4倍、0/500/1000/2000件・navigation0/5/12/24の7条件91操作/versionで比較。2000件/履歴24のinstrumented天候commit2467.8→15.2ms、first interactive commit6344.3→4303.5ms。無instrumentation完成コードのevent→2回目rAFは天候1145.8→10.6ms。reload/wait/作業からweatherへ戻る追加フローと完成build/Done確認もPASS。application console error/warning/外部通信0。起動archive gateはなおlong taskが残る。具体値・測定境界・未確認範囲は今回CHANGE_REPORTと外部performance結果を参照。計測instrumentationはrelease source/distに含めない。
+- 97 production source中91本が9-37とbyte-identical。変更6本はApp、useNebikiApp、stateNormalization、historicalArchiveRuntime、navigationHistory、storage。AGENTS.md/SQL9本/過去報告/version-build生成方式/schema3は非変更。
+- 即時weather保存、back/undo/reload/checkpoint-only crash復元、Done journal安定化、storage eventの更新を恒久testで確認。GPT-6.1 Sol / Ultraのみ使用（並列agentを含む）。
 
-未確認: 実Supabase通信、インストール済みPWA、実店舗物理端末・native touch・長時間background復帰、実店舗の全過去archiveを使った性能。browserは隔離synthetic data/Date固定時計、タイマー/Performance APIは実時間。通常季節シナリオの他エリアは完了fixture、Review全観測と性能シナリオ全エリアはUI入力。
+未確認: 実店舗物理Android端末・native touch・インストール済みPWA、実Supabase通信/remote取得時間、実店舗の全過去archive、物理crash/長時間background。CPU4倍はdesktop slowdownの近似であり、店舗端末の改善値を保証しない。起動gateのarchive read後のcanonical化は依然重く、weather操作改善だけで全問題解決と断定しない。
 
-証跡: `work/performanceSeasonal37/checks.json`, `lint-comparison37.json`, `baseline-comparison37.json`, `benchmark-comparison37.json`, `actual-performance37.json`, `calculation-comparison37.json`, `browser-work/browser-results37.json`。ZIP再open検査/SHAは外部release報告/検査JSONへ記録。
+証跡: `work/interactivePerformance38/checks.json`, `lint-comparison38.json`, `baseline-comparison38.json`, `calculation-comparison38.json`, `startup-audit/`, `persistence-audit/`, `browser-work/`。ZIP再open検査/SHAは外部release報告/検査JSON。
 
 ## 13. 既知課題、検討中だが未実装の案
 
 既知課題:
 
 - 減り方の厳密な20ポイント境界には既存の浮動小数点差がある（40%→60%では `0.4 + 0.2` が `0.6000000000000001` となり補正なし）。9-35との同結果を確認済み。今回の通年化では判定式を変更していない。
-- full project ESLintに既存9 errors / 7 warnings。
+- full project ESLintに既存9 errors / 6 warnings（9-37は9/7、新規0）。
 - `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、全51本より少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
@@ -427,7 +432,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-37.md`（9-36 baselineは `CHANGE_REPORT_2026.8.9-36.md`）
+4. `CHANGE_REPORT_2026.8.9-38.md`（9-37 baselineは `CHANGE_REPORT_2026.8.9-37.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

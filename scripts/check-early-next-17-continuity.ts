@@ -125,6 +125,7 @@ function harness(state = fixture(), now = at(18, 40)) {
     useMemo: (factory: () => unknown) => factory(),
     getRuntimeNow: () => new Date(context.nowMs as number),
     getHistoricalDailySessionSnapshotsForDate: () => [],
+    savedDailySessionSnapshots: [],
     getEarlyNextMinus5TargetDiscountTime, getWeekdayBaseInfo, getBasisGuideDisplay,
     resolveSessionTemperatureComfort, normalizeDemandCycle, normalizeGlobalDiscountAdjustmentPercent,
     shouldIgnoreNormalTimeRateCap, buildMergedBonusDisplay, buildRateDecisionSnapshot,

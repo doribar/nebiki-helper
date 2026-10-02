@@ -353,8 +353,21 @@ export function loadCurrentSession(): AppState | null {
   return safeParseJSON<AppState | null>(raw, null);
 }
 
-export function saveCurrentSession(state: AppState): void {
-  localStorage.setItem(STORAGE_KEYS.currentSession, JSON.stringify(state));
+function isStoredSessionStateUnchanged(key: string, serializedState: string): boolean {
+  try {
+    // Compare the real storage value so quota cleanup, reset, or another writer
+    // cannot make an in-memory cache incorrectly suppress a recovery write.
+    return localStorage.getItem(key) === serializedState;
+  } catch {
+    // A failed read must not prevent a still-available authoritative write.
+  }
+  return false;
+}
+
+export function saveCurrentSession(state: AppState, serializedState?: string): void {
+  const serialized = serializedState ?? JSON.stringify(state);
+  if (isStoredSessionStateUnchanged(STORAGE_KEYS.currentSession, serialized)) return;
+  localStorage.setItem(STORAGE_KEYS.currentSession, serialized);
 }
 
 export function clearCurrentSession(): void {
@@ -366,15 +379,17 @@ export function loadWorkSessionCheckpoint(): AppState | null {
   return safeParseJSON<AppState | null>(raw, null);
 }
 
-export function saveWorkSessionCheckpoint(state: AppState): void {
-  localStorage.setItem(STORAGE_KEYS.workSessionCheckpoint, JSON.stringify(state));
+export function saveWorkSessionCheckpoint(state: AppState, serializedState?: string): void {
+  const serialized = serializedState ?? JSON.stringify(state);
+  if (isStoredSessionStateUnchanged(STORAGE_KEYS.workSessionCheckpoint, serialized)) return;
+  localStorage.setItem(STORAGE_KEYS.workSessionCheckpoint, serialized);
 }
 
 export function clearWorkSessionCheckpoint(): void {
   localStorage.removeItem(STORAGE_KEYS.workSessionCheckpoint);
 }
 
-function cloneRuntimeState(raw: PersistedRuntimeState | null): PersistedRuntimeState | null {
+function normalizeRuntimeStateShape(raw: PersistedRuntimeState | null): PersistedRuntimeState | null {
   if (!raw || typeof raw !== "object") return null;
 
   return {
@@ -394,15 +409,27 @@ function cloneRuntimeState(raw: PersistedRuntimeState | null): PersistedRuntimeS
       raw.timeSwitchTarget === "20"
         ? raw.timeSwitchTarget
         : null,
-    undoSnapshot: raw.undoSnapshot ? JSON.parse(JSON.stringify(raw.undoSnapshot)) : null,
+    undoSnapshot: raw.undoSnapshot ?? null,
     screenHistory: Array.isArray(raw.screenHistory)
-      ? JSON.parse(JSON.stringify(raw.screenHistory.slice(
+      ? raw.screenHistory.slice(
           -PERSISTED_RUNTIME_HISTORY_MAX_ENTRIES,
-        )))
+        )
       : [],
     weatherConfirmationPending: normalizeWeatherConfirmationPending(
       raw.weatherConfirmationPending,
     ),
+  };
+}
+
+function cloneRuntimeState(raw: PersistedRuntimeState | null): PersistedRuntimeState | null {
+  const normalized = normalizeRuntimeStateShape(raw);
+  if (!normalized) return null;
+  return {
+    ...normalized,
+    undoSnapshot: normalized.undoSnapshot
+      ? JSON.parse(JSON.stringify(normalized.undoSnapshot))
+      : null,
+    screenHistory: JSON.parse(JSON.stringify(normalized.screenHistory)),
   };
 }
 
@@ -414,7 +441,9 @@ export function loadRuntimeState(): PersistedRuntimeState | null {
 export function saveRuntimeState(state: PersistedRuntimeState): void {
   localStorage.setItem(
     STORAGE_KEYS.runtimeState,
-    JSON.stringify(cloneRuntimeState(state))
+    // The synchronous serialization already isolates the durable value. Deep
+    // cloning all immutable navigation entries before it duplicates that work.
+    JSON.stringify(normalizeRuntimeStateShape(state))
   );
 }
 
@@ -951,6 +980,15 @@ function getDailySessionCompletionSignature(snapshot: DailySessionSnapshot): str
   );
 }
 
+/** Raw journal revision for write-time memory invalidation; no JSON parsing. */
+export function readRawDailySessionSnapshotJournal(): string | null | undefined {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.dailySessionSnapshots);
+  } catch {
+    return undefined;
+  }
+}
+
 export function loadDailySessionSnapshots(): DailySessionSnapshot[] {
   const raw = localStorage.getItem(STORAGE_KEYS.dailySessionSnapshots);
   const parsed = safeParseJSON<DailySessionSnapshot[]>(raw, []);
@@ -1323,6 +1361,7 @@ export function savePersistedNebikiStateSafely(
 
 export function savePersistedNebikiStateWithAuxiliaryRecovery(
   state: PersistedNebikiState,
+  options?: { currentSessionSerialized?: string },
 ): StorageOperationResult[] {
   const proactiveAttempts = isOperationalHeadroomLow()
     ? releaseAuxiliaryStorageForReview19()
@@ -1332,7 +1371,7 @@ export function savePersistedNebikiStateWithAuxiliaryRecovery(
       ? {
           key: STORAGE_KEYS.currentSession,
           operation: "set",
-          run: () => saveCurrentSession(state.currentSession!),
+          run: () => saveCurrentSession(state.currentSession!, options?.currentSessionSerialized),
         }
       : {
           key: STORAGE_KEYS.currentSession,
@@ -1354,7 +1393,7 @@ export function savePersistedNebikiStateWithAuxiliaryRecovery(
       attemptStorageOperation({
         key: STORAGE_KEYS.currentSession,
         operation: "set",
-        run: () => saveCurrentSession(state.currentSession!),
+        run: () => saveCurrentSession(state.currentSession!, options?.currentSessionSerialized),
       }),
     );
   }
@@ -1368,6 +1407,7 @@ export function savePersistedNebikiStateWithAuxiliaryRecovery(
 
 export function saveWorkSessionCheckpointSafely(
   state: AppState,
+  serializedState?: string,
 ): StorageOperationResult {
   if (isOperationalHeadroomLow()) {
     const removed = removeStorageKeySafely(STORAGE_KEYS.workSessionCheckpoint);
@@ -1378,7 +1418,7 @@ export function saveWorkSessionCheckpointSafely(
   return attemptStorageOperation({
     key: STORAGE_KEYS.workSessionCheckpoint,
     operation: "set",
-    run: () => saveWorkSessionCheckpoint(state),
+    run: () => saveWorkSessionCheckpoint(state, serializedState),
   });
 }
 

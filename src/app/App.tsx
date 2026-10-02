@@ -13,7 +13,7 @@ import {
   setArchivedFinalizedDatesForStorageRetention,
 } from "../domain/storage";
 import {
-  getHistoricalArchiveRuntimeSnapshot,
+  getHistoricalArchiveRuntimeStatus,
   initializeHistoricalArchiveRuntime,
 } from "../domain/historicalArchiveRuntime.ts";
 
@@ -409,7 +409,7 @@ export default function App() {
   }, [testModeNow]);
 
   if (hasDateChanged) return <DateChangedBlocker loadedDate={loadedDate} />;
-  if (!archiveReady && getHistoricalArchiveRuntimeSnapshot().status !== "complete") {
+  if (!archiveReady && getHistoricalArchiveRuntimeStatus() !== "complete") {
     return <ArchiveLoadingScreen />;
   }
 
