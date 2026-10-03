@@ -2,11 +2,15 @@ import type { CSSProperties } from "react";
 import type { DiscountTime } from "../../domain/types.ts";
 import { getEarlyNextMinus5CompletedText } from "../../domain/earlyNextMinus5.ts";
 import { ScreenHeader } from "../layout/ScreenHeader";
+import type { AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
+import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
 
 type AutoSkipNoticeScreenProps = {
   weekdayText: string;
   timeText: string;
   areaName: string;
+  areaCount?: number | null;
+  areaCountDecisionBasis?: AreaCountDecisionBasis;
   onRecordCountOnly: () => void;
   onProcessNormally: () => void;
   onSkipWithoutMeasurement: () => void;
@@ -31,6 +35,8 @@ export function AutoSkipNoticeScreen({
   weekdayText,
   timeText,
   areaName,
+  areaCount,
+  areaCountDecisionBasis,
   onRecordCountOnly,
   onProcessNormally,
   onSkipWithoutMeasurement,
@@ -59,6 +65,11 @@ export function AutoSkipNoticeScreen({
             戻る
           </button>
         }
+      />
+
+      <AreaCountStatusPanel
+        areaCount={areaCount}
+        decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
       />
 
       <section

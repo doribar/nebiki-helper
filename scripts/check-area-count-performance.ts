@@ -1,3 +1,4 @@
+import { retainSuppressedDecreaseRecommendation } from "../src/hooks/nebikiApp/decreaseSuppression.ts";
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import { readFileSync } from "node:fs";
@@ -185,6 +186,8 @@ check("actual hook and AreaJudge memo dependencies reuse clock renders and inval
     useCallback: <T>(callback: T, deps: readonly unknown[]) => memoSlot(() => callback, deps),
     prepareAreaCountCalculationPopulation: (values: AreaCountRecord[]) => { prepareCalls += 1; return prepareAreaCountCalculationPopulation(values); },
     buildAreaCountRecommendation: (values: Parameters<typeof getAreaCountRecommendation>[0]) => { recommendationCalls += 1; return getAreaCountRecommendation(values); },
+    currentAreaProgress: undefined,
+    retainSuppressedDecreaseRecommendation,
     areaCountRecords: records,
     state: { currentAreaId: params.areaId, session: { discountTime: params.discountTime, date: params.date, weekday: params.weekday, demandCycle: params.demandCycle } },
     applyObonRule: true,

@@ -127,10 +127,20 @@ export function DoneScreen({
                   </>
                 ) : (
                   <>
-                    <div style={{ fontWeight: 800 }}>
+                    <div style={{
+                      fontWeight: 800,
+                      color: typeof item.manyRatePercent === "number" &&
+                        Number.isFinite(item.manyRatePercent) && item.manyRatePercent > 0
+                        ? "#ff0000" : undefined,
+                    }}>
                       多い → {item.manyRateText ?? item.rateText}
                     </div>
-                    <div style={{ fontWeight: 800 }}>
+                    <div style={{
+                      fontWeight: 800,
+                      color: typeof item.normalRatePercent === "number" &&
+                        Number.isFinite(item.normalRatePercent) && item.normalRatePercent > 0
+                        ? "#008000" : undefined,
+                    }}>
                       どちらでもない → {item.normalRateText ?? item.rateText}
                     </div>
                     {item.statusText ? (

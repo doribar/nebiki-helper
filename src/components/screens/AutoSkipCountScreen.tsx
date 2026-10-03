@@ -2,12 +2,16 @@ import { useState, type CSSProperties, type FormEvent } from "react";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import type { AreaId, EditableAreaCountItem } from "../../domain/types.ts";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
+import type { AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
+import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
 
 type AutoSkipCountScreenProps = {
   weekdayText: string;
   timeText: string;
   areaName: string;
   initialCount?: number | null;
+  areaCount?: number | null;
+  areaCountDecisionBasis?: AreaCountDecisionBasis;
   onSave: (count: number) => void;
   onGoBack: () => void;
   onReturnHome: () => void;
@@ -45,6 +49,8 @@ export function AutoSkipCountScreen({
   timeText,
   areaName,
   initialCount,
+  areaCount,
+  areaCountDecisionBasis,
   onSave,
   onGoBack,
   onReturnHome,
@@ -83,6 +89,11 @@ export function AutoSkipCountScreen({
             戻る
           </button>
         }
+      />
+
+      <AreaCountStatusPanel
+        areaCount={areaCount ?? initialCount}
+        decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
       />
 
       <form onSubmit={handleSubmit}>

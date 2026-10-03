@@ -25,7 +25,8 @@ import {
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
-import { evaluationText } from "../../domain/areaCountHistory.ts";
+import { evaluationText, type AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
+import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
 import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
 import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
 import type { MedianEvaluationDisplay } from "../../domain/medianEvaluationPresentation.ts";
@@ -52,6 +53,9 @@ type RateDisplayScreenProps = {
   timeSwitchNotice?: string | null;
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
+  areaCount?: number | null;
+  areaCountDecisionBasis?: AreaCountDecisionBasis;
+  onToggleDecreaseAdjustmentSuppression?: () => void;
   rateDisplay: RateDisplayData | null;
   rateDisplayBeforeGlobalAdjustment?: RateDisplayData | null;
   globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
@@ -278,6 +282,9 @@ export function RateDisplayScreen({
   timeSwitchNotice,
   lateSkipNotice,
   discountTime,
+  areaCount,
+  areaCountDecisionBasis,
+  onToggleDecreaseAdjustmentSuppression,
   rateDisplay,
   rateDisplayBeforeGlobalAdjustment = null,
   globalDiscountAdjustmentPercent = 0,
@@ -399,6 +406,13 @@ export function RateDisplayScreen({
           }
         />
 
+        <AreaCountStatusPanel
+          areaCount={areaCount}
+          decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
+          onToggleDecreaseAdjustmentSuppression={discountTime === "17"
+            ? onToggleDecreaseAdjustmentSuppression : undefined}
+        />
+
         <NoticeSection />
 
         <PrimaryButton onClick={onConfirmDailyNotice ?? (() => {})}>
@@ -439,6 +453,13 @@ export function RateDisplayScreen({
             戻る
           </button>
         }
+      />
+
+      <AreaCountStatusPanel
+        areaCount={areaCount}
+        decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
+        onToggleDecreaseAdjustmentSuppression={discountTime === "17"
+          ? onToggleDecreaseAdjustmentSuppression : undefined}
       />
 
       {timeSwitchNotice ? (

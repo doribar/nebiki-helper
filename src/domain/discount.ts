@@ -46,7 +46,7 @@ function toRateLine(main: string, note?: string): RateLine {
   return note ? { main, note } : { main };
 }
 
-export function getNormalTimeRateDisplay(params: {
+type NormalTimeRateParams = {
   discountTime: Exclude<DiscountTime, "20">;
   weekday?: number;
   date?: string;
@@ -55,7 +55,13 @@ export function getNormalTimeRateDisplay(params: {
   isSunday?: boolean;
   ignoreTimeRateCap?: boolean;
   areaRateAdjustment?: AreaRateAdjustment;
-}): RateDisplayData {
+};
+
+/** 表示と同じ計算の数値を返す。Doneの色判定で表示文字列を解析しない。 */
+export function getNormalTimeRatePercentages(params: NormalTimeRateParams): {
+  manyRatePercent: number;
+  normalRatePercent: number;
+} {
   const ignoreTimeRateCap = params.ignoreTimeRateCap ?? false;
   const base = getBaseRate(params.discountTime, {
     weekday: params.weekday,
@@ -85,10 +91,15 @@ export function getNormalTimeRateDisplay(params: {
     ignoreTimeRateCap
   );
 
+  return { manyRatePercent: manyRate, normalRatePercent: normalRate };
+}
+
+export function getNormalTimeRateDisplay(params: NormalTimeRateParams): RateDisplayData {
+  const { manyRatePercent, normalRatePercent } = getNormalTimeRatePercentages(params);
   return {
-    many: toRateLine(`${manyRate}%`),
+    many: toRateLine(`${manyRatePercent}%`),
     few: toRateLine("引かない"),
-    normal: toRateLine(`${normalRate}%`),
+    normal: toRateLine(`${normalRatePercent}%`),
   };
 }
 

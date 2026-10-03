@@ -8,7 +8,8 @@ import type {
   HumanEvaluationSelection,
   SkipTargetOption,
 } from "../../domain/types";
-import type { AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
+import type { AreaCountDecisionBasis, AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
+import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
@@ -46,6 +47,8 @@ type AreaJudgeScreenProps = {
   areaCountSameItemLimit?: number | null;
   finalCountMode?: boolean;
   initialAreaCount?: number | null;
+  areaCount?: number | null;
+  areaCountDecisionBasis?: AreaCountDecisionBasis;
   initialStapleItemCount?: number | null;
   editableAreaCounts?: EditableAreaCountItem[];
   onStartAreaCountCorrection?: (areaId: AreaId) => void;
@@ -225,6 +228,8 @@ export function AreaJudgeScreen({
   areaCountSameItemLimit = null,
   finalCountMode = false,
   initialAreaCount = null,
+  areaCount,
+  areaCountDecisionBasis,
   initialStapleItemCount = null,
   editableAreaCounts = [],
   onStartAreaCountCorrection,
@@ -302,6 +307,16 @@ export function AreaJudgeScreen({
   );
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
+  const rawDecreaseAdjustment = areaCountSubmitted
+    ? areaCountRecommendation?.decreaseRecommendation
+    : areaCountDecisionBasis?.decreaseAdjustment;
+  const displayedDecreaseAdjustment = areaCountSubmitted &&
+    areaCountDecisionBasis?.decreaseAdjustment?.suppressed === true &&
+    rawDecreaseAdjustment?.canUse === true &&
+    rawDecreaseAdjustment.direction === "more_many" &&
+    rawDecreaseAdjustment.previousDiscountTime === "15"
+      ? { ...rawDecreaseAdjustment, suppressed: true }
+      : rawDecreaseAdjustment;
   const correctionAreaCounts =
     areaCountSubmitted && parsedAreaCount !== null
       ? editableAreaCounts.some((item) => item.areaId === areaId)
@@ -441,6 +456,11 @@ export function AreaJudgeScreen({
             戻る
           </button>
         }
+      />
+
+      <AreaCountStatusPanel
+        areaCount={areaCountSubmitted ? parsedAreaCount : areaCount ?? initialAreaCount}
+        decreaseAdjustment={displayedDecreaseAdjustment}
       />
 
       {timeSwitchNotice ? (

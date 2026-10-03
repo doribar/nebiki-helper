@@ -77,6 +77,9 @@ export type AreaCountDecisionBasis = {
     currentDecreaseRate?: number;
     medianDecreaseRate?: number;
     direction: DecreaseAdjustmentDirection;
+    /** Missing/false keeps the raw automatic correction. New writes use true only. */
+    suppressed?: boolean;
+    suppressionReason?: "additional_production";
   };
 };
 
@@ -171,14 +174,82 @@ const MEDIAN_DOWN_GUARD_MAX_DROP = 2;
 const DECREASE_RATE_THRESHOLD = 0.2;
 
 // 15→17時の減り方比較を使える、追加製造が基本的にないエリア。
-// 涼味・フライ鶏惣菜・焼鳥・中華魚惣菜・寿司・太巻中巻は追加製造があり得るため含めない。
+// フライ鶏惣菜・中華魚惣菜・寿司・太巻中巻は追加製造があり得るため含めない。
 const NO_AFTERNOON_ADD_AREA_IDS = new Set<AreaId>([
   "bento_men",
   "tempura",
   "onigiri",
   "inari",
   "hosomaki",
+  "ryomi",
+  "autumn",
+  "yakitori",
 ]);
+
+/** Present the existing raw decrease decision; suppression never changes this label. */
+export function getDecreaseRateAssessment(
+  decrease: Pick<
+    NonNullable<AreaCountDecisionBasis["decreaseAdjustment"]>,
+    "canUse" | "direction"
+  > | null | undefined,
+): "良い" | "普通" | "悪い" | "判定なし" {
+  if (!decrease?.canUse) return "判定なし";
+  if (decrease.direction === "more_few") return "良い";
+  if (decrease.direction === "more_many") return "悪い";
+  return "普通";
+}
+
+/** This exception belongs to the business 15→17 comparison only. */
+export function canSuppressAreaCountDecreaseAdjustment(params: {
+  areaId: AreaId | null | undefined;
+  discountTime: DiscountTime | null | undefined;
+  basis: AreaCountDecisionBasis | null | undefined;
+}): boolean {
+  return Boolean(
+    params.discountTime === "17" &&
+    params.areaId && NO_AFTERNOON_ADD_AREA_IDS.has(params.areaId) &&
+    params.basis?.recommendationStatus === "ready" &&
+    isAreaCountEvaluation(params.basis.baseEvaluation) &&
+    params.basis.decreaseAdjustment?.canUse &&
+    params.basis.decreaseAdjustment.previousDiscountTime === "15" &&
+    params.basis.decreaseAdjustment.direction === "more_many",
+  );
+}
+
+/**
+ * Toggle only the automatic decrease layer. Reconstruct it from the raw base
+ * each time, so restore/repeated cancel cannot accumulate one-step changes.
+ * A saved explicit human final and its rate always take priority.
+ */
+export function setAreaCountDecreaseAdjustmentSuppressed(params: {
+  areaId: AreaId | null | undefined;
+  discountTime: DiscountTime | null | undefined;
+  basis: AreaCountDecisionBasis;
+  suppressed: boolean;
+}): AreaCountDecisionBasis | null {
+  if (!canSuppressAreaCountDecreaseAdjustment(params)) return null;
+  const basis = params.basis;
+  const decreaseAdjustment = { ...basis.decreaseAdjustment! };
+  if (params.suppressed) {
+    decreaseAdjustment.suppressed = true;
+    decreaseAdjustment.suppressionReason = "additional_production";
+  } else {
+    delete decreaseAdjustment.suppressed;
+    delete decreaseAdjustment.suppressionReason;
+  }
+  if (basis.evaluationSource === "manual") {
+    return { ...basis, decreaseAdjustment };
+  }
+  const finalEvaluation = params.suppressed
+    ? basis.baseEvaluation!
+    : scoreToEvaluation(getEvaluationScore(basis.baseEvaluation!) + 1);
+  return {
+    ...basis,
+    decreaseAdjustment,
+    finalEvaluation,
+    areaRateAdjustment: evaluationToRateAdjustment(finalEvaluation),
+  };
+}
 
 export function getActualWeekdayLabel(weekday: number): ActualWeekdayLabel {
   switch (weekday) {
@@ -696,6 +767,12 @@ export function normalizeAreaCountDecisionBasis(
         currentDecreaseRate: normalizeFiniteNumber(rawDecrease.currentDecreaseRate),
         medianDecreaseRate: normalizeFiniteNumber(rawDecrease.medianDecreaseRate),
         direction: rawDecrease.direction,
+        ...(typeof rawDecrease.suppressed === "boolean"
+          ? { suppressed: rawDecrease.suppressed }
+          : {}),
+        ...(rawDecrease.suppressionReason === "additional_production"
+          ? { suppressionReason: rawDecrease.suppressionReason }
+          : {}),
       };
     }
   }
@@ -1617,9 +1694,12 @@ function getDecreaseRecommendation(params: {
 
   const medianDecreaseRate = getMedianFloat(historicalRates);
   let direction: DecreaseAdjustmentDirection = "none";
-  if (currentDecreaseRate <= medianDecreaseRate - DECREASE_RATE_THRESHOLD) {
+  // Binary floating point may place an exact 17:00 20pt boundary one ulp away
+  // (for example 0.4 + 0.2). Keep the existing 19:30 comparison unchanged.
+  const comparisonTolerance = params.discountTime === "17" ? Number.EPSILON : 0;
+  if (currentDecreaseRate <= medianDecreaseRate - DECREASE_RATE_THRESHOLD + comparisonTolerance) {
     direction = "more_many";
-  } else if (currentDecreaseRate >= medianDecreaseRate + DECREASE_RATE_THRESHOLD) {
+  } else if (currentDecreaseRate >= medianDecreaseRate + DECREASE_RATE_THRESHOLD - comparisonTolerance) {
     direction = "more_few";
   }
 

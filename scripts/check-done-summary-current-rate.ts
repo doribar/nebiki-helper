@@ -152,7 +152,7 @@ assert.match(
 );
 assert.match(
   hookSource,
-  /buildCurrentNormalRateDisplay\(\{[\s\S]*?effectiveRateDiscountTime[\s\S]*?rateOffsetPercent:\s*earlyNextMinus5Info \? -5 : 0/,
+  /const rateParams = \{[\s\S]*?effectiveRateDiscountTime[\s\S]*?rateOffsetPercent:\s*earlyNextMinus5Info \? -5 : 0[\s\S]*?buildCurrentNormalRateDisplay\(rateParams\)/,
   "完了画面の表示だけが既存の現在時刻補正を共有する",
 );
 assert.doesNotMatch(

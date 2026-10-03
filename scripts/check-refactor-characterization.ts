@@ -137,6 +137,7 @@ function assertPublicHookContract(): void {
       "confirmDailyNotice",
       "judgeCurrentArea",
       "applyAreaEvaluationAdjustment",
+  "toggleCurrentAreaDecreaseAdjustmentSuppression",
       "getCurrentAreaCountRecommendation",
       "skipCurrentArea",
       "chooseSkipTargetArea",

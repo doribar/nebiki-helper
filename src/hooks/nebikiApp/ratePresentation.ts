@@ -9,10 +9,11 @@ import type {
   ResolvedWeatherInput,
   SessionData,
 } from "../../domain/types";
-import { getNormalTimeRateDisplay } from "../../domain/discount";
+import { getNormalTimeRateDisplay, getNormalTimeRatePercentages } from "../../domain/discount";
 import { resolveWeatherInputForDiscount } from "../../domain/hourlyWeather.ts";
 import {
   applyGlobalDiscountAdjustmentToDisplay,
+  applyGlobalDiscountAdjustmentToRate,
   normalizeGlobalDiscountAdjustmentPercent,
 } from "../../domain/globalDiscountAdjustment.ts";
 
@@ -120,6 +121,31 @@ export function buildCurrentNormalRateDisplay(
   params: Parameters<typeof buildCurrentNormalRatePresentation>[0],
 ): RateDisplayData | null {
   return buildCurrentNormalRatePresentation(params)?.display ?? null;
+}
+
+/** 現在の表示と同じcore・補正順から得る数値。保存済みのtextは解析しない。 */
+export function buildCurrentNormalRateNumbers(
+  params: Parameters<typeof buildCurrentNormalRatePresentation>[0],
+): { manyRatePercent: number; normalRatePercent: number } | null {
+  const { session, progress, effectiveDiscountTime } = params;
+  if (!session || session.discountTime === "20" || !progress?.areaJudge ||
+    !effectiveDiscountTime || effectiveDiscountTime === "20") return null;
+  const rates = getNormalTimeRatePercentages({
+    discountTime: effectiveDiscountTime,
+    weekday: session.weekday,
+    date: session.date,
+    weatherBonus: params.weatherBonus,
+    areaJudge: progress.areaJudge,
+    isSunday: session.weekday === 0 && effectiveDiscountTime === "15",
+    ignoreTimeRateCap: params.ignoreTimeRateCap,
+    areaRateAdjustment: progress.areaRateAdjustment,
+  });
+  const globalAdjustment = normalizeGlobalDiscountAdjustmentPercent(session.globalDiscountAdjustmentPercent);
+  const offset = params.rateOffsetPercent ?? 0;
+  return {
+    manyRatePercent: applyGlobalDiscountAdjustmentToRate(clampDisplayRate(rates.manyRatePercent + offset), globalAdjustment),
+    normalRatePercent: applyGlobalDiscountAdjustmentToRate(clampDisplayRate(rates.normalRatePercent + offset), globalAdjustment),
+  };
 }
 
 export function getAreaJudgeText(judge: AreaJudge): string {

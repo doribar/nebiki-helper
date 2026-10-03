@@ -12,6 +12,7 @@ import { Review19Screen } from "../components/screens/Review19Screen";
 import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresentation.ts";
 import { isSummerModeAvailable } from "../domain/demandCycle.ts";
+import { canSuppressAreaCountDecreaseAdjustment } from "../domain/areaCountHistory.ts";
 import { getAreaEvaluationQuickAdjustments } from "../domain/areaEvaluationAdjustment.ts";
 
 type AppRouterProps = {
@@ -97,6 +98,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           areaCountSameItemLimit={derived.areaCountSameItemLimit}
           finalCountMode={state.session?.discountTime === "20"}
           initialAreaCount={state.areaProgressMap[state.currentAreaId!]?.areaCount}
+          areaCount={state.areaProgressMap[state.currentAreaId!]?.areaCount}
+          areaCountDecisionBasis={state.areaProgressMap[state.currentAreaId!]?.areaCountDecisionBasis}
           initialStapleItemCount={state.areaProgressMap[state.currentAreaId!]?.stapleItemCount}
           editableAreaCounts={derived.editableAreaCounts}
           onStartAreaCountCorrection={actions.startAreaCountCorrection}
@@ -119,6 +122,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
         <AutoSkipNoticeScreen
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
+          areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
+          areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
           areaName={derived.currentAreaName}
           autoSkipKind={
             state.currentAreaId
@@ -142,6 +147,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           key={state.currentAreaId}
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
+          areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
+          areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
           areaName={derived.currentAreaName}
           initialCount={state.areaProgressMap[state.currentAreaId]?.areaCount}
           editableAreaCounts={derived.editableAreaCounts}
@@ -166,6 +173,13 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           timeSwitchNotice={derived.timeSwitchNotice}
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
+          areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
+          areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
+          onToggleDecreaseAdjustmentSuppression={!(testNow instanceof Date) && canSuppressAreaCountDecreaseAdjustment({
+            areaId: state.currentAreaId,
+            discountTime: state.session.discountTime,
+            basis: state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined,
+          }) ? actions.toggleCurrentAreaDecreaseAdjustmentSuppression : undefined}
           rateDisplay={derived.rateDisplay}
           rateDisplayBeforeGlobalAdjustment={
             derived.rateDisplayBeforeGlobalAdjustment
@@ -242,6 +256,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
         <FinalTimeScreen
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
+          areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
+          areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
           timeSwitchNotice={derived.timeSwitchNotice}
           finalGuide={derived.finalGuide}
           finalStep={state.finalTimeStep}

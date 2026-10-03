@@ -124,6 +124,7 @@ import type {
 import {
   cloneAreaCountRecords,
   buildAreaCountDecisionBasis,
+  setAreaCountDecreaseAdjustmentSuppressed,
   evaluationText as getAreaCountEvaluationText,
   evaluationToRateAdjustment as getAreaCountRateAdjustment,
   getActualWeekdayLabel,
@@ -190,6 +191,7 @@ import { getCurrentDataVersionInfo } from "../domain/dataVersion.ts";
 import { supportsObonCalendarRule } from "../domain/obon.ts";
 import {
   buildCurrentNormalRateDisplay,
+  buildCurrentNormalRateNumbers,
   buildCurrentNormalRatePresentation,
   buildCompletedRateSnapshot,
   buildNextSessionSkipRecord,
@@ -206,6 +208,7 @@ import {
   selectGlobalDiscountAdjustmentForDate,
   type GlobalDiscountAdjustmentState,
 } from "../domain/globalDiscountAdjustment.ts";
+import { retainSuppressedDecreaseRecommendation, retainAreaProgressInNavigationSnapshot } from "./nebikiApp/decreaseSuppression.ts";
 import type { CompletedRateSnapshot } from "./nebikiApp/ratePresentation.ts";
 import {
   acknowledgeAutoSkippedProgress,
@@ -1790,6 +1793,8 @@ const lateSkipNotice = useMemo(() => {
         rateText: completedNormalRateText,
         manyRateText: completedManyRateText,
         normalRateText: completedNormalRateText,
+        manyRatePercent: progress.rateDecisionSnapshot?.displayedManyRatePercent,
+        normalRatePercent: progress.rateDecisionSnapshot?.displayedNormalRatePercent,
         statusText,
       };
     });
@@ -1816,7 +1821,7 @@ const lateSkipNotice = useMemo(() => {
         return item;
       }
 
-      const currentDisplay = buildCurrentNormalRateDisplay({
+      const rateParams = {
         session,
         progress,
         effectiveDiscountTime:
@@ -1824,14 +1829,17 @@ const lateSkipNotice = useMemo(() => {
         weatherBonus,
         ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
         rateOffsetPercent: earlyNextMinus5Info ? -5 : 0,
-      });
+      };
+      const currentDisplay = buildCurrentNormalRateDisplay(rateParams);
       if (!currentDisplay) return item;
+      const currentNumbers = buildCurrentNormalRateNumbers(rateParams);
 
       return {
         ...item,
         rateText: currentDisplay.normal.main,
         normalRateText: currentDisplay.normal.main,
         manyRateText: currentDisplay.many.main,
+        ...currentNumbers,
       };
     });
   }, [
@@ -3046,7 +3054,7 @@ const lateSkipNotice = useMemo(() => {
     : null;
 
   const getCurrentAreaCountRecommendation = useCallback((count: number) => {
-    return buildAreaCountRecommendation({
+    const recommendation = buildAreaCountRecommendation({
       records: areaCountRecords,
       preparedPopulation: areaCountCalculationPopulation.get(),
       areaId: state.currentAreaId,
@@ -3057,7 +3065,14 @@ const lateSkipNotice = useMemo(() => {
       applyObonRule,
       count,
     });
+    return retainSuppressedDecreaseRecommendation({
+      recommendation,
+      previousBasis: currentAreaProgress?.areaCountDecisionBasis,
+      areaId: state.currentAreaId,
+      discountTime: state.session?.discountTime,
+    });
   }, [
+    currentAreaProgress?.areaCountDecisionBasis,
     areaCountRecords,
     areaCountCalculationPopulation,
     state.currentAreaId,
@@ -3265,6 +3280,7 @@ const lateSkipNotice = useMemo(() => {
   ) {
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
+    const previousProgress = state.currentAreaId ? state.areaProgressMap[state.currentAreaId] : undefined;
     const actionNow = getRuntimeNow();
     const actionAt = actionNow.toISOString();
 
@@ -3316,9 +3332,14 @@ const lateSkipNotice = useMemo(() => {
             rateAdjustment: areaCountRecommendation.areaRateAdjustment,
           }
         : undefined;
+    // An existing explicit human/quick judgment keeps its original automatic
+    // observation, even when the automatic decrease layer was later cancelled.
+    const automaticEvaluation = previousProgress?.areaCount === roundedAreaCount
+      ? previousProgress.humanEvaluationDetails?.automaticEvaluation ?? readyAreaCountResult?.evaluation
+      : readyAreaCountResult?.evaluation;
     if (
       evaluationAdjustment &&
-      (readyAreaCountResult?.evaluation !==
+      (automaticEvaluation !==
         evaluationAdjustment.originalEvaluation ||
         resolvedHumanEvaluationDetails?.resolvedEvaluation !==
           evaluationAdjustment.finalEvaluation)
@@ -3328,7 +3349,7 @@ const lateSkipNotice = useMemo(() => {
     const humanEvaluationDetails = resolvedHumanEvaluationDetails
       ? {
           ...resolvedHumanEvaluationDetails,
-          automaticEvaluation: readyAreaCountResult?.evaluation,
+          automaticEvaluation,
           ...(evaluationAdjustment ? { evaluationAdjustment } : {}),
         }
       : undefined;
@@ -3345,7 +3366,7 @@ const lateSkipNotice = useMemo(() => {
       : readyAreaCountResult
       ? "history" as const
       : undefined;
-    const areaCountDecisionBasis = areaCountRecommendation
+    let areaCountDecisionBasis = areaCountRecommendation
       ? buildAreaCountDecisionBasis({
           recommendation: evaluationAdjustment
             ? { ...areaCountRecommendation, baseEvaluation: evaluationAdjustment.originalEvaluation }
@@ -3355,6 +3376,14 @@ const lateSkipNotice = useMemo(() => {
           areaRateAdjustment: effectiveAreaCountResult?.rateAdjustment,
         })
       : undefined;
+    if (areaCountDecisionBasis && previousProgress?.areaCountDecisionBasis?.decreaseAdjustment?.suppressed === true) {
+      areaCountDecisionBasis = setAreaCountDecreaseAdjustmentSuppressed({
+        areaId: state.currentAreaId,
+        discountTime: state.session?.discountTime,
+        basis: areaCountDecisionBasis,
+        suppressed: true,
+      }) ?? areaCountDecisionBasis;
+    }
 
     // エリア残数判定が使える場合、エリア判定は5段階結果で固定する。
     const effectiveJudge: Exclude<AreaJudge, null> = effectiveAreaCountResult ? "normal" : judge;
@@ -3445,6 +3474,9 @@ const lateSkipNotice = useMemo(() => {
     });
     if (finalizedDayData.storageFailed) return;
 
+    if (previousProgress?.areaCountDecisionBasis?.decreaseAdjustment?.suppressed === true && state.currentAreaId) {
+      retainCurrentAreaNavigationProgress(nextStateForAction.areaProgressMap[state.currentAreaId]);
+    }
     setState((prev) => {
       const nextState = applyAreaJudgeSelection(
         prev,
@@ -3460,6 +3492,95 @@ const lateSkipNotice = useMemo(() => {
         ? { ...nextState, finalizedDayRecordId: finalizedDayData.record.recordId }
         : nextState;
     });
+  }
+
+  function retainCurrentAreaNavigationProgress(progress: AreaProgress): void {
+    if (!state.currentAreaId) return;
+    const areaId = state.currentAreaId;
+    screenHistoryRef.current = screenHistoryRef.current.map((snapshot) =>
+      retainAreaProgressInNavigationSnapshot(snapshot, state, areaId, progress));
+    if (previousRenderRef.current) {
+      previousRenderRef.current = retainAreaProgressInNavigationSnapshot(
+        previousRenderRef.current, state, areaId, progress,
+      );
+    }
+  }
+
+  async function toggleCurrentAreaDecreaseAdjustmentSuppression(): Promise<void> {
+    const session = state.session;
+    const areaId = state.currentAreaId;
+    const progress = currentAreaProgress;
+    const previousBasis = progress?.areaCountDecisionBasis;
+    if (isTestMode || state.screen !== "rate_display" || !session || !areaId ||
+      !progress || typeof progress.areaCount !== "number" || !previousBasis) return;
+    // Legacy bases may omit source/final. The current area's explicit human
+    // adoption remains authoritative, rather than inferring it from raw history.
+    const basisForSuppression = progress.areaCountEvaluationSource === "manual"
+      ? {
+          ...previousBasis,
+          evaluationSource: "manual" as const,
+          finalEvaluation: progress.areaCountEvaluation ?? previousBasis.finalEvaluation,
+          areaRateAdjustment: progress.areaRateAdjustment ?? previousBasis.areaRateAdjustment,
+        }
+      : previousBasis;
+    const basis = setAreaCountDecreaseAdjustmentSuppressed({
+      areaId, discountTime: session.discountTime, basis: basisForSuppression,
+      suppressed: previousBasis.decreaseAdjustment?.suppressed !== true,
+    });
+    if (!basis) return;
+    const savedRecord = areaCountRecords.find((record) =>
+      record.areaId === areaId && record.date === session.date &&
+      normalizeDemandCycle(record.demandCycle) === normalizeDemandCycle(session.demandCycle) &&
+      record.discountTime === session.discountTime && record.sessionStartedAt === session.startedAt);
+    const nextRecord: AreaCountRecord = {
+      ...savedRecord,
+      ...getCurrentDataVersionInfo(),
+      date: session.date,
+      demandCycle: normalizeDemandCycle(session.demandCycle),
+      sessionStartedAt: session.startedAt,
+      recordedAt: getRuntimeNow().toISOString(),
+      areaId,
+      discountTime: session.discountTime,
+      actualWeekday: getActualWeekdayLabel(session.weekday),
+      actualWeekdayGroup: getAreaCountFallbackWeekdayGroup({
+        weekday: session.weekday, discountTime: session.discountTime,
+        date: session.date, applyObonRule,
+      }),
+      count: progress.areaCount,
+      suggestedEvaluation: basis.finalEvaluation,
+      areaRateAdjustment: basis.areaRateAdjustment,
+      evaluationSource: progress.areaCountEvaluationSource,
+      humanEvaluationDetails: progress.humanEvaluationDetails,
+      userJudge: progress.areaCountEvaluationSource === "manual" ? progress.areaCountEvaluation : undefined,
+      decisionBasis: basis,
+    };
+    const saved = persistAreaCountRecordSafely(nextRecord);
+    if (!saved) return;
+    // The storage boundary supplies the canonical saved record. Replace only
+    // this identity in memory; do not clone/re-normalize the history population.
+    const identity = getAreaCountRecordIdentity(nextRecord);
+    const savedCurrent = saved.find((record) => getAreaCountRecordIdentity(record) === identity) ?? nextRecord;
+    setAreaCountRecords((records) => {
+      const index = records.findIndex((record) => getAreaCountRecordIdentity(record) === identity);
+      if (index < 0) return [...records, savedCurrent];
+      const next = [...records];
+      next[index] = savedCurrent;
+      return next;
+    });
+    const nextProgress: AreaProgress = {
+      ...progress,
+      areaCountDecisionBasis: basis,
+      areaCountEvaluation: basis.finalEvaluation,
+      areaRateAdjustment: basis.areaRateAdjustment,
+    };
+    retainCurrentAreaNavigationProgress(nextProgress);
+    setState((previous) => ({
+      ...previous,
+      areaProgressMap: { ...previous.areaProgressMap, [areaId]: nextProgress },
+    }));
+    setUndoNotice(null);
+    setCloudSyncVersion((version) => version + 1);
+    void retryPendingCloudSync();
   }
 
   async function applyAreaEvaluationAdjustment(direction: HumanEvaluationAdjustment["direction"]): Promise<void> {
@@ -5361,6 +5482,7 @@ const lateSkipNotice = useMemo(() => {
       confirmDailyNotice,
       judgeCurrentArea,
       applyAreaEvaluationAdjustment,
+      toggleCurrentAreaDecreaseAdjustmentSuppression,
       getCurrentAreaCountRecommendation,
       skipCurrentArea,
       chooseSkipTargetArea,

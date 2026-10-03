@@ -3,11 +3,15 @@ import type { FinalGuideData, FinalTimeStep } from "../../domain/types";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { PrimaryButton } from "../layout/PrimaryButton";
+import type { AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
+import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
 
 type FinalTimeScreenProps = {
   weekdayText: string;
   timeText: string;
   timeSwitchNotice?: string | null;
+  areaCount?: number | null;
+  areaCountDecisionBasis?: AreaCountDecisionBasis;
   finalGuide: FinalGuideData;
   finalStep: FinalTimeStep;
   onAdvance: () => void;
@@ -31,6 +35,8 @@ export function FinalTimeScreen({
   weekdayText,
   timeText,
   timeSwitchNotice,
+  areaCount,
+  areaCountDecisionBasis,
   finalGuide,
   finalStep,
   onAdvance,
@@ -53,6 +59,10 @@ export function FinalTimeScreen({
         }
       />
 
+      <AreaCountStatusPanel
+        areaCount={areaCount}
+        decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
+      />
 
       {timeSwitchNotice ? (
         <section

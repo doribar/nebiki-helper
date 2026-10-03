@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-39",
+  "version": "2026.8.9-40",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -80,7 +80,11 @@
     "check:startup-archive-performance": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-startup-archive-performance.ts",
     "check:interactive-persistence": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-interactive-persistence.ts",
     "check:business-month-label": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-business-month-label.ts",
-    "check:review19-business-month": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-business-month.ts"
+    "check:review19-business-month": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-business-month.ts",
+    "check:area-decrease-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-decrease-adjustment.ts",
+    "check:area-count-status-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-status-ui.ts",
+    "check:done-rate-colors": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-done-rate-colors.ts",
+    "check:decrease-suppression-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-decrease-suppression-flow.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

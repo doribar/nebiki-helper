@@ -2430,7 +2430,8 @@ const totalChecks = 91;
     date: '2026-07-10',
     count: 120,
   });
-  assert.equal(addedProductionRecommendation.decreaseRecommendation?.previousDiscountTime, undefined);
+  assert.equal(addedProductionRecommendation.decreaseRecommendation?.previousDiscountTime, "15");
+  assert.equal(addedProductionRecommendation.decreaseRecommendation?.canUse, false, "missing15history remains unavailable for the newly eligible summer area");
   passed += 1;
 }
 
