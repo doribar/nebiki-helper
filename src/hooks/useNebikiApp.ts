@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAdvanceDiscountRate } from "../domain/advanceDiscount.ts";
 import { getColdDeliGuide } from "../domain/coldDeliGuide.ts";
+import { monthFromBusinessDate } from "../domain/businessMonth.ts";
 import type {
   AppState,
   AreaId,
@@ -1934,7 +1935,7 @@ const lateSkipNotice = useMemo(() => {
     const reference = state.review19?.reference;
     if (!reference) return null;
     return getReferenceConditionLabel({
-      date: reference.date,
+      date: state.review19?.date ?? reference.date,
       weekday: reference.weekday,
       discountTime: "19",
       demandCycle: normalizeDemandCycle(
@@ -4309,6 +4310,7 @@ const lateSkipNotice = useMemo(() => {
   ): Review19Result | null {
     if ((state.screen !== "review19" && state.screen !== "review19_done") || !state.review19) return null;
 
+    const businessMonth = monthFromBusinessDate(state.review19.date);
     const completedAt = getRuntimeNow().toISOString();
     const latestAreaCounts: Partial<Record<AreaId, number>> = latestAreaCount
       ? { [latestAreaCount.areaId]: Math.max(0, Math.round(latestAreaCount.count)) }
@@ -4433,6 +4435,7 @@ const lateSkipNotice = useMemo(() => {
       review19Check: {
         version: 1,
         ...getCurrentDataVersionInfo(),
+        businessMonth,
         demandCycle: state.review19.demandCycle,
         review19Status: "recorded",
         recordedAt,
@@ -4464,6 +4467,7 @@ const lateSkipNotice = useMemo(() => {
     return {
       ...review19WithoutReference,
       ...getCurrentDataVersionInfo(),
+      businessMonth,
       review19Status: "recorded",
       ratingStatus: "not_collected",
       ratings: null,

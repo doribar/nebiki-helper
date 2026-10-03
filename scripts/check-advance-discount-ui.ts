@@ -115,25 +115,25 @@ type ReferenceCase = {
   expected: string;
 };
 const referenceCases: ReferenceCase[] = [
-  { name: "normal 15", date: "2026-09-10", weekday: 4, discountTime: "15", demandCycle: "normal", kind: "actual_weekday", expected: "木曜日・15時" },
-  { name: "normal 17", date: "2026-09-10", weekday: 4, discountTime: "17", demandCycle: "normal", kind: "actual_weekday", expected: "木曜日・17時" },
-  { name: "summer 15", date: "2026-09-10", weekday: 4, discountTime: "15", demandCycle: "summer", kind: "actual_weekday", expected: "夏・木曜日・15時" },
-  { name: "summer 17", date: "2026-09-10", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "actual_weekday", expected: "夏・木曜日・17時" },
+  { name: "normal 15", date: "2026-09-10", weekday: 4, discountTime: "15", demandCycle: "normal", kind: "actual_weekday", expected: "9月・木曜日・15時" },
+  { name: "normal 17", date: "2026-09-10", weekday: 4, discountTime: "17", demandCycle: "normal", kind: "actual_weekday", expected: "9月・木曜日・17時" },
+  { name: "summer 15", date: "2026-09-10", weekday: 4, discountTime: "15", demandCycle: "summer", kind: "actual_weekday", expected: "9月・木曜日・15時" },
+  { name: "summer 17", date: "2026-09-10", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "actual_weekday", expected: "9月・木曜日・17時" },
   // September 8 is Tuesday; the persisted manual override selects Thursday.
-  { name: "normal manual weekday override", date: "2026-09-08", weekday: 4, discountTime: "15", demandCycle: "normal", kind: "actual_weekday", expected: "木曜日・15時" },
-  { name: "summer manual weekday override", date: "2026-09-08", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "actual_weekday", expected: "夏・木曜日・17時" },
-  { name: "normal holiday", date: "2026-01-01", weekday: 4, discountTime: "15", demandCycle: "normal", kind: "holiday", expected: "日曜日・15時" },
-  { name: "summer holiday", date: "2026-01-01", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "holiday", expected: "夏・日曜日・17時" },
-  { name: "day before holiday", date: "2026-02-10", weekday: 2, discountTime: "15", demandCycle: "normal", kind: "day_before_holiday", expected: "金曜日・土曜日・15時" },
-  { name: "Obon", date: "2026-08-13", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "obon", expected: "夏・日曜日・17時" },
-  { name: "normal three day holiday middle", date: "2026-01-11", weekday: 0, discountTime: "17", demandCycle: "normal", kind: "three_day_holiday_middle", expected: "日曜日・金曜日・土曜日・中間・17時" },
-  { name: "summer three day holiday middle", date: "2026-01-11", weekday: 0, discountTime: "17", demandCycle: "summer", kind: "three_day_holiday_middle", expected: "夏・日曜日・金曜日・土曜日・中間・17時" },
+  { name: "normal manual weekday override", date: "2026-09-08", weekday: 4, discountTime: "15", demandCycle: "normal", kind: "actual_weekday", expected: "9月・木曜日・15時" },
+  { name: "summer manual weekday override", date: "2026-09-08", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "actual_weekday", expected: "9月・木曜日・17時" },
+  { name: "normal holiday", date: "2026-01-01", weekday: 4, discountTime: "15", demandCycle: "normal", kind: "holiday", expected: "1月・日曜日・15時" },
+  { name: "summer holiday", date: "2026-01-01", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "holiday", expected: "1月・日曜日・17時" },
+  { name: "day before holiday", date: "2026-02-10", weekday: 2, discountTime: "15", demandCycle: "normal", kind: "day_before_holiday", expected: "2月・金曜日・土曜日・15時" },
+  { name: "Obon", date: "2026-08-13", weekday: 4, discountTime: "17", demandCycle: "summer", kind: "obon", expected: "8月・日曜日・17時" },
+  { name: "normal three day holiday middle", date: "2026-01-11", weekday: 0, discountTime: "17", demandCycle: "normal", kind: "three_day_holiday_middle", expected: "1月・日曜日・金曜日・土曜日・中間・17時" },
+  { name: "summer three day holiday middle", date: "2026-01-11", weekday: 0, discountTime: "17", demandCycle: "summer", kind: "three_day_holiday_middle", expected: "1月・日曜日・金曜日・土曜日・中間・17時" },
 ];
 
 for (const fixture of referenceCases) {
   const reference = getIndividualAmountReferenceContext(fixture);
   assert.equal(reference.kind, fixture.kind, fixture.name);
-  const label = formatReferenceConditionLabel({ reference, demandCycle: fixture.demandCycle });
+  const label = formatReferenceConditionLabel({ date: fixture.date, reference, demandCycle: fixture.demandCycle });
   assert.equal(label, fixture.expected, fixture.name);
 
   test(`Done ${fixture.name} shows the resolved label even with no summary`, () => {

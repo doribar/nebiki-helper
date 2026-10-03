@@ -346,7 +346,7 @@ test("36. 基準案内は全時刻で日曜日の同時刻と一致", () => {
       weekday: 1,
       discountTime,
       weather: weatherFor(discountTime),
-    }).referenceText, referenceText);
+    }).referenceText, `7月の${referenceText}`);
   }
 });
 

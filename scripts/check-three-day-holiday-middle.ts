@@ -446,7 +446,7 @@ test("33. 表示条件は値引率計算を変えず、中間の基準案内だ�
   );
   assert.equal(
     getBasisGuideDisplay({ date: "2026-07-19", weekday: 0, discountTime: "17", weather }).referenceText,
-    "通常の日曜夜と金曜・土曜夜の中間を基準に考えて",
+    "7月の通常の日曜夜と金曜・土曜夜の中間を基準に考えて",
   );
 });
 

@@ -48,7 +48,7 @@ function label(params: {
   displayTimeText?: string;
   date?: string;
 }): string {
-  return getReferenceConditionLabel(params);
+  return getReferenceConditionLabel({ date: "2026-09-08", ...params });
 }
 
 function canQuick(params: {
@@ -102,28 +102,28 @@ function buildAdjustedDetails(): HumanEvaluationDetails {
   };
 }
 
-test("normal / 火曜 / 15 は火曜日・15時", () => {
-  assert.equal(label({ demandCycle: "normal", weekday: 2, discountTime: "15" }), "火曜日・15時");
+test("normal / 火曜 / 15 は9月・火曜日・15時", () => {
+  assert.equal(label({ demandCycle: "normal", weekday: 2, discountTime: "15" }), "9月・火曜日・15時");
 });
 
-test("normal / 火曜 / 17 は火曜日・17時", () => {
-  assert.equal(label({ demandCycle: "normal", weekday: 2, discountTime: "17" }), "火曜日・17時");
+test("normal / 火曜 / 17 は9月・火曜日・17時", () => {
+  assert.equal(label({ demandCycle: "normal", weekday: 2, discountTime: "17" }), "9月・火曜日・17時");
 });
 
-test("normal / 火曜 / Review19 は火曜日・19時", () => {
-  assert.equal(label({ demandCycle: "normal", weekday: 2, discountTime: "19", displayTimeText: "19時" }), "火曜日・19時");
+test("normal / 火曜 / Review19 は9月・火曜日・19時", () => {
+  assert.equal(label({ demandCycle: "normal", weekday: 2, discountTime: "19", displayTimeText: "19時" }), "9月・火曜日・19時");
 });
 
-test("summer / 火曜 / 15 は夏・火曜日・15時", () => {
-  assert.equal(label({ demandCycle: "summer", weekday: 2, discountTime: "15" }), "夏・火曜日・15時");
+test("summer / 火曜 / 15 は9月・火曜日・15時", () => {
+  assert.equal(label({ demandCycle: "summer", weekday: 2, discountTime: "15" }), "9月・火曜日・15時");
 });
 
-test("summer / 火曜 / 17 は夏・火曜日・17時", () => {
-  assert.equal(label({ demandCycle: "summer", weekday: 2, discountTime: "17" }), "夏・火曜日・17時");
+test("summer / 火曜 / 17 は9月・火曜日・17時", () => {
+  assert.equal(label({ demandCycle: "summer", weekday: 2, discountTime: "17" }), "9月・火曜日・17時");
 });
 
-test("summer / 火曜 / Review19 は夏・火曜日・19時", () => {
-  assert.equal(label({ demandCycle: "summer", weekday: 2, discountTime: "19", displayTimeText: "19時" }), "夏・火曜日・19時");
+test("summer / 火曜 / Review19 は9月・火曜日・19時", () => {
+  assert.equal(label({ demandCycle: "summer", weekday: 2, discountTime: "19", displayTimeText: "19時" }), "9月・火曜日・19時");
 });
 
 test("Review19ラベルに19時30分を表示しない", () => {
@@ -141,22 +141,22 @@ test("対象UIに『を基準に考えて』が残らない", () => {
   }
 });
 
-test("夏ラベルは『の』を混ぜず中黒で統一", () => {
+test("月ラベルは『の』を混ぜず中黒で統一", () => {
   const value = label({ demandCycle: "summer", weekday: 2, discountTime: "17" });
-  assert.equal(value, "夏・火曜日・17時");
+  assert.equal(value, "9月・火曜日・17時");
   assert.doesNotMatch(value, /の/);
 });
 
 test("祝日は既存参照ロジックが採用する日曜日を表示", () => {
   assert.equal(
     label({ demandCycle: "normal", date: "2026-01-01", weekday: 4, discountTime: "15" }),
-    "日曜日・15時",
+    "1月・日曜日・15時",
   );
 });
 
 test("formatは解決済み参照曜日を再判定せず利用", () => {
   const reference = getIndividualAmountReferenceContext({ weekday: 4, discountTime: "17" });
-  assert.equal(formatReferenceConditionLabel({ demandCycle: "summer", reference }), "夏・木曜日・17時");
+  assert.equal(formatReferenceConditionLabel({ date: "2026-09-08", demandCycle: "summer", reference }), "9月・木曜日・17時");
 });
 
 test("normal 15 / auto many は既存quick補正を維持", () => {

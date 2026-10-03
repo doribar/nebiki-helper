@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-38）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-39）
 
-最終更新: 2026-10-01 JST
+最終更新: 2026-10-03 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-38.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-38.zip` |
-| appVersion | `2026.8.9-38` |
-| buildId | `build-20261001-223736-jst` |
+| ZIP | `nebiki-helper-2026.8.9-39.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-39.zip` |
+| appVersion | `2026.8.9-39` |
+| buildId | `build-20261003-085458-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `.zip.sha256` / `RELEASE_REPORT_2026.8.9-38.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `.zip.sha256` / `RELEASE_REPORT_2026.8.9-39.md` を参照（自己参照回避） |
 
-application rootは `work/interactivePerformance38/nebiki-helper`。比較基準は9-37 ZIP `nebiki-helper-2026.8.9-37.zip`（SHA-256 `afa58fc16e0ca2428dbc420bcfcf383d339ee7bc3b2b18edc763d860ae3f1f23`）。9-38は起動/天候入力/保存のperformance修正だけ。業務計算、保存形式、schema3、version/buildId生成方式は維持。AGENTS.md・過去CHANGE_REPORT・SQL9本は非変更。詳細は `CHANGE_REPORT_2026.8.9-38.md`。
+application rootは `work/businessMonth39/nebiki-helper`。比較基準は9-38 ZIP `nebiki-helper-2026.8.9-38.zip`（SHA-256 `5a90c674a9272bfe61e98ab1694d461542cdab270b644f403dd2598b67b0b3ae`）。9-39は基準表示の営業月化とReview19のoptional `businessMonth` metadata追加だけ。業務計算・履歴母集団・9-38 performance構造・schema3・version/buildId生成方式は維持。AGENTS.md・過去CHANGE_REPORT・SQL9本は非変更。詳細は `CHANGE_REPORT_2026.8.9-39.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\interactivePerformance38\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\businessMonth39\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -136,7 +136,7 @@ legacy migrationは次の順で行う。
 - 減り方補正の過去時刻間sampleと当日前時刻は通年のcanonical観測から取得。対象area、20ポイント差、1段補正は維持する。20:30の参照中央値も同じ母集団を使うが、30/40/50型、40/50型、all50、個数別の業務ruleは非変更。
 - `buildReview19HistoryStatistics()` へ渡す過去Review19由来の一時AreaCountも両cycleを含め、各recordの元cycleを保持する。この一時recordは保存しない。結果は引き続き履歴統計だけで、廃止済みautoEvaluationを生成しない。正式なhuman raw9、tap-toggle、完了、JSON形式、productionAnalysisの判定定義は非変更。
 - 保存・archive・remote identity・Supabase `demand_cycle`・session/snapshot/Review19/rateDecisionSnapshot/exportはnormal/summer metadataを維持する。remoteは従来のcycle別2queryをmemory mergeする方式で、production local-first/失敗時継続/fixed-time READ ONLYは非変更。normal/summer別JSON exportも維持する。
-- 履歴説明は「同じ曜日の記録」「短期中央値」「長期中央値」等の共通文言。夏の手動残数noteは「残数基準で手動判定します。」、mode ON/OFF確認は共通履歴を使う旨へ変更。実際の夏専用reference label・human even解決・summer17 dry快適上限-10%・7/1〜9/30 gate/lockは維持する。
+- 履歴説明は「同じ曜日の記録」「短期中央値」「長期中央値」等の共通文言。夏の手動残数noteは「残数基準で手動判定します。」、mode ON/OFF確認は共通履歴を使う旨へ変更。基準表示は9-39で営業月表示となるが、human even解決・summer17 dry快適上限-10%・7/1〜9/30 gate/lockは維持する。
 
 ### 9-37: 履歴前処理の再利用・17時early-next継続・季節商品
 
@@ -176,21 +176,30 @@ Obonは毎年8月13日〜16日。`isObon=true`、`calendarCondition="obon"` と�
 ### 9-29: 長期連休内部の17時は金土reference
 
 - `isLongHolidayMiddle()` は既存 `isJapaneseHolidayOrWeekend()` を再利用する。当日・前日・翌日が休日で、前々日または翌々日も休日なら4日以上のブロック内部。初日・最終日・ちょうど3日は対象外。Obonだけの日を休日ブロックへ加えない。
-- 個別量は `getIndividualAmountReferenceContext()` の三連休分岐の後で17時だけ金土group。表示は「金曜日・土曜日の17時を基準に考えて」、短いラベルは共通formatterによる「金曜日・土曜日・17時」（summerは先頭に夏）。
+- 個別量は `getIndividualAmountReferenceContext()` の三連休分岐の後で17時だけ金土group。表示は「金曜日・土曜日の17時を基準に考えて」、短いラベルは共通formatterによる「○月・金曜日・土曜日・17時」（9-39以降、営業月prefix）。
 - 残数は `getAreaCountComparisonWeekdayGroup()` とrecommendationの比較basis/force fallbackへ17時限定適用。同曜日データが3件以上あっても対象日は金土を使う。中央値/減少率アルゴリズムは変更しない。
 - **履歴recordの分類** `getAreaCountFallbackWeekdayGroup()`、そのnormalizerと書込経路は維持。新しい比較先選択によって過去recordを再分類しない。新規の `areaCountDecisionBasis` / calendar `areaCountReference` には実際に採用した金土比較を保存する。
 - 既存JSON構造のkind/reasonに `long_holiday_middle` を許可するだけで、field/schemaを追加しない。既存contextはそのまま保持。calendarContext欠損の旧snapshotを復元する2経路は `applyLongHolidayRule: false` で旧referenceを再現する。このflagは保存fieldではない。
 - 2026-09-20/21/22の17時が対象。9/19は初日、9/23は最終日で対象外。15/18:30/19:30/20:30とReview19の19時referenceは非変更。
 
-9-19の対象UIは共通の `formatReferenceConditionLabel()` で短いreference labelを作る。エリア手動判定・値引率表示は、既存の `getIndividualAmountReferenceContext()` で解決したcontextをformatterへ渡す。
+9-19以降の対象UIは共通の `formatReferenceConditionLabel()` を使う。9-39では営業日 `date` の月を先頭へ付け、normal/summerを問わず1〜12月を表示する。エリア手動判定・RateDisplay・AdvanceDiscount・通常Done・Review19へ既存propsで伝播し、component側に月計算を重複追加しない。
 
-- normal: `火曜日・17時`
-- summer: `夏・火曜日・17時`
-- Review19: internal referenceが19:30相当でもdisplayは `火曜日・19時` / `夏・火曜日・19時`
+- 文型: `10月の金曜日の17時を基準に考えて`
+- 単一曜日の短いラベル: `10月・金曜日・17時`
+- 解決済みgroup: `10月・金曜日・土曜日・17時`
+- Review19: `10月・金曜日・19時` / group `10月・金曜日・土曜日・19時`。既存の19時表示を維持し、内部19:30相当をラベルへ出さない。
 
-Review19は、保存済み `IndividualAmountReferenceContext` そのものを直接渡す方式ではない。`useNebikiApp.ts` の `review19ReferenceLabel` が `state.review19.reference.date` / `weekday`、`discountTime: "19"`、現在の `applyObonRule` を `getReferenceConditionLabel()` へ渡し、その内部で既存reference logicを再解決してからformatterを呼ぶ。cycleは `state.review19.demandCycle ?? reference.demandCycle` を `normalizeDemandCycle()` で正規化する（両方欠損時はnormal）。`displayTimeText: "19時"` を明示するため、内部の19:30相当表現はラベルへ出さない。
+表示月はsession/recordの営業日だけから導出し、UTC timestampや現在のclockを参照しない。weekday/groupは既存reference resolver・manual weekday・calendar/holiday/Obon/長期連休を尊重する。`getIndividualAmountReferenceContext()` のraw contextや保存済みreferenceText自体は変えず、月を履歴filterや判定入力へ使わない。需要modeを示す既存「夏季モード基準」badgeは残り、曜日・時刻referenceの季節prefixとは区別する。
 
-入力は保存済みdate / weekdayであり、UI側で今日の曜日を再計算したり、保存済みreferenceを書き換えたりしない。legacy `referenceText` やsummer補助noteは互換/別用途で残るため、全UIの文章形式を廃止したわけではない。
+Review19は保存済み `IndividualAmountReferenceContext` を直接formatterへ渡さない。`review19ReferenceLabel` は `state.review19.date ?? reference.date`、保存済み `reference.weekday`、`discountTime: "19"`、現在の `applyObonRule` を既存 `getReferenceConditionLabel()` へ渡し再解決する。cycle正規化と `displayTimeText: "19時"` は維持する。recordとreferenceの日付が異なるlegacy caseでも表示月はrecord.dateを優先する。保存済みreferenceを物理変更しない。
+
+### 9-39: Review19の営業月metadata
+
+- canonical fieldはoptional `businessMonth?: number` 1つ。値は整数1..12。新規Review19作成/確定は営業日ISO `date` から `monthFromBusinessDate()` で導出する。normal/summerに関係なく全月へ適用する。
+- Review19Result root、review19Check、Review19DaySnapshot root / daySnapshot.review19Check、current/checkpoint JSON、authoritative IndexedDB archive、Review19各exportへ保持する。既存remote rowのJSON payload内で保存可能なためSQL/column/RLS/grant/triggerは変更しない。
+- lightweight outboxは従来のidentity参照だけであり、monthやrich snapshotをpayloadへ増やさない。送信時にauthoritative recordを解決してremote JSONへmonthを伝播する。pendingなしdirect rescueも既存正本を使う。
+- 旧recordのmonth欠損はnormalize/read/archive/remoteで欠損のまま。必要な読み出しは `resolveBusinessMonth()` でvalidな保存monthを優先し、なければ営業日dateからfallbackする。exportは独立copyにのみmonthを補う。migration、backfill、storageへの埋戻し、過去recordの再計算は行わない。不正monthは採用しない。無効な営業日は現在月で補完しない。
+- AreaCount通年rolling16/52、同曜日3件、group/median/decrease、Review19統計、rate/weather/summer17、productionAnalysisは非変更。month計算は小さい文字列処理のみで、render全archive read/全normalize/大量cloneを追加しない。
 
 human 9-scaleのeven解決は、normalでは15時が少ない側、17時以降が多い側。summerではJST 18:00未満が少ない側、18:00以降が多い側。
 
@@ -243,7 +252,7 @@ quickは既存 `judgeCurrentArea()` / `applyAreaJudgeSelection()` と保存経�
 
 ### 9-27: DoneScreenの重複曜日・時刻表示を削除
 
-通常の値引完了画面は上部の `referenceConditionLabel`（例: `夏・木曜日・17時`）を残し、「全エリアの値引率」内の `BasisTimeMiniPanel` を表示しない。一覧の全行・値引率、ボタン、メモ、日次exportの挙動は維持。DoneScreen内だけのpanel・2helperと不要なreferenceText/timeText props、およびDoneScreenへの2属性渡しを削除した。他画面のpanel、AreaJudgeScreenの曜日・時刻、共通formatter・resolved referenceは変更していない。
+通常の値引完了画面は上部の `referenceConditionLabel`（例: `10月・木曜日・17時`）を残し、「全エリアの値引率」内の `BasisTimeMiniPanel` を表示しない。一覧の全行・値引率、ボタン、メモ、日次exportの挙動は維持。DoneScreen内だけのpanel・2helperと不要なreferenceText/timeText props、およびDoneScreenへの2属性渡しを削除した。他画面のpanel、AreaJudgeScreenの曜日・時刻、共通formatter・resolved referenceは変更していない。
 
 ## 8. rate、global adjustment、productionAnalysis
 
@@ -371,7 +380,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 通常 `DoneScreen` に `derived.basisGuide.referenceConditionLabel` を表示する。RateDisplayと同じ既存formatter / resolved referenceを使用し、手動曜日指定、holiday / Obon等の解決、summer / normalを尊重する。Review19DoneScreenは非変更。
 - 通常15/17の新しいsession開始では、天候確認を確定した後 `screen: "advance_discount"` に入り、`AdvanceDiscountScreen` を表示する。18/19/20、Review19、fixed-timeには追加しない。
-- 文面は「夏・木曜日・17時を基準に考えて」「多い商品のうち10個以上ある商品を」「10％で引いてください」の形でlabel・rateを動的表示。9-34では「多い」・率・「10個以上」は既存RateDisplayと同じ赤、「ある商品を」は通常色。操作は「エリア別値引へ進む」。
+- 文面は「9月・木曜日・17時を基準に考えて」（9-39以降は営業月）「多い商品のうち10個以上ある商品を」「10％で引いてください」の形でlabel・rateを動的表示。9-34では「多い」・率・「10個以上」は既存RateDisplayと同じ赤、「ある商品を」は通常色。操作は「エリア別値引へ進む」。
 - `getAdvanceDiscountRate()` は `getBaseRate()` + `getWeekdayBaseInfo(...resolvedWeather...).baseRateBonus` + 商品が多い固定10を、`applyGlobalDiscountAdjustmentToRate()` でsessionのglobal補正を加算し共通0〜50%へ制限する。0以下も必ず「0％で引いてください」と数値表示する。既存エリア画面の「引かない」は非変更。
 - このhelperはsessionのdate / weekday / discountTime / demandCycle / globalと既存解決済みweatherだけを受け取る。AreaCount / median / area評価 / quick / decrease / 商品個別policyを参照せず、lateTimeBonus / early-next補正も新画面の式に加えない。新画面のlabelはsessionの時刻を既存 `getReferenceConditionLabel()` で解決する。
 - 押下までは新画面のまま保存・復元し、`continueAfterAdvanceDiscount()` で既存current area / normal-flow入口へ進む。session・area mapを変更せず、架空のAreaCount・評価・完了snapshotを作らない。既存current / checkpoint / runtime保存を使い、新flagやstorage keyは増やさない。
@@ -389,16 +398,16 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全check:* 71/71 PASS。恒久performance/recovery専用: startup6/6、interactive12/12。既存69本を含む。
-- 9-37との全出力1260 recommendation +32 Review19統計一致。9-36互換は9-37の同比較証跡と37/38計算コードbyte一致を併せて確認。rate/weather/calendar/AreaCount/Review19/productionAnalysis定義はbyte-identical。
-- TypeScript/production build/PWA generateSW PASS（101 modules、precache10）。focused ESLint0 errors/3 baseline warnings、full9 errors/6 warnings（9-37は9/7）、file/rule/severity/messageで新規0。
-- Edge production preview390×844、CPU4倍、0/500/1000/2000件・navigation0/5/12/24の7条件91操作/versionで比較。2000件/履歴24のinstrumented天候commit2467.8→15.2ms、first interactive commit6344.3→4303.5ms。無instrumentation完成コードのevent→2回目rAFは天候1145.8→10.6ms。reload/wait/作業からweatherへ戻る追加フローと完成build/Done確認もPASS。application console error/warning/外部通信0。起動archive gateはなおlong taskが残る。具体値・測定境界・未確認範囲は今回CHANGE_REPORTと外部performance結果を参照。計測instrumentationはrelease source/distに含めない。
-- 97 production source中91本が9-37とbyte-identical。変更6本はApp、useNebikiApp、stateNormalization、historicalArchiveRuntime、navigationHistory、storage。AGENTS.md/SQL9本/過去報告/version-build生成方式/schema3は非変更。
-- 即時weather保存、back/undo/reload/checkpoint-only crash復元、Done journal安定化、storage eventの更新を恒久testで確認。GPT-6.1 Sol / Ultraのみ使用（並列agentを含む）。
+- 全check:* **73/73 PASS**（9-38の71本 + 新規2）。月表示専用28/28、Review19月保存11/11、AreaCount performance7/7、startup6/6、interactive/recovery12/12。
+- 9-38と全出力一致: recommendation1260、Review19統計32、weekday core336、rate5040、rate snapshot5040、advance1008、basis business fields336、productionAnalysis1458。表示2fieldとoptional月metadataだけが意図した差分。入力は非破壊。
+- TypeScript / production build / PWA generateSW PASS（102 modules、precache10）。focused ESLint0 errors/3 existing warnings、full9 errors/6 warnings。9-38とのfile/rule/severity/message比較で新規error/warning0。既存largechunk/Browserslist build warningsは残る。
+- Edge production preview390×844で10月15/17/Review19と7/8/9月summer・weekday groupを確認。Review19は18:55の実遷移から12エリアをUI入力し、完了/JSON download/parse/IndexedDB正本のmonth10を確認。詳細と性能再確認は外部browser summaryを参照。アプリconsole error/warning・外部request0。instrumentationはreleaseへ含めない。
+- 98 production source中91本が9-38とbyte-identical。変更はbusinessMonth helper、weekday表示、types、Review19/finalized normalizer、sessionSnapshots、useNebikiAppの7本。AreaCount/history/weather/rate/productionAnalysis/Supabase実装はbyte-identical。AGENTS.md、SQL9本、過去CHANGE_REPORT、version/build生成方式/schema3もbyte-identical。
+- GPT-6.1 Sol / Ultraのみ使用（並列agentを含む）。
 
-未確認: 実店舗物理Android端末・native touch・インストール済みPWA、実Supabase通信/remote取得時間、実店舗の全過去archive、物理crash/長時間background。CPU4倍はdesktop slowdownの近似であり、店舗端末の改善値を保証しない。起動gateのarchive read後のcanonical化は依然重く、weather操作改善だけで全問題解決と断定しない。
+未確認: 店舗物理端末・native touch・インストール済みPWA、実Supabase通信、実店舗の全過去archive、物理crash/長時間background。Edgeの隔離fixtureとsoftware touch/CPU4xは実端末の保証ではない。9-38の起動archive gateに残るlong taskを今回解消したとはしていない。
 
-証跡: `work/interactivePerformance38/checks.json`, `lint-comparison38.json`, `baseline-comparison38.json`, `calculation-comparison38.json`, `startup-audit/`, `persistence-audit/`, `browser-work/`。ZIP再open検査/SHAは外部release報告/検査JSON。
+証跡: `work/businessMonth39/checks.json`, `lint-comparison39.json`, `baseline-comparison39.json`, `calculation-comparison39.json`, `browser-work/final-browser-summary39.json`。ZIP再open検査/SHAは外部release報告/検査JSON。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -432,7 +441,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-38.md`（9-37 baselineは `CHANGE_REPORT_2026.8.9-37.md`）
+4. `CHANGE_REPORT_2026.8.9-39.md`（9-38 baselineは `CHANGE_REPORT_2026.8.9-38.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

@@ -687,6 +687,8 @@ export type DailySessionSnapshot = {
 
 export type Review19DayCheckSnapshot = {
   version: 1;
+  /** 営業日由来の分析カテゴリ（1..12）。schema-3旧recordでは欠損を保持する。 */
+  businessMonth?: number;
   /** Route captured at creation; optional for schema-3 legacy records. */
   expectedAreaIds?: AreaId[];
   dataSchemaVersion?: number;
@@ -719,6 +721,7 @@ export type Review19DayCheckSnapshot = {
 
 export type Review19DaySnapshot = {
   version: 1;
+  businessMonth?: number;
   expectedAreaIds?: AreaId[];
   dataSchemaVersion?: number;
   appVersion?: string;
@@ -740,6 +743,8 @@ export type Review19DaySnapshot = {
 };
 
 export type Review19Result = {
+  /** 営業日date由来の分析カテゴリ（1..12）。判定入力には使わない。 */
+  businessMonth?: number;
   expectedAreaIds?: AreaId[];
   dataSchemaVersion?: number;
   appVersion?: string;

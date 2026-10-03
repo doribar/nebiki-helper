@@ -41,6 +41,7 @@ import {
   normalizeAnalysisCalendarContext,
 } from "../../domain/analysisMetadata.ts";
 import { normalizeGlobalDiscountAdjustmentPercent } from "../../domain/globalDiscountAdjustment.ts";
+import { isBusinessMonth, monthFromBusinessDate } from "../../domain/businessMonth.ts";
 
 function getAreaCountRecordDemandCycle(record: AreaCountRecord): DemandCycle {
   return normalizeDemandCycle(
@@ -325,6 +326,7 @@ export function selectLatestReview19DayCheck(
   return {
     version: 1,
     expectedAreaIds: latest.expectedAreaIds,
+    ...(isBusinessMonth(latest.businessMonth) ? { businessMonth: latest.businessMonth } : {}),
     dataSchemaVersion: latest.dataSchemaVersion,
     appVersion: latest.appVersion,
     buildId: latest.buildId,
@@ -471,6 +473,7 @@ export function createReview19DaySnapshot(params: {
     capturedAt: params.capturedAt,
     expectedAreaIds,
     date: params.date,
+    businessMonth: monthFromBusinessDate(params.date),
     demandCycle,
     calendarContext,
     analysisWeatherContext,

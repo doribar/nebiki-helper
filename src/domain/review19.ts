@@ -44,6 +44,7 @@ import {
 } from "./analysisMetadata.ts";
 import { supportsObonCalendarRule } from "./obon.ts";
 import { pickReview19HistoryStatistics } from "./review19Evaluation.ts";
+import { isBusinessMonth, monthFromBusinessDate, resolveBusinessMonth } from "./businessMonth.ts";
 
 export const REVIEW19_RATINGS: Array<{
   value: Review19Rating;
@@ -226,6 +227,7 @@ export function createInitialReview19Result(params: {
     review19Status: "recorded",
     expectedAreaIds,
     date: params.date,
+    businessMonth: monthFromBusinessDate(params.date),
     demandCycle: normalizeDemandCycle(params.demandCycle),
     sessionStartedAt: params.sessionStartedAt,
     reviewStartedAt: params.reviewStartedAt,
@@ -701,6 +703,7 @@ function normalizeReview19DayCheckSnapshot(
   return JSON.parse(JSON.stringify({
     ...raw,
     ...dataVersion,
+    businessMonth: isBusinessMonth(raw.businessMonth) ? raw.businessMonth : undefined,
     expectedAreaIds,
     demandCycle,
     calendarContext,
@@ -852,6 +855,7 @@ function normalizeReview19DaySnapshot(
   return JSON.parse(JSON.stringify({
     ...raw,
     ...normalizeDataVersionInfo(raw),
+    businessMonth: isBusinessMonth(raw.businessMonth) ? raw.businessMonth : undefined,
     expectedAreaIds,
     demandCycle,
     calendarContext,
@@ -949,6 +953,8 @@ export function normalizeReview19Result(
     excludedAreaIds: rawExcludedAreaIds,
     expectedAreaIds,
   });
+  // The new-record default must not become a legacy read-time backfill.
+  delete base.businessMonth;
 
   const ratingData = normalizeReview19RatingData({
     date: raw.date,
@@ -1018,6 +1024,7 @@ export function normalizeReview19Result(
   return {
     ...base,
     ...normalizeDataVersionInfo(raw),
+    ...(isBusinessMonth(raw.businessMonth) ? { businessMonth: raw.businessMonth } : {}),
     ...ratingData,
     review19Status: legacyReview19Status,
     demandCycle,
@@ -1108,11 +1115,19 @@ function materializeLegacyManualAreaSnapshotsForExport(
 
 /**
  * 旧5段階の人間評価を、保存済みデータ自体は書き換えず、出力時だけ奇数scoreへ展開する。
+ * businessMonth欠損も出力copy上だけで営業日から導出し、storageへ埋め戻さない。
  */
 export function materializeReview19DaySnapshotHumanEvaluationsForExport<
   T extends Review19DaySnapshot,
 >(snapshot: T): T {
   const cloned = JSON.parse(JSON.stringify(snapshot)) as T;
+  cloned.businessMonth = resolveBusinessMonth(cloned);
+  if (cloned.review19Check) {
+    cloned.review19Check.businessMonth = resolveBusinessMonth({
+      date: cloned.date,
+      businessMonth: cloned.review19Check.businessMonth,
+    });
+  }
   for (const session of cloned.sessions) {
     materializeLegacyManualAreaSnapshotsForExport(session.areas);
   }
@@ -1139,6 +1154,7 @@ export function materializeReview19ResultHumanEvaluationsForExport(
   record: Review19Result,
 ): Review19Result {
   const cloned = JSON.parse(JSON.stringify(record)) as Review19Result;
+  cloned.businessMonth = resolveBusinessMonth(cloned);
   materializeLegacyReview19AreaEvaluationsForExport(cloned.areaEvaluations);
   materializeLegacyManualAreaSnapshotsForExport(cloned.snapshot?.areas);
   if (cloned.daySnapshot) {

@@ -19,6 +19,7 @@ import {
 } from "./japaneseHoliday.ts";
 import { isObonDate } from "./obon.ts";
 import { getBaseRate } from "./discount.ts";
+import { monthFromBusinessDate } from "./businessMonth.ts";
 import {
   getTemperaturePoint,
   normalizeTemperatureComfortAnalysis,
@@ -230,13 +231,15 @@ function getReferenceWeekdayConditionText(
   }
 }
 
-/** 判定で解決済みの参照曜日を、画面共通の短い条件ラベルにする。 */
+/** 営業日の月と判定で解決済みの参照曜日を、画面共通の短い条件ラベルにする。 */
 export function formatReferenceConditionLabel(params: {
+  date?: string;
   demandCycle?: DemandCycle;
   reference: IndividualAmountReferenceContext;
   displayTimeText?: string;
 }): string {
-  const prefix = params.demandCycle === "summer" ? "夏・" : "";
+  const month = params.date ? monthFromBusinessDate(params.date) : undefined;
+  const prefix = month === undefined ? "" : `${month}月・`;
   const timeText =
     params.displayTimeText ??
     getBasisTimeText(params.reference.referenceDiscountTime);
@@ -252,6 +255,7 @@ export function getReferenceConditionLabel(params: {
   displayTimeText?: string;
 }): string {
   return formatReferenceConditionLabel({
+    date: params.date,
     demandCycle: params.demandCycle,
     reference: getIndividualAmountReferenceContext(params),
     displayTimeText: params.displayTimeText,
@@ -1005,6 +1009,7 @@ export function getBasisGuideDisplay(params: {
 }): BasisGuideDisplay {
   const resolved = resolveWeatherEffect(params);
   const individualAmountReference = getIndividualAmountReferenceContext(params);
+  const month = params.date ? monthFromBusinessDate(params.date) : undefined;
   const showObonNotice =
     params.applyObonRule !== false &&
     typeof params.date === "string" &&
@@ -1027,8 +1032,11 @@ export function getBasisGuideDisplay(params: {
     bonusResultText: resolved.bonusResultText,
     bonusCalcParts: resolved.bonusCalcParts,
     bonusTotal: resolved.baseRateBonus,
-    referenceText: individualAmountReference.referenceText,
+    referenceText: month === undefined
+      ? individualAmountReference.referenceText
+      : `${month}月の${individualAmountReference.referenceText}`,
     referenceConditionLabel: formatReferenceConditionLabel({
+      date: params.date,
       demandCycle: params.demandCycle,
       reference: individualAmountReference,
     }),

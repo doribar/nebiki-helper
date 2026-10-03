@@ -301,7 +301,7 @@ test("お盆の個別量referenceは祝日当日と同じでreasonだけ識別�
     guide.noticeText,
     "今日はお盆のため、祝日と同じ基準になっています。",
   );
-  assert.equal(guide.referenceText, "日曜日の17時を基準に考えて");
+  assert.equal(guide.referenceText, "8月の日曜日の17時を基準に考えて");
 });
 
 test("お盆のエリアreference選択は同曜日の祝日当日と同じ", () => {

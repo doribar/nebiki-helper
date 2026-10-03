@@ -87,7 +87,7 @@ test("個別量の通常日は実曜日・同時刻を表示", () => {
   );
   assert.equal(
     referenceText({ date: "2026-08-18", weekday: 2 }),
-    "火曜日の17時を基準に考えて",
+    "8月の火曜日の17時を基準に考えて",
   );
 });
 
@@ -103,7 +103,7 @@ test("個別量の祝日前日は金曜日・土曜日を参照", () => {
   assert.equal(context.referenceWeekdayGroup, "金土");
   assert.equal(
     referenceText({ date: "2026-11-02", weekday: 1 }),
-    "金曜日・土曜日の17時を基準に考えて",
+    "11月の金曜日・土曜日の17時を基準に考えて",
   );
 });
 
@@ -119,7 +119,7 @@ test("個別量の祝日当日は日曜日を参照", () => {
   assert.equal(context.referenceWeekdayGroup, null);
   assert.equal(
     referenceText({ date: "2026-07-20", weekday: 1 }),
-    "日曜日の17時を基準に考えて",
+    "7月の日曜日の17時を基準に考えて",
   );
 });
 
@@ -135,7 +135,7 @@ test("三連休中日の既存特殊基準を祝日前日より優先", () => {
   assert.equal(context.referenceWeekdayGroup, "金土");
   assert.equal(
     referenceText({ date: "2026-07-19", weekday: 0 }),
-    "通常の日曜夜と金曜・土曜夜の中間を基準に考えて",
+    "7月の通常の日曜夜と金曜・土曜夜の中間を基準に考えて",
   );
 });
 
@@ -205,7 +205,7 @@ test("祝日説明は指示ではなく適用中基準の受動説明", () => {
   }
 });
 
-test("夏季モードの個別量表示に中黒区切りの夏接頭辞を付ける", () => {
+test("夏季モードの個別量表示に営業月の接頭辞を付ける", () => {
   const rateScreen = source("src/components/screens/RateDisplayScreen.tsx");
   const router = source("src/app/AppRouter.tsx");
   const guide = getBasisGuideDisplay({
@@ -221,7 +221,7 @@ test("夏季モードの個別量表示に中黒区切りの夏接頭辞を付�
       "17",
     ),
   });
-  assert.equal(guide.referenceConditionLabel, "夏・火曜日・17時");
+  assert.equal(guide.referenceConditionLabel, "8月・火曜日・17時");
   assert.match(rateScreen, /basisGuide\.referenceConditionLabel/);
   assert.match(router, /<RateDisplayScreen[\s\S]*?demandCycle=\{derived\.demandCycle\}/);
 });

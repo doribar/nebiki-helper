@@ -409,11 +409,21 @@ function assertExportJsonCharacterization(): void {
         : value
   );
 
-  // New snapshots add only this policy. Pin its two export copies, then keep
-  // the pre-extension golden for every other byte of the payload.
+  // Pin each added field/copy, then keep the pre-extension golden for every
+  // other byte. The new businessMonth metadata adds exactly four July fields.
+  assert.equal(bundle.automatic.daySnapshot.businessMonth, 7);
+  assert.equal(bundle.review.records[0].businessMonth, 7);
+  assert.equal(bundle.all.dailyData[0].businessMonth, 7);
+  assert.equal(bundle.all.review19Data[0].businessMonth, 7);
   let newPolicyCopies = 0;
   let expectedRouteCopies = 0;
+  let businessMonthCopies = 0;
   const legacyJson = JSON.stringify(JSON.parse(json), (key, value) => {
+    if (key === "businessMonth") {
+      assert.equal(value, 7);
+      businessMonthCopies += 1;
+      return undefined;
+    }
     if (key === "expectedAreaIds") {
       assert.ok(Array.isArray(value));
       assert.equal(value.includes("autumn"), false);
@@ -431,6 +441,7 @@ function assertExportJsonCharacterization(): void {
   });
   assert.equal(newPolicyCopies, 2);
   assert.ok(expectedRouteCopies > 0);
+  assert.equal(businessMonthCopies, 4);
   assert.equal(legacyJson.length, 34742);
   assert.equal(
     createHash("sha256").update(legacyJson).digest("hex"),

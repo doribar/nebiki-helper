@@ -6,6 +6,7 @@ import type {
 } from "./types.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
 import { getExpectedAreaIdsForStoredRecord } from "./area.ts";
+import { isBusinessMonth } from "./businessMonth.ts";
 import {
   buildAnalysisWeatherContext,
   buildDayAnalysisCalendarContext,
@@ -74,6 +75,7 @@ export function normalizeReview19DaySnapshotDemandCycle(
   snapshot: Review19DaySnapshot,
 ): Review19DaySnapshot {
   const cloned = clone(snapshot);
+  if (!isBusinessMonth(cloned.businessMonth)) delete cloned.businessMonth;
   const firstSession = cloned.sessions.find(
     (session) => session && typeof session === "object",
   );
@@ -118,6 +120,7 @@ export function normalizeReview19DaySnapshotDemandCycle(
 
   const review19Check = cloned.review19Check;
   if (review19Check && typeof review19Check === "object") {
+    if (!isBusinessMonth(review19Check.businessMonth)) delete review19Check.businessMonth;
     review19Check.demandCycle = demandCycle;
     if (
       review19Check.reference &&

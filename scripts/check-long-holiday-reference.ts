@@ -207,12 +207,12 @@ test("9/21・22の個別量context・共通ラベル・案内・保存metadata�
     for (const demandCycle of ["normal", "summer"] as const) {
       const reference = getIndividualAmountReferenceContext(paramsFor(date));
       assert.deepEqual(reference, newReference);
-      const expectedLabel = `${demandCycle === "summer" ? "夏・" : ""}金曜日・土曜日・17時`;
-      assert.equal(formatReferenceConditionLabel({ reference, demandCycle }), expectedLabel);
+      const expectedLabel = "9月・金曜日・土曜日・17時";
+      assert.equal(formatReferenceConditionLabel({ date, reference, demandCycle }), expectedLabel);
       assert.equal(getReferenceConditionLabel({ ...paramsFor(date), demandCycle }), expectedLabel);
       const weather = resolveWeatherInputForDiscount({ hourlyForecasts: createDefaultHourlyForecasts(), afterRainSky: null }, "17");
       const guide = getBasisGuideDisplay({ ...paramsFor(date), demandCycle, weather });
-      assert.equal(guide.referenceText, newReference.referenceText);
+      assert.equal(guide.referenceText, `9月の${newReference.referenceText}`);
       assert.equal(guide.referenceConditionLabel, expectedLabel);
       const result = recommendation(date, history(2026, "17", demandCycle), "17", demandCycle);
       assert.equal(result.comparisonMode, "fallback_group");

@@ -391,7 +391,7 @@ test("注意11. 既存文言・表示位置・注意デザインを維持", () =
     discountTime: "17",
     weather,
   });
-  assert.equal(guide.referenceText, "通常の日曜夜と金曜・土曜夜の中間を基準に考えて");
+  assert.equal(guide.referenceText, "7月の通常の日曜夜と金曜・土曜夜の中間を基準に考えて");
   assert.equal(
     DAY_BEFORE_HOLIDAY_NOTICE_TEXT,
     "明日は祝日のため、金曜日・土曜日と同じ基準になっています。",
