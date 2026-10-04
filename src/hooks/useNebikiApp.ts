@@ -110,11 +110,10 @@ import {
 } from "../domain/review19Evaluation.ts";
 import type { StoredFinalizedDayData } from "../domain/finalizedDayData.ts";
 import {
-  buildAllReview19DataExportPayloadsByDemandCycle,
+  buildAllReview19DataExportPayload,
   buildDirectReview19DataExportPayload,
   buildLatestReview19DataExportPayload,
-  getDemandCycleAllExportFilename,
-  selectAllReview19Data,
+  getAllReview19ExportFilename,
 } from "../domain/separateDataExport.ts";
 import { downloadJsonFiles } from "../domain/jsonDownload.ts";
 import type {
@@ -4992,23 +4991,18 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function exportAllReview19Data(): boolean {
-    const records = selectAllReview19Data(archivedReview19RecordsRef.current);
-    if (records.length === 0) return false;
     const exportedAt = getRuntimeNow().toISOString();
-    const exports = buildAllReview19DataExportPayloadsByDemandCycle({
-      records,
+    const payload = buildAllReview19DataExportPayload({
+      records: archivedReview19RecordsRef.current,
       exportedAt,
     });
-    return downloadJsonFiles(
-      exports.map(({ demandCycle, payload }) => ({
+    if (payload.count === 0) return false;
+    return downloadJsonFiles([
+      {
         payload,
-        filename: getDemandCycleAllExportFilename({
-          dataKind: "review19",
-          demandCycle,
-          exportedAt,
-        }),
-      })),
-    );
+        filename: getAllReview19ExportFilename(exportedAt),
+      },
+    ]);
   }
 
   function exportLatestReview19Data(): boolean {

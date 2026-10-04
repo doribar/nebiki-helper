@@ -222,6 +222,12 @@ export function getDemandCycleAllExportFilename(params: {
   return `nebiki-${params.dataKind}-${params.demandCycle}${suffix}.json`;
 }
 
+export function getAllReview19ExportFilename(exportedAt: string): string {
+  const timestamp = formatJstExportTimestamp(exportedAt);
+  const suffix = timestamp ? `-${timestamp}` : "";
+  return `nebiki-review19-all${suffix}.json`;
+}
+
 /** 設定の最新出力と20:30完了画面の直接出力で共有する1件payload。 */
 export function buildLatestFinalizedDayDataExportPayload(params: {
   records: readonly FinalizedDayData[];

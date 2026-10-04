@@ -13,11 +13,10 @@ import { buildNormalRateDecisionSnapshot } from "../src/domain/rateDecisionSnaps
 import { buildReview19DataQuality } from "../src/domain/review19.ts";
 import { buildReview19HistoryStatistics } from "../src/domain/review19Evaluation.ts";
 import {
-  buildAllReview19DataExportPayloadsByDemandCycle,
+  buildAllReview19DataExportPayload,
   buildDirectReview19DataExportPayload,
   buildLatestReview19DataExportPayload,
-  getDemandCycleAllExportFilename,
-  selectAllReview19Data,
+  getAllReview19ExportFilename,
 } from "../src/domain/separateDataExport.ts";
 import type { AppState, DemandCycle, Review19Result, SessionDraft } from "../src/domain/types.ts";
 import { getBasisGuideDisplay, getWeekdayBaseInfo } from "../src/domain/weekdayBase.ts";
@@ -304,8 +303,8 @@ function settingsHarness(records: Review19Result[]) {
   const context: Record<string, unknown> = {
     archivedReview19RecordsRef: { current: records },
     getRuntimeNow: () => new Date(EXPORTED_AT),
-    selectAllReview19Data, buildAllReview19DataExportPayloadsByDemandCycle,
-    buildLatestReview19DataExportPayload, getDemandCycleAllExportFilename,
+    buildAllReview19DataExportPayload,
+    buildLatestReview19DataExportPayload, getAllReview19ExportFilename,
     downloadJsonFiles: (items: Parameters<typeof downloadJsonFiles>[0]) => downloadJsonFiles(items, download.runtime),
   };
   context.downloadJsonFile = runInNewContext(hookFunction("downloadJsonFile"), context);
@@ -317,17 +316,19 @@ function settingsHarness(records: Review19Result[]) {
   };
 }
 
-test("settings all Review19 export still downloads each cycle with unchanged JSON", async () => {
+test("settings all Review19 export downloads both cycles in one unchanged payload", async () => {
   const records = [fixture("normal").review19!, fixture("summer").review19!];
-  const expected = buildAllReview19DataExportPayloadsByDemandCycle({ records, exportedAt: EXPORTED_AT });
+  const expected = buildAllReview19DataExportPayload({ records, exportedAt: EXPORTED_AT });
   const harness = settingsHarness(records);
   assert.equal(harness.all(), true);
-  assert.equal(harness.files.length, 2);
-  for (const [index, file] of harness.files.entries()) {
-    assert.equal(file.clicked, true);
-    assert.equal(await file.blob.text(), JSON.stringify(expected[index].payload, null, 2));
-    assert.equal(file.filename, getDemandCycleAllExportFilename({ dataKind: "review19", demandCycle: expected[index].demandCycle, exportedAt: EXPORTED_AT }));
-  }
+  assert.equal(harness.files.length, 1);
+  const file = harness.files[0];
+  assert.equal(file.clicked, true);
+  assert.equal(await file.blob.text(), JSON.stringify(expected, null, 2));
+  assert.equal(file.filename, getAllReview19ExportFilename(EXPORTED_AT));
+  assert.equal(Object.hasOwn(expected, "exportFilter"), false);
+  assert.equal(expected.count, 2);
+  assert.deepEqual(expected.records.map((record) => record.demandCycle).sort(), ["normal", "summer"]);
   harness.assertUnchanged();
 });
 

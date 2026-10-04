@@ -259,7 +259,7 @@ test("19時・日次の全件／最新／direct exportを分離する", () => {
     null,
   );
 
-  assert.match(hookSource, /if \(records\.length === 0\) return false/);
+  assert.match(hookSource, /if \(payload\.count === 0\) return false/);
   assert.match(hookSource, /if \(!payload \|\| payload\.records\.length === 0\) return false/);
   assert.doesNotMatch(hookSource, /persistFinalizedDayMemo|exportCompletedDailyData/);
   assert.match(hookSource, /state\.screen !== "review19_done"/);

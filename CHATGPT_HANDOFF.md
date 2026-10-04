@@ -1,4 +1,4 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-40）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-41）
 
 最終更新: 2026-10-04 JST
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-40.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-40.zip` |
-| appVersion | `2026.8.9-40` |
-| buildId | `build-20261003-235945-jst` |
+| ZIP | `nebiki-helper-2026.8.9-41.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-41.zip` |
+| appVersion | `2026.8.9-41` |
+| buildId | `build-20261004-211829-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `.zip.sha256` / `RELEASE_REPORT_2026.8.9-40.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `.zip.sha256` / `RELEASE_REPORT_2026.8.9-41.md` を参照（自己参照回避） |
 
-application rootは `work/areaDecrease40/nebiki-helper`。比較基準は9-39 ZIP `nebiki-helper-2026.8.9-39.zip`（SHA-256 `5f9463ea6f65f1a717f514de3887a9255c79e077657fdfb04b6490c5ede2bba2`）。9-40は残数/減少率表示、17時対象3エリア追加、bad自動補正取消metadata、Done値引率色を実装。17時厳密20pt境界のbinary誤差のみ修正。19:30・rate core・Review19統計・productionAnalysis・businessMonth・9-38 performance構造・schema3・version/build生成方式は維持。AGENTS.md・過去CHANGE_REPORT・SQL9本は非変更。詳細は `CHANGE_REPORT_2026.8.9-40.md`。
+application rootは `work/review19AllExport41/nebiki-helper`。比較基準は9-40 ZIP `nebiki-helper-2026.8.9-40.zip`（SHA-256 `bc8f98a38bb995b7a50135dd0bab5b5478e72b7eef77041757f77d4c803ee200`）。9-41はReview19設定「全件出力」を両cycleの1ファイルへ変更。98/100 production sourceは9-40とbyte-identicalで、計算・統計・保存・9-38 performance構造・schema3・version/build生成方式は維持。AGENTS.md・過去CHANGE_REPORT・SQL9本は非変更。詳細は `CHANGE_REPORT_2026.8.9-41.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\areaDecrease40\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19AllExport41\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -135,7 +135,7 @@ legacy migrationは次の順で行う。
 - 新しい `dedupeLatestAreaCountCalculationRecordsByDateAreaTime()` は計算時だけ同一営業日・area・時刻を1観測へ寄せる。保存identity内の既存canonical mergeを再利用し、recordedAt、sessionStartedAt、richness、deterministic fingerprintで正式な観測を選ぶ。3件以上の同identityコピーも入力順で結果が変わらないようraw copyを安定順序へ並べてからmergeする。異なる保存identity間でmetadataを補完せず、選んだ観測自身のcycle/decisionを保持する。入力と保存済みrecordは書き換えない。
 - 減り方補正の過去時刻間sampleと当日前時刻は通年のcanonical観測から取得。対象area、20ポイント差、1段補正は維持する。20:30の参照中央値も同じ母集団を使うが、30/40/50型、40/50型、all50、個数別の業務ruleは非変更。
 - `buildReview19HistoryStatistics()` へ渡す過去Review19由来の一時AreaCountも両cycleを含め、各recordの元cycleを保持する。この一時recordは保存しない。結果は引き続き履歴統計だけで、廃止済みautoEvaluationを生成しない。正式なhuman raw9、tap-toggle、完了、JSON形式、productionAnalysisの判定定義は非変更。
-- 保存・archive・remote identity・Supabase `demand_cycle`・session/snapshot/Review19/rateDecisionSnapshot/exportはnormal/summer metadataを維持する。remoteは従来のcycle別2queryをmemory mergeする方式で、production local-first/失敗時継続/fixed-time READ ONLYは非変更。normal/summer別JSON exportも維持する。
+- 保存・archive・remote identity・Supabase `demand_cycle`・session/snapshot/Review19/rateDecisionSnapshot/exportはnormal/summer metadataを維持する。remoteは従来のcycle別2queryをmemory mergeする方式で、production local-first/失敗時継続/fixed-time READ ONLYは非変更。明示cycle指定のpure export builderは維持する。Review19設定の全件出力は9-41から両cycleを1ファイルにまとめる。
 - 履歴説明は「同じ曜日の記録」「短期中央値」「長期中央値」等の共通文言。夏の手動残数noteは「残数基準で手動判定します。」、mode ON/OFF確認は共通履歴を使う旨へ変更。基準表示は9-39で営業月表示となるが、human even解決・summer17 dry快適上限-10%・7/1〜9/30 gate/lockは維持する。
 
 ### 9-37: 履歴前処理の再利用・17時early-next継続・季節商品
@@ -349,6 +349,14 @@ archive件数が過去のlegacy local件数より多いことはremote canonical
 - 9-22のdownload復帰時にはexport payloadのformat、version、dataSchemaVersion、appVersion、buildId、dataQuality、records、Review19 areaCounts、human/auto evaluation、calendar/weather、productionAnalysis、snapshot、daySnapshot、rateDecisionSnapshot等を変更・削除・要約していない。9-26では新規Review19のauto/status生成を停止し、既存export builderが人間評価と履歴統計をそのまま出力する。downloadはReview19保存、archive、outbox、cloud、localStorage、IndexedDBを変更しない。
 - 設定画面の `19:00チェックデータを全件出力` / `最新の19:00チェックデータを出力` は従来どおりJSON downloadする。完了画面は `buildDirectReview19DataExportPayload()`、設定画面は従来の全件/最新export builderを使う。
 
+### 9-41: Review19設定「全件出力」は両cycleの1ファイル
+
+- 9-40までの全件出力は全archiveをnormal/summerの2ファイルへ分けていた。9-41は同じcanonical `archivedReview19RecordsRef.current` を既存 `buildAllReview19DataExportPayload()` へcycle指定なしで渡し、1つのpretty JSONへ出力する。active/current cycleに依存しない。最新/完了直接出力、明示cycle指定のpure builderは保持。
+- filenameは `nebiki-review19-all-YYYYMMDD-HHmm.json`。既存JST formatterを再利用し、UIボタン/selectorを増やさない。
+- recordのdemandCycle・businessMonth・human/productionAnalysis/calendar/weather/snapshot metadataとlegacy fallbackは保持。root count/dataQualityは既存builderが混在最終集合から再集計する。recordedなincompleteも含める。
+- source/dedupeは既存archive: date×cycle×sessionStartedAtでfinal/complete/revision/richness優先。同日別operation identityは保持。local journal/remote ready記録は既存archive canonical upsertを経由し、remote失敗時はlocal archiveを保持。exportに中央値用complete-only merge・新migration/backfillを使わない。
+- sortは既存date→実施時刻fallback→sessionStartedAt。通常render/起動へ全履歴処理を追加せず、明示export時だけ生成する。保存・計算・remote query・schema・SQLは非変更。
+
 ### 9-22導入 / 9-23表示順: AreaCount自動判定の±1 quick adjustment
 
 - 通常の `rate_display` で履歴自動判定がready、countが存在する15/17/18/19 session（summer/normal）に、元の自動判定から1段上げる・1段下げるボタンをこの順で表示する。fewはhigherだけ、manyはlowerだけ。Review19、fixed-time、20:30、履歴不足・不明は対象外で、full manual selectorは残す。
@@ -411,17 +419,16 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全check:* **77/77 PASS**（9-39の73 + 専用4）。domain35/35、実hook取消フロー15/15、実component/event/AppRouter UI16/16、Done色9/9。性能は既存AreaCount7/7、startup6/6、interactive/recovery12/12もPASS。
-- 9-39比較: AreaCount3640の3530件は全出力一致。意図した差分110件は、新17対象ryomi/autumn/yakitoriの90件と17時厳密20pt境界20件のみ。40%→60%および60%→40%のbinary誤差を修正し、旧5対象でもこの境界だけ旧9-39の補正なしと差がある。19:30ではこの変更を適用しない。
-- Review19統計112、weekday336、rate5040、rate snapshot5040、advance1008、basis business fields336、productionAnalysis1458、numeric/current rate9072件ずつは一致。入力非破壊。天候/商品policy/冷惣菜/暦/営業月/Review19自動移行は非変更。
-- TypeScript / production build / PWA generateSW PASS（104 modules、precache10）。focused ESLint4 existing errors/3 existing warnings、full9 existing errors/6 existing warnings。file/rule/severity/message比較で新規error/warning0。移動した行番号とReact診断のcode-frame行番号のみ正規化し、診断文とcode tokenは保持。既存largechunk/Browserslist warningは残る。
-- Edge production preview390×844で最終buildの残数継続/修正/Back/reload/recovery、悪い取消/復元、良い/普通/対象外/19:30の取消なし、human/quick優先、日次/Review19/archive、Done色、横overflowを確認。意図的な保存失敗は隔離fixtureで別集計。通常application consoleerror/warningと外部request0。詳細は外部browser summaryを参照。
-- SQL9本・AGENTS.md・過去CHANGE_REPORT・保存architecture・version/buildId生成方式/schema3は9-39とbyte-identical。100 production source中86本が9-39とbyte-identical。
-- GPT-6.1 Sol / Ultraのみ使用（並列agentを含む）。
+- 全check:* **78/78 PASS**（9-40の77 + Review19 all-export専用1）。専用: `{"review19AllExport": "14/14 PASS", "review19Download": "15/15 PASS", "cycleSeparatedBuilders": "7/7 PASS", "legacyFeatureRegression": "6/6 PASS", "independentCanonicalSourceAudit": "9/9 PASS"}`。
+- 混在fixture6件・recorded6・complete5・incomplete1・summer3/normal3を、active normal/summer双方で確認。dedupe/legacy/source失敗継続/metadata非破壊/最新・直接出力を維持。
+- 9-40とのAreaCount/Review19統計/human/productionAnalysis/rate/snapshot/営業月/analysis metadata計算比較は全一致、入力非破壊。production source98/100がbyte-identical、変更はexport handlerとfilename helperだけ。
+- TypeScript / production build / PWA generateSW PASS（104 modules、precache10）。focused ESLint 0 existing errors/3 existing warnings、full 9 existing errors/6 existing warnings。file/rule/severity/message比較で新規error/warning0。既存largechunk/Browserslist warningは残る。
+- Edge production preview390×844で最終build両cycleのsingle download、JSON6件/品質/並び/metadata/filename、最新出力と通常UIを確認。完了画面direct downloadは自動testのみ（done seedのreloadは既存のstart/null正規化仕様）。application error/warning/不要外部request/横overflow0。詳細は外部browser summary。
+- SQL9本・AGENTS.md・過去CHANGE_REPORT・保存architecture・version/build生成方式/schema3は9-40とbyte-identical。
 
-未確認: 店舗物理端末/native touch、インストール済みPWA、実Supabase通信、店舗の全過去archive、物理crash/長時間background。CPU4x/software touch/隔離fixtureは実端末の速度保証ではない。起動archive gateの既存long taskを今回解消したとはしていない。
+未確認: 店舗物理端末/native touch、installed PWA、実Supabase通信、店舗の全過去archive、物理crash/長時間background。既存起動archive gateのlong taskを今回解消したとはしていない。
 
-証跡: `work/areaDecrease40/checks.json`, `lint-comparison40.json`, `baseline-comparison40.json`, `calculation-comparison40.json`, `browser-work/final-browser-summary40.json`。完成ZIP検査/SHAは外部release報告/検査JSON。
+証跡: `work/review19AllExport41/checks.json`, `lint-comparison41.json`, `baseline-comparison41.json`, `calculation-comparison41.json`, `browser-work/final-browser-summary41.json`。完成ZIP検査/SHAは外部release報告/検査JSON。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -455,7 +462,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-40.md`（9-39 baselineは `CHANGE_REPORT_2026.8.9-39.md`）
+4. `CHANGE_REPORT_2026.8.9-41.md`（9-40 baselineは `CHANGE_REPORT_2026.8.9-40.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

@@ -93,7 +93,7 @@ function makeDay(
   };
 }
 
-test("Review19 all export splits normal/summer without an empty file", () => {
+test("explicit Review19 cycle export builder splits normal/summer without an empty file", () => {
   const exportedAt = "2026-08-11T15:23:45.000Z";
   const both = buildAllReview19DataExportPayloadsByDemandCycle({
     records: [
@@ -263,7 +263,7 @@ test("multi-download preparation failure returns false without clicking", () => 
   assert.equal(clickCount, 0);
 });
 
-test("Review19 keeps cycle-separated all export while daily UI export is removed", () => {
+test("Review19 settings all route uses one unfiltered payload while explicit cycle builders remain available", () => {
   assert.equal(
     (settingsSource.match(/onExportAllReview19Data/g) ?? []).length,
     3,
@@ -272,7 +272,9 @@ test("Review19 keeps cycle-separated all export while daily UI export is removed
     (settingsSource.match(/onExportAllDailyData/g) ?? []).length,
     0,
   );
-  assert.match(hookSource, /buildAllReview19DataExportPayloadsByDemandCycle/);
+  assert.match(hookSource, /buildAllReview19DataExportPayload/);
+  assert.match(hookSource, /getAllReview19ExportFilename/);
+  assert.doesNotMatch(hookSource, /buildAllReview19DataExportPayloadsByDemandCycle/);
   assert.doesNotMatch(hookSource, /buildAllFinalizedDayDataExportPayloadsByDemandCycle/);
 });
 

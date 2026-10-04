@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-40",
+  "version": "2026.8.9-41",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -84,7 +84,8 @@
     "check:area-decrease-adjustment": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-decrease-adjustment.ts",
     "check:area-count-status-ui": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-status-ui.ts",
     "check:done-rate-colors": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-done-rate-colors.ts",
-    "check:decrease-suppression-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-decrease-suppression-flow.ts"
+    "check:decrease-suppression-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-decrease-suppression-flow.ts",
+    "check:review19-all-export": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-review19-all-export.ts"
   },
   "dependencies": {
     "react": "^19.2.4",
