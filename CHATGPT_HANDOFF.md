@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-41）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-42）
 
-最終更新: 2026-10-04 JST
+最終更新: 2026-10-06 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-41.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-41.zip` |
-| appVersion | `2026.8.9-41` |
-| buildId | `build-20261004-211829-jst` |
+| ZIP | `nebiki-helper-2026.8.9-42.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-42.zip` |
+| appVersion | `2026.8.9-42` |
+| buildId | `build-20261006-095107-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の `.zip.sha256` / `RELEASE_REPORT_2026.8.9-41.md` を参照（自己参照回避） |
+| SHA-256 | ZIP外の `.zip.sha256` / `RELEASE_REPORT_2026.8.9-42.md` を参照（自己参照回避） |
 
-application rootは `work/review19AllExport41/nebiki-helper`。比較基準は9-40 ZIP `nebiki-helper-2026.8.9-40.zip`（SHA-256 `bc8f98a38bb995b7a50135dd0bab5b5478e72b7eef77041757f77d4c803ee200`）。9-41はReview19設定「全件出力」を両cycleの1ファイルへ変更。98/100 production sourceは9-40とbyte-identicalで、計算・統計・保存・9-38 performance構造・schema3・version/build生成方式は維持。AGENTS.md・過去CHANGE_REPORT・SQL9本は非変更。詳細は `CHANGE_REPORT_2026.8.9-41.md`。
+application rootは `work/productCountNotice42/nebiki-helper`。比較基準は9-41 ZIP `nebiki-helper-2026.8.9-41.zip`（SHA-256 `394b59e79376cd30254ec1477212161ba4d0577e21b978639f921fd8d6c1a45e`）。9-42は値引率画面の注意事項へ小パックを除く同一商品20個以上の＋10％案内を1項目だけ追加。99/100 production sourceはbaselineとbyte-identical。値引計算・商品入力・policy snapshot・保存形式・Review19/履歴/export・schema3・version/build生成方式は維持。AGENTS.md・過去CHANGE_REPORT・SQL9本は非変更。詳細は `CHANGE_REPORT_2026.8.9-42.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\review19AllExport41\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\productCountNotice42\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -375,6 +375,13 @@ fixed-timeはproduction AreaCount履歴をSupabaseからREAD ONLYで使い、同
 
 DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能は9-26でも変更していない。
 
+### 9-42: 小パックを除く同一商品20個以上の注意書き
+
+- `fullMode.ts` の `FULL_MODE_NOTICE_ITEMS` に「同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。」を独立追加。旧6項目を保持し、やや不人気の後/減り方の前へ置き、計7項目にする。
+- 既存emphasis/strong方式で「同一商品」「小パックを含めずに」「20個以上」「＋10％」を強調する。RateDisplayScreenの表示条件・component/styleは非変更、20:30では従来どおり注意事項を表示しない。
+- 同一商品の実際の個数で20ちょうどを含む。小パックは判定個数へ入れない。大20なら対象、大15+小10は対象外。＋10％は10 percentage points（表示20→30）。AreaCountの同一商品10個capとは別。
+- 現場確認用の注意書きのみ。商品数input/自動加算/state/key/metadataを追加せず、ProductAdjustmentPolicySnapshot/保存形式/値引率の計算は変更しない。不人気/やや不人気などとの重複時の加算方法を新設・変更しない。
+
 ## 11. そのほかの現行UX
 
 ### 9-28: ユーザー向け「1日データ」機能を撤去
@@ -419,16 +426,15 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全check:* **78/78 PASS**（9-40の77 + Review19 all-export専用1）。専用: `{"review19AllExport": "14/14 PASS", "review19Download": "15/15 PASS", "cycleSeparatedBuilders": "7/7 PASS", "legacyFeatureRegression": "6/6 PASS", "independentCanonicalSourceAudit": "9/9 PASS"}`。
-- 混在fixture6件・recorded6・complete5・incomplete1・summer3/normal3を、active normal/summer双方で確認。dedupe/legacy/source失敗継続/metadata非破壊/最新・直接出力を維持。
-- 9-40とのAreaCount/Review19統計/human/productionAnalysis/rate/snapshot/営業月/analysis metadata計算比較は全一致、入力非破壊。production source98/100がbyte-identical、変更はexport handlerとfilename helperだけ。
-- TypeScript / production build / PWA generateSW PASS（104 modules、precache10）。focused ESLint 0 existing errors/3 existing warnings、full 9 existing errors/6 existing warnings。file/rule/severity/message比較で新規error/warning0。既存largechunk/Browserslist warningは残る。
-- Edge production preview390×844で最終build両cycleのsingle download、JSON6件/品質/並び/metadata/filename、最新出力と通常UIを確認。完了画面direct downloadは自動testのみ（done seedのreloadは既存のstart/null正規化仕様）。application error/warning/不要外部request/横overflow0。詳細は外部browser summary。
-- SQL9本・AGENTS.md・過去CHANGE_REPORT・保存architecture・version/build生成方式/schema3は9-40とbyte-identical。
+- 全check:* **78/78 PASS**。関連full-mode36/36、logic91/91、feature6/6、slightly-unpopular-policy10/10。
+- 新文言・7項目・4箇所強調・旧6項目保持、実component SSRのnormal/summer×15/17/18/19表示と20:30非表示を確認。policy snapshot/legacy/JSON/同商品cap/先行率の既存checkを維持。
+- TypeScript / production build / PWA generateSW PASS（104 modules、precache10）。focused ESLint 0 errors/0 warnings、full既存 9 errors/6 warnings。9-41比較で新規diagnostic0。既存largechunk/Browserslist warningは残る。
+- Edge最終production390×844でnormal17/summer15の天候→先行案内→エリア→率、注意7項目/新文言/強調/旧文言保持、20:30非表示を確認。console error/warning/外部request/横overflow0。
+- production source99/100は9-41とbyte-identical。差分はfullModeのnotice1項目のみ。AGENTS.md・SQL9本・過去CHANGE_REPORT・build生成方式・schema3は不変。
 
-未確認: 店舗物理端末/native touch、installed PWA、実Supabase通信、店舗の全過去archive、物理crash/長時間background。既存起動archive gateのlong taskを今回解消したとはしていない。
+未確認: 店舗物理端末・installed PWA・実Supabase通信。重複加算方法・商品数の自動計算は今回実装対象ではない。
 
-証跡: `work/review19AllExport41/checks.json`, `lint-comparison41.json`, `baseline-comparison41.json`, `calculation-comparison41.json`, `browser-work/final-browser-summary41.json`。完成ZIP検査/SHAは外部release報告/検査JSON。
+証跡: `work/productCountNotice42/checks.json`, `lint-comparison42.json`, `baseline-comparison42.json`, `browser-work/final-browser-summary42.json`。完成ZIP検査/SHAは外部release報告/検査JSON。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -462,7 +468,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-41.md`（9-40 baselineは `CHANGE_REPORT_2026.8.9-40.md`）
+4. `CHANGE_REPORT_2026.8.9-42.md`（9-41 baselineは `CHANGE_REPORT_2026.8.9-41.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

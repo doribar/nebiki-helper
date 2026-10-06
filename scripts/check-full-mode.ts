@@ -13,6 +13,7 @@ import {
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { getNormalTimeRateDisplay } from "../src/domain/discount.ts";
 import {
+  FULL_MODE_NOTICE_ITEMS,
   FULL_MODE_NOTICE_TEXTS,
   getCanonicalUrlForLegacyHash,
 } from "../src/domain/fullMode.ts";
@@ -151,8 +152,40 @@ test("14. 10個以上専用計算コードを削除", () => {
   assert.equal(discountSource.includes("manyThreshold"), false);
 });
 
-test("15. 注意事項は既存5項目とやや不人気の条件付き補正", () => {
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 6);
+test("15. 注意事項の既存6項目・強調を維持し同一商品20個以上を独立追加", () => {
+  const oldTexts = [
+    "残り2個の商品は「多い」にしない",
+    "残り1個の商品は「少ない」にする",
+    "定番商品・夜によく売れる商品・広告商品は、表示値引率から-10%",
+    "見た目が悪い個別商品・不人気な商品は、表示値引率に+10%",
+    "やや不人気な商品は、実際に10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%（小パックは補正なし）",
+    "多い・少ないの判断は、残り数だけでなく商品の減り方も含める",
+  ];
+  const newText = "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。";
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 7);
+  assert.deepEqual(FULL_MODE_NOTICE_TEXTS, [...oldTexts.slice(0, 5), newText, oldTexts[5]]);
+  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 7);
+  assert.deepEqual(
+    FULL_MODE_NOTICE_ITEMS.filter((_, index) => index !== 5)
+      .map((segments) => segments.filter((segment) => segment.emphasis).map((segment) => segment.text)),
+    [
+      ["残り2個", "「多い」にしない"],
+      ["残り1個", "「少ない」にする"],
+      ["定番商品・夜によく売れる商品・広告商品", "-10%"],
+      ["見た目が悪い個別商品・不人気な商品", "+10%"],
+      ["やや不人気な商品", "10個以上", "+10%", "大パックのみ+10%"],
+      ["多い・少ないの判断", "商品の減り方"],
+    ],
+  );
+  assert.deepEqual(FULL_MODE_NOTICE_ITEMS[5], [
+    { text: "同一商品", emphasis: true },
+    { text: "が、" },
+    { text: "小パックを含めずに", emphasis: true },
+    { text: "20個以上", emphasis: true },
+    { text: "ある場合は、表示値引率に" },
+    { text: "＋10％", emphasis: true },
+    { text: "。" },
+  ]);
   assert.deepEqual(FULL_MODE_NOTICE_TEXTS.filter((text) => text.includes("10個以上")), [
     "やや不人気な商品は、実際に10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%（小パックは補正なし）",
   ]);

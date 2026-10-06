@@ -35,6 +35,15 @@ export const FULL_MODE_NOTICE_ITEMS: readonly (readonly FullModeNoticeSegment[])
     { text: "（小パックは補正なし）" },
   ],
   [
+    { text: "同一商品", emphasis: true },
+    { text: "が、" },
+    { text: "小パックを含めずに", emphasis: true },
+    { text: "20個以上", emphasis: true },
+    { text: "ある場合は、表示値引率に" },
+    { text: "＋10％", emphasis: true },
+    { text: "。" },
+  ],
+  [
     { text: "多い・少ないの判断", emphasis: true },
     { text: "は、残り数だけでなく" },
     { text: "商品の減り方", emphasis: true },

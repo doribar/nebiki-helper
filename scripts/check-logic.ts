@@ -2885,13 +2885,13 @@ const totalChecks = 91;
     getCanonicalUrlForLegacyHash({ pathname: '/app/', search: '', hash: '' }),
     null,
   );
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 6);
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 7);
   passed += 1;
 }
 
 
 {
-  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 6);
+  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 7);
   assert.equal(FULL_MODE_NOTICE_TEXTS[0], '残り2個の商品は「多い」にしない');
   assert.equal(
     FULL_MODE_NOTICE_TEXTS[2],
@@ -2900,6 +2900,14 @@ const totalChecks = 91;
   assert.equal(
     FULL_MODE_NOTICE_TEXTS[3],
     '見た目が悪い個別商品・不人気な商品は、表示値引率に+10%',
+  );
+  assert.equal(
+    FULL_MODE_NOTICE_TEXTS[5],
+    '同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。',
+  );
+  assert.equal(
+    FULL_MODE_NOTICE_TEXTS[6],
+    '多い・少ないの判断は、残り数だけでなく商品の減り方も含める',
   );
   passed += 1;
 }
