@@ -16,7 +16,7 @@ import { FULL_MODE_NOTICE_ITEMS } from "../../domain/fullMode";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { PrimaryButton } from "../layout/PrimaryButton";
-import { JudgeHintDialog } from "../common/JudgeHintDialog";
+import { JudgeHintDialog, ManualAreaJudgeHint } from "../common/JudgeHintDialog";
 import {
   DayBeforeHolidayNotice,
   HolidayBeforeNormalWeekdayNotice,
@@ -67,11 +67,9 @@ type RateDisplayScreenProps = {
   onApplyAreaEvaluationAdjustment?: (
     direction: HumanEvaluationAdjustment["direction"],
   ) => void;
-  showDailyNotice?: boolean;
   showDayBeforeHolidayNotice?: boolean;
   showThreeDayHolidayMiddleNotice?: boolean;
   showHolidayBeforeNormalWeekdayNotice?: boolean;
-  onConfirmDailyNotice?: () => void;
   finalGuide?: FinalGuideData;
   onNextArea: () => void;
   onSkip: () => void;
@@ -229,6 +227,7 @@ function RateInstructionCard({
 
       {showJudgeHint ? (
         <JudgeHintDialog
+          purpose="product"
           demandCycle={demandCycle}
           onClose={() => setShowJudgeHint(false)}
         />
@@ -294,11 +293,9 @@ export function RateDisplayScreen({
   onOverrideAreaCountEvaluation,
   areaEvaluationQuickAdjustments = [],
   onApplyAreaEvaluationAdjustment,
-  showDailyNotice = false,
   showDayBeforeHolidayNotice = false,
   showThreeDayHolidayMiddleNotice = false,
   showHolidayBeforeNormalWeekdayNotice = false,
-  onConfirmDailyNotice,
   finalGuide,
   onNextArea,
   onSkip,
@@ -312,7 +309,6 @@ export function RateDisplayScreen({
 }: RateDisplayScreenProps) {
   const isFinalTime = discountTime === "20";
   const { cancelSwipeGesture, ...swipeToSkipHandlers } = useSwipeToSkip({
-    enabled: !showDailyNotice,
     onSwipeLeft: onSkip,
   });
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
@@ -386,57 +382,6 @@ export function RateDisplayScreen({
     }
 
     onNextArea();
-  }
-
-  if (showDailyNotice) {
-    return (
-      <main style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
-        <ScreenHeader
-          weekdayText={weekdayText}
-          timeText={timeText}
-          areaName={areaName}
-          rightAction={
-            <button
-              type="button"
-              onClick={onGoBack}
-              style={subActionButtonStyle}
-            >
-              戻る
-            </button>
-          }
-        />
-
-        <AreaCountStatusPanel
-          areaCount={areaCount}
-          decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
-          onToggleDecreaseAdjustmentSuppression={discountTime === "17"
-            ? onToggleDecreaseAdjustmentSuppression : undefined}
-        />
-
-        <NoticeSection />
-
-        <PrimaryButton onClick={onConfirmDailyNotice ?? (() => {})}>
-          OK
-        </PrimaryButton>
-
-        {onStartAreaCountCorrection ? (
-          <AreaCountCorrectionPanel
-            items={editableAreaCounts}
-            onSelect={onStartAreaCountCorrection}
-          />
-        ) : null}
-
-        <div style={{ marginTop: 16 }}>
-          <button
-            type="button"
-            onClick={onReturnHome}
-            style={{ ...subActionButtonStyle, width: "100%" }}
-          >
-            トップに戻る
-          </button>
-        </div>
-      </main>
-    );
   }
 
   return (
@@ -593,8 +538,8 @@ export function RateDisplayScreen({
           }}
         >
           {getHumanEvaluationRangeLabel(humanEvaluationDetails, evaluationText)}
-          <br />→ この時間帯は「
-          {evaluationText(humanEvaluationDetails.resolvedEvaluation)}」として計算
+          <br />→ 判定確定時に「
+          {evaluationText(humanEvaluationDetails.resolvedEvaluation)}」を採用して計算
         </section>
       ) : null}
 
@@ -631,6 +576,7 @@ export function RateDisplayScreen({
           </button>
           {showManualEvaluationOverride ? (
             <div style={{ marginTop: 10 }}>
+              <ManualAreaJudgeHint demandCycle={demandCycle} />
               <HumanEvaluationSelector
                 ariaLabel={`自動判定の手動変更-${areaName}`}
                 layout="stacked"

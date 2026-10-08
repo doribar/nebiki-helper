@@ -236,16 +236,19 @@ test("夏季モードの手動エリア判定へ基準を明示", () => {
   assert.match(router, /<AreaJudgeScreen[\s\S]*?demandCycle=\{derived\.demandCycle\}/);
 });
 
-test("迷ったらUIとstateはエリア判定だけ削除し個別量側は維持", () => {
+test("迷ったら案内は商品判断と手動エリア判定で用途を分ける", () => {
   const areaScreen = source("src/components/screens/AreaJudgeScreen.tsx");
   const rateScreen = source("src/components/screens/RateDisplayScreen.tsx");
   const judgeHint = source("src/components/common/JudgeHintDialog.tsx");
-  assert.doesNotMatch(areaScreen, /迷ったら…/);
-  assert.doesNotMatch(areaScreen, /showJudgeHint/);
-  assert.doesNotMatch(areaScreen, /JudgeHintDialog/);
+  assert.match(areaScreen, /<ManualAreaJudgeHint demandCycle=\{demandCycle\} \/>/);
+  assert.doesNotMatch(areaScreen, /<JudgeHintDialog/);
   assert.match(rateScreen, /迷ったら…/);
   assert.match(rateScreen, /showJudgeHint/);
   assert.match(rateScreen, /JudgeHintDialog/);
+  assert.match(rateScreen, /<JudgeHintDialog[\s\S]*?purpose="product"/);
+  assert.match(rateScreen, /<ManualAreaJudgeHint demandCycle=\{demandCycle\} \/>/);
+  assert.match(judgeHint, /purpose: "product" \| "manual-area"/);
+  assert.doesNotMatch(judgeHint, /compact/);
   assert.doesNotMatch(judgeHint, /アウトパック/);
   assert.match(judgeHint, /大パックだけ値引/);
   assert.match(judgeHint, /近いものだけ値引/);

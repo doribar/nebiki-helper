@@ -76,14 +76,6 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: "土曜日" },
 ];
 
-const DISCOUNT_TIME_OPTIONS: { value: DiscountTime; label: string }[] = [
-  { value: "15", label: "15時" },
-  { value: "17", label: "17時" },
-  { value: "18", label: "18時30分" },
-  { value: "19", label: "19時30分" },
-  { value: "20", label: "20時30分" },
-];
-
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
 const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
 const FORECAST_WEATHER_ORDER: ForecastWeatherKind[] = ["sunny", "rain", "snow"];
@@ -105,18 +97,6 @@ function formatLocalDate(date = new Date()): string {
   const m = `${date.getMonth() + 1}`.padStart(2, "0");
   const d = `${date.getDate()}`.padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function resolveDiscountTime(date = new Date()): DiscountTime {
-  const minutes = date.getHours() * 60 + date.getMinutes();
-
-  // 天候入力・値引開始準備の時刻で自動切替する。
-  // 15時・17時は冷惣菜値引もあるため20分前、それ以降は5分前。
-  if (minutes < 16 * 60 + 40) return "15";
-  if (minutes < 18 * 60 + 25) return "17";
-  if (minutes < 19 * 60 + 25) return "18";
-  if (minutes < 20 * 60 + 25) return "19";
-  return "20";
 }
 
 function getWeekdayLabel(weekday: number): string {
@@ -470,7 +450,6 @@ export function StartScreen({
   const hasUserAdvancedWeatherInputRef = useRef(false);
   const lastAutoScrolledWeatherTargetKeyRef = useRef<string | null>(null);
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
-  const discountTimeOptions = DISCOUNT_TIME_OPTIONS;
 
   useEffect(() => {
     setConfirmedInputs(createEmptyConfirmationMap());
@@ -732,24 +711,6 @@ export function StartScreen({
     onChangeSessionDraft({
       weekday: nextWeekday,
       manualWeekdayOverride: true,
-    });
-  };
-
-  const handleDiscountTimeWheel = (deltaY: number) => {
-    const step = getWheelStep(deltaY);
-    const currentIndex = discountTimeOptions.findIndex(
-      (option) => option.value === sessionDraft.discountTime,
-    );
-    const nextIndex = cycleIndex(
-      discountTimeOptions.length,
-      currentIndex,
-      step,
-    );
-    const nextDiscountTime = discountTimeOptions[nextIndex].value;
-
-    onChangeSessionDraft({
-      discountTime: nextDiscountTime,
-      manualDiscountTimeOverride: true,
     });
   };
 
@@ -1048,79 +1009,16 @@ export function StartScreen({
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>時刻</StartSectionLabel>
         <div
-          style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}
+          style={{
+            width: "100%",
+            padding: 12,
+            borderRadius: 10,
+            border: "1px solid #ccc",
+            background: "#f7f7f7",
+            fontWeight: 700,
+          }}
         >
-          <div
-            onWheel={(e) => {
-              e.preventDefault();
-              handleDiscountTimeWheel(e.deltaY);
-            }}
-            style={{ minWidth: 0 }}
-          >
-            {sessionDraft.manualDiscountTimeOverride ? (
-              <select
-                value={sessionDraft.discountTime}
-                onChange={(e) =>
-                  onChangeSessionDraft({
-                    discountTime: e.target.value as DiscountTime,
-                    manualDiscountTimeOverride: true,
-                  })
-                }
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                }}
-              >
-                {discountTimeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                  background: "#f7f7f7",
-                  fontWeight: 700,
-                }}
-              >
-                {getDiscountTimeLabel(sessionDraft.discountTime)}
-              </div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (sessionDraft.manualDiscountTimeOverride) {
-                onChangeSessionDraft({
-                  discountTime: resolveDiscountTime(now),
-                  manualDiscountTimeOverride: false,
-                });
-              } else {
-                onChangeSessionDraft({ manualDiscountTimeOverride: true });
-              }
-            }}
-            style={{
-              padding: "0 14px",
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              background: "#fff",
-              cursor: "pointer",
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {sessionDraft.manualDiscountTimeOverride
-              ? "自動に戻す"
-              : "手動で切り替える"}
-          </button>
+          {getDiscountTimeLabel(sessionDraft.discountTime)}
         </div>
       </div>
 

@@ -21,6 +21,7 @@ import {
   saveCalculatorDraft,
 } from "../../domain/calculatorDraft";
 import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
+import { ManualAreaJudgeHint } from "../common/JudgeHintDialog";
 
 type AreaJudgeScreenProps = {
   weekdayText: string;
@@ -829,6 +830,7 @@ export function AreaJudgeScreen({
                 referenceConditionLabel={basisGuide.referenceConditionLabel}
               />
               <div ref={normalManualJudgeButtonRef}>
+                <ManualAreaJudgeHint demandCycle={demandCycle} />
                 <HumanEvaluationSelector
                   ariaLabel={`人間目線の実質9段階残数評価-${areaId}`}
                   layout="stacked"

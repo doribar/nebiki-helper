@@ -1,18 +1,19 @@
+import { useState } from "react";
 import { PrimaryButton } from "../layout/PrimaryButton";
 import type { DemandCycle } from "../../domain/types";
 
 function JudgeHintContent({
-  compact = false,
+  purpose,
   demandCycle = "normal",
 }: {
-  compact?: boolean;
+  purpose: "product" | "manual-area";
   demandCycle?: DemandCycle;
 }) {
   const isSummerMode = demandCycle === "summer";
 
   return (
     <div style={{ lineHeight: 1.8 }}>
-      {!compact ? (
+      {purpose === "product" ? (
         <>
           <div>
             ・商品が大パックと小パックで分かれている
@@ -32,7 +33,18 @@ function JudgeHintContent({
           </div>
         </>
       ) : null}
-      {isSummerMode ? (
+      {purpose === "product" ? (
+        <>
+          <div>
+            {isSummerMode ? "15時・17時" : "15時"}：
+            <span style={{ color: "#e65100", fontWeight: 700 }}>少ない側に寄せる</span>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            {isSummerMode ? "18時以降" : "17時以降"}：
+            <span style={{ color: "#e65100", fontWeight: 700 }}>多い側に寄せる</span>
+          </div>
+        </>
+      ) : isSummerMode ? (
         <>
           <div>
             15時・17時：2つの間で迷う場合は選択肢を長押し。
@@ -49,9 +61,6 @@ function JudgeHintContent({
               多い側の判定
             </span>
             で計算します。
-          </div>
-          <div style={{ marginTop: 8 }}>
-            明らかに多い場合は無理に下げず、夕方〜夜の売れ方も考慮して個別に判断します。
           </div>
         </>
       ) : (
@@ -80,11 +89,11 @@ function JudgeHintContent({
 
 export function JudgeHintDialog({
   onClose,
-  compact = false,
+  purpose,
   demandCycle = "normal",
 }: {
   onClose: () => void;
-  compact?: boolean;
+  purpose: "product" | "manual-area";
   demandCycle?: DemandCycle;
 }) {
   return (
@@ -103,6 +112,9 @@ export function JudgeHintDialog({
         padding: 16,
       }}
       onClick={onClose}
+      onTouchStart={(event) => event.stopPropagation()}
+      onTouchEnd={(event) => event.stopPropagation()}
+      onTouchCancel={(event) => event.stopPropagation()}
     >
       <div
         style={{
@@ -111,6 +123,8 @@ export function JudgeHintDialog({
           borderRadius: 16,
           background: "#fff",
           padding: 18,
+          maxHeight: "calc(100dvh - 32px)",
+          overflowY: "auto",
           boxShadow: "0 12px 32px rgba(0, 0, 0, 0.25)",
         }}
         onClick={(event) => event.stopPropagation()}
@@ -123,7 +137,7 @@ export function JudgeHintDialog({
         </div>
 
         <JudgeHintContent
-          compact={compact}
+          purpose={purpose}
           demandCycle={demandCycle}
         />
 
@@ -131,6 +145,40 @@ export function JudgeHintDialog({
           <PrimaryButton onClick={onClose}>OK</PrimaryButton>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function ManualAreaJudgeHint({ demandCycle }: { demandCycle: DemandCycle }) {
+  const [showHint, setShowHint] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setShowHint(true)}
+        onTouchStart={(event) => event.stopPropagation()}
+        onTouchEnd={(event) => event.stopPropagation()}
+        style={{
+          border: 0,
+          background: "transparent",
+          color: "#555",
+          fontSize: 14,
+          fontWeight: 700,
+          textDecoration: "underline",
+          textUnderlineOffset: 3,
+          cursor: "pointer",
+          padding: "4px 0",
+        }}
+      >
+        迷ったら…
+      </button>
+      {showHint ? (
+        <JudgeHintDialog
+          purpose="manual-area"
+          demandCycle={demandCycle}
+          onClose={() => setShowHint(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -222,11 +222,9 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
             progress: state.currentAreaId ? state.areaProgressMap[state.currentAreaId] : undefined,
           })}
           onApplyAreaEvaluationAdjustment={actions.applyAreaEvaluationAdjustment}
-          showDailyNotice={derived.showDailyNoticeBeforeRate}
           showDayBeforeHolidayNotice={derived.showDayBeforeHolidayNotice}
           showThreeDayHolidayMiddleNotice={derived.showThreeDayHolidayMiddleNotice}
           showHolidayBeforeNormalWeekdayNotice={derived.showHolidayBeforeNormalWeekdayNotice}
-          onConfirmDailyNotice={actions.confirmDailyNotice}
           finalGuide={derived.finalGuide ?? undefined}
           onNextArea={actions.goToNextArea}
           onSkip={actions.skipCurrentArea}

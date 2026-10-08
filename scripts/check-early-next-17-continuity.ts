@@ -25,6 +25,7 @@ import type {
 import { buildMergedBonusDisplay, getBasisGuideDisplay, getWeekdayBaseInfo } from "../src/domain/weekdayBase.ts";
 import { formatLocalDate } from "../src/hooks/nebikiApp/clock.ts";
 import { getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
+import { retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
 import {
   buildCompletedRateSnapshot, buildCurrentNormalRatePresentation,
   buildNextSessionSkipRecord, shouldIgnoreNormalTimeRateCap,
@@ -132,7 +133,7 @@ function harness(state = fixture(), now = at(18, 40)) {
     buildCurrentNormalRatePresentation, buildCompletedRateSnapshot, buildNextSessionSkipRecord,
     refreshSessionDiscountTime, getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap,
     getNormalFlowScreenForArea, getNextSkipTargetDiscountTime, getNextPendingCandidate, getPendingResumeScreen,
-    createNavigationSnapshot, cloneAppState, cloneLastSessionWeatherRecord, popNavigationHistory,
+    createNavigationSnapshot, cloneAppState, cloneLastSessionWeatherRecord, popNavigationHistory, retireManualDiscountTimeOverride,
     window: { confirm: () => { throw new Error("unexpected weather confirmation"); } },
     finalGuide: null, lateTimeBonusNotice: null,
     setState: (update: AppState | ((previous: AppState) => AppState)) => {

@@ -109,7 +109,7 @@ function routedApp(areaId: AreaId = "bento_men", discountTime: DiscountTime = "1
       finalGuide: { count1: { main: "30%" }, count2: { main: "40%" }, count3OrMore: { main: "50%" }, score: 0, scoreThreshold: 3, scoreBreakdown: { weekdayShiftPoints: 0, rateBonusPoints: 0 } },
     } as unknown as UseNebikiAppResult["derived"],
     actions: {
-      goBackOneScreen: noop, skipCurrentArea: noop, goToNextArea: noop, confirmDailyNotice: noop,
+      goBackOneScreen: noop, skipCurrentArea: noop, goToNextArea: noop,
       applyAreaEvaluationAdjustment: noop, toggleCurrentAreaDecreaseAdjustmentSuppression: noop,
       judgeCurrentArea: noop, chooseSkipTargetArea: noop, startAreaCountCorrection: noop,
       startAutoSkippedAreaCountOnly: noop, processAutoSkippedAreaNormally: noop, skipAutoSkippedAreaWithoutMeasurement: noop,
@@ -234,9 +234,10 @@ test("fixed-time callback absence and defensive 19:30 guard hide the button", ()
   const markup19 = rateMarkup({ discountTime: "19", areaCountDecisionBasis: raw19 });
   assert.match(markup19, /減少率：悪い/); assert.doesNotMatch(markup19, /追加製造あり・補正を取り消す/);
 });
-test("daily notice keeps the same current-area count and raw assessment", () => {
-  const markup = rateMarkup({ showDailyNotice: true });
+test("rate instructions and lower notices keep the same current-area count and raw assessment", () => {
+  const markup = rateMarkup();
   assert.match(markup, /エリア残数：20個/); assert.match(markup, /減少率：悪い/); assert.match(markup, /注意事項/);
+  assert.match(markup, /多い商品を30%/); assert.doesNotMatch(markup, />OK<\/button>/);
 });
 test("actual AreaJudge keypad completion transitions to RateDisplay with count 20", () => {
   sessionStorage.clear();

@@ -884,7 +884,6 @@ export type UseNebikiAppDerived = {
   showBentoJudgeGuide: boolean;
   areaCountAssistEnabled: boolean;
   areaCountSameItemLimit: number | null;
-  showDailyNoticeBeforeRate: boolean;
   showDayBeforeHolidayNotice: boolean;
   showThreeDayHolidayMiddleNotice: boolean;
   showHolidayBeforeNormalWeekdayNotice: boolean;
@@ -933,7 +932,6 @@ export type UseNebikiAppActions = {
   startEditingConditions: () => void;
   undoLastAction: () => void;
   markBentoJudgeGuideShown: () => void;
-  confirmDailyNotice: () => void;
   judgeCurrentArea: (
     judge: Exclude<AreaJudge, null>,
     areaCount?: number | null,

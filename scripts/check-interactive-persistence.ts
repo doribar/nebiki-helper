@@ -121,7 +121,7 @@ class HookFixture {
         const text = String(callback);
         // Keep unrelated network/archive async effects outside this fixture;
         // all synchronous persistence/navigation/draft effects execute verbatim.
-        if (!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|setAreaJudgeSelection|setInterval\(updateNow|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)/.test(text)) continue;
+        if (!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|setInterval\(updateNow|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)/.test(text)) continue;
         slot.cleanup?.(); const cleanup = callback(); slot.cleanup = typeof cleanup === "function" ? cleanup : undefined;
       }
       if (!this.dirty) return;
@@ -143,8 +143,11 @@ function initial(active = false): AppState {
   if (active) state.session = { ...draft, startedAt: "2026-10-01T08:00:00.000Z", appVersion: "2026.8.9-37", dataSchemaVersion: 3, buildId: "synthetic-persistence-regression" };
   return state;
 }
-function fixture(options: { active?: boolean; historyCount?: number; checkpointOnly?: boolean; undo?: boolean; done?: boolean } = {}) {
-  memory.clear(); const state = initial(options.active);
+function fixture(options: {
+  active?: boolean; historyCount?: number; checkpointOnly?: boolean; undo?: boolean; done?: boolean;
+  rawState?: AppState; pendingWeather?: { date: string; discountTime: SessionDraft["discountTime"] };
+} = {}) {
+  memory.clear(); const state = options.rawState ?? initial(options.active);
   if (options.done) {
     state.screen="done";state.currentAreaId=null;
     for(const progress of Object.values(state.areaProgressMap))Object.assign(progress,{status:"completed",areaJudge:"normal",areaCount:12,
@@ -155,7 +158,7 @@ function fixture(options: { active?: boolean; historyCount?: number; checkpointO
   if (!options.checkpointOnly) memory.values.set(storage.STORAGE_KEYS.currentSession, JSON.stringify(state));
   if (options.active) memory.values.set(storage.STORAGE_KEYS.workSessionCheckpoint, JSON.stringify(state));
   memory.values.set(storage.STORAGE_KEYS.runtimeState, JSON.stringify({areaJudgeSelection:null,resumeTargetScreen:null,timeSwitchTarget:null,
-    undoSnapshot:options.undo ? snapshot : null,screenHistory:Array.from({length:options.historyCount??0},()=>snapshot),weatherConfirmationPending:null}));
+    undoSnapshot:options.undo ? snapshot : null,screenHistory:Array.from({length:options.historyCount??0},()=>snapshot),weatherConfirmationPending:options.pendingWeather??null}));
   const hook = new HookFixture(); hook.settle(true); return hook;
 }
 const stringify = JSON.stringify, parse = JSON.parse;
@@ -315,6 +318,79 @@ test("runtime serialization keeps the 24-entry cap and independent durable undo/
   loaded.screenHistory[0].state.sessionDraft.weather.hourlyForecasts["18"].tempC=34;
   assert.equal(storage.loadRuntimeState().screenHistory[0].state.sessionDraft.weather.hourlyForecasts["18"].tempC,24);
   return counts;
+});
+
+test("legacy active 15/18/19 no-switch resumes preserve original time, identity and adopted progress", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  const evidence = [];
+  for (const time of ["15", "18", "19"] as const) {
+    const saved = initial(true);
+    saved.session!.discountTime = time; saved.session!.manualDiscountTimeOverride = true;
+    saved.sessionDraft.discountTime = time; saved.sessionDraft.manualDiscountTimeOverride = true;
+    saved.currentAreaId = "bento_men"; saved.screen = "start";
+    Object.assign(saved.areaProgressMap.bento_men, { areaCount: 20, areaJudge: "normal", areaCountEvaluation: "normal", areaCountEvaluationSource: "manual", areaRateAdjustment: 0 });
+    const before = JSON.stringify(saved);
+    const hook = fixture({ active: true, rawState: saved });
+    assert.equal(hook.app.state.session?.discountTime, time);
+    assert.equal(hook.app.state.sessionDraft.discountTime, time, "start screen draft follows the existing operation");
+    assert.equal(hook.app.state.session?.manualDiscountTimeOverride, false);
+    assert.equal(hook.app.state.sessionDraft.manualDiscountTimeOverride, false);
+    const progress = JSON.stringify(hook.app.state.areaProgressMap);
+    hook.app.actions.startSession(); hook.settle();
+    assert.equal(hook.app.state.session?.discountTime, time);
+    assert.equal(hook.app.state.session?.startedAt, saved.session!.startedAt);
+    assert.equal(JSON.stringify(hook.app.state.areaProgressMap), progress);
+    assert.equal(hook.app.state.session?.manualDiscountTimeOverride, false);
+    assert.equal(JSON.stringify(saved), before);
+    evidence.push({ originalTime: time, resumedTime: hook.app.state.session?.discountTime, startedAt: hook.app.state.session?.startedAt, count: hook.app.state.areaProgressMap.bento_men.areaCount });
+    hook.close();
+  }
+  return evidence;
+});
+
+test("legacy pending weather cannot restore retired manual time or its mismatched confirmation", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  const saved = initial(); saved.sessionDraft.discountTime = "15"; saved.sessionDraft.manualDiscountTimeOverride = true;
+  const hook = fixture({ rawState: saved, pendingWeather: { date: saved.sessionDraft.date, discountTime: "15" } });
+  assert.equal(hook.app.state.sessionDraft.discountTime, "17");
+  assert.equal(hook.app.state.sessionDraft.manualDiscountTimeOverride, false);
+  assert.equal(hook.app.derived.weatherConfirmationPending, false);
+  assert.equal(hook.app.state.session, null);
+  hook.close(); return { retiredDraftTime: "17", pendingWeather: false };
+});
+
+test("valid weather hold across 18:25 resumes its confirmation and starts at the held time", () => {
+  fixedMs = new NativeDate("2026-10-01T18:25:00+09:00").getTime();
+  const saved = initial(); saved.sessionDraft.weatherInputLockedDiscountTime = "17";
+  const hook = fixture({ rawState: saved, pendingWeather: { date: saved.sessionDraft.date, discountTime: "17" } });
+  assert.equal(hook.app.state.sessionDraft.discountTime, "17");
+  assert.equal(hook.app.state.sessionDraft.weatherInputLockedDiscountTime, "17");
+  assert.equal(hook.app.derived.weatherConfirmationPending, true);
+  hook.app.actions.confirmWeatherInput(); hook.settle();
+  assert.equal(hook.app.state.session?.discountTime, "17");
+  assert.equal(hook.app.state.session?.manualDiscountTimeOverride, false);
+  const resumedTime = hook.app.state.session?.discountTime; hook.close(); return { boundary: "18:25", resumedTime };
+});
+
+test("legacy undo restoration retires active manual time without rewriting the retained snapshot", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  const saved = initial(true); saved.session!.manualDiscountTimeOverride = true; saved.sessionDraft.manualDiscountTimeOverride = true;
+  saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
+  Object.assign(saved.areaProgressMap.bento_men, { areaCount: 20, areaJudge: "normal", areaCountEvaluation: "normal", areaCountEvaluationSource: "manual", areaRateAdjustment: 0 });
+  const before = JSON.stringify(saved);
+  const hook = fixture({ active: true, rawState: saved, undo: true });
+  const retained = storage.loadRuntimeState().undoSnapshot;
+  assert.equal(retained.state.session.manualDiscountTimeOverride, true);
+  const retainedBefore = JSON.stringify(retained);
+  hook.app.actions.undoLastAction(); hook.settle();
+  assert.equal(hook.app.state.session?.manualDiscountTimeOverride, false);
+  assert.equal(hook.app.state.sessionDraft.manualDiscountTimeOverride, false);
+  assert.equal(hook.app.state.session?.discountTime, "17");
+  assert.equal(hook.app.state.session?.startedAt, saved.session!.startedAt);
+  assert.equal(hook.app.state.areaProgressMap.bento_men.areaCount, 20);
+  assert.equal(JSON.stringify(retained), retainedBefore);
+  assert.equal(JSON.stringify(saved), before);
+  hook.close(); return { retainedManualFlag: true, restoredManualFlag: false, count: 20 };
 });
 
 if(process.env.PERSISTENCE_REPORT)writeFileSync(process.env.PERSISTENCE_REPORT,JSON.stringify({projectRoot,scope:"Actual production hook with deterministic React dispatcher; synchronous effect/action regression, not DOM/paint timing.",results},null,2));

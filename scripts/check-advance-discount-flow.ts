@@ -28,6 +28,7 @@ import { getBasisGuideDisplay, getWeekdayBaseInfo } from "../src/domain/weekdayB
 import { isAutoSkipNoticePending } from "../src/hooks/nebikiApp/autoSkipFlow.ts";
 import { buildTimeSwitchNotice, formatLocalDate } from "../src/hooks/nebikiApp/clock.ts";
 import { getFirstNormalFlowAreaId, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
+import { retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
 import { createDailySessionSnapshot } from "../src/hooks/nebikiApp/sessionSnapshots.ts";
 import {
   buildStartDefaultDraft, clonePersistedNebikiStateSnapshot, createInitialAreaProgressMap,
@@ -122,7 +123,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     createAreaProgressMapWithAutoSkippedAreas, getFirstNormalFlowAreaId, getNormalFlowScreenForArea,
     getFirstAvailableAreaId, isAutoSkipNoticePending, isValidDiscountTime,
     normalizeReview19ExcludedAreaIds, buildTimeSwitchNotice, buildStartDefaultDraft,
-    normalizeSessionDraft, syncAfterRainSelection, createInitialState,
+    normalizeSessionDraft, syncAfterRainSelection, createInitialState, retireManualDiscountTimeOverride,
     matchesWeatherConfirmationDraft, createDailySessionSnapshot, getBasisGuideDisplay, getWeekdayBaseInfo,
     cloneAppState, createNavigationSnapshot, appendNavigationHistory,
     clonePersistedNebikiStateSnapshot, savePersistedNebikiStateWithAuxiliaryRecovery,

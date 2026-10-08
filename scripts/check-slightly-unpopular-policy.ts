@@ -29,7 +29,7 @@ import type {
 } from "../src/domain/types.ts";
 import { normalizeAreaProgressMap } from "../src/hooks/nebikiApp/stateNormalization.ts";
 
-const notice = "やや不人気な商品は、実際に10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%（小パックは補正なし）";
+const notice = "やや不人気な商品は、10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%";
 const sameItemNotice = "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。";
 const legacyPolicy = {
   staplePercent: -10, nightSellerPercent: -10, poorAppearancePercent: 10,
@@ -316,6 +316,9 @@ test("実RateDisplayScreenの通常/夏15〜19時に7項目・独立した20個�
       assert.deepEqual(rows.map((row) => row.replace(/<[^>]*>/g, "")), FULL_MODE_NOTICE_TEXTS);
       assert.equal(text.split(sameItemNotice).length - 1, 1);
       assert.equal(rows[4].replace(/<[^>]*>/g, ""), notice);
+      assert.deepEqual([...rows[4].matchAll(/<strong>(.*?)<\/strong>/g)].map((match) => match[1]), [
+        "やや不人気な商品", "10個以上", "+10%", "大パックのみ+10%",
+      ]);
       assert.equal(rows[5].replace(/<[^>]*>/g, ""), sameItemNotice);
       assert.equal(rows[6].replace(/<[^>]*>/g, ""), "多い・少ないの判断は、残り数だけでなく商品の減り方も含める");
       assert.deepEqual([...rows[5].matchAll(/<strong>(.*?)<\/strong>/g)].map((match) => match[1]), [

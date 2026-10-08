@@ -195,7 +195,7 @@ export function refreshSessionDiscountTime(session: SessionData | null): {
   timeSwitchNotice: string | null;
 } {
   // 実時間が次の値引帯に入っても、自動で打ち切り・移動しない。
-  // 必要な場合はユーザーが開始画面から値引時刻を選び直す。
+  // 次の時刻への移行は、既存の時刻遷移・明示開始フローが担当する。
   return {
     nextSession: session,
     timeSwitchNotice: null,

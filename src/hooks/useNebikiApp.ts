@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { retireManualDiscountTimeOverride } from "./nebikiApp/operationalTime.ts";
 import { getAdvanceDiscountRate } from "../domain/advanceDiscount.ts";
 import { getColdDeliGuide } from "../domain/coldDeliGuide.ts";
 import { monthFromBusinessDate } from "../domain/businessMonth.ts";
@@ -449,18 +450,23 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
           },
         };
 
-    if (!initialWeatherConfirmationPending || !initialLoadedState) {
-      return normalized;
-    }
-
-    return {
-      ...normalized,
-      sessionDraft: normalizeSessionDraft(initialLoadedState.sessionDraft),
-    };
+    const restored = initialWeatherConfirmationPending && initialLoadedState
+      ? {
+          ...normalized,
+          sessionDraft: normalizeSessionDraft(initialLoadedState.sessionDraft),
+        }
+      : normalized;
+    return retireManualDiscountTimeOverride(restored, {
+      now: getRuntimeNow(), fixedTime: isTestMode,
+    });
   });
   const [weatherConfirmationPending, setWeatherConfirmationPending] =
     useState<WeatherConfirmationPending | null>(
-      initialWeatherConfirmationPending,
+      matchesWeatherConfirmationDraft({
+        pending: initialWeatherConfirmationPending,
+        screen: state.screen,
+        sessionDraft: state.sessionDraft,
+      }) ? initialWeatherConfirmationPending : null,
     );
   const [weatherCorrectionRequestId, setWeatherCorrectionRequestId] =
     useState(0);
@@ -801,7 +807,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     setWeatherConfirmationPending(null);
     replaceNextSessionSkipRecords(snapshot.nextSessionSkipRecords);
     setLastSessionWeather(cloneLastSessionWeatherRecord(snapshot.lastSessionWeather));
-    const restoredState = cloneAppState(snapshot.state);
+    const restoredState = retireManualDiscountTimeOverride(cloneAppState(snapshot.state), {
+      now: getRuntimeNow(), fixedTime: isTestMode,
+    });
     if (
       state.finalizedDayRecordId &&
       state.session?.discountTime === "20" &&
@@ -1249,9 +1257,8 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       const now = getRuntimeNow();
       const nowDate = formatLocalDate(now);
       const nowDiscountTime = !isTestMode &&
-        prev.session?.date === nowDate && prev.session.discountTime === "17" &&
-        !timeSwitchTarget
-        ? "17"
+        prev.session?.date === nowDate && !timeSwitchTarget
+        ? prev.session.discountTime
         : resolveDiscountTime(now);
       const nowWeekday = now.getDay();
 
@@ -1413,11 +1420,6 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     state.screen === "area_judge" &&
     state.currentAreaId === "bento_men" &&
     dailyMessageState.bentoJudgeGuideShownDate !== activeSessionDate;
-
-  const showDailyNoticeBeforeRate =
-    state.screen === "rate_display" &&
-    state.session?.discountTime !== "20" &&
-    dailyMessageState.rateNoticeShownDate !== activeSessionDate;
 
   const showAfterRainRecoverySelector = useMemo(() => {
     return shouldOfferAfterRainRecovery({
@@ -2374,13 +2376,16 @@ const lateSkipNotice = useMemo(() => {
       const mergedDraft: SessionDraft = {
         ...prev.sessionDraft,
         ...patch,
+        manualDiscountTimeOverride: isTestMode
+          ? patch.manualDiscountTimeOverride ?? prev.sessionDraft.manualDiscountTimeOverride
+          : false,
         weather: {
           ...prev.sessionDraft.weather,
           ...(patch.weather ?? {}),
         },
       };
 
-      if (hasWeatherPatch && !prev.sessionDraft.manualDiscountTimeOverride) {
+      if (hasWeatherPatch && !mergedDraft.manualDiscountTimeOverride) {
         // 天候入力中に時刻境界を跨いでも、入力を始めた時刻を維持する。
         // StartScreen側から明示された表示中の値引時刻を優先することで、
         // 19時30分入力中に自動判定だけ20時30分へ進む競合を防ぐ。
@@ -2391,11 +2396,7 @@ const lateSkipNotice = useMemo(() => {
           : prev.sessionDraft.weatherInputLockedDiscountTime ?? prev.sessionDraft.discountTime;
       }
 
-      if (patch.manualDiscountTimeOverride === true) {
-        mergedDraft.weatherInputLockedDiscountTime = null;
-      }
-
-      if (patch.manualDiscountTimeOverride === false) {
+      if (isTestMode && typeof patch.manualDiscountTimeOverride === "boolean") {
         mergedDraft.weatherInputLockedDiscountTime = null;
       }
 
@@ -2457,7 +2458,11 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function buildDraftFromSource(source: SessionData | SessionDraft): SessionDraft {
-    return syncAfterRainSelection(normalizeSessionDraft(source), lastSessionWeather);
+    const draft = normalizeSessionDraft(source);
+    return syncAfterRainSelection({
+      ...draft,
+      manualDiscountTimeOverride: isTestMode ? draft.manualDiscountTimeOverride : false,
+    }, lastSessionWeather);
   }
 
   function createUndoSnapshot(baseState: AppState = state) {
@@ -2748,14 +2753,17 @@ const lateSkipNotice = useMemo(() => {
     // そうしないと、天候入力中や開始ボタン押下直前に時刻境界を跨いだとき、
     // 19時30分で入力したのに20時30分の値引へ進むことがある。
     const resolvedDiscountTime =
-      !prev.sessionDraft.manualDiscountTimeOverride &&
-      isValidDiscountTime(prev.sessionDraft.weatherInputLockedDiscountTime)
+      !isTestMode && prev.session?.date === currentDate && !timeSwitchTarget
+        ? prev.session.discountTime
+        : !prev.sessionDraft.manualDiscountTimeOverride &&
+          isValidDiscountTime(prev.sessionDraft.weatherInputLockedDiscountTime)
         ? prev.sessionDraft.weatherInputLockedDiscountTime
         : prev.sessionDraft.discountTime;
 
     const canResumeCurrentSession = prev.session?.date === currentDate;
     const nextSessionBase: SessionData = {
       ...prev.sessionDraft,
+      manualDiscountTimeOverride: isTestMode ? prev.sessionDraft.manualDiscountTimeOverride : false,
       ...getCurrentDataVersionInfo(),
       date: currentDate,
       demandCycle: activeDemandCycle,
@@ -3094,20 +3102,6 @@ const lateSkipNotice = useMemo(() => {
       };
     });
   }
-
-  function confirmDailyNotice() {
-    const shownDate = activeSessionDate;
-
-    setDailyMessageState((current) => {
-      if (current.rateNoticeShownDate === shownDate) return current;
-
-      return {
-        ...current,
-        rateNoticeShownDate: shownDate,
-      };
-    });
-  }
-
 
   async function finalizeFinalDayData(params: {
     nextState: AppState;
@@ -3640,13 +3634,13 @@ const lateSkipNotice = useMemo(() => {
         prev.currentAreaId === areaId &&
         prev.areaProgressMap[areaId].status !== "completed"
       ) {
-        return {
+        return retireManualDiscountTimeOverride({
           ...prev,
           screen: "area_judge",
           finalTimeStep: 0,
           timeSwitchNotice: null,
           areaCountCorrection: null,
-        };
+        }, { now: getRuntimeNow(), fixedTime: isTestMode });
       }
       const correctionMode =
         prev.areaProgressMap[areaId].status === "auto_skipped_late_time" &&
@@ -3654,7 +3648,7 @@ const lateSkipNotice = useMemo(() => {
           ? "auto_skip_count_only" as const
           : "normal" as const;
       const existingContext = prev.areaCountCorrection;
-      return {
+      return retireManualDiscountTimeOverride({
         ...prev,
         screen:
           correctionMode === "auto_skip_count_only"
@@ -3680,7 +3674,7 @@ const lateSkipNotice = useMemo(() => {
             returnTimeSwitchNotice: prev.timeSwitchNotice,
             returnHistoryLength: screenHistoryRef.current.length,
             },
-      };
+      }, { now: getRuntimeNow(), fixedTime: isTestMode });
     });
   }
 
@@ -3690,12 +3684,12 @@ const lateSkipNotice = useMemo(() => {
     weatherConfirmationSubmittingRef.current = false;
     setWeatherConfirmationPending(null);
     setResumeTargetScreen(state.screen);
-    setState((prev) => ({
+    setState((prev) => retireManualDiscountTimeOverride({
       ...prev,
       screen: "start",
       sessionDraft: buildDraftFromSource(prev.session ?? prev.sessionDraft),
       timeSwitchNotice: null,
-    }));
+    }, { now: getRuntimeNow(), fixedTime: isTestMode }));
   }
 
   function undoLastAction() {
@@ -5425,7 +5419,6 @@ const lateSkipNotice = useMemo(() => {
   showBentoJudgeGuide,
   areaCountAssistEnabled,
   areaCountSameItemLimit,
-  showDailyNoticeBeforeRate,
   showDayBeforeHolidayNotice,
   showThreeDayHolidayMiddleNotice,
   showHolidayBeforeNormalWeekdayNotice,
@@ -5473,7 +5466,6 @@ const lateSkipNotice = useMemo(() => {
       startEditingConditions,
       undoLastAction,
       markBentoJudgeGuideShown,
-      confirmDailyNotice,
       judgeCurrentArea,
       applyAreaEvaluationAdjustment,
       toggleCurrentAreaDecreaseAdjustmentSuppression,

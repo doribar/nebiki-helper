@@ -295,8 +295,9 @@ test("16. 迷った時案内はmode別に15/17境界と17/18境界だけを表�
   assert.match(dialogSource, /18時以降：/);
   assert.match(dialogSource, /少ない側/);
   assert.match(dialogSource, /多い側/);
-  assert.match(dialogSource, /明らかに多い/);
-  assert.match(dialogSource, /夕方.*夜/);
+  assert.doesNotMatch(dialogSource, /明らかに多い場合は無理に下げず/);
+  assert.doesNotMatch(dialogSource, /夕方〜夜の売れ方も考慮/);
+  assert.match(dialogSource, /purpose: "product" \| "manual-area"/);
   assert.doesNotMatch(dialogSource, /夏季モード中（17:59まで）/);
   assert.match(rateSource, /<JudgeHintDialog[\s\S]*?demandCycle=\{demandCycle\}/);
 });

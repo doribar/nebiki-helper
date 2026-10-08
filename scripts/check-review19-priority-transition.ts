@@ -60,6 +60,7 @@ import {
   createAreaProgressMapWithAutoSkippedAreas,
   createTimeSwitchPlan,
   finalizeUnmeasuredAreasForAutoTransition,
+  getFirstAvailableAreaId,
   shouldPrioritizeUnfinishedAreasOnAutoTransition,
 } from "../src/hooks/nebikiApp/timeTransitions.ts";
 import {
@@ -798,6 +799,7 @@ function manualStartHarness(params: {
     isValidDiscountTime,
     normalizeReview19ExcludedAreaIds,
     buildTimeSwitchNotice,
+    getFirstAvailableAreaId,
     lastUsedSessionDraft: state.sessionDraft,
     activeDemandCycle: "normal",
     globalDiscountAdjustmentPercent: 5,
@@ -818,6 +820,7 @@ function manualStartHarness(params: {
     replaceNextSessionSkipRecords: () => events.push("replaceSkips"),
   });
   context.openNextSessionInput = runInNewContext(extractHookFunction("openNextSessionInput"), context);
+  context.resolveResumeState = runInNewContext(extractHookFunction("resolveResumeState"), context);
   const start = runInNewContext(extractHookFunction("startSession"), context) as () => void;
   return { ...harness, start };
 }
@@ -877,7 +880,7 @@ test("actual manual 18 start persists real unmeasured session before publishing 
   assert.equal(hasStarted1830Session({ state: fixture(), now: at(23, 59), snapshots: harness.snapshots }), true);
 });
 
-test("manual full time selector creates a fresh 18 session rather than relabelling the preserved 17 areas", () => {
+test("legacy manual draft without an explicit transition resumes original 17 identity and keeps its areas", () => {
   const state = fixture("17", "start");
   state.sessionDraft.discountTime = "18";
   state.sessionDraft.manualDiscountTimeOverride = true;
@@ -885,11 +888,11 @@ test("manual full time selector creates a fresh 18 session rather than relabelli
   const harness = manualStartHarness({ state });
   harness.start();
   const started = harness.published[0];
-  assert.equal(started.session?.discountTime, "18");
-  assert.equal(started.session?.manualDiscountTimeOverride, true);
-  assert.notEqual(started.session?.startedAt, STARTED_AT);
-  assert.equal(started.areaProgressMap.inari.areaCount, undefined);
-  assert.equal(harness.snapshots.length, 1);
+  assert.equal(started.session?.discountTime, "17");
+  assert.equal(started.session?.manualDiscountTimeOverride, false);
+  assert.equal(started.session?.startedAt, STARTED_AT);
+  assert.equal(started.areaProgressMap.inari.areaCount, 32);
+  assert.equal(harness.snapshots.length, 0);
 });
 
 test("18 start snapshot failure retains the 17 source and permits retry without a false night marker", () => {
