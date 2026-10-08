@@ -8,7 +8,7 @@ import { NORMAL_ROUTE, getNormalRoute, getAreaRouteFromStoredIds } from "../src/
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { lockDemandCycleForDate } from "../src/domain/demandCycleStorage.ts";
-import { addDaysToDateString, isJapaneseHolidayOrWeekend } from "../src/domain/japaneseHoliday.ts";
+import { addDaysToDateString, getCalendarWeekday, isJapaneseHolidayOrWeekend } from "../src/domain/japaneseHoliday.ts";
 import { normalizeGlobalDiscountAdjustmentPercent } from "../src/domain/globalDiscountAdjustment.ts";
 import { cloneHourlyForecasts, createDefaultHourlyForecasts, resolveWeatherInputForDiscount } from "../src/domain/hourlyWeather.ts";
 import { appendNavigationHistory, cloneAppState, cloneSkipRecords, createNavigationSnapshot } from "../src/domain/navigationHistory.ts";
@@ -29,6 +29,7 @@ import { isAutoSkipNoticePending } from "../src/hooks/nebikiApp/autoSkipFlow.ts"
 import { buildTimeSwitchNotice, formatLocalDate } from "../src/hooks/nebikiApp/clock.ts";
 import { getFirstNormalFlowAreaId, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
 import { retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
+import { retireManualWeekdayDraft, retireManualWeekdayOverride } from "../src/hooks/nebikiApp/operationalWeekday.ts";
 import { createDailySessionSnapshot } from "../src/hooks/nebikiApp/sessionSnapshots.ts";
 import {
   buildStartDefaultDraft, clonePersistedNebikiStateSnapshot, createInitialAreaProgressMap,
@@ -124,6 +125,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     getFirstAvailableAreaId, isAutoSkipNoticePending, isValidDiscountTime,
     normalizeReview19ExcludedAreaIds, buildTimeSwitchNotice, buildStartDefaultDraft,
     normalizeSessionDraft, syncAfterRainSelection, createInitialState, retireManualDiscountTimeOverride,
+    retireManualWeekdayDraft, retireManualWeekdayOverride, getCalendarWeekday,
     matchesWeatherConfirmationDraft, createDailySessionSnapshot, getBasisGuideDisplay, getWeekdayBaseInfo,
     cloneAppState, createNavigationSnapshot, appendNavigationHistory,
     clonePersistedNebikiStateSnapshot, savePersistedNebikiStateWithAuxiliaryRecovery,
@@ -154,7 +156,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     setUndoSnapshot: () => {}, setUndoNotice: () => {}, setAreaJudgeSelection: () => {},
     window: { alert: (message: string) => { throw new Error(message); } },
   };
-  for (const action of ["buildNavigationSnapshot", "buildDraftFromSource", "resolveResumeState", "startSession", "requestWeatherConfirmation",
+  for (const action of ["retireOperationalOverrides", "buildNavigationSnapshot", "buildDraftFromSource", "resolveResumeState", "startSession", "requestWeatherConfirmation",
     "confirmWeatherInput", "continueAfterAdvanceDiscount", "startEditingConditions", "openNextSessionInput"]) {
     installAction(action, context);
   }

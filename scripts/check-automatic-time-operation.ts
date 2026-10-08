@@ -346,9 +346,8 @@ await test("normal and fixed-time Start show time without a manual select, toggl
       assert.equal(sectionNodes.filter(node => node.type === "select" || node.type === "button" || typeof node.props.onWheel === "function").length, 0);
       runtime.dispatch(timeSection, "Wheel", { deltaY: 100 });
       assert.equal(patches.length, 0);
-      assert.equal(runtime.buttons("手動で切り替える").length, 1, "weekday toggle remains");
-      runtime.click(runtime.button("手動で切り替える"));
-      assert.equal(JSON.stringify(patches), JSON.stringify([{ manualWeekdayOverride: true }]));
+      assert.equal(runtime.buttons("手動で切り替える").length, 0, "weekday picker was also retired in 45");
+      assert.equal(runtime.buttons("自動に戻す").length, 0);
     }
   }
 });

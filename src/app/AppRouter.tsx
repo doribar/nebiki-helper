@@ -63,7 +63,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
             (state.sessionDraft.discountTime === "17" && Boolean(derived.doneNextSessionInfo?.canStart))
           )}
           onStartReview19={actions.startReview19Manually}
-          now={testNow ?? undefined}
           onOpenSettings={onOpenSettings}
           demandCycle={derived.demandCycle}
           summerModeAvailable={isSummerModeAvailable(state.sessionDraft.date)}

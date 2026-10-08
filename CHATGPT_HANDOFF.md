@@ -1,4 +1,4 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-44）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-45）
 
 最終更新: 2026-10-08 JST
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-44.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-44.zip` |
-| appVersion | `2026.8.9-44` |
-| buildId | `build-20261007-235103-jst` |
+| ZIP | `nebiki-helper-2026.8.9-45.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-45.zip` |
+| appVersion | `2026.8.9-45` |
+| buildId | `build-20261008-110344-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-44.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-45.md`参照（自己参照回避） |
 
-application rootは`work/automaticTime44/nebiki-helper`。比較基準は9-43 ZIP `nebiki-helper-2026.8.9-43.zip`（SHA-256 `3be82d6913e6afe1e8f0d92b272107669906cf231e30e7188c47862c7cc7ec50`）。9-44はやや不人気noticeの2句削除、rate前のdaily notice確認廃止、通常運用の時刻manual picker/fixing廃止。旧activeは元session時刻/startedAt/map/確定済み評価/率snapshotを保持してoverrideだけ解除し、既存early/late補正へ復帰する。93/100既存production sourceがbyte-identical、helper1本追加。schema3、計算core、歴史record、同期/SQL、AGENTS、version/build生成方式は維持。旧18:30を18時前に再開する夏静的案内の不一致は残る。第7節の9-44項と`CHANGE_REPORT_2026.8.9-44.md`を参照。
+application rootは`work/automaticWeekday45/nebiki-helper`。比較基準は完成9-44 ZIP `nebiki-helper-2026.8.9-44.zip`（SHA-256 `04645949da174b3615137c5c43e9a016c8414cc9148ba4a0d041dfe674d8160b`）。9-45は通常の曜日manual UIを撤去し、旧通常状態のoverrideを運用復元境界で解除。元業務日、確定済み評価/率/snapshot、歴史recordを保持し、自動自然曜日と既存calendar referenceを区別する。95/101既存production sourceはbyte-identical、helper1追加。44の時刻UI/noticegate廃止・notice7・hint分離・weather/early/Review19は保持。schema3、SQL/AGENTS、version/build生成方式は不変。詳細は第7節9-45項と`CHANGE_REPORT_2026.8.9-45.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\automaticTime44\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\automaticWeekday45\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -202,7 +202,7 @@ Obonは毎年8月13日〜16日。`isObon=true`、`calendarCondition="obon"` と�
 - 解決済みgroup: `10月・金曜日・土曜日・17時`
 - Review19: `10月・金曜日・19時` / group `10月・金曜日・土曜日・19時`。既存の19時表示を維持し、内部19:30相当をラベルへ出さない。
 
-表示月はsession/recordの営業日だけから導出し、UTC timestampや現在のclockを参照しない。weekday/groupは既存reference resolver・manual weekday・calendar/holiday/Obon/長期連休を尊重する。`getIndividualAmountReferenceContext()` のraw contextや保存済みreferenceText自体は変えず、月を履歴filterや判定入力へ使わない。需要modeを示す既存「夏季モード基準」badgeは残り、曜日・時刻referenceの季節prefixとは区別する。
+表示月はsession/recordの営業日だけから導出し、UTC timestampや現在のclockを参照しない。weekday/groupは既存reference resolver・calendar/holiday/Obon/長期連休を尊重する。9-45以降の通常操作は業務日由来自動曜日で、保存済みmanual weekday/referenceは当時の証跡として保持。`getIndividualAmountReferenceContext()` のraw contextや保存済みreferenceText自体は変えず、月を履歴filterや判定入力へ使わない。需要modeを示す既存「夏季モード基準」badgeは残り、曜日・時刻referenceの季節prefixとは区別する。
 
 Review19は保存済み `IndividualAmountReferenceContext` を直接formatterへ渡さない。`review19ReferenceLabel` は `state.review19.date ?? reference.date`、保存済み `reference.weekday`、`discountTime: "19"`、現在の `applyObonRule` を既存 `getReferenceConditionLabel()` へ渡し再解決する。cycle正規化と `displayTimeText: "19時"` は維持する。recordとreferenceの日付が異なるlegacy caseでも表示月はrecord.dateを優先する。保存済みreferenceを物理変更しない。
 
@@ -218,9 +218,19 @@ human 9-scaleのeven解決は、normalでは15時が少ない側、17時以降�
 
 ## 7. 人間評価と±1 quick adjustment（9-23表示順）
 
-### 9-44: 自動時刻運用・daily注意確認廃止
+### 9-45: 通常運用は曜日の自動判定のみ
 
-- Startの時刻select/toggle/auto-return/wheelは削除。自動時刻表示、weekday override、weather input lock、固定時計検証panelを維持。既存clock境界・早取り−5・late+5・次枠skip・17→Review19優先は変更しない。Doneの次枠明示開始はclockでunlockした次枠だけで、任意時刻の指定ではない。
+- Startの曜日toggle/auto-return/select/wheelと専用helper/now propを撤去し自然曜日表示だけを残す。時刻manual UIは44で廃止済み。エリアmanual/longpress/quickは維持。
+- operationalWeekday helperは既存date-only utility公開aliasを使い、current/checkpoint・navigation/undo・条件編集・Done再入で旧manualWeekdayOverrideを解除。未開始は現在日、activeは元session.dateの曜日。raw9/resolved/evaluatedAt/count/completed率/snapshotは保持。
+- 条件編集中に日付を跨いでもactive業務日を保持。既存別日startSession gateで新日sessionを作る時はdraft.date/weekdayも揃える。旧日通常current/checkpoint除外・未保存完成Review19翌日救済は維持。
+- Done/開始済みReview19復元は証跡保護のためno-op。Done再入/新19:30開始で解除。新Reviewはsource session/mapを保持し、新draft/reference/入力統計だけ自動曜日へ。未確定Review weatherの確認も新draft/refだけ解除。
+- generic normalize/clone/historyから旧manual情報を削除しない。運用buildStartDefaultDraftのみ現在日・曜日・flagfalse化。fixedTime helper no-op、production READ ONLY、schema3、既存storage keyを維持。
+- holiday/祝前日/三連休/長期連休/Obon/reference/group/基本率は不変。自動曜日に戻った新規判定・現在率は変わり得るが保存済み値を遡及置換しない。火曜旧金曜指定の新再判定は普通→少ない・10/20→0/10%、金曜20:30旧火曜指定は40/50/50→30/40/50%を実codeで照合。
+- 44のnotice7/太字/文言、商品/manual hint、weather lock、early/late、Review19/20:30、保存評価を時計だけで再解決しない仕様を保持。既存weather effect3件は理由付き局所lint例外で同期挙動維持、global lint config不変。
+
+### 9-44: 自動時刻運用・daily注意確認廃止（当時の記録。曜日は上の9-45項）
+
+- Startの時刻select/toggle/auto-return/wheelは削除。自動時刻表示、当時のweekday override（9-45で通常操作廃止）、weather input lock、固定時計検証panelを維持。既存clock境界・早取り−5・late+5・次枠skip・17→Review19優先は変更しない。Doneの次枠明示開始はclockでunlockした次枠だけで、任意時刻の指定ではない。
 - `showDailyNoticeBeforeRate` / `showDailyNotice` / 確認action・callback・swipe disableは撤去。残数入力/必要な評価後に直接最初のmany指示へ進む。下部注意7項目は保持。やや不人気の本文から「実際に」と「（小パックは補正なし）」だけを削除し4つの太字を維持。他6項目・20個実数rule・商品policyは不変。旧`rateNoticeShownDate`は読込互換だけで確認待ちに使わない。弁当/天候/祝日/20:30の別案内は保持。
 - operationalTime helperはcurrent/checkpoint・navigation/undo・条件編集/Done再活性化だけに適用。activeのmanual flagはfalseへ、元time/startedAt/count/raw9/adopted評価/completed rate/snapshotを保持。sessionless旧draftはautoclock（正当な既存weatherlockがあればそれを尊重）、旧weatherpending不一致は解除して再確認。Done/Review19/historical normalizerは変更せずfixed-time helperはno-op。保存key/schema/migration追加なし。
 - 同日current sessionを再開/条件編集する場合、明示timeSwitchTargetがなければ元timeを使う。解除直後に別枠へsession identityを付け替えない。固定解除後のcurrent率では既存early/late/次skipが復帰する。旧17lowerが18:00に0/10→10/20%、higherが5/15→15/25%となり得るが、既存完了率・snapshotは再計算しない。
@@ -427,7 +437,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ### 9-24: 通常Done基準ラベル・15/17先行値引
 
-- 通常 `DoneScreen` に `derived.basisGuide.referenceConditionLabel` を表示する。RateDisplayと同じ既存formatter / resolved referenceを使用し、手動曜日指定、holiday / Obon等の解決、summer / normalを尊重する。Review19DoneScreenは非変更。
+- 通常 `DoneScreen` に `derived.basisGuide.referenceConditionLabel` を表示する。RateDisplayと同じ既存formatter / resolved referenceを使用し、保存済みlegacy手動曜日、holiday / Obon等の解決（新規通常操作は9-45以降自動曜日）、summer / normalを尊重する。Review19DoneScreenは非変更。
 - 通常15/17の新しいsession開始では、天候確認を確定した後 `screen: "advance_discount"` に入り、`AdvanceDiscountScreen` を表示する。18/19/20、Review19、fixed-timeには追加しない。
 - 文面は「9月・木曜日・17時を基準に考えて」（9-39以降は営業月）「多い商品のうち10個以上ある商品を」「10％で引いてください」の形でlabel・rateを動的表示。9-34では「多い」・率・「10個以上」は既存RateDisplayと同じ赤、「ある商品を」は通常色。操作は「エリア別値引へ進む」。
 - `getAdvanceDiscountRate()` は `getBaseRate()` + `getWeekdayBaseInfo(...resolvedWeather...).baseRateBonus` + 商品が多い固定10を、`applyGlobalDiscountAdjustmentToRate()` でsessionのglobal補正を加算し共通0〜50%へ制限する。0以下も必ず「0％で引いてください」と数値表示する。既存エリア画面の「引かない」は非変更。
@@ -447,13 +457,13 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全check:*80/80、automatic-time-operation13/13、interactive-persistence16/16、Review19priority70/70、advanceflow48/48、early17continuity14/14、judge-hint17/17 PASS。
-- production pipeline166行: 隣接96、単独35、legacy5、quick10、clamp7、保存境界3、減り方10。実採用・率・完了snapshot式を照合。React/storage stubの自動testはブラウザと区別。
-- TypeScript/build/PWA PASS（105 modules、precache10）。focused0 errors/既存3 warnings、full既存9 errors/6 warnings。43版file/rule/severity/message比較で新規0。
-- Edgeproduction390×844 **17ケース/172操作**。daily gateなしの両stage、notice7、時刻manual廃止、weekday保持、旧draft/current/checkpoint、weather境界/reload、案内12開閉storage不変、longpress/cancel/swipe、18時境界・保存評価維持、Review19/20を確認。console error/warning/外部request/横overflow0。source/assetSHA最終build一致・owned preview停止済み。
-- 既存source93/100不変、helper1追加。AGENTS/SQL9/過去報告・保存/同期/core計算は不変。旧18:30-pre18静的hintの不一致を報告。物理店舗端末/installed PWA/実Supabase/長時間background復帰は未確認。
+- 全check:*81/81、automatic-weekday12/12、interactive26/26、time13/13、Review19priority71/71、advance48/48、early17 14/14 PASS。
+- calendar7/restore7/率変化2/実judge3/Review観察1/実Start同期3の監査で新判定・率・保存と旧bytesを照合。React/storage stubはnativeブラウザと区別。
+- TypeScript/build/PWA PASS（106 modules、precache10）。focused0 errors/既存3 warnings、full既存9 errors/6 warnings、44版比較新規0。旧weather effect3件の局所lint例外は同期挙動保持のためでglobal緩和なし。
+- Edgeproduction390×844 26ケース。曜日/time picker・wheelなし、旧draft/current/checkpoint/runtime Back/条件編集済み再開、日付境界、自然曜日/祝日、fixed clock、44のnotice7/両stage/hint/longpress/cancel/swipe、夏18時境界、Review19/20を確認。console error/warning/外部request/overflow0、source/asset hash最終build一致、preview停止済み。
+- 既存source95/101不変・helper1追加。AGENTS/SQL9/過去報告・保存/同期/core計算は不変。旧18:30-pre18静的hint不一致は残る。物理店舗/native touch/installed PWA/実Supabase/長時間backgroundは未確認。
 
-証跡: `work/automaticTime44/checks.json`、`lint-comparison44.json`、`baseline-comparison44.json`、`audit/AUTOMATIC44_PIPELINE_AUDIT.json`、`browser-work/final-browser-summary44.json`。完成ZIP/SHAは外部release報告/検査JSON。
+証跡: `work/automaticWeekday45/checks.json`、`lint-comparison45.json`、`baseline-comparison45.json`、`audit/AUTOMATIC45_PIPELINE_AUDIT.json`、`browser-work/final-browser-summary45.json`。完成ZIP/SHAは外部release報告/検査JSON。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -489,7 +499,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-44.md`（9-43 baselineは `CHANGE_REPORT_2026.8.9-43.md`）
+4. `CHANGE_REPORT_2026.8.9-45.md`（完成baselineは `CHANGE_REPORT_2026.8.9-44.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

@@ -26,6 +26,7 @@ import { buildMergedBonusDisplay, getBasisGuideDisplay, getWeekdayBaseInfo } fro
 import { formatLocalDate } from "../src/hooks/nebikiApp/clock.ts";
 import { getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
 import { retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
+import { retireManualWeekdayOverride } from "../src/hooks/nebikiApp/operationalWeekday.ts";
 import {
   buildCompletedRateSnapshot, buildCurrentNormalRatePresentation,
   buildNextSessionSkipRecord, shouldIgnoreNormalTimeRateCap,
@@ -133,7 +134,7 @@ function harness(state = fixture(), now = at(18, 40)) {
     buildCurrentNormalRatePresentation, buildCompletedRateSnapshot, buildNextSessionSkipRecord,
     refreshSessionDiscountTime, getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap,
     getNormalFlowScreenForArea, getNextSkipTargetDiscountTime, getNextPendingCandidate, getPendingResumeScreen,
-    createNavigationSnapshot, cloneAppState, cloneLastSessionWeatherRecord, popNavigationHistory, retireManualDiscountTimeOverride,
+    createNavigationSnapshot, cloneAppState, cloneLastSessionWeatherRecord, popNavigationHistory, retireManualDiscountTimeOverride, retireManualWeekdayOverride,
     window: { confirm: () => { throw new Error("unexpected weather confirmation"); } },
     finalGuide: null, lateTimeBonusNotice: null,
     setState: (update: AppState | ((previous: AppState) => AppState)) => {
@@ -151,7 +152,7 @@ function harness(state = fixture(), now = at(18, 40)) {
       (context.nextSessionSkipRecordsRef as { current: NextSessionSkipRecord[] }).current.push(...cloneSkipRecords(records));
     },
   };
-  for (const name of ["buildNavigationSnapshot", "createUndoSnapshot", "restoreNavigationSnapshot",
+  for (const name of ["retireOperationalOverrides", "buildNavigationSnapshot", "createUndoSnapshot", "restoreNavigationSnapshot",
     "moveToNextPendingOrDone", "goToNextArea", "goBackOneScreen"]) installAction(name, context);
   function render() {
     const current = context.state as AppState;

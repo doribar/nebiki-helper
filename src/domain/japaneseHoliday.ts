@@ -227,3 +227,6 @@ export function isLongHolidayMiddle(dateString: string): boolean {
     )
   );
 }
+
+// Reuse the validated date-only weekday at operational restore boundaries.
+export { getWeekday as getCalendarWeekday };

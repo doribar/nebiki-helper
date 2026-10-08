@@ -12,6 +12,7 @@ import { canStartReview19FromCurrentState, formatLocalDate } from "./clock.ts";
 import { createReview19Reference, createReview19WeatherDraft } from "./sessionSnapshots.ts";
 import { normalizeLoadedState } from "./stateNormalization.ts";
 import { resolveSessionTemperatureComfort } from "./temperatureComfortState.ts";
+import { retireManualWeekdayDraft } from "./operationalWeekday.ts";
 
 /** 実際に開始した18:30sessionだけを夜値引日の証拠にする。入力draftだけでは判定しない。 */
 export function hasStarted1830Session(params: {
@@ -63,11 +64,15 @@ export function createReview19StartState(params: {
   now: Date;
   snapshots: DailySessionSnapshot[];
   lastSessionWeather: LastSessionWeatherRecord | null;
+  fixedTime?: boolean;
 }): AppState {
   const { currentState, sourceState, now } = params;
   const session = sourceState.session;
   if (!session) return currentState;
-  const reviewDraft = createReview19WeatherDraft(session);
+  // New observation uses the business date; the saved source remains evidence.
+  const reviewDraft = retireManualWeekdayDraft(createReview19WeatherDraft(session), {
+    fixedTime: params.fixedTime,
+  });
   const initialReview19 = createInitialReview19Result({
     date: session.date,
     demandCycle: normalizeDemandCycle(session.demandCycle),

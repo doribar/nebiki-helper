@@ -583,7 +583,8 @@ export function buildStartDefaultDraft(
   return {
     ...normalized,
     date: currentDefault.date,
-    weekday: normalized.manualWeekdayOverride ? normalized.weekday : currentDefault.weekday,
+    weekday: currentDefault.weekday,
+    manualWeekdayOverride: false,
     // 手動時刻・天候入力ロックはページ再読み込み後まで引き継がない。
     // ここを保存値から復元すると、メイン画面や固定動作確認モードが以前の時刻に貼り付く。
     discountTime: currentDefault.discountTime,

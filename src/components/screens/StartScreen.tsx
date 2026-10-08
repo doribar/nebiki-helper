@@ -63,18 +63,7 @@ type StartScreenProps = {
   onChangeGlobalDiscountAdjustment?: (
     adjustmentPercent: GlobalDiscountAdjustmentPercent,
   ) => void;
-  now?: Date;
 };
-
-const WEEKDAY_OPTIONS = [
-  { value: 0, label: "日曜日" },
-  { value: 1, label: "月曜日" },
-  { value: 2, label: "火曜日" },
-  { value: 3, label: "水曜日" },
-  { value: 4, label: "木曜日" },
-  { value: 5, label: "金曜日" },
-  { value: 6, label: "土曜日" },
-];
 
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
 const WIND_NUMBER_OPTIONS = Array.from({ length: 16 }, (_, index) => index);
@@ -90,13 +79,6 @@ function stepForecastWeather(
     (safeIndex + delta + FORECAST_WEATHER_ORDER.length) %
     FORECAST_WEATHER_ORDER.length;
   return FORECAST_WEATHER_ORDER[nextIndex];
-}
-
-function formatLocalDate(date = new Date()): string {
-  const y = date.getFullYear();
-  const m = `${date.getMonth() + 1}`.padStart(2, "0");
-  const d = `${date.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 function getWeekdayLabel(weekday: number): string {
@@ -121,18 +103,6 @@ function getDiscountTimeLabel(discountTime: DiscountTime): string {
     "20": "20時30分",
   };
   return map[discountTime];
-}
-
-function cycleIndex(
-  length: number,
-  currentIndex: number,
-  delta: number,
-): number {
-  return (currentIndex + delta + length) % length;
-}
-
-function getWheelStep(deltaY: number): 1 | -1 {
-  return deltaY > 0 ? 1 : -1;
 }
 
 function StartSectionLabel({ children }: { children: ReactNode }) {
@@ -411,7 +381,6 @@ export function StartScreen({
   onChangeDemandCycle,
   globalDiscountAdjustmentPercent = 0,
   onChangeGlobalDiscountAdjustment,
-  now = new Date(),
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
   const activeHours = useMemo(
@@ -452,6 +421,7 @@ export function StartScreen({
   const startButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Preserve the existing synchronous reset when the weather-input date/time changes.
     setConfirmedInputs(createEmptyConfirmationMap());
   }, [sessionDraft.discountTime, sessionDraft.date]);
 
@@ -460,6 +430,7 @@ export function StartScreen({
     if (fixedTemperatureScopeRef.current === nextScope) return;
 
     fixedTemperatureScopeRef.current = nextScope;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Preserve the existing fixed-clock temperature reload before further input.
     setFixedTimeTemperatures(
       loadFixedTimeTemperatures({
         enabled: isFixedTimeMode,
@@ -528,6 +499,7 @@ export function StartScreen({
     if (previousRequestId === weatherCorrectionRequestId) return;
     hasUserAdvancedWeatherInputRef.current = true;
     lastAutoScrolledWeatherTargetKeyRef.current = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Preserve the existing synchronous confirmation reset when reopening weather input.
     setConfirmedInputs(createCorrectionConfirmationMap(fieldOrder));
   }, [fieldOrder, weatherCorrectionRequestId]);
 
@@ -698,20 +670,6 @@ export function StartScreen({
     }
 
     onStart();
-  };
-
-  const handleWeekdayWheel = (deltaY: number) => {
-    const step = getWheelStep(deltaY);
-    const currentIndex = WEEKDAY_OPTIONS.findIndex(
-      (option) => option.value === sessionDraft.weekday,
-    );
-    const nextIndex = cycleIndex(WEEKDAY_OPTIONS.length, currentIndex, step);
-    const nextWeekday = WEEKDAY_OPTIONS[nextIndex].value;
-
-    onChangeSessionDraft({
-      weekday: nextWeekday,
-      manualWeekdayOverride: true,
-    });
   };
 
   if (weatherConfirmationPending) {
@@ -929,80 +887,16 @@ export function StartScreen({
       <div style={{ marginBottom: 14 }}>
         <StartSectionLabel>曜日</StartSectionLabel>
         <div
-          style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}
+          style={{
+            width: "100%",
+            padding: 12,
+            borderRadius: 10,
+            border: "1px solid #ccc",
+            background: "#f7f7f7",
+            fontWeight: 700,
+          }}
         >
-          <div
-            onWheel={(e) => {
-              e.preventDefault();
-              handleWeekdayWheel(e.deltaY);
-            }}
-            style={{ minWidth: 0 }}
-          >
-            {sessionDraft.manualWeekdayOverride ? (
-              <select
-                value={sessionDraft.weekday}
-                onChange={(e) =>
-                  onChangeSessionDraft({
-                    weekday: Number(e.target.value),
-                    manualWeekdayOverride: true,
-                  })
-                }
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                }}
-              >
-                {WEEKDAY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                  background: "#f7f7f7",
-                  fontWeight: 700,
-                }}
-              >
-                {getWeekdayLabel(sessionDraft.weekday)}
-              </div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (sessionDraft.manualWeekdayOverride) {
-                onChangeSessionDraft({
-                  date: formatLocalDate(now),
-                  weekday: now.getDay(),
-                  manualWeekdayOverride: false,
-                });
-              } else {
-                onChangeSessionDraft({ manualWeekdayOverride: true });
-              }
-            }}
-            style={{
-              padding: "0 14px",
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              background: "#fff",
-              cursor: "pointer",
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {sessionDraft.manualWeekdayOverride
-              ? "自動に戻す"
-              : "手動で切り替える"}
-          </button>
+          {getWeekdayLabel(sessionDraft.weekday)}
         </div>
       </div>
 

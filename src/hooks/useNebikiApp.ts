@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { retireManualDiscountTimeOverride } from "./nebikiApp/operationalTime.ts";
+import { retireManualWeekdayDraft, retireManualWeekdayOverride } from "./nebikiApp/operationalWeekday.ts";
+import { getCalendarWeekday } from "../domain/japaneseHoliday.ts";
 import { getAdvanceDiscountRate } from "../domain/advanceDiscount.ts";
 import { getColdDeliGuide } from "../domain/coldDeliGuide.ts";
 import { monthFromBusinessDate } from "../domain/businessMonth.ts";
@@ -353,6 +355,13 @@ function downloadJsonFile(payload: unknown, filename: string): boolean {
   return downloadJsonFiles([{ payload, filename }]);
 }
 
+function retireOperationalOverrides(
+  state: AppState,
+  params: { now: Date; fixedTime?: boolean },
+): AppState {
+  return retireManualWeekdayOverride(retireManualDiscountTimeOverride(state, params), params);
+}
+
 export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppResult {
   setRuntimeNowOverride(params?.testNow ?? null);
   const isTestMode = params?.testNow instanceof Date;
@@ -456,7 +465,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
           sessionDraft: normalizeSessionDraft(initialLoadedState.sessionDraft),
         }
       : normalized;
-    return retireManualDiscountTimeOverride(restored, {
+    return retireOperationalOverrides(restored, {
       now: getRuntimeNow(), fixedTime: isTestMode,
     });
   });
@@ -807,7 +816,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     setWeatherConfirmationPending(null);
     replaceNextSessionSkipRecords(snapshot.nextSessionSkipRecords);
     setLastSessionWeather(cloneLastSessionWeatherRecord(snapshot.lastSessionWeather));
-    const restoredState = retireManualDiscountTimeOverride(cloneAppState(snapshot.state), {
+    const restoredState = retireOperationalOverrides(cloneAppState(snapshot.state), {
       now: getRuntimeNow(), fixedTime: isTestMode,
     });
     if (
@@ -1260,22 +1269,26 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
         prev.session?.date === nowDate && !timeSwitchTarget
         ? prev.session.discountTime
         : resolveDiscountTime(now);
-      const nowWeekday = now.getDay();
+      // Editing an active session keeps its business date, including after midnight.
+      // A new/next-session draft still follows the existing current-date refresh.
+      const draftDate = prev.session && !timeSwitchTarget ? prev.session.date : nowDate;
+      const draftWeekday = getCalendarWeekday(draftDate) ?? now.getDay();
 
       const nextDraft = { ...prev.sessionDraft };
       let changed = false;
 
-      if (nextDraft.date !== nowDate) {
-        nextDraft.date = nowDate;
+      if (nextDraft.date !== draftDate) {
+        nextDraft.date = draftDate;
         nextDraft.weatherInputLockedDiscountTime = null;
         changed = true;
       }
 
       if (
-        !nextDraft.manualWeekdayOverride &&
-        nextDraft.weekday !== nowWeekday
+        (!isTestMode || !nextDraft.manualWeekdayOverride) &&
+        (nextDraft.weekday !== draftWeekday || (!isTestMode && nextDraft.manualWeekdayOverride))
       ) {
-        nextDraft.weekday = nowWeekday;
+        nextDraft.weekday = draftWeekday;
+        if (!isTestMode) nextDraft.manualWeekdayOverride = false;
         changed = true;
       }
 
@@ -2385,6 +2398,11 @@ const lateSkipNotice = useMemo(() => {
         },
       };
 
+      if (!isTestMode) {
+        mergedDraft.weekday = getCalendarWeekday(mergedDraft.date) ?? mergedDraft.weekday;
+        mergedDraft.manualWeekdayOverride = false;
+      }
+
       if (hasWeatherPatch && !mergedDraft.manualDiscountTimeOverride) {
         // 天候入力中に時刻境界を跨いでも、入力を始めた時刻を維持する。
         // StartScreen側から明示された表示中の値引時刻を優先することで、
@@ -2458,7 +2476,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function buildDraftFromSource(source: SessionData | SessionDraft): SessionDraft {
-    const draft = normalizeSessionDraft(source);
+    const draft = retireManualWeekdayDraft(normalizeSessionDraft(source), { fixedTime: isTestMode });
     return syncAfterRainSelection({
       ...draft,
       manualDiscountTimeOverride: isTestMode ? draft.manualDiscountTimeOverride : false,
@@ -2767,9 +2785,10 @@ const lateSkipNotice = useMemo(() => {
       ...getCurrentDataVersionInfo(),
       date: currentDate,
       demandCycle: activeDemandCycle,
-      weekday: prev.sessionDraft.manualWeekdayOverride
+      weekday: isTestMode && prev.sessionDraft.manualWeekdayOverride
         ? prev.sessionDraft.weekday
         : currentWeekday,
+      manualWeekdayOverride: isTestMode ? prev.sessionDraft.manualWeekdayOverride : false,
       discountTime: resolvedDiscountTime,
       weather: {
         ...prev.sessionDraft.weather,
@@ -2931,6 +2950,18 @@ const lateSkipNotice = useMemo(() => {
         timeSwitchNotice: null,
         finalTimeStep: 0,
         areaCountCorrection: null,
+      };
+    }
+
+    if (!isTestMode) {
+      nextState = {
+        ...nextState,
+        sessionDraft: {
+          ...nextState.sessionDraft,
+          date: nextSession.date,
+          weekday: nextSession.weekday,
+          manualWeekdayOverride: false,
+        },
       };
     }
 
@@ -3634,7 +3665,7 @@ const lateSkipNotice = useMemo(() => {
         prev.currentAreaId === areaId &&
         prev.areaProgressMap[areaId].status !== "completed"
       ) {
-        return retireManualDiscountTimeOverride({
+        return retireOperationalOverrides({
           ...prev,
           screen: "area_judge",
           finalTimeStep: 0,
@@ -3648,7 +3679,7 @@ const lateSkipNotice = useMemo(() => {
           ? "auto_skip_count_only" as const
           : "normal" as const;
       const existingContext = prev.areaCountCorrection;
-      return retireManualDiscountTimeOverride({
+      return retireOperationalOverrides({
         ...prev,
         screen:
           correctionMode === "auto_skip_count_only"
@@ -3684,7 +3715,7 @@ const lateSkipNotice = useMemo(() => {
     weatherConfirmationSubmittingRef.current = false;
     setWeatherConfirmationPending(null);
     setResumeTargetScreen(state.screen);
-    setState((prev) => retireManualDiscountTimeOverride({
+    setState((prev) => retireOperationalOverrides({
       ...prev,
       screen: "start",
       sessionDraft: buildDraftFromSource(prev.session ?? prev.sessionDraft),
@@ -4209,6 +4240,7 @@ const lateSkipNotice = useMemo(() => {
       currentState,
       sourceState,
       now,
+      fixedTime: isTestMode,
       snapshots: isTestMode || !sourceState.session
         ? []
         : getHistoricalDailySessionSnapshotsForDate(sourceState.session.date),
@@ -4255,14 +4287,15 @@ const lateSkipNotice = useMemo(() => {
     const actionTimestamp = getRuntimeNow().toISOString();
     setState((prev) => {
       if (prev.screen !== "review19_weather" || !prev.session || !prev.review19) return prev;
+      const reviewDraft = retireManualWeekdayDraft(prev.sessionDraft, { fixedTime: isTestMode });
 
       const reviewTemperatureComfort = resolveSessionTemperatureComfort({
-        date: prev.sessionDraft.date,
+        date: reviewDraft.date,
         discountTime: "19",
-        weather: prev.sessionDraft.weather,
+        weather: reviewDraft.weather,
         snapshots: isTestMode
           ? []
-          : getHistoricalDailySessionSnapshotsForDate(prev.sessionDraft.date),
+          : getHistoricalDailySessionSnapshotsForDate(reviewDraft.date),
         lastSessionWeather,
         previousSession: prev.session,
       }).analysis;
@@ -4270,6 +4303,7 @@ const lateSkipNotice = useMemo(() => {
       return {
         ...prev,
         screen: "review19",
+        sessionDraft: reviewDraft,
         review19: {
           ...prev.review19,
           reviewStartedAt: prev.review19.reviewStartedAt ?? actionTimestamp,
@@ -4278,7 +4312,7 @@ const lateSkipNotice = useMemo(() => {
             actionTimestamp,
           ),
           reference: createReview19Reference(
-            prev.sessionDraft,
+            reviewDraft,
             reviewTemperatureComfort,
             supportsObonCalendarRule(prev.session.appVersion),
           ),
@@ -4690,13 +4724,13 @@ const lateSkipNotice = useMemo(() => {
 
     const now = getRuntimeNow();
     const startedAt = now.toISOString();
-    const draft = normalizeSessionDraft({
+    const draft = retireManualWeekdayDraft(normalizeSessionDraft({
       ...state.sessionDraft,
       discountTime: "19",
       demandCycle: normalizeDemandCycle(
         state.session?.demandCycle ?? state.review19?.demandCycle,
       ),
-    });
+    }), { fixedTime: isTestMode });
     const nextSessionBase: SessionData = {
       ...draft,
       ...getCurrentDataVersionInfo(),
@@ -4739,6 +4773,7 @@ const lateSkipNotice = useMemo(() => {
       ...state,
       screen: firstAreaId ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId) : "done",
       session: nextSession,
+      sessionDraft: draft,
       areaProgressMap,
       normalFlowOrder,
       currentAreaId: firstAreaId,

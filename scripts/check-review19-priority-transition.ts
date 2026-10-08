@@ -301,12 +301,26 @@ for (const demandCycle of ["normal", "summer"] as const) {
     assert.deepEqual(next.review19ExcludedAreaIds, ["tempura"]);
     assert.deepEqual(next.areaProgressMap, source.areaProgressMap);
     assert.equal(next.sessionDraft.discountTime, "19");
-    assert.equal(next.sessionDraft.manualWeekdayOverride, true);
+    assert.equal(next.sessionDraft.manualWeekdayOverride, false, "a newly entered Review19 uses automatic weekday");
+    assert.equal(next.session?.manualWeekdayOverride, true, "the historical 17 source identity is retained");
     assert.equal(next.sessionDraft.manualDiscountTimeOverride, false);
     assert.notEqual(next.sessionDraft.weather.hourlyForecasts, source.session!.weather.hourlyForecasts);
     assert.ok(Object.values(next.review19!.areaCounts).every((count) => count === null));
   });
 }
+
+test("new Review19 reference retires a mismatched weekday while source metadata and fixed clock stay intact", () => {
+  for (const fixedTime of [false, true]) {
+    const source = fixture("17", "done"); source.session!.weekday = 2; source.sessionDraft.weekday = 2;
+    const before = JSON.stringify(source);
+    const next = createReview19StartState({ currentState: source, sourceState: source, now: at(18, 55), snapshots: [], lastSessionWeather: null, fixedTime });
+    assert.equal(next.session?.weekday, 2); assert.equal(next.session?.manualWeekdayOverride, true);
+    assert.equal(next.sessionDraft.weekday, fixedTime ? 2 : 6);
+    assert.equal(next.sessionDraft.manualWeekdayOverride, fixedTime);
+    assert.equal(next.review19?.reference?.weekday, fixedTime ? 2 : 6);
+    assert.equal(JSON.stringify(source), before);
+  }
+});
 
 test("unmeasured areas stay missing and 17 snapshot survives in Review19 daySnapshot without fake counts", () => {
   const original = fixture("17", "area_judge");

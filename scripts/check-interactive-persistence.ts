@@ -11,10 +11,11 @@ import type { UseNebikiAppResult } from "../src/domain/types.ts";
 // hydration and paint are covered separately by the production Edge suite.
 const projectRoot = resolve(process.env.PERSISTENCE_PROJECT_ROOT ?? import.meta.dirname + "/..");
 const load = (path: string) => import(pathToFileURL(resolve(projectRoot, path)).href);
-const [{ default: React }, { useNebikiApp: runProductionHook }, navigation, storage, normalization, weather] = await Promise.all([
+const [{ default: React }, { useNebikiApp: runProductionHook }, navigation, storage, normalization, weather, rateSnapshots] = await Promise.all([
   load("node_modules/react/index.js"), load("src/hooks/useNebikiApp.ts"),
   load("src/domain/navigationHistory.ts"), load("src/domain/storage.ts"),
   load("src/hooks/nebikiApp/stateNormalization.ts"), load("src/domain/hourlyWeather.ts"),
+  load("src/domain/rateDecisionSnapshot.ts"),
 ]);
 process.env.TZ = "Asia/Tokyo";
 const NativeDate = Date;
@@ -70,6 +71,8 @@ type Slot = { value?: unknown; dependencies?: readonly unknown[]; cleanup?: () =
 const sameDeps = (a: readonly unknown[] | undefined, b: readonly unknown[] | undefined) =>
   a !== undefined && b !== undefined && a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
 class HookFixture {
+  private params?: { testNow?: Date | null };
+  constructor(params?: { testNow?: Date | null }) { this.params = params; }
   slots: Slot[] = []; index = 0; dirty = false; renderCount = 0;
   effects: { callback: () => void | (() => void); slot: Slot }[] = [];
   memoPreparations = { areaCount: 0, review19: 0 };
@@ -112,7 +115,7 @@ class HookFixture {
     // useState/useMemo above are called by the actual imported React functions.
     const internals = React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE as { H: unknown };
     const previous = internals.H; internals.H = this.dispatcher;
-    try { this.app = runProductionHook(); } finally { internals.H = previous; }
+    try { this.app = runProductionHook(this.params); } finally { internals.H = previous; }
   }
   settle(forceRender = false) {
     if (forceRender || this.dirty || !this.app) this.render();
@@ -391,6 +394,195 @@ test("legacy undo restoration retires active manual time without rewriting the r
   assert.equal(JSON.stringify(retained), retainedBefore);
   assert.equal(JSON.stringify(saved), before);
   hook.close(); return { retainedManualFlag: true, restoredManualFlag: false, count: 20 };
+});
+
+function legacyWeekdayState(active = false): AppState {
+  const saved = initial(active);
+  saved.sessionDraft.weekday = 2; saved.sessionDraft.manualWeekdayOverride = true;
+  if (saved.session) { saved.session.weekday = 2; saved.session.manualWeekdayOverride = true; }
+  return saved;
+}
+function assertAutomaticBusinessWeekday(hook: HookFixture, date: string, weekday: number) {
+  assert.equal(hook.app.state.sessionDraft.date, date);
+  assert.equal(hook.app.state.sessionDraft.weekday, weekday);
+  assert.equal(hook.app.state.sessionDraft.manualWeekdayOverride, false);
+  if (hook.app.state.session) {
+    assert.equal(hook.app.state.session.date, date);
+    assert.equal(hook.app.state.session.weekday, weekday);
+    assert.equal(hook.app.state.session.manualWeekdayOverride, false);
+  }
+}
+
+test("legacy weekday draft reload starts and saves the natural business weekday", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  const saved = legacyWeekdayState(); const before = JSON.stringify(saved);
+  const hook = fixture({ rawState: saved });
+  assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+  assert.equal(hook.app.derived.weekdayText, "木曜日");
+  hook.app.actions.startSession(); hook.settle();
+  assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+  const persisted = storage.loadCurrentSession();
+  assert.equal(persisted.session.weekday, 4); assert.equal(persisted.session.manualWeekdayOverride, false);
+  assert.equal(hook.app.actions.getCurrentAreaCountRecommendation(20).actualWeekday, "木");
+  assert.equal(JSON.stringify(saved), before);
+  hook.close(); return { displayed: "木曜日", savedWeekday: 4, areaCountActualWeekday: "木" };
+});
+
+test("a valid legacy weekday weather confirmation reload starts with natural weekday and held time", () => {
+  fixedMs = new NativeDate("2026-10-01T18:25:00+09:00").getTime();
+  const saved = legacyWeekdayState(); saved.sessionDraft.weatherInputLockedDiscountTime = "17";
+  const hook = fixture({ rawState: saved, pendingWeather: { date: "2026-10-01", discountTime: "17" } });
+  assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+  assert.equal(hook.app.derived.weatherConfirmationPending, true);
+  hook.app.actions.confirmWeatherInput(); hook.settle();
+  assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+  assert.equal(hook.app.state.session?.discountTime, "17");
+  hook.close(); return { weekday: 4, heldTime: "17", resumedConfirmation: true };
+});
+
+test("legacy Done re-entry retires weekday without changing its completed journal or count", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  const hook = fixture({ active: true, done: true, rawState: legacyWeekdayState(true) });
+  assert.equal(hook.app.state.session?.manualWeekdayOverride, true, "completed legacy source remains readable");
+  const journal = storage.readRawDailySessionSnapshotJournal();
+  const completed = JSON.stringify(hook.app.state.areaProgressMap.bento_men);
+  hook.app.actions.startAreaCountCorrection("bento_men"); hook.settle();
+  assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+  assert.equal(hook.app.state.screen, "area_judge");
+  assert.equal(hook.app.state.areaProgressMap.bento_men.areaCount, 12);
+  assert.equal(JSON.stringify(hook.app.state.areaProgressMap.bento_men), completed);
+  assert.equal(storage.readRawDailySessionSnapshotJournal(), journal);
+  hook.close(); return { completedCount: 12, completedJournalUnchanged: true, newOperationalWeekday: 4 };
+});
+
+test("legacy current and checkpoint weekday restore retain confirmed evaluation and completion snapshots", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  const evidence = [];
+  for (const checkpointOnly of [false, true]) {
+    const saved = legacyWeekdayState(true); saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
+    Object.assign(saved.areaProgressMap.bento_men, {
+      areaCount: 20, areaJudge: "normal", areaCountEvaluation: "normal", areaCountEvaluationSource: "manual", areaRateAdjustment: 0,
+      humanEvaluationDetails: { humanEvaluationScore9: 4, humanEvaluationScale: 9, humanEvaluationSelections: ["slightly_few", "normal"],
+        resolvedEvaluation: "normal", resolutionDirection: "higher", resolutionReason: "normal_17_or_later", demandCycle: "normal", sessionDiscountTime: "17", evaluatedAt: "2026-10-01T07:58:00.000Z" },
+    });
+    const snapshot = rateSnapshots.buildNormalRateDecisionSnapshot({
+      confirmedAt: "2026-10-01T08:02:00.000Z", sessionDiscountTime: "17", demandCycle: "normal", weekday: 2, date: "2026-10-01",
+      weatherComfortAdjustmentPercent: 0, areaJudge: "normal", areaRateAdjustment: 0,
+      resolvedWeather: weather.resolveWeatherInputForDiscount(saved.session!.weather, "17"),
+    });
+    Object.assign(saved.areaProgressMap.sushi, { status: "completed", areaCount: 12, areaJudge: "normal", areaCountEvaluation: "normal",
+      areaCountEvaluationSource: "manual", areaRateAdjustment: 0, completedAt: "2026-10-01T08:02:00.000Z",
+      completedRateText: "10%", completedNormalRateText: "10%", completedManyRateText: "20%", rateDecisionSnapshot: snapshot });
+    const expected = normalization.normalizeLoadedState(saved, initial().sessionDraft).areaProgressMap;
+    const hook = fixture({ active: true, checkpointOnly, rawState: saved });
+    assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+    assert.equal(hook.app.state.session?.startedAt, saved.session?.startedAt);
+    assert.equal(JSON.stringify(hook.app.state.areaProgressMap), JSON.stringify(expected));
+    assert.equal(hook.app.state.areaProgressMap.bento_men.humanEvaluationDetails?.humanEvaluationScore9, 4);
+    assert.equal(hook.app.state.areaProgressMap.bento_men.humanEvaluationDetails?.resolvedEvaluation, "normal");
+    assert.equal(hook.app.state.areaProgressMap.bento_men.humanEvaluationDetails?.evaluatedAt, "2026-10-01T07:58:00.000Z");
+    assert.deepEqual(hook.app.state.areaProgressMap.sushi.rateDecisionSnapshot, snapshot);
+    const persisted = storage.loadWorkSessionCheckpoint();
+    assert.equal(persisted.session.weekday, 4); assert.equal(persisted.session.manualWeekdayOverride, false);
+    assert.deepEqual(persisted.areaProgressMap.sushi.rateDecisionSnapshot, snapshot);
+    hook.close(); evidence.push({ checkpointOnly, preservedCount: 20, completedNormalRate: "10%", resolvedEvaluation: "normal" });
+  }
+  return evidence;
+});
+
+test("undo and back restore an automatic weekday while retained navigation metadata remains legacy", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  const evidence = [];
+  for (const operation of ["undo", "back"] as const) {
+    const saved = legacyWeekdayState(true); saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
+    Object.assign(saved.areaProgressMap.bento_men, { areaCount: 20, areaJudge: "normal", areaCountEvaluation: "normal", areaCountEvaluationSource: "manual", areaRateAdjustment: 0 });
+    const hook = fixture({ active: true, rawState: saved, undo: operation === "undo", historyCount: operation === "back" ? 1 : 0 });
+    const retained = operation === "undo" ? storage.loadRuntimeState().undoSnapshot : storage.loadRuntimeState().screenHistory[0];
+    assert.equal(retained.state.session.manualWeekdayOverride, true);
+    const before = JSON.stringify(retained);
+    if (operation === "undo") hook.app.actions.undoLastAction(); else hook.app.actions.goBackOneScreen();
+    hook.settle(); assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+    assert.equal(hook.app.state.areaProgressMap.bento_men.areaCount, 20);
+    assert.equal(hook.app.state.session?.startedAt, saved.session?.startedAt);
+    assert.equal(JSON.stringify(retained), before);
+    hook.close(); evidence.push({ operation, retainedLegacyFlag: true, restoredFlag: false });
+  }
+  return evidence;
+});
+
+test("condition editing and no-switch resume preserve original session time, identity and automatic weekday", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  for (const time of ["15", "17", "18", "19"] as const) {
+    const saved = legacyWeekdayState(true); saved.session!.discountTime = time; saved.sessionDraft.discountTime = time;
+    saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
+    Object.assign(saved.areaProgressMap.bento_men, { areaCount: 20, areaJudge: "normal", areaCountEvaluation: "normal", areaCountEvaluationSource: "manual", areaRateAdjustment: 0 });
+    const hook = fixture({ active: true, rawState: saved });
+    const progress = JSON.stringify(hook.app.state.areaProgressMap);
+    hook.app.actions.startEditingConditions(); hook.settle();
+    assert.equal(hook.app.state.screen, "start"); assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+    hook.app.actions.startSession(); hook.settle(); assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+    assert.equal(hook.app.state.session?.discountTime, time); assert.equal(hook.app.state.session?.startedAt, saved.session?.startedAt);
+    assert.equal(JSON.stringify(hook.app.state.areaProgressMap), progress);
+    hook.close();
+  }
+  return { sessionTimes: ["15", "17", "18", "19"], weekday: 4 };
+});
+
+test("an unstarted draft crosses midnight with new date/weekday and clears the old weather lock", () => {
+  fixedMs = new NativeDate("2026-10-01T23:59:59+09:00").getTime();
+  const saved = legacyWeekdayState(); saved.sessionDraft.weatherInputLockedDiscountTime = "17";
+  const hook = fixture({ rawState: saved }); assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+  fixedMs = new NativeDate("2026-10-02T00:00:01+09:00").getTime();
+  for (const callback of intervals.values()) callback(); hook.settle();
+  assertAutomaticBusinessWeekday(hook, "2026-10-02", 5);
+  assert.equal(hook.app.state.sessionDraft.weatherInputLockedDiscountTime, null);
+  assert.equal(storage.loadCurrentSession().sessionDraft.weekday, 5);
+  hook.close(); return { before: "2026-10-01 木", after: "2026-10-02 金", session: null };
+});
+
+test("an active session across midnight retains its business date and that day's weekday during condition editing", () => {
+  fixedMs = new NativeDate("2026-10-01T23:59:59+09:00").getTime();
+  const saved = legacyWeekdayState(true); saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
+  const hook = fixture({ active: true, rawState: saved });
+  fixedMs = new NativeDate("2026-10-02T00:00:01+09:00").getTime();
+  for (const callback of intervals.values()) callback(); hook.settle();
+  assert.equal(hook.app.state.session?.date, "2026-10-01"); assert.equal(hook.app.state.session?.weekday, 4);
+  hook.app.actions.startEditingConditions(); hook.settle();
+  assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
+  assert.equal(hook.app.derived.weekdayText, "木曜日");
+  assert.equal(hook.app.state.session?.startedAt, saved.session?.startedAt);
+  hook.app.actions.startSession(); hook.settle();
+  assertAutomaticBusinessWeekday(hook, "2026-10-02", 5);
+  assert.notEqual(hook.app.state.session?.startedAt, saved.session?.startedAt, "the existing date gate starts a fresh day instead of relabeling old work");
+  hook.close(); return { businessDateWhileEditing: "2026-10-01", weekdayWhileEditing: 4, newlyStartedDate: "2026-10-02", newlyStartedWeekday: 5 };
+});
+
+test("old-day current and checkpoint reload still obey the existing date gate", () => {
+  fixedMs = new NativeDate("2026-10-02T17:05:00+09:00").getTime();
+  const saved = legacyWeekdayState(true); saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
+  const hook = fixture({ active: true, rawState: saved });
+  assert.equal(hook.app.state.session, null, "an ordinary previous-day session is not resumed");
+  assertAutomaticBusinessWeekday(hook, "2026-10-02", 5);
+  assert.equal(storage.loadWorkSessionCheckpoint(), null);
+  assert.equal(saved.session?.date, "2026-10-01"); assert.equal(saved.session?.manualWeekdayOverride, true);
+  hook.close(); return { previousDayResumed: false, newDraftDate: "2026-10-02", naturalWeekday: 5 };
+});
+
+test("fixed clock starts with its calendar weekday and leaves production operational storage untouched", () => {
+  fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
+  memory.clear(); const saved = legacyWeekdayState(true);
+  memory.values.set(storage.STORAGE_KEYS.currentSession, JSON.stringify(saved));
+  memory.values.set(storage.STORAGE_KEYS.workSessionCheckpoint, JSON.stringify(saved));
+  const before = new Map(memory.values);
+  const hook = new HookFixture({ testNow: new Date("2026-11-03T17:05:00+09:00") }); hook.settle(true);
+  assert.equal(hook.app.state.sessionDraft.date, "2026-11-03"); assert.equal(hook.app.state.sessionDraft.weekday, 2);
+  hook.app.actions.startSession(); hook.settle();
+  assert.equal(hook.app.state.session?.date, "2026-11-03"); assert.equal(hook.app.state.session?.weekday, 2);
+  for (const [key, value] of before) assert.equal(memory.values.get(key), value);
+  const productionKeys = new Set(Object.values(storage.STORAGE_KEYS));
+  assert.equal(memory.writes.filter(key => productionKeys.has(key)).length, 0);
+  assert.equal(memory.values.has(storage.STORAGE_KEYS.areaCountRecords), false);
+  hook.close(); return { fixedDate: "2026-11-03", naturalWeekday: 2, productionWrites: 0 };
 });
 
 if(process.env.PERSISTENCE_REPORT)writeFileSync(process.env.PERSISTENCE_REPORT,JSON.stringify({projectRoot,scope:"Actual production hook with deterministic React dispatcher; synchronous effect/action regression, not DOM/paint timing.",results},null,2));
