@@ -1,4 +1,4 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-46）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-47）
 
 最終更新: 2026-10-09 JST
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-46.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-46.zip` |
-| appVersion | `2026.8.9-46` |
-| buildId | `build-20261009-121800-jst` |
+| ZIP | `nebiki-helper-2026.8.9-47.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-47.zip` |
+| appVersion | `2026.8.9-47` |
+| buildId | `build-20261009-214347-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-46.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-47.md`参照（自己参照回避） |
 
-application rootは`work/comfortDrop46/nebiki-helper`。比較基準は完成9-45 ZIP `nebiki-helper-2026.8.9-45.zip`（SHA-256 `87114f0c1ed4ea1bdb49b8cbb2ac43c57a4c1e90349a45bd5ea5ecbe46de77ec`）。9-46は元15/17sessionの夕方快適低下時、既存制限後の負快適補正を5ポイント緩和。比較尺度/適用順/入力marker/保存metadataは第8節9-46項と`CHANGE_REPORT_2026.8.9-46.md`。schema3、SQL/AGENTS、過去履歴と完成報告、version/build方式を維持。
+application rootは`work/startLayout47/nebiki-helper`。比較基準は完成9-46 ZIP `nebiki-helper-2026.8.9-46.zip`（SHA-256 `37a8838570d7b9a6bad485391501e8227b4025cb2a0accd2eb138052caaa39e1`）。9-47は開始画面の曜日・時刻を同幅2列にする表示配置のみ。左曜日/右時刻、ラベル上・値下。全体値引補正→曜日時刻→天候。自動判定/入力lock/46快適緩和/計算/保存/履歴は不変。schema3、SQL/AGENTS/過去報告、version/build方式を維持。詳細は第11節9-47項と`CHANGE_REPORT_2026.8.9-47.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\comfortDrop46\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\startLayout47\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -424,6 +424,12 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-47: 開始画面の曜日・時刻は同幅2列
+
+- StartScreenの表示JSXだけを変更。grid `repeat(2, minmax(0, 1fr))` / gap12px、子列minWidth0。左曜日/右時刻、ラベル上・既存表示欄下の2行。順序は全体値引補正→2列→天候。既存文字サイズ・padding/枠/色を維持。
+- getWeekdayLabel(sessionDraft.weekday) / getDiscountTimeLabel(sessionDraft.discountTime)をそのまま使う。曜日/time自動、天候入力lock/開始時確定、46快適補正、計算/保存/履歴/Review19/注意7項目は非変更。手動button/select/wheelを復活させない。
+- production source103本のうち102本byte-identical。新state/key/metadata/SQL/schema変更なし。実TSX配置/35表示組合せ/既存handlerと360/390実Edgeを別々に検証。
+
 ### 9-28: ユーザー向け「1日データ」機能を撤去
 
 - 通常Doneの「1日データを出力」・メモ入力/保存、設定の日次全件/最新出力・日次件数表示、Startの前日廃棄個数入力を削除。上部referenceConditionLabel、全エリア値引率一覧、戻る/home/18:30手動開始は維持。
@@ -466,11 +472,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 9-46: 全83/83 checks、専用17/17・実hook/Start10/10。完成45実module比較4,536条件/表示率11,664照合。TypeScript/build/PWA PASS、107 modules・precache10。
-- focused lint0 errors/3 existing warnings、full9 existing errors/6 existing warnings。45比較file/rule/severity/message新規0。
-- Edge production390×844、51cases、同一source/asset hash・内訳/通常率/先取り/入力/確定/reloadを確認。console error/warning・不要外部通信・横overflow0、preview停止。emulationと物理店舗端末の確認を区別。
-- SQL9/AGENTS/過去CHANGE_REPORTは45ZIPとbyte-identical。CRC/path/除外物/version/build/schema/distPWA/working-tree対象file集合bytes/SHAはZIP再open検査結果参照。
-- 詳細: `CHANGE_REPORT_2026.8.9-46.md`、ZIP外`RELEASE_REPORT_2026.8.9-46.md` / `ZIP_VALIDATION_2026.8.9-46.json`。
+- 9-47: 全83/83 checks、automatic-weekday13/13（配置・35表示組・callback保持を追加）。TypeScript/build/PWA PASS、107 modules・precache10。
+- focused lint0 errors/0 warnings、full9 existing errors/6 existing warnings。46比較file/rule/severity/message新規0。
+- 実Edge production360×844・390×844で配置/自動表示/天候入力→開始/時刻lockを確認。実操作とSSR fixtureを区別。詳細は外部browser summaryを参照。
+- SQL9/AGENTS/過去CHANGE_REPORTは46ZIPとbyte-identical。CRC/path/除外物/version/build/schema/distPWA/対象file集合bytes/SHAはZIP再open結果参照。
+- 詳細: `CHANGE_REPORT_2026.8.9-47.md`、ZIP外`RELEASE_REPORT_2026.8.9-47.md` / `ZIP_VALIDATION_2026.8.9-47.json`。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -508,7 +514,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-46.md`（完成baselineは `CHANGE_REPORT_2026.8.9-45.md`）
+4. `CHANGE_REPORT_2026.8.9-47.md`（完成baselineは `CHANGE_REPORT_2026.8.9-46.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

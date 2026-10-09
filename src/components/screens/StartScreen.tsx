@@ -911,35 +911,46 @@ export function StartScreen({
         </div>
       </section>
 
-      <div style={{ marginBottom: 14 }}>
-        <StartSectionLabel>曜日</StartSectionLabel>
-        <div
-          style={{
-            width: "100%",
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            background: "#f7f7f7",
-            fontWeight: 700,
-          }}
-        >
-          {getWeekdayLabel(sessionDraft.weekday)}
+      <div
+        role="group"
+        aria-label="曜日と時刻"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <StartSectionLabel>曜日</StartSectionLabel>
+          <div
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid #ccc",
+              background: "#f7f7f7",
+              fontWeight: 700,
+            }}
+          >
+            {getWeekdayLabel(sessionDraft.weekday)}
+          </div>
         </div>
-      </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <StartSectionLabel>時刻</StartSectionLabel>
-        <div
-          style={{
-            width: "100%",
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            background: "#f7f7f7",
-            fontWeight: 700,
-          }}
-        >
-          {getDiscountTimeLabel(sessionDraft.discountTime)}
+        <div style={{ minWidth: 0 }}>
+          <StartSectionLabel>時刻</StartSectionLabel>
+          <div
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 10,
+              border: "1px solid #ccc",
+              background: "#f7f7f7",
+              fontWeight: 700,
+            }}
+          >
+            {getDiscountTimeLabel(sessionDraft.discountTime)}
+          </div>
         </div>
       </div>
 

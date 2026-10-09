@@ -256,6 +256,7 @@ await test("Start displays weekday and time only for normal/fixed mode and old t
   for (const isFixedTimeMode of [false, true]) for (const legacyManualFlag of [false, true]) {
     const runtime = new Runtime();
     const patches: Partial<SessionDraft>[] = [];
+    const adjustments: number[] = [];
     const Start = (await runtime.loader.load("src/components/screens/StartScreen.tsx")).StartScreen as Component;
     runtime.mount(Start, {
       sessionDraft: { ...draft(), manualWeekdayOverride: legacyManualFlag }, previousSession: null, isFixedTimeMode,
@@ -264,7 +265,23 @@ await test("Start displays weekday and time only for normal/fixed mode and old t
       onChangeSessionDraft: (patch: Partial<SessionDraft>) => patches.push(patch), onRequestWeatherConfirmation: noop,
       onEditWeatherInput: noop, onStart: noop, demandCycle: "normal", summerModeAvailable: false,
       canChangeDemandCycle: true, onChangeDemandCycle: () => true, now: at("2026-10-01"),
+      onChangeGlobalDiscountAdjustment: (adjustment: number) => adjustments.push(adjustment),
     });
+    const row = runtime.find(node => node.props.role === "group" && node.props["aria-label"] === "曜日と時刻");
+    const rowStyle = row.props.style as React.CSSProperties;
+    assert.equal(rowStyle.display, "grid");
+    assert.equal(rowStyle.gridTemplateColumns, "repeat(2, minmax(0, 1fr))", "weekday and time have equal columns");
+    const columns = row.children.filter((node): node is Element => typeof node !== "string");
+    assert.deepEqual(Array.from(columns, node => Array.from(node.children, textOf)), [["曜日", "木曜日"], ["時刻", "17時"]], "labels are above values, weekday on the left");
+    assert.ok(columns.every(node => (node.props.style as React.CSSProperties).minWidth === 0));
+    const adjustmentSection = runtime.find(node => node.type === "section" && node.props["aria-label"] === "全体値引補正");
+    const weatherLabel = runtime.find(node => textOf(node) === "天候");
+    assert.ok(row.parent);
+    assert.equal(row.parent, adjustmentSection.parent);
+    assert.equal(row.parent, weatherLabel.parent);
+    const rowIndex = row.parent.children.indexOf(row);
+    assert.equal(row.parent.children.indexOf(adjustmentSection), rowIndex - 1);
+    assert.equal(row.parent.children.indexOf(weatherLabel), rowIndex + 1);
     for (const [label, display] of [["曜日", "木曜日"], ["時刻", "17時"]]) {
       const parent = runtime.find(node => textOf(node) === label).parent;
       assert.ok(parent);
@@ -276,6 +293,32 @@ await test("Start displays weekday and time only for normal/fixed mode and old t
     assert.equal(runtime.buttons("手動で切り替える").length, 0);
     assert.equal(runtime.buttons("自動に戻す").length, 0);
     assert.deepEqual(patches, [], "wheel events cannot change the operational draft");
+    for (const label of ["-5%", "なし", "+5%"]) runtime.click(runtime.button(label));
+    assert.deepEqual(adjustments, [-5, 0, 5], "global adjustment buttons retain their callbacks");
+    runtime.click(runtime.find(node => node.type === "button" && textOf(node) === "+1" && !node.props.disabled));
+    const expectedWeather = clone(draft().weather);
+    expectedWeather.hourlyForecasts["18"].weather = "rain";
+    expectedWeather.hourlyForecasts["19"].weather = "rain";
+    assert.deepEqual(clone(patches), [{ weatherInputLockedDiscountTime: "17", weather: expectedWeather }], "weather change preserves its lock and next-hour copy");
+    assert.equal(runtime.storageWrites, 0, "display and weather change introduce no storage writes");
+  }
+});
+
+await test("the two-column Start retains all seven weekday and five automatic time labels", async () => {
+  const runtime = new Runtime();
+  const Start = (await runtime.loader.load("src/components/screens/StartScreen.tsx")).StartScreen as Component;
+  for (const [weekday, weekdayLabel] of ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"].entries()) {
+    for (const [discountTime, timeLabel] of [["15", "15時"], ["17", "17時"], ["18", "18時30分"], ["19", "19時30分"], ["20", "20時30分"]] as const) {
+      runtime.mount(Start, {
+        sessionDraft: { ...draft(`2026-10-${String(4 + weekday).padStart(2, "0")}`, weekday), discountTime }, previousSession: null, isFixedTimeMode: false,
+        weatherGuideText: { nearTermWeatherGuide: "", laterPrecipGuide: "", laterPrecipTypeGuide: "", windGuide: "", tempGuide: "" },
+        showAfterRainRecoverySelector: false, weatherConfirmationPending: false, weatherCorrectionRequestId: 0,
+        onChangeSessionDraft: noop, onRequestWeatherConfirmation: noop, onEditWeatherInput: noop, onStart: noop,
+        demandCycle: "normal", summerModeAvailable: false, canChangeDemandCycle: true, onChangeDemandCycle: () => true,
+      });
+      const row = runtime.find(node => node.props.role === "group" && node.props["aria-label"] === "曜日と時刻");
+      assert.deepEqual(Array.from(row.children, textOf), [`曜日${weekdayLabel}`, `時刻${timeLabel}`]);
+    }
   }
 });
 
