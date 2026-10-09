@@ -11,6 +11,7 @@ import {
 } from "../src/domain/hourlyWeather.ts";
 import { createInitialReview19Result } from "../src/domain/review19.ts";
 import { getBasisGuideDisplay, getWeekdayBaseInfo } from "../src/domain/weekdayBase.ts";
+import { getEveningComfortReliefContext } from "../src/domain/eveningComfortRelief.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { lockDemandCycleForDate } from "../src/domain/demandCycleStorage.ts";
@@ -810,6 +811,7 @@ function manualStartHarness(params: {
     getNormalFlowScreenForArea,
     getWeekdayBaseInfo,
     getBasisGuideDisplay,
+    getEveningComfortReliefContext,
     isValidDiscountTime,
     normalizeReview19ExcludedAreaIds,
     buildTimeSwitchNotice,

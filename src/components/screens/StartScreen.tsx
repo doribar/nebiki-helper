@@ -30,6 +30,7 @@ import { PrimaryButton } from "../layout/PrimaryButton";
 import { WeatherConfirmationPanel } from "./WeatherConfirmationPanel";
 import { APP_VERSION } from "../../domain/dataVersion.ts";
 import { shouldAutoScrollWeatherInputTarget } from "../../domain/weatherInputAutoAdvance.ts";
+import { isValidEveningComfortForecastEntry } from "../../domain/eveningComfortRelief.ts";
 
 type StartScreenProps = {
   sessionDraft: SessionDraft;
@@ -344,6 +345,7 @@ function createFieldOrder(startHour: ForecastHourKey) {
 
 function createCorrectionConfirmationMap(
   fieldOrder: ReturnType<typeof createFieldOrder>,
+  unavailableForecastHours?: Array<"16" | "21">,
 ): ForecastConfirmationMap {
   const confirmations = createEmptyConfirmationMap();
 
@@ -354,6 +356,11 @@ function createCorrectionConfirmationMap(
   const finalTarget = fieldOrder.at(-1);
   if (finalTarget) {
     confirmations[finalTarget.hour][finalTarget.field] = false;
+  }
+
+  // 欠損補完された比較入力は、補正画面の自動確認で入力済みにしない。
+  for (const hour of unavailableForecastHours ?? []) {
+    for (const field of INPUT_FIELDS) confirmations[hour][field] = false;
   }
 
   return confirmations;
@@ -500,8 +507,11 @@ export function StartScreen({
     hasUserAdvancedWeatherInputRef.current = true;
     lastAutoScrolledWeatherTargetKeyRef.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Preserve the existing synchronous confirmation reset when reopening weather input.
-    setConfirmedInputs(createCorrectionConfirmationMap(fieldOrder));
-  }, [fieldOrder, weatherCorrectionRequestId]);
+    setConfirmedInputs(createCorrectionConfirmationMap(
+      fieldOrder,
+      sessionDraft.weather.eveningComfortUnavailableForecastHours,
+    ));
+  }, [fieldOrder, weatherCorrectionRequestId, sessionDraft.weather.eveningComfortUnavailableForecastHours]);
 
   useEffect(() => {
     if (!currentUnlockTarget) return;
@@ -610,14 +620,31 @@ export function StartScreen({
       }));
     }
 
+    const nextWeather = {
+      ...sessionDraft.weather,
+      hourlyForecasts: nextHourlyForecasts,
+    };
+    if (
+      shouldConfirm && (hour === "16" || hour === "21") &&
+      INPUT_FIELDS.every((inputField) => inputField === field || confirmedInputs[hour][inputField]) &&
+      isValidEveningComfortForecastEntry(nextHourlyForecasts[hour])
+    ) {
+      // 現在hourの3項目を明示確認した時だけ解除。次hourへの自動copyでは解除しない。
+      const remainingUnavailableHours = nextWeather.eveningComfortUnavailableForecastHours
+        ?.filter((unavailableHour) => unavailableHour !== hour);
+      if (remainingUnavailableHours?.length) {
+        nextWeather.eveningComfortUnavailableForecastHours = remainingUnavailableHours;
+      } else {
+        // 親のweather patchはshallow merge。空配列を明示して旧markerも解除する。
+        nextWeather.eveningComfortUnavailableForecastHours = [];
+      }
+    }
+
     onChangeSessionDraft({
       ...(!sessionDraft.manualDiscountTimeOverride && !isFinalTime
         ? { weatherInputLockedDiscountTime: sessionDraft.discountTime }
         : {}),
-      weather: {
-        ...sessionDraft.weather,
-        hourlyForecasts: nextHourlyForecasts,
-      },
+      weather: nextWeather,
     });
   };
 

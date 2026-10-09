@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
+import { getEveningComfortReliefContext } from "../src/domain/eveningComfortRelief.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { getEarlyNextMinus5TargetDiscountTime } from "../src/domain/earlyNextMinus5.ts";
 import { normalizeGlobalDiscountAdjustmentPercent } from "../src/domain/globalDiscountAdjustment.ts";
@@ -128,7 +129,7 @@ function harness(state = fixture(), now = at(18, 40)) {
     getRuntimeNow: () => new Date(context.nowMs as number),
     getHistoricalDailySessionSnapshotsForDate: () => [],
     savedDailySessionSnapshots: [],
-    getEarlyNextMinus5TargetDiscountTime, getWeekdayBaseInfo, getBasisGuideDisplay,
+    getEarlyNextMinus5TargetDiscountTime, getWeekdayBaseInfo, getBasisGuideDisplay, getEveningComfortReliefContext,
     resolveSessionTemperatureComfort, normalizeDemandCycle, normalizeGlobalDiscountAdjustmentPercent,
     shouldIgnoreNormalTimeRateCap, buildMergedBonusDisplay, buildRateDecisionSnapshot,
     buildCurrentNormalRatePresentation, buildCompletedRateSnapshot, buildNextSessionSkipRecord,

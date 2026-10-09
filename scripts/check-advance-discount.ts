@@ -278,7 +278,8 @@ test("AreaCount・quick・decrease・中央値・履歴・商品policy・時刻�
       "areaCountAdjustmentPercent", "evaluationAdjustment", "quickAdjustment",
       "decrease", "decreaseAdjustment", "medianCount",
       "history", "snapshots", "productAdjustmentPolicy", "productPolicy",
-      "lateTimeBonus", "earlyNextMinus5Info", "rateOffsetPercent", "weather",
+      // Raw 16/21 hourly forecasts are now needed by the evening comfort comparison.
+      "lateTimeBonus", "earlyNextMinus5Info", "rateOffsetPercent",
       "temperatureComfortAnalysis",
     ]) {
       Object.defineProperty(value, field, {

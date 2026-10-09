@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-45）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-46）
 
-最終更新: 2026-10-08 JST
+最終更新: 2026-10-09 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-45.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-45.zip` |
-| appVersion | `2026.8.9-45` |
-| buildId | `build-20261008-110344-jst` |
+| ZIP | `nebiki-helper-2026.8.9-46.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-46.zip` |
+| appVersion | `2026.8.9-46` |
+| buildId | `build-20261009-121800-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-45.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-46.md`参照（自己参照回避） |
 
-application rootは`work/automaticWeekday45/nebiki-helper`。比較基準は完成9-44 ZIP `nebiki-helper-2026.8.9-44.zip`（SHA-256 `04645949da174b3615137c5c43e9a016c8414cc9148ba4a0d041dfe674d8160b`）。9-45は通常の曜日manual UIを撤去し、旧通常状態のoverrideを運用復元境界で解除。元業務日、確定済み評価/率/snapshot、歴史recordを保持し、自動自然曜日と既存calendar referenceを区別する。95/101既存production sourceはbyte-identical、helper1追加。44の時刻UI/noticegate廃止・notice7・hint分離・weather/early/Review19は保持。schema3、SQL/AGENTS、version/build生成方式は不変。詳細は第7節9-45項と`CHANGE_REPORT_2026.8.9-45.md`。
+application rootは`work/comfortDrop46/nebiki-helper`。比較基準は完成9-45 ZIP `nebiki-helper-2026.8.9-45.zip`（SHA-256 `87114f0c1ed4ea1bdb49b8cbb2ac43c57a4c1e90349a45bd5ea5ecbe46de77ec`）。9-46は元15/17sessionの夕方快適低下時、既存制限後の負快適補正を5ポイント緩和。比較尺度/適用順/入力marker/保存metadataは第8節9-46項と`CHANGE_REPORT_2026.8.9-46.md`。schema3、SQL/AGENTS、過去履歴と完成報告、version/build方式を維持。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\automaticWeekday45\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\comfortDrop46\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -302,6 +302,15 @@ quickは既存 `judgeCurrentArea()` / `applyAreaJudgeSelection()` と保存経�
 
 rate計算の正本は `discount.ts`、`weekdayBase.ts`、`rateDecisionSnapshot.ts`、`globalDiscountAdjustment.ts`。
 
+### 9-46: 夕方から夜の快適度低下では負の快適補正を5ポイント緩和
+
+- normal/summerの元session15/17のみ。入力済み16/21単時間の気温・風・晴雨雪を既存hourly pointの逆符号で比較（大きいほど不快、clamp前）。絶対差5℃以上かつ21score>16scoreで成立。晴弱23→18℃は-2→-1（超快適→快適）でも対象。未来合計/時刻季節limit/暑さ抑制/新処理を比較に混ぜない。
+- `weekdayBase.ts` が既存時刻・季節・雨雪制限後BにB<0のみmin(0,B+5)、その後降水を合算。元session時刻はcontextへ明示し、15late/17earlyにも適用、独立18/19/20は除外。rawカテゴリを変更せず内訳に理由・気温差・前後値を表示。毎回元Bから解決し重複適用しない。
+- `getEveningComfortReliefContext()` をhook通常/early、advance/coldに伝播。独自cold/advance規則は不変だが同じWが変わるため、翌日休日summer17/global0のcold25→30等は既存条件の結果として変わる。Review19 reference自身/最終guideの規則は変更しない。
+- 新規default/欠損補完予報はoptional weather.eveningComfortUnavailableForecastHoursで区別。3field明示確認後だけ該当hour解除、最後は[]明示patch。新日draftへ持越す数値を本日入力済みとしない。旧完全mapは利用可能、旧集約/欠損は不適用。current/checkpoint/reload/部分修正でmarker保持、未入力を0℃へ変換しない。
+- optional eveningComfortReliefに原/effective時刻、比較入力score、差/成立/理由、快適項目B/適用後を保存。確定RateDecisionSnapshot→progress→daily/Reviewsource snapshot→daySnapshot/finalized/analysisexportの既存経路で保持。weatherComfortAdjustmentPercentは既存の合計天候補正意味を維持。過去metadata欠損は補完せず保存済み率/評価/履歴は再計算しない。schema3、新storage key/SQLなし。
+- 45の曜日/time自動、notice gate廃止・注意7全文/順序/太字、hint分離、長押しraw9/quick、確定済み評価を時計だけで再解決しない仕様、Review19/archive/cloud/productionAnalysisを維持。
+
 ### 9-30: 商品policy「やや不人気」
 
 - 通常商品の中間区分として、実際に10個以上（10を含む）ある場合だけ表示率へ+10 percentage points。9個以下は補正なし。大小パックに分かれる場合は大パックだけが対象で、小パックは補正しない。
@@ -457,13 +466,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全check:*81/81、automatic-weekday12/12、interactive26/26、time13/13、Review19priority71/71、advance48/48、early17 14/14 PASS。
-- calendar7/restore7/率変化2/実judge3/Review観察1/実Start同期3の監査で新判定・率・保存と旧bytesを照合。React/storage stubはnativeブラウザと区別。
-- TypeScript/build/PWA PASS（106 modules、precache10）。focused0 errors/既存3 warnings、full既存9 errors/6 warnings、44版比較新規0。旧weather effect3件の局所lint例外は同期挙動保持のためでglobal緩和なし。
-- Edgeproduction390×844 26ケース。曜日/time picker・wheelなし、旧draft/current/checkpoint/runtime Back/条件編集済み再開、日付境界、自然曜日/祝日、fixed clock、44のnotice7/両stage/hint/longpress/cancel/swipe、夏18時境界、Review19/20を確認。console error/warning/外部request/overflow0、source/asset hash最終build一致、preview停止済み。
-- 既存source95/101不変・helper1追加。AGENTS/SQL9/過去報告・保存/同期/core計算は不変。旧18:30-pre18静的hint不一致は残る。物理店舗/native touch/installed PWA/実Supabase/長時間backgroundは未確認。
-
-証跡: `work/automaticWeekday45/checks.json`、`lint-comparison45.json`、`baseline-comparison45.json`、`audit/AUTOMATIC45_PIPELINE_AUDIT.json`、`browser-work/final-browser-summary45.json`。完成ZIP/SHAは外部release報告/検査JSON。
+- 9-46: 全83/83 checks、専用17/17・実hook/Start10/10。完成45実module比較4,536条件/表示率11,664照合。TypeScript/build/PWA PASS、107 modules・precache10。
+- focused lint0 errors/3 existing warnings、full9 existing errors/6 existing warnings。45比較file/rule/severity/message新規0。
+- Edge production390×844、51cases、同一source/asset hash・内訳/通常率/先取り/入力/確定/reloadを確認。console error/warning・不要外部通信・横overflow0、preview停止。emulationと物理店舗端末の確認を区別。
+- SQL9/AGENTS/過去CHANGE_REPORTは45ZIPとbyte-identical。CRC/path/除外物/version/build/schema/distPWA/working-tree対象file集合bytes/SHAはZIP再open検査結果参照。
+- 詳細: `CHANGE_REPORT_2026.8.9-46.md`、ZIP外`RELEASE_REPORT_2026.8.9-46.md` / `ZIP_VALIDATION_2026.8.9-46.json`。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -496,10 +503,12 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
+9-46追加: `src/domain/eveningComfortRelief.ts`、`weekdayBase.ts`、`hourlyWeather.ts`、`rateDecisionSnapshot.ts`、`useNebikiApp.ts`、`stateNormalization.ts`、`StartScreen.tsx`、専用`check-evening-comfort-relief/flow.ts`。
+
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-45.md`（完成baselineは `CHANGE_REPORT_2026.8.9-44.md`）
+4. `CHANGE_REPORT_2026.8.9-46.md`（完成baselineは `CHANGE_REPORT_2026.8.9-45.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

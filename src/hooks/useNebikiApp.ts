@@ -1,3 +1,4 @@
+import { getEveningComfortReliefContext } from "../domain/eveningComfortRelief.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { retireManualDiscountTimeOverride } from "./nebikiApp/operationalTime.ts";
 import { retireManualWeekdayDraft, retireManualWeekdayOverride } from "./nebikiApp/operationalWeekday.ts";
@@ -359,7 +360,13 @@ function retireOperationalOverrides(
   state: AppState,
   params: { now: Date; fixedTime?: boolean },
 ): AppState {
-  return retireManualWeekdayOverride(retireManualDiscountTimeOverride(state, params), params);
+  const restored = retireManualWeekdayOverride(retireManualDiscountTimeOverride(state, params), params);
+  if (!params.fixedTime && restored.sessionDraft.date !== state.sessionDraft.date) {
+    return { ...restored, sessionDraft: { ...restored.sessionDraft, weather: {
+      ...restored.sessionDraft.weather, eveningComfortUnavailableForecastHours: ["16", "21"],
+    } } };
+  }
+  return restored;
 }
 
 export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppResult {
@@ -1279,6 +1286,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
 
       if (nextDraft.date !== draftDate) {
         nextDraft.date = draftDate;
+        if (!isTestMode) nextDraft.weather = {
+          ...nextDraft.weather, eveningComfortUnavailableForecastHours: ["16", "21"],
+        };
         nextDraft.weatherInputLockedDiscountTime = null;
         changed = true;
       }
@@ -1460,6 +1470,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     sessionSourceResolvedWeather,
     sessionSource.date,
     sessionSource.demandCycle,
+    getEveningComfortReliefContext({
+      discountTime: sessionSource.discountTime, weather: sessionSource.weather,
+    }),
   );
 }, [
   sessionSource.weekday,
@@ -1467,6 +1480,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   sessionSourceResolvedWeather,
   sessionSource.date,
   sessionSource.demandCycle,
+  sessionSource.weather,
 ]);
 
   const earlyNextMinus5Info = useMemo(() => {
@@ -1495,6 +1509,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       resolvedWeather,
       state.session.date,
       state.session.demandCycle,
+      getEveningComfortReliefContext(state.session),
     );
     const targetBasisGuide = getBasisGuideDisplay({
       date: state.session.date,
@@ -1502,6 +1517,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       discountTime: targetDiscountTime,
       demandCycle: normalizeDemandCycle(state.session.demandCycle),
       weather: resolvedWeather,
+      eveningComfortReliefContext: getEveningComfortReliefContext(state.session),
       applyObonRule,
     });
 
@@ -1639,6 +1655,9 @@ const lateSkipNotice = useMemo(() => {
     discountTime: sessionSource.discountTime,
     demandCycle: normalizeDemandCycle(sessionSource.demandCycle),
     weather: sessionSourceResolvedWeather,
+    eveningComfortReliefContext: getEveningComfortReliefContext({
+      discountTime: sessionSource.discountTime, weather: sessionSource.weather,
+    }),
     applyObonRule,
   });
 
@@ -1659,6 +1678,7 @@ const lateSkipNotice = useMemo(() => {
   sessionSource.discountTime,
   sessionSource.demandCycle,
   sessionSourceResolvedWeather,
+  sessionSource.weather,
   lateTimeBonusNotice,
   lateTimeBonus,
   weekdayBaseInfo.baseRateBonus,
@@ -2398,6 +2418,11 @@ const lateSkipNotice = useMemo(() => {
         },
       };
 
+      if (!isTestMode && mergedDraft.date !== prev.sessionDraft.date) {
+        // 数値は入力用defaultとして残すが、別日の予報を新比較の入力済み証拠にしない。
+        mergedDraft.weather.eveningComfortUnavailableForecastHours = ["16", "21"];
+      }
+
       if (!isTestMode) {
         mergedDraft.weekday = getCalendarWeekday(mergedDraft.date) ?? mergedDraft.weekday;
         mergedDraft.manualWeekdayOverride = false;
@@ -2793,6 +2818,8 @@ const lateSkipNotice = useMemo(() => {
       weather: {
         ...prev.sessionDraft.weather,
         hourlyForecasts: cloneHourlyForecasts(prev.sessionDraft.weather.hourlyForecasts),
+        ...(!isTestMode && prev.sessionDraft.date !== currentDate
+          ? { eveningComfortUnavailableForecastHours: ["16", "21"] as Array<"16" | "21"> } : {}),
       },
       globalDiscountAdjustmentPercent:
         prev.session &&
@@ -3874,6 +3901,9 @@ const lateSkipNotice = useMemo(() => {
             weatherComfortAdjustmentPercent: earlyNextMinus5Info
               ? earlyNextMinus5Info.weekdayBaseInfo.baseRateBonus
               : weekdayBaseInfo.baseRateBonus,
+            eveningComfortRelief: earlyNextMinus5Info
+              ? earlyNextMinus5Info.weekdayBaseInfo.eveningComfortRelief
+              : weekdayBaseInfo.eveningComfortRelief,
             areaJudge: clickedProgress.areaJudge,
             areaRateAdjustment: clickedProgress.areaRateAdjustment,
             resolvedWeather: earlyNextMinus5Info

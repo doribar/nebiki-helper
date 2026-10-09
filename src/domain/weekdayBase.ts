@@ -24,6 +24,11 @@ import {
   getTemperaturePoint,
   normalizeTemperatureComfortAnalysis,
 } from "./temperatureComfort.ts";
+import {
+  evaluateEveningComfortRelief,
+  type EveningComfortReliefAnalysis,
+  type EveningComfortReliefContext,
+} from "./eveningComfortRelief.ts";
 
 type ShiftTerm = {
   label: string;
@@ -766,28 +771,29 @@ function applyComfortNegativeLimit(params: {
 }
 
 function getComfortRateBonusTerm(params: {
-  discountTime: DiscountTime;
-  demandCycle?: DemandCycle;
   rawScore: number;
   precipitationBonus: number;
+  comfortAdjustmentPercent: number;
+  limitNote?: string;
+  eveningComfortRelief?: EveningComfortReliefAnalysis;
 }): PercentTerm | undefined {
   if (isSnowPrecipitationBonus(params.precipitationBonus)) return undefined;
 
   const rawScore = clampComfortScore(params.rawScore);
   if (rawScore === 0) return undefined;
 
-  const limited = applyComfortNegativeLimit({
-    rawScore,
-    discountTime: params.discountTime,
-    demandCycle: params.demandCycle,
-    hasRain: isRainPrecipitationBonus(params.precipitationBonus),
-  });
-  const value = limited.score * 5;
-  const note = limited.note ? `（${limited.note}）` : "";
+  const relief = params.eveningComfortRelief;
+  const notes = [
+    params.limitNote,
+    relief?.applied
+      ? `16時→21時の快適度低下・気温差${relief.temperatureDifferenceC}℃のため快適補正を5ポイント緩和：${formatSignedValue(relief.comfortAdjustmentBeforePercent, "%")}→${formatSignedValue(relief.comfortAdjustmentAfterPercent, "%")}`
+      : undefined,
+  ].filter((value): value is string => Boolean(value));
+  const note = notes.length > 0 ? `（${notes.join("、")}）` : "";
 
   return {
     label: `快適度補正：${getComfortText(rawScore)}${note}`,
-    value,
+    value: params.comfortAdjustmentPercent,
   };
 }
 
@@ -862,6 +868,7 @@ function resolveWeatherEffect(params: {
   discountTime: DiscountTime;
   demandCycle?: DemandCycle;
   weather: ResolvedWeatherInput;
+  eveningComfortReliefContext?: EveningComfortReliefContext;
 }) {
   // 旧形式の保存データ互換用。値引率の計算には使わない。
   const original = getOriginalWeekdayBase(params.weekday);
@@ -899,11 +906,32 @@ function resolveWeatherEffect(params: {
     params.weather,
     params.discountTime,
   );
+  const rawComfortScore = clampComfortScore(rawComfortShift);
+  const limitedComfort = isSnowPrecipitationBonus(precipitationBonus)
+    ? { score: 0 as const }
+    : applyComfortNegativeLimit({
+        rawScore: rawComfortScore,
+        discountTime: params.discountTime,
+        demandCycle: params.demandCycle,
+        hasRain: isRainPrecipitationBonus(precipitationBonus),
+      });
+  // 既存の時刻・季節・雨雪制限後の快適項目だけへ適用し、雨雪項目を後から合算する。
+  // 毎回rawComfortShiftから計算し、保存済み補正へ5ポイントを再加算しない。
+  const eveningComfortRelief = params.eveningComfortReliefContext
+    ? evaluateEveningComfortRelief({
+        context: params.eveningComfortReliefContext,
+        effectiveRateDiscountTime: params.discountTime,
+        comfortAdjustmentBeforePercent: limitedComfort.score * 5,
+      })
+    : undefined;
+  const comfortAdjustmentPercent = eveningComfortRelief?.comfortAdjustmentAfterPercent
+    ?? limitedComfort.score * 5;
   const comfortTerm = getComfortRateBonusTerm({
-    discountTime: params.discountTime,
-    demandCycle: params.demandCycle,
-    rawScore: rawComfortShift,
+    rawScore: rawComfortScore,
     precipitationBonus,
+    comfortAdjustmentPercent,
+    limitNote: limitedComfort.note,
+    eveningComfortRelief,
   });
 
   const percentTerms = [
@@ -916,16 +944,6 @@ function resolveWeatherEffect(params: {
     weekday: params.weekday,
     date: params.date,
   });
-  const rawComfortScore = clampComfortScore(rawComfortShift);
-  const finalComfortScore = isSnowPrecipitationBonus(precipitationBonus)
-    ? 0
-    : applyComfortNegativeLimit({
-        rawScore: rawComfortScore,
-        discountTime: params.discountTime,
-        demandCycle: params.demandCycle,
-        hasRain: isRainPrecipitationBonus(precipitationBonus),
-      }).score;
-
   const basisTimeText = getBasisTimeText(params.discountTime);
   const weekdaySummaryText = `基本値引率：${basicRate}%（${basisTimeText}）`;
   const weekdayDetailLines: string[] = [];
@@ -934,7 +952,7 @@ function resolveWeatherEffect(params: {
   const comfortCalcParts = comfortShiftTerms.map(toComfortScoreCalcPart);
   const comfortDetailLine = isSnowPrecipitationBonus(precipitationBonus)
     ? "雪のため快適度補正は使いません。"
-    : `快適度：${getComfortText(rawComfortScore)}（快適度補正 ${formatSignedValue(finalComfortScore * 5, "%")}）`;
+    : `快適度：${getComfortText(rawComfortScore)}（快適度補正 ${formatSignedValue(comfortAdjustmentPercent, "%")}）`;
   const bonusCalcParts = percentTerms.map(toPercentCalcPart);
   const bonusSummaryText = buildBonusSummaryText(baseRateBonus);
   const bonusDetailLines = [
@@ -968,6 +986,7 @@ function resolveWeatherEffect(params: {
     bonusCalcParts,
     totalShift: rawComfortShift,
     baseRateBonus,
+    ...(eveningComfortRelief ? { eveningComfortRelief } : {}),
   };
 }
 
@@ -977,6 +996,7 @@ export function getWeekdayBaseInfo(
   weather: ResolvedWeatherInput,
   date?: string,
   demandCycle?: DemandCycle,
+  eveningComfortReliefContext?: EveningComfortReliefContext,
 ): WeekdayBaseInfo {
   const resolved = resolveWeatherEffect({
     date,
@@ -984,6 +1004,7 @@ export function getWeekdayBaseInfo(
     discountTime,
     weather,
     demandCycle,
+    eveningComfortReliefContext,
   });
 
   return {
@@ -993,9 +1014,10 @@ export function getWeekdayBaseInfo(
     weekdayShift: resolved.totalShift,
     baseRateBonus: resolved.baseRateBonus,
     baseRateBonusReason:
-      resolved.baseRateBonus !== 0 && resolved.bonusCalcText
+      (resolved.baseRateBonus !== 0 || resolved.eveningComfortRelief?.applied) && resolved.bonusCalcText
         ? [resolved.bonusCalcText, resolved.bonusResultText ?? ""]
         : [],
+    ...(resolved.eveningComfortRelief ? { eveningComfortRelief: resolved.eveningComfortRelief } : {}),
   };
 }
 
@@ -1005,6 +1027,7 @@ export function getBasisGuideDisplay(params: {
   discountTime: DiscountTime;
   demandCycle?: DemandCycle;
   weather: ResolvedWeatherInput;
+  eveningComfortReliefContext?: EveningComfortReliefContext;
   applyObonRule?: boolean;
 }): BasisGuideDisplay {
   const resolved = resolveWeatherEffect(params);
@@ -1032,6 +1055,7 @@ export function getBasisGuideDisplay(params: {
     bonusResultText: resolved.bonusResultText,
     bonusCalcParts: resolved.bonusCalcParts,
     bonusTotal: resolved.baseRateBonus,
+    ...(resolved.eveningComfortRelief ? { eveningComfortRelief: resolved.eveningComfortRelief } : {}),
     referenceText: month === undefined
       ? individualAmountReference.referenceText
       : `${month}月の${individualAmountReference.referenceText}`,

@@ -5,6 +5,7 @@ import {
 } from "./japaneseHoliday.ts";
 import type { ResolvedWeatherInput, SessionData } from "./types.ts";
 import { getWeekdayBaseInfo } from "./weekdayBase.ts";
+import { getEveningComfortReliefContext } from "./eveningComfortRelief.ts";
 
 export type ColdDeliGuide =
   | {
@@ -21,7 +22,7 @@ export type ColdDeliGuide =
 type ColdDeliGuideSession = Pick<
   SessionData,
   "date" | "weekday" | "discountTime" | "demandCycle" | "globalDiscountAdjustmentPercent"
->;
+> & Partial<Pick<SessionData, "weather">>;
 
 /** 先行値引画面専用の冷惣菜ガイド。商品数の判定や通常値引率への加算は行わない。 */
 export function getColdDeliGuide(params: {
@@ -49,6 +50,9 @@ export function getColdDeliGuide(params: {
     params.resolvedWeather,
     session.date,
     session.demandCycle,
+    session.weather ? getEveningComfortReliefContext({
+      discountTime: session.discountTime, weather: session.weather,
+    }) : undefined,
   ).baseRateBonus;
   const globalAdjustment = normalizeGlobalDiscountAdjustmentPercent(
     session.globalDiscountAdjustmentPercent,

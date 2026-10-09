@@ -5,6 +5,7 @@ import type {
 } from "./areaCountHistory.ts";
 import type { PendingSupabaseSyncErrorDetails } from "./supabaseSyncDiagnostics.ts";
 import type { NebikiStorageUsageDiagnostic } from "./storageDiagnostics.ts";
+import type { EveningComfortReliefAnalysis } from "./eveningComfortRelief.ts";
 import type {
   AnalysisCalendarContext,
   AnalysisWeatherContext,
@@ -104,6 +105,8 @@ export type HourlyForecastMap = Record<ForecastHourKey, HourlyForecastEntry>;
 export type WeatherInput = {
   hourlyForecasts: HourlyForecastMap;
   afterRainSky: AfterRainSky;
+  /** 未入力・欠損を補完した16/21時予報を、新しい比較判定には使わない。 */
+  eveningComfortUnavailableForecastHours?: Array<"16" | "21">;
 };
 
 export type ResolvedWeatherInput = {
@@ -285,9 +288,11 @@ export type WeekdayBaseInfo = {
   weekdayShift: number;
   baseRateBonus: number;
   baseRateBonusReason: string[];
+  eveningComfortRelief?: EveningComfortReliefAnalysis;
 };
 
 export type BasisGuideDisplay = {
+  eveningComfortRelief?: EveningComfortReliefAnalysis;
   noticeText?: string;
   weekdaySummaryText?: string;
   weekdayDetailLines?: string[];
@@ -353,6 +358,8 @@ export type RateDecisionSnapshot = {
   rateLogicVersion: RateLogicVersion;
   basicRatePercent: number;
   weatherComfortAdjustmentPercent: number;
+  /** 確定時の快適補正の前後値・16/21時比較。旧snapshotには補完しない。 */
+  eveningComfortRelief?: EveningComfortReliefAnalysis;
   lateTimeAdjustmentPercent: number;
   earlyNextAdjustmentPercent: number;
   areaCountAdjustmentPercent: number;
@@ -622,6 +629,7 @@ export type Review19Snapshot = {
     /** legacy: 旧曜日基準方式の保存データにだけ入る。 */
     weekdayShift?: number;
     baseRateBonus: number;
+    eveningComfortRelief?: EveningComfortReliefAnalysis;
     lateTimeBonus: number;
     totalRateBonus: number;
     baseRateBonusReason: string[];
@@ -669,6 +677,7 @@ export type DailySessionSnapshot = {
   basis: {
     rateLogicVersion?: RateLogicVersion;
     baseRateBonus: number;
+    eveningComfortRelief?: EveningComfortReliefAnalysis;
     lateTimeBonus: number;
     totalRateBonus: number;
     baseRateBonusReason: string[];

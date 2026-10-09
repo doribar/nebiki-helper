@@ -449,7 +449,7 @@ test("fixed-time・session未開始・18:30/19:30/20:30は天候を読まず対�
   }), null);
 });
 
-test("AreaCount・中央値・商品属性・数量・quick/decrease・raw天候を参照しない", () => {
+test("AreaCount・中央値・商品属性・数量・quick/decrease・時刻補正を参照しない", () => {
   function forbidOtherFields<T extends object>(value: T): T {
     for (const field of [
       "areaCount", "areaCountRecords", "areaProgressMap", "currentAreaId", "areaJudge",
@@ -457,7 +457,8 @@ test("AreaCount・中央値・商品属性・数量・quick/decrease・raw天候
       "areaCountAdjustmentPercent", "evaluationAdjustment", "quickAdjustment",
       "decrease", "decreaseAdjustment", "medianCount", "history", "snapshots",
       "productAdjustmentPolicy", "productPolicy", "productCount", "quantity",
-      "lateTimeBonus", "earlyNextMinus5Info", "rateOffsetPercent", "weather",
+      // Raw 16/21 hourly forecasts are now needed by the evening comfort comparison.
+      "lateTimeBonus", "earlyNextMinus5Info", "rateOffsetPercent",
       "temperatureComfortAnalysis",
     ]) {
       Object.defineProperty(value, field, {

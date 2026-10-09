@@ -9,6 +9,7 @@ import type { AdvanceDiscountScreen } from "../src/components/screens/AdvanceDis
 import type { RateDisplayScreen } from "../src/components/screens/RateDisplayScreen.tsx";
 import { getAdvanceDiscountRate } from "../src/domain/advanceDiscount.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
+import { getEveningComfortReliefContext } from "../src/domain/eveningComfortRelief.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { normalizeFinalizedDayData, initializeFinalizedDayDataInMemory } from "../src/domain/finalizedDayData.ts";
 import { normalizeGlobalDiscountAdjustmentPercent } from "../src/domain/globalDiscountAdjustment.ts";
@@ -104,7 +105,7 @@ function hookDecision(session: SessionData, resolvedWeather = resolveWeatherInpu
     earlyNextMinus5Info: null, effectiveRateDiscountTime: session.discountTime,
     effectiveRateIgnoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
     applyObonRule: true, useMemo: (factory: () => unknown) => factory(),
-    getWeekdayBaseInfo, getBasisGuideDisplay, buildMergedBonusDisplay,
+    getWeekdayBaseInfo, getBasisGuideDisplay, buildMergedBonusDisplay, getEveningComfortReliefContext,
     buildCurrentNormalRatePresentation, buildRateDecisionSnapshot,
     normalizeGlobalDiscountAdjustmentPercent, normalizeDemandCycle,
   };

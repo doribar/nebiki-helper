@@ -17,6 +17,7 @@ import type {
 } from "./types.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
 import { normalizeTemperatureComfortAnalysis } from "./temperatureComfort.ts";
+import { normalizeEveningComfortReliefAnalysis, type EveningComfortReliefAnalysis } from "./eveningComfortRelief.ts";
 import {
   applyGlobalDiscountAdjustmentToDisplay,
   applyGlobalDiscountAdjustmentToRate,
@@ -49,6 +50,7 @@ type CommonRateDecisionSnapshotParams = {
   demandCycle?: DemandCycle;
   rateLogicVersion?: RateLogicVersion;
   weatherComfortAdjustmentPercent: number;
+  eveningComfortRelief?: EveningComfortReliefAnalysis;
   areaJudge: Exclude<AreaJudge, null>;
   areaRateAdjustment?: AreaRateAdjustment;
   resolvedWeather: ResolvedWeatherInput;
@@ -395,6 +397,13 @@ function assertBuildInputs(params: BuildRateDecisionSnapshotParams): void {
   if (!isFiniteNumber(params.weatherComfortAdjustmentPercent)) {
     throw new TypeError("weatherComfortAdjustmentPercent must be finite");
   }
+  if (params.eveningComfortRelief && (
+    !normalizeEveningComfortReliefAnalysis(params.eveningComfortRelief) ||
+    params.eveningComfortRelief.sessionDiscountTime !== params.sessionDiscountTime ||
+    params.eveningComfortRelief.effectiveRateDiscountTime !== params.effectiveRateDiscountTime
+  )) {
+    throw new TypeError("eveningComfortRelief snapshot input is invalid");
+  }
   if (!cloneResolvedWeather(params.resolvedWeather)) {
     throw new TypeError("resolvedWeather is invalid");
   }
@@ -516,6 +525,9 @@ export function buildRateDecisionSnapshot(
     rateLogicVersion: params.rateLogicVersion ?? "time_basic_rate_v1",
     basicRatePercent,
     weatherComfortAdjustmentPercent: params.weatherComfortAdjustmentPercent,
+    ...(params.eveningComfortRelief ? {
+      eveningComfortRelief: normalizeEveningComfortReliefAnalysis(params.eveningComfortRelief),
+    } : {}),
     lateTimeAdjustmentPercent: modeAdjustments.lateTimeAdjustmentPercent,
     earlyNextAdjustmentPercent: modeAdjustments.earlyNextAdjustmentPercent,
     areaCountAdjustmentPercent,
@@ -776,6 +788,7 @@ export function normalizeRateDecisionSnapshot(
     ? (raw.globalDiscountAdjustmentPercent as GlobalDiscountAdjustmentPercent)
     : 0;
 
+  const eveningComfortRelief = normalizeEveningComfortReliefAnalysis(raw.eveningComfortRelief);
   const baseFields = {
     version: 1 as const,
     dataSchemaVersion: raw.dataSchemaVersion,
@@ -790,6 +803,7 @@ export function normalizeRateDecisionSnapshot(
     basicRatePercent: raw.basicRatePercent as number,
     weatherComfortAdjustmentPercent:
       raw.weatherComfortAdjustmentPercent as number,
+    ...(eveningComfortRelief ? { eveningComfortRelief } : {}),
     lateTimeAdjustmentPercent: raw.lateTimeAdjustmentPercent as number,
     earlyNextAdjustmentPercent: raw.earlyNextAdjustmentPercent as number,
     areaCountAdjustmentPercent: raw.areaCountAdjustmentPercent as number,

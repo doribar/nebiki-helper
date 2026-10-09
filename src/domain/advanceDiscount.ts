@@ -5,11 +5,12 @@ import {
 } from "./globalDiscountAdjustment.ts";
 import type { ResolvedWeatherInput, SessionData } from "./types.ts";
 import { getWeekdayBaseInfo } from "./weekdayBase.ts";
+import { getEveningComfortReliefContext } from "./eveningComfortRelief.ts";
 
 type AdvanceDiscountSession = Pick<
   SessionData,
   "date" | "weekday" | "discountTime" | "demandCycle" | "globalDiscountAdjustmentPercent"
->;
+> & Partial<Pick<SessionData, "weather">>;
 
 /**
  * 天候確定後の15時・17時に使う、session共通の先行値引率。
@@ -36,6 +37,9 @@ export function getAdvanceDiscountRate(params: {
     params.resolvedWeather,
     session.date,
     session.demandCycle,
+    session.weather ? getEveningComfortReliefContext({
+      discountTime: session.discountTime, weather: session.weather,
+    }) : undefined,
   ).baseRateBonus;
 
   return applyGlobalDiscountAdjustmentToRate(

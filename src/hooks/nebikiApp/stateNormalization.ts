@@ -42,6 +42,7 @@ import {
   normalizeDemandCycle,
 } from "../../domain/demandCycle.ts";
 import { normalizeGlobalDiscountAdjustmentPercent } from "../../domain/globalDiscountAdjustment.ts";
+import { isValidEveningComfortForecastEntry } from "../../domain/eveningComfortRelief.ts";
 import {
   formatLocalDate,
   getRuntimeNow,
@@ -61,6 +62,7 @@ export function createInitialSessionDraft(): SessionDraft {
     weather: {
       hourlyForecasts: createDefaultHourlyForecasts(),
       afterRainSky: null,
+      eveningComfortUnavailableForecastHours: ["16", "21"],
     },
   };
 }
@@ -487,11 +489,20 @@ function normalizeWeatherInput(raw: unknown, discountTime: DiscountTime): Weathe
     return {
       hourlyForecasts: cloneHourlyForecasts(fallback.hourlyForecasts),
       afterRainSky: fallback.afterRainSky,
+      eveningComfortUnavailableForecastHours: ["16", "21"],
     };
   }
 
   const source = raw as Record<string, unknown>;
   const rawHourlyForecasts = source.hourlyForecasts;
+  const rawForecastMap = rawHourlyForecasts && typeof rawHourlyForecasts === "object"
+    ? rawHourlyForecasts as Record<string, unknown> : {};
+  // 既存の正規化は表示用の既定値を補完する。新判定ではその補完を入力証拠にしない。
+  const eveningComfortUnavailableForecastHours = (["16", "21"] as const).filter(
+    (hour) => !isValidEveningComfortForecastEntry(rawForecastMap[hour]) ||
+      (Array.isArray(source.eveningComfortUnavailableForecastHours) &&
+        source.eveningComfortUnavailableForecastHours.includes(hour)),
+  );
 
   const hourlyForecasts =
     rawHourlyForecasts && typeof rawHourlyForecasts === "object"
@@ -528,6 +539,8 @@ function normalizeWeatherInput(raw: unknown, discountTime: DiscountTime): Weathe
 
   return {
     hourlyForecasts,
+    ...(eveningComfortUnavailableForecastHours.length > 0
+      ? { eveningComfortUnavailableForecastHours } : {}),
     afterRainSky:
       source.afterRainSky === "cloudy" || source.afterRainSky === "sunny"
         ? source.afterRainSky
@@ -593,6 +606,10 @@ export function buildStartDefaultDraft(
     weather: {
       ...normalized.weather,
       hourlyForecasts: cloneHourlyForecasts(normalized.weather.hourlyForecasts),
+      // 値は入力の既定値として保持し、前日の16/21時を本日の入力済み予報にしない。
+      ...(normalized.date !== currentDefault.date
+        ? { eveningComfortUnavailableForecastHours: ["16", "21"] as Array<"16" | "21"> }
+        : {}),
     },
   };
 }

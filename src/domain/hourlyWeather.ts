@@ -302,6 +302,11 @@ function getFutureWeatherPoint(entry: HourlyForecastEntry): number {
   );
 }
 
+/** 同じ1時間予報の気温・風・天候。合計前の値を大きいほど不快な向きへ揃える。 */
+export function getHourlyForecastComfortScore(entry: HourlyForecastEntry): number {
+  return -getFutureWeatherPoint(entry);
+}
+
 function getWeatherPointShift(score: number): -2 | -1 | 0 | 1 | 2 {
   if (score >= 7) return -2;
   if (score >= 4) return -1;

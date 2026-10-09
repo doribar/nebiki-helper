@@ -6,6 +6,7 @@ import { renderToString } from "react-dom/server";
 import ts from "typescript";
 import { NORMAL_ROUTE, getNormalRoute, getAreaRouteFromStoredIds } from "../src/domain/area.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
+import { getEveningComfortReliefContext } from "../src/domain/eveningComfortRelief.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { lockDemandCycleForDate } from "../src/domain/demandCycleStorage.ts";
 import { addDaysToDateString, getCalendarWeekday, isJapaneseHolidayOrWeekend } from "../src/domain/japaneseHoliday.ts";
@@ -126,7 +127,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     normalizeReview19ExcludedAreaIds, buildTimeSwitchNotice, buildStartDefaultDraft,
     normalizeSessionDraft, syncAfterRainSelection, createInitialState, retireManualDiscountTimeOverride,
     retireManualWeekdayDraft, retireManualWeekdayOverride, getCalendarWeekday,
-    matchesWeatherConfirmationDraft, createDailySessionSnapshot, getBasisGuideDisplay, getWeekdayBaseInfo,
+    matchesWeatherConfirmationDraft, createDailySessionSnapshot, getBasisGuideDisplay, getWeekdayBaseInfo, getEveningComfortReliefContext,
     cloneAppState, createNavigationSnapshot, appendNavigationHistory,
     clonePersistedNebikiStateSnapshot, savePersistedNebikiStateWithAuxiliaryRecovery,
     saveWorkSessionCheckpointSafely, saveRuntimeStateSafely,

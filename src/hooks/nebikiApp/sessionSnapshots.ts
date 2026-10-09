@@ -232,6 +232,9 @@ export function createDailySessionSnapshot(params: {
     basis: {
       rateLogicVersion: "time_basic_rate_v1",
       baseRateBonus: params.weekdayBaseInfo.baseRateBonus,
+      ...(params.weekdayBaseInfo.eveningComfortRelief ? {
+        eveningComfortRelief: JSON.parse(JSON.stringify(params.weekdayBaseInfo.eveningComfortRelief)),
+      } : {}),
       lateTimeBonus: params.lateTimeBonus,
       totalRateBonus: params.weekdayBaseInfo.baseRateBonus + params.lateTimeBonus,
       baseRateBonusReason: [...params.weekdayBaseInfo.baseRateBonusReason],
@@ -551,6 +554,9 @@ export function createReview19Snapshot(params: {
     basis: {
       rateLogicVersion: "time_basic_rate_v1",
       baseRateBonus: params.weekdayBaseInfo.baseRateBonus,
+      ...(params.weekdayBaseInfo.eveningComfortRelief ? {
+        eveningComfortRelief: JSON.parse(JSON.stringify(params.weekdayBaseInfo.eveningComfortRelief)),
+      } : {}),
       lateTimeBonus: params.lateTimeBonus,
       totalRateBonus: params.weekdayBaseInfo.baseRateBonus + params.lateTimeBonus,
       baseRateBonusReason: [...params.weekdayBaseInfo.baseRateBonusReason],

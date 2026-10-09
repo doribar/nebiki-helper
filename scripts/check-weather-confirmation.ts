@@ -746,7 +746,7 @@ test("修正リクエストと自動失効・履歴復元を区別する", () =>
   assert.ok(!pendingInvalidationBlock.includes("setWeatherCorrectionRequestId"));
   assert.ok(restoreNavigationBlock.includes("setWeatherConfirmationPending(null)"));
   assert.ok(startSource.includes("previousWeatherCorrectionRequestIdRef"));
-  assert.ok(startSource.includes("createCorrectionConfirmationMap(fieldOrder)"));
+  assert.match(startSource, /createCorrectionConfirmationMap\(\s*fieldOrder,\s*sessionDraft\.weather\.eveningComfortUnavailableForecastHours,?\s*\)/);
 });
 
 test("StartScreen・AppRouter・確認Panelが表示専用モデルと固定時刻キャッシュを正しく配線する", () => {
