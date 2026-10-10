@@ -203,7 +203,7 @@ function getComparisonNotice(
   recommendation: AreaCountRecommendation,
 ): string | null {
   if (recommendation.comparisonMode === "three_day_holiday_middle") {
-    return "※三連休中日のため、火木日と金土を別々に集計した50対50の中間基準で判定しています。";
+    return "※三連休中日の参照元と採用方法は、以下の内訳を確認してください。";
   }
 
   if (recommendation.comparisonMode === "holiday_before_normal_weekday") {

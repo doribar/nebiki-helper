@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-47",
+  "version": "2026.8.9-48",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "check:integration": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-integration.ts",
     "check:weekday-groups": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-weekday-groups.ts",
     "check:three-day-holiday-middle": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-three-day-holiday-middle.ts",
+    "check:three-day-holiday-sunday-reference": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-three-day-holiday-sunday-reference.ts",
     "check:holiday-before-normal-weekday": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-holiday-before-normal-weekday.ts",
     "check:full-mode": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-full-mode.ts",
     "check:rate-decision-snapshot": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-rate-decision-snapshot.ts",

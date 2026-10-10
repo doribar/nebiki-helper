@@ -58,6 +58,7 @@ export type CalendarAreaCountReference = {
     | "weekday"
     | "weekday_group"
     | "composite_weekday_groups"
+    | "composite_weekday_and_group"
     | "unavailable";
   referenceWeekday: ActualWeekdayLabel | null;
   referenceWeekdayGroup: ActualWeekdayGroup | null;
@@ -380,6 +381,7 @@ function normalizeAreaCountReference(
     (raw.type !== "weekday" &&
       raw.type !== "weekday_group" &&
       raw.type !== "composite_weekday_groups" &&
+      raw.type !== "composite_weekday_and_group" &&
       raw.type !== "unavailable") ||
     (raw.referenceWeekday !== null && !isActualWeekday(raw.referenceWeekday)) ||
     (raw.referenceWeekdayGroup !== null &&
@@ -402,7 +404,10 @@ function normalizeAreaCountReference(
     (raw.type === "weekday_group" &&
       !isActualWeekdayGroup(raw.referenceWeekdayGroup)) ||
     (raw.type === "composite_weekday_groups" &&
-      raw.referenceWeekdayGroups.length < 2)
+      raw.referenceWeekdayGroups.length < 2) ||
+    (raw.type === "composite_weekday_and_group" &&
+      (!isActualWeekday(raw.referenceWeekday) ||
+        raw.referenceWeekdayGroups.length < 1))
   ) {
     return null;
   }
@@ -575,7 +580,22 @@ function buildAreaCountReference(params: {
   }
 
   if (comparisonMode === "three_day_holiday_middle") {
-    const adoptedSource = params.basis.threeDayHolidayMiddleReference?.adoptedSource;
+    const middleReference = params.basis.threeDayHolidayMiddleReference;
+    const adoptedSource = middleReference?.adoptedSource;
+    // Only captured adoption evidence identifies the new standalone Sunday
+    // rule. Legacy bases keep their original 火木日/金土 interpretation.
+    if (middleReference?.sundayReference?.source === "weekday" &&
+      middleReference.sundayReference.adopted &&
+      (adoptedSource === "both" || adoptedSource === "日")) {
+      return {
+        ...base,
+        type: adoptedSource === "both" ? "composite_weekday_and_group" : "weekday",
+        referenceWeekday: "日",
+        referenceWeekdayGroup: null,
+        referenceWeekdayGroups: adoptedSource === "both" ? ["金土"] : [],
+        reason: "three_day_holiday_middle_history",
+      };
+    }
     const groups: ActualWeekdayGroup[] =
       adoptedSource === "both"
         ? ["火木日", "金土"]

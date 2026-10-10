@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-47）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-48）
 
-最終更新: 2026-10-09 JST
+最終更新: 2026-10-10 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-47.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-47.zip` |
-| appVersion | `2026.8.9-47` |
-| buildId | `build-20261009-214347-jst` |
+| ZIP | `nebiki-helper-2026.8.9-48.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-48.zip` |
+| appVersion | `2026.8.9-48` |
+| buildId | `build-20261010-190352-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-47.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-48.md`参照（自己参照回避） |
 
-application rootは`work/startLayout47/nebiki-helper`。比較基準は完成9-46 ZIP `nebiki-helper-2026.8.9-46.zip`（SHA-256 `37a8838570d7b9a6bad485391501e8227b4025cb2a0accd2eb138052caaa39e1`）。9-47は開始画面の曜日・時刻を同幅2列にする表示配置のみ。左曜日/右時刻、ラベル上・値下。全体値引補正→曜日時刻→天候。自動判定/入力lock/46快適緩和/計算/保存/履歴は不変。schema3、SQL/AGENTS/過去報告、version/build方式を維持。詳細は第11節9-47項と`CHANGE_REPORT_2026.8.9-47.md`。
+application rootは`work/threeDay48/nebiki-helper`。比較基準は完成9-47 ZIP `nebiki-helper-2026.8.9-47.zip`（SHA-256 `c987bb9582befbf39a4d5b6269745bcd78b5d1ef24cc61de42ea7889fd6eb2ef`）。9-48は、ちょうど三連休中日の17/18:30/19:30/20:30で日曜側を普通の日曜3件以上なら単独参照、不足時だけ火木日へ代替し、金土との中央値50:50・片側採用を維持する。採用根拠はoptional metadataと共通formatterで保存・表示。15時/通常曜日/4日以上連休/値引engine/20:30固定rule/47開始2列は維持。schema3、SQL/AGENTS/過去報告、version/build方式を維持。詳細は第5節9-48項と`CHANGE_REPORT_2026.8.9-48.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\startLayout47\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\threeDay48\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -170,6 +170,17 @@ legacy migrationは次の順で行う。
 - 同session/同areaの既存navigation snapshotだけ更新し、Backで入力済み残数と取消を失わない。Undoのpre-action snapshotは改変せず、quick/残数修正のUndoを維持する。count修正時にraw bad比較が引き続き成立する場合だけ取消を引き継ぎ、good/none/比較不能なら無効な取消を新判定へ持ち込まない。
 - current/checkpoint、daily session snapshot、Review19 daySnapshot、finalized/archive、AreaCount record_details、export/remote JSONは既存propagationでmetadataを保持する。rateDecisionSnapshotへ新しい取消fieldを重複追加しない。source state/履歴/productionAnalysis/businessMonthは維持する。
 - Doneの多い/どちらでもないはfinite numeric > 0だけ赤#ff0000/緑#008000。0/unknown/skip/20:30は従来色。既存snapshot numericと、既存rate coreを共有するcurrent numeric helperを使い、文字列をparseして色を決めない。エリア順・judge/status/note・表示値引率は不変。
+
+
+### 9-48: 三連休中日の夜参照は普通の日曜を優先
+
+- 既存の「ちょうど三連休中日」の17/18/19/20だけ、同area/timeの普通の日曜3件以上を先に選ぶ。日曜不足時のみ既存火木日を代替し、金土側の選択方法は維持。両側有効は採用中央値を50:50、片側のみはその中央値、両側不足は従来のinsufficient/manual。値引率を平均しない。中日が土曜でも日曜側は普通の日曜。
+- 通年・date<today・canonical/dedupeと必要3件を共用し、short16/long52、日曜単独の `max(short,long-2)` guardを既存helperで適用する。group fallbackは従来どおりguardなし。新しい日曜候補だけ実日付/実曜日が日曜で、holiday/祝前日/三連休/長期連休/当時Obon/captured特殊calendarを除外する。その他通常曜日の母集団処理は変更しない。
+- `threeDayHolidayMiddleReference.sundayReference?` にsource(`weekday`/`fallback_group`)、adopted、普通日曜件数、採用側全件数/short/long件数、各中央値/guard、fallbackReason(`insufficient_sunday_history`)を保持する。旧 `fireThursdaySunday*` は火木日groupの意味を維持し、日曜単独を入れない。日曜採用時の旧group中央値は未採用として省略。adoptedSourceは日曜だけなら`日`、双方は従来の`both`＋sundayReference.sourceで識別する。
+- basisはAreaProgress→確定area snapshot/daily/day/finalized/export、AreaCount record_detailsの既存経路へ伝播。rateDecisionSnapshot内へ新しいAreaCount metadataを追加しない。calendarContextは普通日曜+金土のとき `composite_weekday_and_group` / referenceWeekday=`日` / groups=`金土`、日曜だけならweekday。fallback/legacyの火木日・金土表現を維持。
+- 共通 `getThreeDayHolidayMiddleReferenceDetailLines()` は保存metadataだけを読み、日曜単独/代替理由・実件数/中央値/guard・50:50か片側かを表示する。RateDisplayの三連休時だけdetails「三連休中日の履歴基準」を追加。開閉は判定・保存・再計算しない。AreaJudgeの静的火木日50:50断定は内訳案内へ変更。
+- Review19参考統計も共通median処理を使い、optional参照根拠を保存する。正式評価は9段階人間入力のまま。auto5段階を復活させずproductionAnalysisは変更しない。過去のsundayReference欠損へ新ルール採用実績を補完せず、保存済み率/評価/中央値は再計算しない。
+- 15時/通常日曜/その他曜日/4日以上の連休、基本率/天候46快適緩和/area・商品・global/時刻補正/20:30固定本体、47開始2列/注意7項目/長押しは非変更。新storage key/migration/SQLなし、schema3。
 
 ## 6. calendar、reference、summer / normal
 
@@ -472,11 +483,12 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 9-47: 全83/83 checks、automatic-weekday13/13（配置・35表示組・callback保持を追加）。TypeScript/build/PWA PASS、107 modules・precache10。
-- focused lint0 errors/0 warnings、full9 existing errors/6 existing warnings。46比較file/rule/severity/message新規0。
-- 実Edge production360×844・390×844で配置/自動表示/天候入力→開始/時刻lockを確認。実操作とSSR fixtureを区別。詳細は外部browser summaryを参照。
-- SQL9/AGENTS/過去CHANGE_REPORTは46ZIPとbyte-identical。CRC/path/除外物/version/build/schema/distPWA/対象file集合bytes/SHAはZIP再open結果参照。
-- 詳細: `CHANGE_REPORT_2026.8.9-47.md`、ZIP外`RELEASE_REPORT_2026.8.9-47.md` / `ZIP_VALIDATION_2026.8.9-47.json`。
+- 9-48: 全84/84 checks、専用Sunday-reference28/28、既存三連休33/33、関連長期連休17/17 PASS。47/48の同一fixture実行比較8ケースPASS。実RateDisplay TSXのReact SSRと実ブラウザ確認を区別。
+- TypeScript/build/PWA PASS、107 modules/precache10、build `build-20261010-190352-jst`。bundle `/assets/index-Fche_LNf.js` / SHA-256 `71920a6a7274f6223b420a53c5cdecbbe68460e2a521d57876c7a970c68b1c75`。
+- focused lint1 existing error/0 warnings（AreaJudgeScreen既存react-hooks/set-state-in-effect）、full9 existing errors/6 existing warnings。47比較file/rule/severity/message新規0、lint例外追加なし。
+- 最終production Edge390×844の実操作確認完了。普通日曜優先/fallback/片側/不足、17/18/19/20、実残数→表示率→完了保存/再読込、内訳・Review19人間評価/JSON・開始2列/注意7項目を確認。詳細・タッチemulationの範囲・native未実施・未確認事項はCHANGE_REPORTと外部browser summary参照。
+- SQL9/AGENTS/vite/dataVersion/過去CHANGE_REPORT56は47ZIPとbyte-identical。production103本中99本同一。CRC/path/除外物/version/build/schema/distPWA/対象file集合bytes/SHAはZIP再open結果参照。
+- 詳細: `CHANGE_REPORT_2026.8.9-48.md`、ZIP外`RELEASE_REPORT_2026.8.9-48.md` / `ZIP_VALIDATION_2026.8.9-48.json`。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -509,12 +521,14 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
+9-48追加: `areaCountHistory.ts`のSunday参照/normalizer/共通formatter、`analysisMetadata.ts`の参照type、`RateDisplayScreen.tsx`の保存根拠details、専用`check-three-day-holiday-sunday-reference.ts`。
+
 9-46追加: `src/domain/eveningComfortRelief.ts`、`weekdayBase.ts`、`hourlyWeather.ts`、`rateDecisionSnapshot.ts`、`useNebikiApp.ts`、`stateNormalization.ts`、`StartScreen.tsx`、専用`check-evening-comfort-relief/flow.ts`。
 
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-47.md`（完成baselineは `CHANGE_REPORT_2026.8.9-46.md`）
+4. `CHANGE_REPORT_2026.8.9-48.md`（完成baselineは `CHANGE_REPORT_2026.8.9-47.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

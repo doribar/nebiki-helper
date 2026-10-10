@@ -144,7 +144,21 @@ export type AreaCountRecommendation = {
     fridaySaturdaySampleSize: number;
     fireThursdaySundayMedianCount?: number;
     fridaySaturdayMedianCount?: number;
-    adoptedSource: "both" | "火木日" | "金土" | "none";
+    adoptedSource: "both" | "日" | "火木日" | "金土" | "none";
+    /** Captured only for the Sunday-first rule; missing keeps legacy evidence. */
+    sundayReference?: {
+      source: "weekday" | "fallback_group";
+      adopted: boolean;
+      weekdaySampleSize: number;
+      sampleSize: number;
+      shortSampleSize: number;
+      longSampleSize: number;
+      medianCount?: number;
+      shortMedianCount?: number;
+      longMedianCount?: number;
+      medianDownGuardApplied?: boolean;
+      fallbackReason?: "insufficient_sunday_history";
+    };
   };
   medianCount?: number;
   shortMedianCount?: number;
@@ -696,6 +710,42 @@ function normalizeNonNegativeNumber(value: unknown): number | undefined {
   return numberValue === undefined || numberValue < 0 ? undefined : numberValue;
 }
 
+function normalizeThreeDayHolidaySundayReference(
+  raw: unknown,
+): NonNullable<AreaCountRecommendation["threeDayHolidayMiddleReference"]>["sundayReference"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const source = raw as NonNullable<
+    NonNullable<AreaCountRecommendation["threeDayHolidayMiddleReference"]>["sundayReference"]
+  >;
+  const weekdaySampleSize = normalizeNonNegativeInteger(source.weekdaySampleSize);
+  const sampleSize = normalizeNonNegativeInteger(source.sampleSize);
+  const shortSampleSize = normalizeNonNegativeInteger(source.shortSampleSize);
+  const longSampleSize = normalizeNonNegativeInteger(source.longSampleSize);
+  if (
+    (source.source !== "weekday" && source.source !== "fallback_group") ||
+    typeof source.adopted !== "boolean" ||
+    weekdaySampleSize === undefined || sampleSize === undefined ||
+    shortSampleSize === undefined || longSampleSize === undefined
+  ) return undefined;
+  return {
+    source: source.source,
+    adopted: source.adopted,
+    weekdaySampleSize,
+    sampleSize,
+    shortSampleSize,
+    longSampleSize,
+    medianCount: normalizeNonNegativeNumber(source.medianCount),
+    shortMedianCount: normalizeNonNegativeNumber(source.shortMedianCount),
+    longMedianCount: normalizeNonNegativeNumber(source.longMedianCount),
+    medianDownGuardApplied: typeof source.medianDownGuardApplied === "boolean"
+      ? source.medianDownGuardApplied
+      : undefined,
+    fallbackReason: source.fallbackReason === "insufficient_sunday_history"
+      ? source.fallbackReason
+      : undefined,
+  };
+}
+
 function normalizeThreeDayHolidayMiddleReference(
   raw: unknown,
 ): AreaCountDecisionBasis["threeDayHolidayMiddleReference"] {
@@ -713,6 +763,7 @@ function normalizeThreeDayHolidayMiddleReference(
     fireThursdaySundaySampleSize === undefined ||
     fridaySaturdaySampleSize === undefined ||
     (source.adoptedSource !== "both" &&
+      source.adoptedSource !== "日" &&
       source.adoptedSource !== "火木日" &&
       source.adoptedSource !== "金土" &&
       source.adoptedSource !== "none")
@@ -729,6 +780,9 @@ function normalizeThreeDayHolidayMiddleReference(
       source.fridaySaturdayMedianCount,
     ),
     adoptedSource: source.adoptedSource,
+    ...(source.sundayReference !== undefined
+      ? { sundayReference: normalizeThreeDayHolidaySundayReference(source.sundayReference) }
+      : {}),
   };
 }
 
@@ -1505,6 +1559,28 @@ function getGuardedReferenceMedian(params: {
   };
 }
 
+function isOrdinarySundayReferenceRecord(record: AreaCountRecord): boolean {
+  const calendar = record.calendarContext;
+  // Follow the same captured/version-aware Obon boundary as normalization.
+  // This selects candidates only and never reclassifies the saved record.
+  const applyObonRule = calendar
+    ? calendar.isObon === true || calendar.calendarCondition === "obon"
+    : supportsObonCalendarRule(record.appVersion);
+  return record.actualWeekday === "日" &&
+    inferWeekdayLabelFromDate(record.date) === "日" &&
+    record.actualWeekdayGroup === "火木日" &&
+    !isJapaneseHolidayOrObserved(record.date) &&
+    !isDayBeforeJapaneseHoliday(record.date) &&
+    !isThreeDayHolidayMiddle(record.date) &&
+    !isLongHolidayMiddle(record.date) &&
+    !(applyObonRule && isObonDate(record.date)) &&
+    (!calendar || (
+      calendar.calendarCondition === "ordinary" &&
+      !calendar.isHoliday && !calendar.isDayBeforeHoliday &&
+      calendar.isObon !== true
+    ));
+}
+
 function getThreeDayHolidayMiddleReference(params: {
   shortRecords: AreaCountRecord[];
   longRecords: AreaCountRecord[];
@@ -1525,14 +1601,30 @@ function getThreeDayHolidayMiddleReference(params: {
 
   const fireThursdaySundayReference = getGroupReference("火木日");
   const fridaySaturdayReference = getGroupReference("金土");
-  const fireThursdaySundayValid = fireThursdaySundayReference.hasValidReference;
+  const ordinarySundayRecords = params.shortRecords.filter(isOrdinarySundayReferenceRecord);
+  const ordinarySundayLongRecords = params.longRecords === params.shortRecords
+    ? ordinarySundayRecords
+    : params.longRecords.filter(isOrdinarySundayReferenceRecord);
+  const sundayWeekdayReference = getReferenceRecords({
+    shortRecords: ordinarySundayRecords,
+    longRecords: ordinarySundayLongRecords,
+    areaId: params.areaId,
+    discountTime: params.discountTime,
+    actualWeekday: "日",
+    fallbackWeekdayGroup: "火木日",
+    forceFallbackWeekdayGroup: false,
+  });
+  const useSundayWeekday = sundayWeekdayReference.comparisonMode === "weekday";
+  const sundaySideReference = useSundayWeekday
+    ? sundayWeekdayReference
+    : fireThursdaySundayReference;
   const fridaySaturdayValid = fridaySaturdayReference.hasValidReference;
 
-  const fireThursdaySundayMedian = fireThursdaySundayValid
+  const sundaySideMedian = sundaySideReference.hasValidReference
     ? getGuardedReferenceMedian({
-        shortRecords: fireThursdaySundayReference.matchedRecords,
-        longRecords: fireThursdaySundayReference.longMatchedRecords,
-        comparisonMode: "fallback_group",
+        shortRecords: sundaySideReference.matchedRecords,
+        longRecords: sundaySideReference.longMatchedRecords,
+        comparisonMode: useSundayWeekday ? "weekday" : "fallback_group",
       })
     : undefined;
   const fridaySaturdayMedian = fridaySaturdayValid
@@ -1544,16 +1636,16 @@ function getThreeDayHolidayMiddleReference(params: {
     : undefined;
 
   const adoptedSource =
-    fireThursdaySundayMedian && fridaySaturdayMedian
+    sundaySideMedian && fridaySaturdayMedian
       ? "both"
-      : fireThursdaySundayMedian
-        ? "火木日"
+      : sundaySideMedian
+        ? useSundayWeekday ? "日" : "火木日"
         : fridaySaturdayMedian
           ? "金土"
           : "none";
   const validReferences = [
-    fireThursdaySundayMedian
-      ? { reference: fireThursdaySundayReference, median: fireThursdaySundayMedian }
+    sundaySideMedian
+      ? { reference: sundaySideReference, median: sundaySideMedian }
       : null,
     fridaySaturdayMedian
       ? { reference: fridaySaturdayReference, median: fridaySaturdayMedian }
@@ -1561,8 +1653,8 @@ function getThreeDayHolidayMiddleReference(params: {
   ].filter((item): item is { reference: ReferenceRecords; median: ReferenceMedian } => item !== null);
 
   const insufficientReference =
-    fireThursdaySundayReference.fallbackSampleSize >= fridaySaturdayReference.fallbackSampleSize
-      ? fireThursdaySundayReference
+    sundaySideReference.fallbackSampleSize >= fridaySaturdayReference.fallbackSampleSize
+      ? sundaySideReference
       : fridaySaturdayReference;
   const matchedRecords = validReferences.length > 0
     ? validReferences
@@ -1604,7 +1696,9 @@ function getThreeDayHolidayMiddleReference(params: {
       comparisonMode: "three_day_holiday_middle",
       weekdaySampleSize: 0,
       fallbackSampleSize: Math.max(
-        fireThursdaySundayReference.fallbackSampleSize,
+        useSundayWeekday
+          ? sundayWeekdayReference.weekdaySampleSize
+          : fireThursdaySundayReference.fallbackSampleSize,
         fridaySaturdayReference.fallbackSampleSize,
       ),
       forceFallbackWeekdayGroup: true,
@@ -1612,13 +1706,91 @@ function getThreeDayHolidayMiddleReference(params: {
       threeDayHolidayMiddleReference: {
         fireThursdaySundaySampleSize: fireThursdaySundayReference.fallbackSampleSize,
         fridaySaturdaySampleSize: fridaySaturdayReference.fallbackSampleSize,
-        fireThursdaySundayMedianCount: fireThursdaySundayMedian?.adoptedMedianCount,
+        fireThursdaySundayMedianCount: useSundayWeekday
+          ? undefined
+          : sundaySideMedian?.adoptedMedianCount,
         fridaySaturdayMedianCount: fridaySaturdayMedian?.adoptedMedianCount,
         adoptedSource,
+        sundayReference: {
+          source: useSundayWeekday ? "weekday" : "fallback_group",
+          adopted: sundaySideMedian !== undefined,
+          weekdaySampleSize: sundayWeekdayReference.weekdaySampleSize,
+          sampleSize: useSundayWeekday
+            ? sundayWeekdayReference.weekdaySampleSize
+            : fireThursdaySundayReference.fallbackSampleSize,
+          shortSampleSize: sundaySideReference.matchedRecords.length,
+          longSampleSize: sundaySideReference.longMatchedRecords.length,
+          medianCount: sundaySideMedian?.adoptedMedianCount,
+          shortMedianCount: sundaySideMedian?.shortMedianCount,
+          longMedianCount: sundaySideMedian?.longMedianCount,
+          medianDownGuardApplied: sundaySideMedian?.medianDownGuardApplied,
+          ...(useSundayWeekday
+            ? {}
+            : { fallbackReason: "insufficient_sunday_history" as const }),
+        },
       },
     },
     referenceMedian,
   };
+}
+
+/** Format captured evidence only; this never calculates fresh history. */
+export function getThreeDayHolidayMiddleReferenceDetailLines(
+  reference: NonNullable<AreaCountRecommendation["threeDayHolidayMiddleReference"]>,
+  requiredSampleSize: number,
+): string[] {
+  const sunday = reference.sundayReference;
+  const usesSundayWeekday = sunday?.source === "weekday";
+  const sundaySideLabel = usesSundayWeekday ? "通常の日曜" : "火木日";
+  const sundaySideMedian = usesSundayWeekday
+    ? sunday?.medianCount
+    : reference.fireThursdaySundayMedianCount;
+  const medianCount = reference.adoptedSource === "both"
+    ? sundaySideMedian !== undefined && reference.fridaySaturdayMedianCount !== undefined
+      ? (sundaySideMedian + reference.fridaySaturdayMedianCount) / 2
+      : undefined
+    : reference.adoptedSource === "金土"
+      ? reference.fridaySaturdayMedianCount
+      : reference.adoptedSource === "日" || reference.adoptedSource === "火木日"
+        ? sundaySideMedian
+        : undefined;
+  const showMedian = (value: number | undefined, sampleSize: number) =>
+    value !== undefined
+      ? `（採用基準 ${value}個）`
+      : sampleSize < requiredSampleSize
+        ? "（基準不足）"
+        : "（採用基準の数値未保存）";
+  const formatMedian = (value: number | undefined) => value === undefined
+    ? "数値未保存"
+    : `${value}個`;
+  const lines = sunday
+    ? [
+        `通常の日曜の記録：${sunday.weekdaySampleSize}/${requiredSampleSize}件${usesSundayWeekday ? showMedian(sunday.medianCount, sunday.sampleSize) : ""}`,
+        ...(!usesSundayWeekday
+          ? [
+              "通常の日曜の記録が足りないため、火木日へフォールバックします。",
+              `火木日の記録：${reference.fireThursdaySundaySampleSize}/${requiredSampleSize}件${showMedian(reference.fireThursdaySundayMedianCount, reference.fireThursdaySundaySampleSize)}`,
+            ]
+          : [
+              `日曜の短期中央値：${formatMedian(sunday.shortMedianCount)}（直近${sunday.shortSampleSize}件）`,
+              `日曜の長期中央値：${formatMedian(sunday.longMedianCount)}（最大${sunday.longSampleSize}件）`,
+              ...(sunday.medianDownGuardApplied
+                ? [sunday.medianCount === undefined
+                    ? "日曜の基準を下げすぎないようにした記録があります（採用基準の数値未保存）。"
+                    : `日曜の短期が長期より少ないため、基準を下げすぎないように${sunday.medianCount}個を採用。`]
+                : []),
+            ]),
+      ]
+    : [`火木日の記録：${reference.fireThursdaySundaySampleSize}/${requiredSampleSize}件${showMedian(reference.fireThursdaySundayMedianCount, reference.fireThursdaySundaySampleSize)}`];
+  lines.push(`金土の記録：${reference.fridaySaturdaySampleSize}/${requiredSampleSize}件${showMedian(reference.fridaySaturdayMedianCount, reference.fridaySaturdaySampleSize)}`);
+  lines.push(reference.adoptedSource === "none"
+    ? "三連休中日は、日曜側と金土を別々に集計し、有効な基準ができるまで従来の履歴不足扱いにします。"
+    : reference.adoptedSource === "both"
+      ? medianCount === undefined
+        ? `${sundaySideLabel}と金土を50対50で合成します（合成基準の数値未保存）。`
+        : `${sundaySideLabel}と金土を50対50で合成し、採用基準を${medianCount}個とします。`
+      : `${reference.adoptedSource === "日" ? "通常の日曜" : reference.adoptedSource}だけに有効な基準があるため${medianCount === undefined ? "、その基準を採用します（数値未保存）" : `、${medianCount}個を採用します`}。`);
+  return lines;
 }
 
 function getDecreaseRecommendation(params: {
@@ -1861,9 +2033,7 @@ export function getAreaCountRecommendation(params: {
       detailLines: comparisonMode === "three_day_holiday_middle" && middleReference
         ? [
             `今日の曜日：${actualWeekday}`,
-            `火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件`,
-            `金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件`,
-            "三連休中日は、火木日と金土を別々に集計し、有効な基準ができるまで従来の履歴不足扱いにします。",
+            ...getThreeDayHolidayMiddleReferenceDetailLines(middleReference, requiredSampleSize),
             `今回の${count}個も、判定後に履歴へ保存されます。`,
           ]
         : [
@@ -1904,18 +2074,14 @@ export function getAreaCountRecommendation(params: {
   const comparisonConditionLine = comparisonMode === "weekday"
     ? `比較条件：同じ曜日（${actualWeekday}）`
     : comparisonMode === "three_day_holiday_middle"
-      ? "比較条件：通常の日曜夜（火木日）と金曜・土曜夜（金土）の中間"
+      ? middleReference?.adoptedSource === "both"
+        ? `比較条件：${middleReference.sundayReference?.source === "weekday" ? "通常の日曜" : "火木日"}と金曜・土曜の中間`
+        : `比較条件：${middleReference?.adoptedSource === "日" ? "通常の日曜" : middleReference?.adoptedSource === "金土" ? "金曜・土曜" : "火木日"}（有効な基準のみ採用）`
       : comparisonMode === "holiday_before_normal_weekday"
         ? `比較条件：日曜日と同じ基準（${comparisonWeekdayGroup}）`
         : `比較条件：暫定グループ（${comparisonWeekdayGroup}）`;
   const referenceSelectionLines = comparisonMode === "three_day_holiday_middle" && middleReference
-    ? [
-        `火木日の記録：${middleReference.fireThursdaySundaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fireThursdaySundayMedianCount ?? "なし"}個）`,
-        `金土の記録：${middleReference.fridaySaturdaySampleSize}/${requiredSampleSize}件（採用基準 ${middleReference.fridaySaturdayMedianCount ?? "なし"}個）`,
-        middleReference.adoptedSource === "both"
-          ? `両グループを50対50で合成し、採用基準を${medianCount}個とします。`
-          : `${middleReference.adoptedSource}だけに有効な基準があるため、${medianCount}個を採用します。`,
-      ]
+    ? getThreeDayHolidayMiddleReferenceDetailLines(middleReference, requiredSampleSize)
     : [
         `同じ曜日の記録：${reference.weekdaySampleSize}/${requiredSampleSize}件`,
         useHolidayBeforeNormalWeekdayReference

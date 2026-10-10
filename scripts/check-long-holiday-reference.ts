@@ -291,7 +291,7 @@ test("金土履歴不足を同曜日履歴で補わず、夏の金土履歴は�
   assert.ok(shared.matchedRecords.every((record) => record.demandCycle === "summer"));
 });
 
-test("三連休は従来の中間referenceを優先し、前後日にも長期ルールを広げない", () => {
+test("三連休は通常日曜優先の中間referenceを使い、前後日にも長期ルールを広げない", () => {
   for (const date of ["2026-07-17", "2026-07-18", "2026-07-19", "2026-07-20", "2026-07-21"]) {
     assert.equal(isLongHolidayMiddle(date), false, date);
   }
@@ -301,7 +301,12 @@ test("三連休は従来の中間referenceを優先し、前後日にも長期�
     const result = recommendation("2026-07-19", history(2026, discountTime), discountTime);
     assert.equal(result.comparisonMode, "three_day_holiday_middle");
     assert.equal(result.threeDayHolidayMiddleReference?.adoptedSource, "both");
-    assert.equal(result.medianCount, 55);
+    assert.equal(result.threeDayHolidayMiddleReference?.sundayReference?.source, "weekday");
+    assert.equal(result.threeDayHolidayMiddleReference?.sundayReference?.weekdaySampleSize, 3);
+    assert.equal(result.threeDayHolidayMiddleReference?.sundayReference?.medianCount, 30);
+    assert.equal(result.threeDayHolidayMiddleReference?.fireThursdaySundayMedianCount, undefined);
+    assert.equal(result.threeDayHolidayMiddleReference?.fridaySaturdayMedianCount, 20);
+    assert.equal(result.medianCount, 25);
   }
   assert.equal(getIndividualAmountReferenceContext(paramsFor("2026-07-19", "15")).kind, "actual_weekday");
 });
