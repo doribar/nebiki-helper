@@ -244,8 +244,9 @@ await test("7. hook keeps fixed-time production writes structurally gated", () =
   assert.match(judgeBlock, /!isTestMode\s*&&[\s\S]*persistAreaCountRecordSafely/);
   const reviewSaveBlock = hook.slice(
     hook.indexOf("function saveReview19("),
-    hook.indexOf("function start19DiscountAfterReview"),
+    hook.indexOf("function openNextSessionInput"),
   );
+  assert.ok(reviewSaveBlock.startsWith("function saveReview19("), "read-only guard inspects the actual Review19 save body");
   assert.match(reviewSaveBlock, /if \(!isTestMode\)/);
   const syncBlock = hook.slice(
     hook.indexOf("async function syncLocalDataToSupabase"),

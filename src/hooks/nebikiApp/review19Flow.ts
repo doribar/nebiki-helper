@@ -33,6 +33,7 @@ export function getAutomaticReview19TransitionKey(params: {
   now: Date;
   records?: Review19Result[];
   isTestMode?: boolean;
+  /** 旧呼出互換。入力draftへの遷移だけでは、実施済み夜sessionの証拠にしない。 */
   hasTransitionedTo1830?: boolean;
   snapshots?: readonly DailySessionSnapshot[];
 }): string | null {
@@ -40,7 +41,6 @@ export function getAutomaticReview19TransitionKey(params: {
   const currentDate = formatLocalDate(now);
   if (
     params.isTestMode ||
-    params.hasTransitionedTo1830 ||
     hasStarted1830Session(params) ||
     state.screen === "start" ||
     state.screen === "review19_weather" ||

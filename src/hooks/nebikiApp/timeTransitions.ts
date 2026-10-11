@@ -23,8 +23,9 @@ export function getWeekdayText(weekday: number): string {
 export function getNextSkipTargetDiscountTime(
   discountTime: DiscountTime
 ): "18" | "19" | null {
-  if (discountTime === "17") return "18";
-  if (discountTime === "18") return "19";
+  // 夜値引の新規開始を撤去したため、通常操作から次枠skipを予約しない。
+  // 保存済みskipの読込・表示・互換map生成は別の既存関数で維持する。
+  void discountTime;
   return null;
 }
 

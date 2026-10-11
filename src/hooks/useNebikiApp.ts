@@ -1,6 +1,9 @@
 import { getEveningComfortReliefContext } from "../domain/eveningComfortRelief.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { retireManualDiscountTimeOverride } from "./nebikiApp/operationalTime.ts";
+import {
+  retireManualDiscountTimeOverride,
+  getOperationalEarlyNextMinus5TargetDiscountTime,
+} from "./nebikiApp/operationalTime.ts";
 import { retireManualWeekdayDraft, retireManualWeekdayOverride } from "./nebikiApp/operationalWeekday.ts";
 import { getCalendarWeekday } from "../domain/japaneseHoliday.ts";
 import { getAdvanceDiscountRate } from "../domain/advanceDiscount.ts";
@@ -59,13 +62,14 @@ import {
 import {
   appendSkipRecordsInMemory,
   consumeSkipRecordsInMemory,
-  loadPersistedNebikiStateForDate,
+  loadPersistedNebikiState,
+  sanitizePersistedNebikiStateForDate,
   normalizeDailyMessageState,
   savePersistedNebikiStateWithAuxiliaryRecovery,
   saveWorkSessionCheckpointSafely,
   saveRuntimeStateSafely,
   attemptStorageOperation,
-  attemptStorageOperationWithAuxiliaryRecovery,
+  attemptStorageOperationWithAuxiliaryRecovery as attemptStorageOperationWithAuxiliaryRecoveryCore,
   removeStorageKeySafely,
   releaseAuxiliaryStorageForReview19,
   reportStorageOperationFailures,
@@ -182,8 +186,6 @@ import {
 } from "../domain/review19RemoteStorage.ts";
 import {
   getEarlyNextMinus5NoticeText,
-  getEarlyNextMinus5TargetDiscountTime,
-  shouldReserveEarlyNextMinus5OnAutoTransition,
 } from "../domain/earlyNextMinus5.ts";
 import {
   matchesWeatherConfirmationDraft,
@@ -326,7 +328,16 @@ import {
   listArchivedReview19ByBusinessIdentity,
   replaceArchivedFinalizedDay,
   saveReview19ToHistoricalArchive,
+  getHistoricalArchiveRepository,
+  refreshHistoricalArchiveRuntime,
 } from "../domain/historicalArchiveRuntime.ts";
+import {
+  collectRetiredNightOperations,
+  isRetiredNightDiscountOperation,
+  retireNightOperationalState,
+  buildRetiredNightSnapshot,
+  buildRetiredNightDoneSummaryItems as buildStoredRateSummaryItems,
+} from "./nebikiApp/retiredNightOperation.ts";
 import { collectNebikiStorageUsageDiagnostic } from "../domain/storageDiagnostics.ts";
 
 export { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
@@ -360,6 +371,14 @@ function retireOperationalOverrides(
   state: AppState,
   params: { now: Date; fixedTime?: boolean },
 ): AppState {
+  state = retireNightOperationalState(state, buildStartDefaultDraft(state.sessionDraft));
+  if (state.screen === "start" && !state.session &&
+      (state.sessionDraft.discountTime !== "15" && state.sessionDraft.discountTime !== "17" ||
+       state.sessionDraft.weatherInputLockedDiscountTime === "18" ||
+       state.sessionDraft.weatherInputLockedDiscountTime === "19" ||
+       state.sessionDraft.weatherInputLockedDiscountTime === "20")) {
+    state = { ...state, sessionDraft: buildStartDefaultDraft(state.sessionDraft) };
+  }
   const restored = retireManualWeekdayOverride(retireManualDiscountTimeOverride(state, params), params);
   if (!params.fixedTime && restored.sessionDraft.date !== state.sessionDraft.date) {
     return { ...restored, sessionDraft: { ...restored.sessionDraft, weather: {
@@ -373,11 +392,17 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   setRuntimeNowOverride(params?.testNow ?? null);
   const isTestMode = params?.testNow instanceof Date;
   const testNowMs = params?.testNow?.getTime() ?? null;
-  const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiStateForDate> | null>(null);
+  const initialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
+  const rawInitialPersistenceRef = useRef<ReturnType<typeof loadPersistedNebikiState> | null>(null);
+  const retiredNightOperationsRef = useRef<ReturnType<typeof collectRetiredNightOperations>>([]);
+  const retiredNightRecoveryPendingRef = useRef(false);
+  const retiredNightRecoveryInFlightRef = useRef(false);
+  const retiredNightRecoveryAlertedRef = useRef(false);
+  const [retiredNightRecoveryVersion, setRetiredNightRecoveryVersion] = useState(0);
   const startupHousekeepingCompletedRef = useRef(false);
   if (!initialPersistenceRef.current) {
     const initialDate = formatLocalDate(getRuntimeNow());
-    initialPersistenceRef.current = isTestMode
+    rawInitialPersistenceRef.current = isTestMode
       ? {
           currentSession: null,
           workSessionCheckpoint: null,
@@ -387,10 +412,36 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
           lastUsedSessionDraft: null,
           dailyMessageState: normalizeDailyMessageState(null),
         }
-      : loadPersistedNebikiStateForDate(initialDate);
+      : loadPersistedNebikiState();
+    retiredNightOperationsRef.current = isTestMode ? [] : collectRetiredNightOperations({
+      ...rawInitialPersistenceRef.current,
+      review19SourceState: loadReview19SourceState(),
+    });
+    retiredNightRecoveryPendingRef.current = retiredNightOperationsRef.current.length > 0;
+    initialPersistenceRef.current = sanitizePersistedNebikiStateForDate(rawInitialPersistenceRef.current, initialDate);
+    if (retiredNightRecoveryPendingRef.current && initialPersistenceRef.current.runtimeState) {
+      const runtime = initialPersistenceRef.current.runtimeState;
+      initialPersistenceRef.current = { ...initialPersistenceRef.current,
+        runtimeState: isRetiredNightDiscountOperation(initialPersistenceRef.current.currentSession) ? null : {
+          ...runtime,
+          undoSnapshot: isRetiredNightDiscountOperation(runtime.undoSnapshot?.state) ? null : runtime.undoSnapshot,
+          screenHistory: runtime.screenHistory.filter((entry) => !isRetiredNightDiscountOperation(entry.state)),
+        },
+      };
+    }
+    if (!isTestMode && !retiredNightRecoveryPendingRef.current) {
+      const raw = rawInitialPersistenceRef.current;
+      const clean = initialPersistenceRef.current;
+      const removals = [
+        ...(raw.currentSession && !clean.currentSession ? [removeStorageKeySafely(STORAGE_KEYS.currentSession)] : []),
+        ...(raw.workSessionCheckpoint && !clean.workSessionCheckpoint ? [removeStorageKeySafely(STORAGE_KEYS.workSessionCheckpoint)] : []),
+        ...(raw.runtimeState && !clean.runtimeState ? [removeStorageKeySafely(STORAGE_KEYS.runtimeState)] : []),
+      ];
+      reportStorageOperationFailures("stale-session-cleanup", removals);
+    }
   }
 
-  if (!isTestMode && !startupHousekeepingCompletedRef.current) {
+  if (!isTestMode && !retiredNightRecoveryPendingRef.current && !startupHousekeepingCompletedRef.current) {
     // Load current/checkpoint into memory first so an unfinished 12/12
     // Review19 remains recoverable, then release only proven duplicate/sealed
     // storage before any startup effect attempts another write.
@@ -530,6 +581,18 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       initialGlobalDiscountAdjustmentState,
     );
 
+  const attemptStorageOperationWithAuxiliaryRecovery = useCallback((
+    params: Parameters<typeof attemptStorageOperationWithAuxiliaryRecoveryCore>[0],
+  ): ReturnType<typeof attemptStorageOperationWithAuxiliaryRecoveryCore> => {
+    // Pending retirement evidence can be unique to checkpoint/runtime. Until
+    // archive read-back succeeds, quota recovery must not remove either key.
+    if (!retiredNightRecoveryPendingRef.current) {
+      return attemptStorageOperationWithAuxiliaryRecoveryCore(params);
+    }
+    const attempt = attemptStorageOperation(params);
+    return { ok: attempt.ok, retried: false, attempts: [attempt], finalResult: attempt };
+  }, []);
+
   const persistDemandCycleStateSafely = useCallback((
     nextState: DemandCycleState,
     context: string,
@@ -557,7 +620,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
         });
     reportStorageOperationFailures(context, result.attempts);
     return result.ok;
-  }, [isTestMode]);
+  }, [isTestMode, attemptStorageOperationWithAuxiliaryRecovery]);
 
   const persistGlobalDiscountAdjustmentStateSafely = useCallback((
     nextState: GlobalDiscountAdjustmentState,
@@ -589,6 +652,10 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   function persistAreaCountRecordSafely(
     record: AreaCountRecord,
   ): AreaCountRecord[] | null {
+    if (retiredNightRecoveryPendingRef.current) {
+      void preserveRetiredNightOperations();
+      return null;
+    }
     const result = persistAreaCountRecordLocalFirstSafely(record);
     if (!result.localSaved) {
       window.alert(
@@ -694,6 +761,12 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }, [isTestMode]);
 
   function persistDailySessionSnapshot(...args: Parameters<typeof upsertDailySessionSnapshotSafely>) {
+    if (retiredNightRecoveryPendingRef.current) {
+      const failure = attemptStorageOperation({ key: STORAGE_KEYS.dailySessionSnapshots,
+        operation: "set", run: () => { throw new Error("RetiredNightPreservationPending"); } });
+      return { ok: false, quotaExceeded: false, retried: false, prunedCount: 0,
+        retainedCount: 0, retainedApproxBytes: 0, failure, attempts: [failure] };
+    }
     const before = readRawDailySessionSnapshotJournal();
     const result = upsertDailySessionSnapshotSafely(...args);
     const after = readRawDailySessionSnapshotJournal();
@@ -702,6 +775,76 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     if (result.ok && before !== after) setHistoryReadVersion((version) => version + 1);
     return result;
   }
+  const preserveRetiredNightOperations = useCallback(async (): Promise<void> => {
+    if (isTestMode || !retiredNightRecoveryPendingRef.current || retiredNightRecoveryInFlightRef.current) return;
+    retiredNightRecoveryInFlightRef.current = true;
+    try {
+      const archive = getHistoricalArchiveRepository();
+      if (!archive) throw new Error("ArchiveUnavailable");
+      const snapshots = getHistoricalDailySessionSnapshots();
+      for (const operation of retiredNightOperationsRef.current) {
+        const source = operation.state;
+        const session = source.session!;
+        const capturedAt = getRuntimeNow().toISOString();
+        const existing = snapshots.find((entry) => JSON.stringify([
+          entry.session.date, entry.session.discountTime, entry.session.startedAt,
+        ]) === operation.identity);
+        let fallback = null;
+        if (!existing) {
+          const weather = resolveSessionTemperatureComfort({ date: session.date,
+            discountTime: session.discountTime, weather: session.weather,
+            snapshots: [], lastSessionWeather: null,
+            existingAnalysis: session.temperatureComfortAnalysis }).resolvedWeather;
+          fallback = createDailySessionSnapshot({ capturedAt, state: source, resolvedWeather: weather,
+            weekdayBaseInfo: getWeekdayBaseInfo(session.weekday, session.discountTime, weather,
+              session.date, session.demandCycle),
+            basisGuide: getBasisGuideDisplay({ date: session.date, weekday: session.weekday,
+              discountTime: session.discountTime, demandCycle: session.demandCycle, weather,
+              applyObonRule: supportsObonCalendarRule(session.appVersion) }),
+            lateTimeBonus: 0, doneSummaryItems: buildStoredRateSummaryItems(source) });
+          if (fallback) {
+            // A missing historical basis is never presented as an adopted recalculation.
+            delete fallback.basisCapturedAt;
+            fallback.basis = { baseRateBonus: 0, lateTimeBonus: 0, totalRateBonus: 0,
+              baseRateBonusReason: ["旧状態に基準内訳が未保存。採用率は各エリアの確定記録と原本証拠を参照。"] };
+          }
+        }
+        const snapshot = buildRetiredNightSnapshot({ operation, capturedAt,
+          existingSnapshot: existing, fallbackSnapshot: fallback });
+        if (!snapshot) throw new Error("RetiredSnapshotUnavailable");
+        const written = await archive.upsertDailySessionSnapshots([snapshot]);
+        if (!written.ok) throw new Error(written.errorName);
+        const verified = await archive.listDailySessionSnapshots();
+        if (!verified.ok) throw new Error(verified.errorName);
+        const record = verified.value.find((entry) => JSON.stringify([
+          entry.session.date, entry.session.discountTime, entry.session.startedAt,
+        ]) === operation.identity);
+        if (!operation.evidence.every((evidence) => record?.retiredOperation?.evidence.some(
+          (stored) => JSON.stringify(stored) === JSON.stringify(evidence),
+        ))) throw new Error("RetiredEvidenceVerificationFailed");
+      }
+      await refreshHistoricalArchiveRuntime();
+      // Only after original evidence has been read back may old recovery keys be retired.
+      reportStorageOperationFailures("retired-night-recovery-cleanup", [
+        ...(isRetiredNightDiscountOperation(rawInitialPersistenceRef.current?.workSessionCheckpoint)
+          ? [removeStorageKeySafely(STORAGE_KEYS.workSessionCheckpoint)] : []),
+      ]);
+      retiredNightRecoveryPendingRef.current = false;
+      retiredNightOperationsRef.current = [];
+      setRetiredNightRecoveryVersion((version) => version + 1);
+      setHistoryReadVersion((version) => version + 1);
+    } catch {
+      if (!retiredNightRecoveryAlertedRef.current) {
+        retiredNightRecoveryAlertedRef.current = true;
+        window.alert("旧夜枠の記録を退避できませんでした。元のデータは保持しています。空き容量を確認して再読み込みするか、開始操作をもう一度お試しください。");
+      }
+    } finally {
+      retiredNightRecoveryInFlightRef.current = false;
+    }
+  }, [isTestMode]);
+  useEffect(() => {
+    void preserveRetiredNightOperations();
+  }, [preserveRetiredNightOperations]);
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [lastBackfillResult, setLastBackfillResult] =
     useState<SupabaseBackfillResult | null>(null);
@@ -728,6 +871,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }
 
   function clearAuxiliarySessionStorageSafely(context: string): void {
+    if (retiredNightRecoveryPendingRef.current) return;
     reportStorageOperationFailures(context, [
       removeStorageKeySafely(STORAGE_KEYS.workSessionCheckpoint),
       removeStorageKeySafely(STORAGE_KEYS.runtimeState),
@@ -735,7 +879,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }
 
   const retryPendingCloudSync = useCallback(async () => {
-    if (isTestMode) {
+    if (isTestMode || retiredNightRecoveryPendingRef.current) {
       return { attempted: 0, succeeded: 0, failed: 0, retained: 0 };
     }
     setCloudSyncing(true);
@@ -1003,6 +1147,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     initialLoadedState?.session?.date,
     initialLoadedState?.review19?.date,
     replaceArchivedReview19Records,
+    attemptStorageOperationWithAuxiliaryRecovery,
   ]);
 
   useEffect(() => {
@@ -1024,7 +1169,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   useEffect(() => {
     // 動作確認モードでは入力結果を端末内のlocalStorageへ残さない。
     // 残数入力の確認で、本番用のセッション状態を汚さないため。
-    if (isTestMode) return;
+    if (isTestMode || retiredNightRecoveryPendingRef.current) return;
 
     const snapshot = clonePersistedNebikiStateSnapshot({
         currentSession: state,
@@ -1053,10 +1198,11 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     dailyMessageState,
     persistedAppState,
     serializedAppState,
+    retiredNightRecoveryVersion,
   ]);
 
   useEffect(() => {
-    if (isTestMode || !state.review19) return;
+    if (isTestMode || retiredNightRecoveryPendingRef.current || !state.review19) return;
     if (
       state.screen !== "review19_weather" &&
       state.screen !== "review19" &&
@@ -1081,7 +1227,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
       setCloudSyncVersion((version) => version + 1);
       void retryPendingCloudSync();
     }
-  }, [isTestMode, retryPendingCloudSync, state.review19, state.screen]);
+  }, [isTestMode, retryPendingCloudSync, state.review19, state.screen, retiredNightRecoveryVersion]);
 
 
   useEffect(() => {
@@ -1106,7 +1252,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
 
   useEffect(() => {
     // 動作確認モードでは画面遷移状態もlocalStorageへ保存しない。
-    if (isTestMode) return;
+    if (isTestMode || retiredNightRecoveryPendingRef.current) return;
 
     const runtimeResult = saveRuntimeStateSafely({
         areaJudgeSelection,
@@ -1129,6 +1275,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     nextSessionSkipRecords,
     lastSessionWeather,
     weatherConfirmationPending,
+    retiredNightRecoveryVersion,
   ]);
 
   useEffect(() => {
@@ -1487,7 +1634,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     if (!state.session || state.screen === "review19_weather" ||
       state.screen === "review19" || state.screen === "review19_done") return null;
 
-    const targetDiscountTime = getEarlyNextMinus5TargetDiscountTime({
+    const targetDiscountTime = getOperationalEarlyNextMinus5TargetDiscountTime({
       discountTime: state.session.discountTime,
       manualDiscountTimeOverride: state.session.manualDiscountTimeOverride,
       nowMs,
@@ -1585,9 +1732,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     return minutes >= 16 * 60 ? 5 : 0;
   }
 
-  // 17時session継続中の18:00以降は、+5%ではなく18時30分値引率-5%で表示する。
+  // 17時の計算基準を維持し、18:00以降は15時の遅延補正と同じく+5%。
   if (state.session.discountTime === "17") {
-    return 0;
+    return minutes >= 18 * 60 ? 5 : 0;
   }
 
   // 18時30分基準の19:00〜19:24は、+5%ではなく19時30分値引率-5%で表示する。
@@ -1634,6 +1781,9 @@ const lateSkipNotice = useMemo(() => {
 
   if (state.session.discountTime === "15") {
     return "16時を過ぎたため、今回は5%強めて値引します。";
+  }
+  if (state.session.discountTime === "17") {
+    return "18時を過ぎたため、今回は5%強めて値引します。";
   }
 
   if (state.session.discountTime === "19") {
@@ -1888,7 +2038,7 @@ const lateSkipNotice = useMemo(() => {
   ]);
 
   useEffect(() => {
-    if (isTestMode) return;
+    if (isTestMode || retiredNightRecoveryPendingRef.current) return;
     if (!state.session) return;
     // 20:30は全エリア入力完了時に正式日次データを一度だけ確定する。
     // done描画時の再構築で確定済みsnapshotを劣化させない。
@@ -1925,6 +2075,7 @@ const lateSkipNotice = useMemo(() => {
     basisGuide,
     lateTimeBonus,
     capturedDoneSummaryItems,
+    retiredNightRecoveryVersion,
   ]);
 
   const review19Items = useMemo(() => {
@@ -2025,7 +2176,12 @@ const lateSkipNotice = useMemo(() => {
       ? [{ areaId, areaName: getAreaName(areaId), count }]
       : [];
   });
-  const canStartReview19Manually = !hasStarted1830Session({
+  const canStartReview19Manually = !retiredNightRecoveryPendingRef.current &&
+    new Date(nowMs).getHours() * 60 + new Date(nowMs).getMinutes() >= 18 * 60 + 55 &&
+    Boolean(selectReview19SourceState({
+    currentState: state, savedSourceState: isTestMode ? null : loadReview19SourceState(),
+    currentDate: formatLocalDate(new Date(nowMs)),
+  })?.session) && !hasStarted1830Session({
     state,
     now: new Date(nowMs),
     snapshots: isTestMode ? [] : savedDailySessionSnapshots,
@@ -2275,19 +2431,13 @@ const lateSkipNotice = useMemo(() => {
     ) {
       return;
     }
-    if (!doneNextSessionInfo?.canStart) return;
-
-    // 17時は18:55まで待機してReview19へ。18:30値引は明示操作だけで開始する。
-    // 開始画面の入力中・Review19中は既存どおり割り込まない。
-    startNextDoneSession({ autoTransition: true });
-  }, [
-    state.screen,
-    state.session?.discountTime,
-    state.session?.startedAt,
-    doneNextSessionInfo?.canStart,
-    doneNextSessionInfo?.targetDiscountTime,
-    nowMs,
-  ]);
+    // Review19は次の値引枠の有無と独立して開始する。
+    if (state.session.discountTime === "17") {
+      startAutomaticReview19();
+    } else if (doneNextSessionInfo?.canStart) {
+      startNextDoneSession({ autoTransition: true });
+    }
+  });
 
   const pendingBanner = useMemo<PendingBannerInfo | null>(() => {
     if (state.currentFlow !== "pending" || !state.currentAreaId) return null;
@@ -2791,6 +2941,10 @@ const lateSkipNotice = useMemo(() => {
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
     const prev = state;
+    if (retiredNightRecoveryPendingRef.current) {
+      void preserveRetiredNightOperations();
+      return;
+    }
 
     // 開始時は、クリック時点の現在時刻で再解決せず、画面に表示されている値引時刻をそのまま使う。
     // そうしないと、天候入力中や開始ボタン押下直前に時刻境界を跨いだとき、
@@ -2803,6 +2957,7 @@ const lateSkipNotice = useMemo(() => {
         ? prev.sessionDraft.weatherInputLockedDiscountTime
         : prev.sessionDraft.discountTime;
 
+    if (resolvedDiscountTime !== "15" && resolvedDiscountTime !== "17") return;
     const canResumeCurrentSession = prev.session?.date === currentDate;
     const nextSessionBase: SessionData = {
       ...prev.sessionDraft,
@@ -2999,37 +3154,6 @@ const lateSkipNotice = useMemo(() => {
     ) {
       // 先行作業は画面だけで保持する。残数・判定・完了実績は作らない。
       nextState = { ...nextState, screen: "advance_discount" };
-    }
-
-    if (!isTestMode && nextState.session?.discountTime === "18" && !isResumingSameDiscountSession) {
-      // 実際に開始した18:30sessionを既存journalへ保存する。未入力の測定値や完了実績は作らない。
-      const nightSession = nextState.session;
-      const nightSnapshot = createDailySessionSnapshot({
-        capturedAt: startedAt,
-        state: nextState,
-        resolvedWeather: temperatureComfort.resolvedWeather,
-        weekdayBaseInfo: getWeekdayBaseInfo(
-          nightSession.weekday, "18", temperatureComfort.resolvedWeather, nightSession.date,
-          nightSession.demandCycle,
-        ),
-        basisGuide: getBasisGuideDisplay({
-          date: nightSession.date,
-          weekday: nightSession.weekday,
-          discountTime: "18",
-          demandCycle: nightSession.demandCycle,
-          weather: temperatureComfort.resolvedWeather,
-          applyObonRule: supportsObonCalendarRule(nightSession.appVersion),
-        }),
-        lateTimeBonus: 0,
-        doneSummaryItems: [],
-      });
-      if (!nightSnapshot) return;
-      const saved = persistDailySessionSnapshot(nightSnapshot, { protectedDate: nightSession.date });
-      reportStorageOperationFailures("night-discount-session-start", saved.attempts);
-      if (!saved.ok) {
-        window.alert("18:30値引の開始記録を保存できませんでした。空き容量を確認して、もう一度操作してください。");
-        return;
-      }
     }
 
     setState(nextState);
@@ -3933,6 +4057,7 @@ const lateSkipNotice = useMemo(() => {
 
     let skipRecordToAdd: NextSessionSkipRecord | null = null;
     if (
+      earlyNextMinus5Info &&
       clickedAreaId &&
       confirmedRateSnapshot &&
       state.session &&
@@ -4278,39 +4403,67 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function startReview19Manually() {
+  function beginReview19FromSource(source: AppState, now: Date, automatic: boolean): void {
+    if (!source.session || retiredNightRecoveryPendingRef.current) return;
+    const key = [source.session.date, source.session.startedAt, "17", "review19"].join("|");
+    if (autoTransitionInFlightKeyRef.current === key) return;
+    autoTransitionInFlightKeyRef.current = key;
+    const capturedAt = now.toISOString();
+    const sourceState = finalizeUnmeasuredAreasForAutoTransition(source, capturedAt);
+    if (!isTestMode) {
+      const session = sourceState.session!;
+      const weather = resolveSessionTemperatureComfort({
+        date: session.date, discountTime: session.discountTime, weather: session.weather,
+        snapshots: getHistoricalDailySessionSnapshotsForDate(session.date),
+        lastSessionWeather, existingAnalysis: session.temperatureComfortAnalysis,
+      }).resolvedWeather;
+      const sourceBasis = getWeekdayBaseInfo(session.weekday, session.discountTime, weather,
+        session.date, session.demandCycle, getEveningComfortReliefContext(session));
+      const sourceGuide = getBasisGuideDisplay({ date: session.date, weekday: session.weekday,
+        discountTime: session.discountTime, demandCycle: session.demandCycle, weather,
+        eveningComfortReliefContext: getEveningComfortReliefContext(session),
+        applyObonRule: supportsObonCalendarRule(session.appVersion) });
+      const snapshot = createDailySessionSnapshot({ capturedAt, state: sourceState,
+        resolvedWeather: weather, weekdayBaseInfo: sourceBasis, basisGuide: sourceGuide,
+        lateTimeBonus: session.discountTime === "17" && !session.manualDiscountTimeOverride && now.getHours() >= 18 ? 5 : 0,
+        doneSummaryItems: buildStoredRateSummaryItems(sourceState),
+        sessionEndReason: "auto_time_transition" });
+      const saved = snapshot ? persistDailySessionSnapshot(snapshot, { protectedDate: session.date }) : null;
+      if (!saved?.ok) {
+        autoTransitionInFlightKeyRef.current = null;
+        if (saved) reportStorageOperationFailures("review19-source-snapshot", saved.attempts);
+        window.alert("17時の記録を保存できませんでした。空き容量を確認して、もう一度操作してください。");
+        return;
+      }
+      if (!persistReview19SourceStateSafely(sourceState, "review19-source-before-review19")) {
+        autoTransitionInFlightKeyRef.current = null;
+        return;
+      }
+    }
+    if (automatic) window.alert("19時チェックの時間になったため、19時チェックに進みます。");
+    setState(buildReview19StartState(state, sourceState, now));
+    setTimeSwitchTarget(null);
+    setAreaJudgeSelection(null);
+    setResumeTargetScreen(null);
     setUndoSnapshot(null);
     setUndoNotice(null);
+  }
 
-    setState((prev) => {
-      if (prev.screen !== "start") return prev;
-      const now = new Date(nowMs);
-      if (
-        hasStarted1830Session({
-          state: prev,
-          now,
-          snapshots: isTestMode ? [] : getHistoricalDailySessionSnapshotsForDate(formatLocalDate(now)),
-        }) ||
-        !canStartReview19FromCurrentState({
-          state: prev,
-          now,
-          records: isTestMode ? [] : archivedReview19RecordsRef.current,
-        })
-      ) {
-        return prev;
-      }
-
-      const currentDate = formatLocalDate(now);
-      const sourceStateForReview = selectReview19SourceState({
-        currentState: prev,
-        savedSourceState: isTestMode ? null : loadReview19SourceState(),
-        currentDate,
-      });
-      const session = sourceStateForReview?.session;
-      if (!session) return prev;
-
-      return buildReview19StartState(prev, sourceStateForReview, now);
+  function startAutomaticReview19(): void {
+    const now = new Date(nowMs);
+    const key = getAutomaticReview19TransitionKey({ state, now,
+      records: archivedReview19RecordsRef.current, isTestMode,
+      snapshots: isTestMode ? [] : getHistoricalDailySessionSnapshotsForDate(formatLocalDate(now)),
     });
+    if (key) beginReview19FromSource(state, now, true);
+  }
+
+  function startReview19Manually(): void {
+    if (state.screen !== "start" || !canStartReview19Manually) return;
+    const now = new Date(nowMs);
+    const source = selectReview19SourceState({ currentState: state,
+      savedSourceState: isTestMode ? null : loadReview19SourceState(), currentDate: formatLocalDate(now) });
+    if (source?.session) beginReview19FromSource(source, now, false);
   }
 
   function startReview19AfterWeather() {
@@ -4678,6 +4831,10 @@ const lateSkipNotice = useMemo(() => {
     },
     latestExcludedAreaId?: AreaId,
   ) {
+    if (retiredNightRecoveryPendingRef.current) {
+      await preserveRetiredNightOperations();
+      if (retiredNightRecoveryPendingRef.current) return;
+    }
     if (review19SaveInFlightRef.current) return;
     const recordedReview = buildRecordedReview19Result(latestAreaCount, latestExcludedAreaId);
     if (!recordedReview?.dataQuality.complete) return;
@@ -4749,79 +4906,6 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function start19DiscountAfterReview() {
-    if (state.screen !== "review19" && state.screen !== "review19_done") return;
-
-    const now = getRuntimeNow();
-    const startedAt = now.toISOString();
-    const draft = retireManualWeekdayDraft(normalizeSessionDraft({
-      ...state.sessionDraft,
-      discountTime: "19",
-      demandCycle: normalizeDemandCycle(
-        state.session?.demandCycle ?? state.review19?.demandCycle,
-      ),
-    }), { fixedTime: isTestMode });
-    const nextSessionBase: SessionData = {
-      ...draft,
-      ...getCurrentDataVersionInfo(),
-      discountTime: "19",
-      weather: {
-        ...draft.weather,
-        hourlyForecasts: cloneHourlyForecasts(draft.weather.hourlyForecasts),
-      },
-      globalDiscountAdjustmentPercent,
-      startedAt,
-    };
-    const nextSessionTemperatureComfort = resolveSessionTemperatureComfort({
-      date: nextSessionBase.date,
-      discountTime: "19",
-      weather: nextSessionBase.weather,
-      snapshots: isTestMode
-        ? []
-        : getHistoricalDailySessionSnapshotsForDate(nextSessionBase.date),
-      lastSessionWeather,
-      previousSession: state.session,
-    }).analysis;
-    const nextSession: SessionData = {
-      ...nextSessionBase,
-      temperatureComfortAnalysis: nextSessionTemperatureComfort,
-    };
-
-    const consumed = consumeSkipRecordsInMemory({
-      currentRecords: nextSessionSkipRecordsRef.current,
-      date: nextSession.date,
-      targetDiscountTime: "19",
-    });
-
-    const normalFlowOrder = [...(state.normalFlowOrder ?? getAreaRouteFromStoredIds(nextSession.date, Object.keys(state.areaProgressMap)))];
-    const areaProgressMap = createAreaProgressMapWithAutoSkippedAreas(
-      consumed.skippedRecords, nextSession.date, normalFlowOrder,
-    );
-    const firstAreaId = getFirstNormalFlowAreaId(areaProgressMap, normalFlowOrder);
-
-    setState({
-      ...state,
-      screen: firstAreaId ? getNormalFlowScreenForArea(areaProgressMap, firstAreaId) : "done",
-      session: nextSession,
-      sessionDraft: draft,
-      areaProgressMap,
-      normalFlowOrder,
-      currentAreaId: firstAreaId,
-      lastReferenceAreaId: firstAreaId,
-      currentFlow: "normal",
-      pendingDeferredAreaIds: [],
-      timeSwitchNotice: null,
-      finalTimeStep: 0,
-      areaCountCorrection: null,
-    });
-
-    replaceNextSessionSkipRecords(consumed.remainingRecords);
-    setResumeTargetScreen(null);
-    setTimeSwitchTarget(null);
-    setUndoSnapshot(null);
-    setUndoNotice(null);
-  }
-
   function openNextSessionInput(
     targetDiscountTime: DiscountTime,
     options?: {
@@ -4830,6 +4914,11 @@ const lateSkipNotice = useMemo(() => {
       lockDiscountTime?: boolean;
     }
   ): boolean {
+    if (retiredNightRecoveryPendingRef.current) {
+      void preserveRetiredNightOperations();
+      return false;
+    }
+    if (targetDiscountTime !== "17") return false;
     weatherConfirmationSubmittingRef.current = false;
     setWeatherConfirmationPending(null);
     const now = getRuntimeNow();
@@ -4903,150 +4992,31 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startNextDoneSession(options?: { autoTransition?: boolean }) {
-    if (!state.session) return;
-
-    const previousDiscountTime = state.session.discountTime;
-    const now = new Date(nowMs);
-    const nextInfo = getNextDoneDiscountInfo(previousDiscountTime, now);
+    if (!state.session || state.session.discountTime !== "15" || retiredNightRecoveryPendingRef.current) return;
+    const nextInfo = getNextDoneDiscountInfo("15", new Date(nowMs));
     if (!nextInfo?.canStart) return;
-    const review19TransitionKey = options?.autoTransition
-      ? getAutomaticReview19TransitionKey({
-          state,
-          now,
-          records: archivedReview19RecordsRef.current,
-          isTestMode,
-          snapshots: isTestMode ? [] : getHistoricalDailySessionSnapshotsForDate(formatLocalDate(now)),
-          hasTransitionedTo1830: timeSwitchTarget === "18",
-        })
-      : null;
-    // 17→18:30の自動遷移は廃止。Review19を開始できない場合は保存・予約・画面遷移を行わない。
-    if (options?.autoTransition && previousDiscountTime === "17" && !review19TransitionKey) return;
-    const autoTransitionKey = options?.autoTransition
-      ? review19TransitionKey ?? [
-          state.session.date,
-          state.session.startedAt,
-          previousDiscountTime,
-          nextInfo.targetDiscountTime,
-        ].join("|")
-      : null;
-    if (autoTransitionKey) {
-      if (autoTransitionInFlightKeyRef.current === autoTransitionKey) return;
-      autoTransitionInFlightKeyRef.current = autoTransitionKey;
-    }
-    const transitionedAt = getRuntimeNow().toISOString();
+    const key = [state.session.date, state.session.startedAt, "15", "17"].join("|");
+    if (autoTransitionInFlightKeyRef.current === key) return;
+    autoTransitionInFlightKeyRef.current = key;
+    const capturedAt = getRuntimeNow().toISOString();
     const sourceState = options?.autoTransition
-      ? finalizeUnmeasuredAreasForAutoTransition(state, transitionedAt)
-      : state;
-
-    if (options?.autoTransition) {
-      const interruptedSnapshot = createDailySessionSnapshot({
-        capturedAt: transitionedAt,
-        state: sourceState,
-        resolvedWeather: sessionSourceResolvedWeather,
-        weekdayBaseInfo,
-        basisGuide,
-        lateTimeBonus,
-        doneSummaryItems: capturedDoneSummaryItems,
-        sessionEndReason: "auto_time_transition",
-      });
-      if (!isTestMode && interruptedSnapshot) {
-        const snapshotWriteResult = persistDailySessionSnapshot(
-          interruptedSnapshot,
-          { protectedDate: interruptedSnapshot.session.date },
-        );
-        reportStorageOperationFailures(
-          "auto-time-transition-snapshot",
-          snapshotWriteResult.attempts,
-        );
-        if (review19TransitionKey && !snapshotWriteResult.ok) {
-          autoTransitionInFlightKeyRef.current = null;
-          window.alert("17時の記録を保存できませんでした。空き容量を確認して、もう一度操作してください。");
-          return;
-        }
-      }
+      ? finalizeUnmeasuredAreasForAutoTransition(state, capturedAt) : state;
+    if (options?.autoTransition && !isTestMode) {
+      const snapshot = createDailySessionSnapshot({ capturedAt, state: sourceState,
+        resolvedWeather: sessionSourceResolvedWeather, weekdayBaseInfo, basisGuide,
+        lateTimeBonus, doneSummaryItems: capturedDoneSummaryItems, sessionEndReason: "auto_time_transition" });
+      const saved = snapshot ? persistDailySessionSnapshot(snapshot, { protectedDate: snapshot.session.date }) : null;
+      // Preserve the existing 15→17 behavior: report an auxiliary journal failure
+      // and retain source state in memory for unfinished-area continuation.
+      if (saved) reportStorageOperationFailures("auto-time-transition-snapshot", saved.attempts);
     }
-
-    if (review19TransitionKey) {
-      if (!persistReview19SourceStateSafely(
-        sourceState,
-        "review19-source-before-auto-review19",
-      )) {
-        autoTransitionInFlightKeyRef.current = null;
-        return;
-      }
-      const reviewState = buildReview19StartState(sourceState, sourceState, now);
-      window.alert("19時チェックの時間になったため、19時チェックに進みます。");
-      setState(reviewState);
-      setTimeSwitchTarget(null);
-      setAreaJudgeSelection(null);
-      setResumeTargetScreen(null);
-      setUndoSnapshot(null);
-      setUndoNotice(null);
-      return;
-    }
-
-    const prioritizeUnfinishedAreas =
-      (options?.autoTransition ?? false) &&
+    const prioritizeUnfinishedAreas = Boolean(options?.autoTransition) &&
       shouldPrioritizeUnfinishedAreasOnAutoTransition(state.screen);
-
-    const currentAreaEarlyNextTarget = state.currentAreaId
-      ? sourceState.areaProgressMap[state.currentAreaId]?.earlyNextMinus5TargetDiscountTime ??
-        earlyNextMinus5Info?.targetDiscountTime ??
-        null
-      : null;
-    const shouldReserveCurrentArea =
-      (options?.autoTransition ?? false) &&
-      shouldReserveEarlyNextMinus5OnAutoTransition({
-        screen: state.screen,
-        currentTargetDiscountTime: currentAreaEarlyNextTarget,
-        nextTargetDiscountTime: nextInfo.targetDiscountTime,
-      });
-
-    if (
-      shouldReserveCurrentArea &&
-      state.currentAreaId &&
-      state.session &&
-      !state.session.manualDiscountTimeOverride
-    ) {
-      const progress = sourceState.areaProgressMap[state.currentAreaId];
-      const rateSnapshot = buildCompletedRateSnapshot({
-        session: state.session,
-        progress,
-        weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
-        rateDisplayOverride: rateDisplay,
-      });
-
-      appendNextSessionSkipRecords([
-        buildNextSessionSkipRecord({
-          date: state.session.date,
-          targetDiscountTime: currentAreaEarlyNextTarget!,
-          areaId: state.currentAreaId,
-          rateSnapshot,
-          skipKind: "early_next_minus5",
-          sourceSession: state.session,
-          earlyDiscountCompletedAt: transitionedAt,
-        }),
-      ]);
-    }
-
-    // 20時30分も他の値引時刻と同じく、20:25から天候入力画面へ移動する。
-    // 21時の天気・気温・風速を確認してから最終値引へ進む。
-    const transitionOpened = openNextSessionInput(nextInfo.targetDiscountTime, {
-      preserveCurrentSession: prioritizeUnfinishedAreas ||
-        (!options?.autoTransition && previousDiscountTime === "17"),
-      sourceState,
-      lockDiscountTime: !options?.autoTransition && nextInfo.targetDiscountTime === "18",
-    });
-    if (autoTransitionKey && !transitionOpened) {
-      autoTransitionInFlightKeyRef.current = null;
-    }
-    if (options?.autoTransition && transitionOpened) {
-      window.alert(buildAutoTimeSwitchDialogText({
-        from: previousDiscountTime,
-        to: nextInfo.targetDiscountTime,
-        prioritizeUnfinishedAreas,
-      }));
-    }
+    const opened = openNextSessionInput("17", { preserveCurrentSession: prioritizeUnfinishedAreas, sourceState });
+    if (!opened) autoTransitionInFlightKeyRef.current = null;
+    if (options?.autoTransition && opened) window.alert(buildAutoTimeSwitchDialogText({
+      from: "15", to: "17", prioritizeUnfinishedAreas,
+    }));
   }
 
   function exportAllReview19Data(): boolean {
@@ -5098,6 +5068,15 @@ const lateSkipNotice = useMemo(() => {
   }
 
   async function syncLocalDataToSupabase(): Promise<SupabaseBackfillResult> {
+    if (retiredNightRecoveryPendingRef.current && !isTestMode) {
+      await preserveRetiredNightOperations();
+      if (retiredNightRecoveryPendingRef.current) {
+        return { detectedAreaCount: 0, detectedReview19Count: 0,
+          directReview19AttemptedCount: 0, directReview19SucceededCount: 0,
+          directReview19FailedCount: 0, queuedCount: 0, attemptedCount: 0,
+          succeededCount: 0, failedCount: 1, pendingCount: 0, allSynced: false };
+      }
+    }
     if (isTestMode) {
       const skipped: SupabaseBackfillResult = {
         detectedAreaCount: 0,
@@ -5433,6 +5412,10 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function resetApp() {
+    if (retiredNightRecoveryPendingRef.current) {
+      void preserveRetiredNightOperations();
+      return;
+    }
     const now = getRuntimeNow();
     const currentDate = formatLocalDate(now);
     if (
@@ -5551,7 +5534,6 @@ const lateSkipNotice = useMemo(() => {
       exportAllReview19Data,
       exportLatestReview19Data,
       exportCompletedReview19Data,
-      start19DiscountAfterReview,
       startNextDoneSession,
       syncLocalDataToSupabase,
       getStorageUsageDiagnostic,

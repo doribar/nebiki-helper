@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-48）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-49）
 
-最終更新: 2026-10-10 JST
+最終更新: 2026-10-11 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
 
@@ -10,20 +10,20 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-48.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-48.zip` |
-| appVersion | `2026.8.9-48` |
-| buildId | `build-20261010-190352-jst` |
+| ZIP | `nebiki-helper-2026.8.9-49.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-49.zip` |
+| appVersion | `2026.8.9-49` |
+| buildId | `build-20261011-220012-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-48.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-49.md`参照（自己参照回避） |
 
-application rootは`work/threeDay48/nebiki-helper`。比較基準は完成9-47 ZIP `nebiki-helper-2026.8.9-47.zip`（SHA-256 `c987bb9582befbf39a4d5b6269745bcd78b5d1ef24cc61de42ea7889fd6eb2ef`）。9-48は、ちょうど三連休中日の17/18:30/19:30/20:30で日曜側を普通の日曜3件以上なら単独参照、不足時だけ火木日へ代替し、金土との中央値50:50・片側採用を維持する。採用根拠はoptional metadataと共通formatterで保存・表示。15時/通常曜日/4日以上連休/値引engine/20:30固定rule/47開始2列は維持。schema3、SQL/AGENTS/過去報告、version/build方式を維持。詳細は第5節9-48項と`CHANGE_REPORT_2026.8.9-48.md`。
+application rootは`work/daytime49/nebiki-helper`。比較基準は完成9-48 ZIP `nebiki-helper-2026.8.9-48.zip`（SHA-256 `0a5f95feb0275f26bdeea52abe553dc59454e27a81ad57a779432d5d7a4a6613`）。9-49の新規値引操作は15/17だけ。16:40以降の開始時刻は17。夜枠への開始・遷移・先取り・新skip予約を撤去し、Review19を18:55以降の独立した通常ルートにした。追加指示により、17時sessionは18:00以降も17時率を使い、15時16:00以降と同様の遅延+5ポイントを適用する。旧夜枠の保存値は読み替えず、UIは先に安全な開始表示へ隔離する。原本を日次archiveへ退避して再read検証後だけ、元キーの解除・置換保存と通常操作の再開を許可する。schema3、SQL/AGENTS/過去報告、version/build方式を維持。以下の過去release説明より9-49の操作仕様を優先する。詳細は`CHANGE_REPORT_2026.8.9-49.md`。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\threeDay48\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\daytime49\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -36,9 +36,9 @@ application rootは`work/threeDay48/nebiki-helper`。比較基準は完成9-47 Z
 
 翌日廃棄の目安は理想5点以下、許容10点以下、10点超は改善対象。19時に売場が薄すぎる状態と、20時半額でも捌けないほど残る状態の双方を避ける。
 
-- 値引session: 15:00、17:00、18:30、19:30、20:30
+- 新規の値引session: 15:00、17:00。16:40以降は夜起動を含め17時。旧18:30/19:30/20:30は保存・同期・分析・export互換だけを維持。
 - Review19: 19:00時点の対象エリア残数と人間評価（6〜11月12、12〜5月11。過去保存routeは保持）。主に15時・17時判断と製造量の評価地点。
-- 18:30: ユーザー本人が夜値引を担当する日の専用枠。Review19の主評価対象ではない。
+- 旧版で同日18:30を実開始した証拠が残る日は、既存のReview19対象外判定を維持する。9-49で新しい18:30sessionは開始できない。
 - 天候入力: 16時〜21時。fresh起動時は最初の欄へ自動scrollせず、入力後は次欄へ進む。
 
 ## 3. 現在のarchitecture
@@ -143,7 +143,7 @@ legacy migrationは次の順で行う。
 - AreaCountは `prepareAreaCountCalculationPopulation()` でnormalize/canonical化・area/time索引を履歴変更時だけ作る。hookは `[areaCountRecords]` のuseMemo、recommendation callbackはarea/date/time/weekday/cycle等の明示依存useCallback、AreaJudgeはcount/callbackをuseMemoする。30秒clock、電卓表示等の同条件renderで全履歴を再構築しない。
 - prepared populationは呼出側が明示的に渡す不変snapshot。内部索引はprivate WeakMap、返す選択履歴は独立clone。従来のpreparedなし呼出は毎回freshに計算し、入力配列のin-place変更にも対応する。保存のcycle-aware canonical merge、通年計算時の1観測化、16/52・3件・group/long guard・decrease・20:30の意味は変更しない。
 - Review19履歴も `prepareReview19HistoryPopulation()` へまとめて準備し、local/remote arrayが置き換わったときだけmemory mergeと前処理を再実行する。統計だけを返し、廃止済みの5段階auto判定は復活させない。archive/outbox/localStorage/Supabaseの責務は変更しない。
-- 17時sessionのearly-nextは18:00以降に `effectiveRateDiscountTime="18"` / `calculationMode="early_next_minus5"` を使い続ける。旧18:25上限を廃止。別session・fixed-timeでは対象外。9-44は旧activeのmanual overrideを解除するがDone/歴史値は保持。Review19 weather/input/doneではhookの明示flow guardで終了する。通常Doneの現時点表示は継続。18:55 Review19、18:30 manual only、次時刻skip予約、保存済みsnapshot非書換えを維持する。
+- 9-37当時の17→18:30 early-nextは9-49で通常経路から撤去。17sessionは18:00以降もeffectiveRateDiscountTime="17"、late_plus5。15sessionは16:00以降late_plus5。旧early snapshot/skip記録は互換読込を維持するが、新15/17の率・次枠予約へ適用しない。時計だけで確定済みarea snapshotを書き換えない。
 - `ryomi` のIDは維持し、master表示名だけ「夏商品」。新規 `autumn`「秋商品」は独立ID。6〜9月はryomi、10〜11月はautumn、12〜5月は季節枠なし。新sessionはsession日付を基準に、天ぷらとコロッケ系の間へ片方だけ置く。通常/Done/Review19/dataQuality/exportで対象数12/12/11を揃える。
 - 保存済みroute/map/expectedAreaIdsを尊重し、9-36以前の10月11エリアへ秋商品の欠測を捏造しない。Review19Result/Review19Check/Review19DaySnapshotへschema3互換optional `expectedAreaIds` を保持し、legacyは保存証拠と当時の季節枠から解決する。legacyの `areaName:"涼味商品"` は物理変更しない。現masterから表示する画面と新snapshotは「夏商品」。ryomiとautumnのhistory/median/Review/analysis/backfillは独立、autumn3件未満は既存insufficient/manual。
 - 巡回のunfinished priority順と表示用canonical順を分け、Done/Review19/日次snapshotでは保存された季節slotの通常業務順を使う。他エリアの順を変えない。productionAnalysisの判定関数・定義はbyte-identical、追加エリアを渡す対象範囲だけ拡張。
@@ -273,7 +273,7 @@ Review19のraw9は19時時点の人間観測。even scoreを15/17のような最
 - 有効な残数と評価が揃ったときだけ既存「完了」で確定。選択だけではonCompleteArea/onSave/次エリア移動は起こさず、既存の最終エリア保存payloadを維持する。画面内下書きと保存済み値の区別、戻る/スキップ/修正/reloadの従来復元範囲は維持。新しい永続field/keyはない。
 - 短い案内は「タップで選択・解除。迷う場合は隣り合う2つを選択。」。Review19には「中間選択をやめる」を表示しない。raw9・scale・resolutionReason=review19_observation / resolutionDirection=not_applicable・旧5段階互換・JSON形式は非変更。
 
-`RateDisplayScreen` のquick buttonは、history由来の自動判定がreadyでcountがあり、通常の15/17/18/19 session（summer/normal）を表示中だけ有効にする。自動判定の順序 `few < slightly_few < normal < slightly_many < many` に対し、9-23では上にhigher（1段多い側）、下にlower（1段少ない側）を表示する。端では存在する方向の1個だけを表示し、空白やplaceholderは作らない。Review19、fixed-time、20:30、履歴不足・自動判定不明では表示しない。
+`RateDisplayScreen` のquick buttonは、history由来の自動判定がreadyでcountがあり、通常の15/17 session（summer/normal）を表示中だけ有効にする。自動判定の順序 `few < slightly_few < normal < slightly_many < many` に対し、9-23では上にhigher（1段多い側）、下にlower（1段少ない側）を表示する。端では存在する方向の1個だけを表示し、空白やplaceholderは作らない。Review19、fixed-time、20:30、履歴不足・自動判定不明では表示しない。
 
 quick適用後の保存関係:
 
@@ -337,12 +337,12 @@ rate計算の正本は `discount.ts`、`weekdayBase.ts`、`rateDecisionSnapshot.
 - dryの15時はnormal/summerとも最大-10%、normal17とnormal/summer18・19は最大-5%のまま。雨あり15時は最大-5%、17時以降の雨ありは快適方向0%、雪は快適補正を使わない。起点/後続雨雪、future weather point、気温低下、風、after-rain recoveryは非変更。
 - dryは既存の解決済み降水補正が0の条件を指す。後続枠に雨雪があっても起点判定で降水補正0となる場合は含み、後続天候は従来のfuture weather pointで扱う。雨雪の制限判定を全予報枠の降水有無へ変更していない。
 - `getWeekdayBaseInfo()` の第5optional引数にdemandCycleを追加。cycle省略は従来のnormal相当。`getBasisGuideDisplay()` も同じ `resolveWeatherEffect()` を使い、bonus summary/calc/resultと率を一致させる。夏17時には旧「17時以降のため快適方向は-5%まで」を出さない。
-- hookの通常計算・early-next対象時刻・手動18開始snapshot、`advanceDiscount.ts`、`sessionSnapshots.ts` のReview19 referenceへ明示的にcycleを渡す。Review19 referenceは19時として計算するので結果は従来どおり。
+- hookの通常計算・旧夜枠snapshot互換経路、`advanceDiscount.ts`、`sessionSnapshots.ts` のReview19 referenceへ明示的にcycleを渡す。Review19 referenceは19時として計算するので結果は従来どおり。
 - 9/13相当の晴れ・弱風・25℃、気温点-2、未来6pt/-1点では夏17時の天候補正-10%。先行率は基本10 - 天候10 + 多い10 + global(-5/0/+5) = 5/10/15%。normal17・global-5では従来の10%。
 - 新しく確定する `rateDecisionSnapshot.weatherComfortAdjustmentPercent` は既存のweather bonus入力から-10を保持し、session/daily/day/finalized/exportへ既存経路で伝播する。保存済み-5をnormalization/exportで再計算しない。同identity・同完了signatureの再保存でも既存storage/archiveが旧basis/areasを保持する。migration・schema変更なし。
 
 
-概略は、基本率 → weather/comfort/late-time → final AreaCount evaluation → 既存商品line/limit → early-next等 → 最後にglobal adjustment → 0〜50 clamp。商品policyには表示line/metadataもあるため、全商品属性を単純加算と決めつけない。
+現行15/17は、基本率 → weather/comfort/late-time → final AreaCount evaluation → 既存商品line/limit → 最後にglobal adjustment → 0〜50 clamp。early-nextは通常経路で使用しない。商品policyには表示line/metadataもあるため、全商品属性を単純加算と決めつけない。
 
 `globalDiscountAdjustmentPercent` は人間が選ぶ `-5 / 0 / +5` percentage points。新business dateでは0、同日内で復元、session開始時にcapture、完了済み過去sessionへ遡及適用しない。production/fixed-timeのsettingは分離。20:30 forced tierは対象外で、forced 50を45/55へしない。
 
@@ -357,15 +357,16 @@ productionAnalysis:
 
 ## 9. Review19の現在状態
 
-### 9-22: 17時→Review19を通常ルート、18:30は手動のみ
+### 9-49: 値引15/17だけ・Review19は独立した通常ルート
 
-- 17時sessionは18:25〜18:54を含めてそのまま保持する。timer、focus、visibility復帰、start画面の時計更新で18:30session・天候入力・AreaCountを自動生成しない。
-- 当日17時sessionをsourceにでき、Review19が未開始・未完了、同日authoritative recordがなく、同日18:30sessionが実際には開始されていない通常日は、18:55以降（19:25、20:30、23:59を含む）に `getAutomaticReview19TransitionKey()` がReview19開始keyを返す。`startNextDoneSession({ autoTransition: true })` はkeyがない17→18経路を保存・予約・画面遷移なしで終了する。
-- 自動開始は `finalizeUnmeasuredAreasForAutoTransition()`、17時の `auto_time_transition` snapshot、`persistReview19SourceStateSafely()`、`createReview19StartState()` の順で既存safe storage境界を共用する。未計測は `measurementStatus: "not_measured"` / `missingReason: "auto_time_transition"` として保全し、捏造した残数を作らない。snapshotまたはsource保存失敗時は17時stateとkeyを保持して再評価・retryできる。
-- 手動・自動とも `createReview19StartState()` を共用し、17時sourceのdate / demandCycle / sessionStartedAt / reference / weather等からReview19を生成する。18:30session、架空AreaCount、実施済み扱い、早め値引予約を作らない。alertは既存の `window.alert("19時チェックの時間になったため、19時チェックに進みます。")` を使い、timer/focus/visibility/StrictModeでも同一keyの通知・開始を一度だけ行う。
-- 18:30値引はDone画面の「18:30値引を開始」等、既存自動clockで許される次枠の明示操作で開始する。9-44でstartの任意時刻selectは廃止。Done画面の操作は既存 `startNextDoneSession()` / `openNextSessionInput()` を使い、weather確認後の `startSession()` で初めて18:30sessionを作る。17時sourceを保持したまま新しい18時の作業mapへ切り替え、開始時に未入力状態の18時 `DailySessionSnapshot` を既存journalへ保存する。
-- 同日実開始済みの18:30session、またはその開始snapshotがある場合は `hasStarted1830Session()` がReview19手動・自動開始を抑止する。snapshotはarchive memoryとoperational journalから再ロードされるため、reload後も抑止する。開始画面draftを18にしただけでは抑止しない。legacyの18時sessionは削除・改変しない。
-- `resolveDiscountTime()` と `getNextDoneDiscountInfo()` の時刻境界、18:30のweather/rate/AreaCount処理、fixed-time READ ONLYは維持する。9-44で通常manual time設定は廃止し、旧active flagだけ互換解除する。fixed-timeではReview19・snapshot・sessionへのproduction writeを行わない。
+- `resolveDiscountTime()` は16:40前15、以降17。`getNextDoneDiscountInfo()` は15→17だけ。Doneの18:30手動開始/夜担当説明、Review19後→19:30、routerのfinal_time操作経路を撤去。`startSession()`/`openNextSessionInput()`にも15/17許可guard。固定時計・reload・戻る/undo・旧weather lockから夜枠を新規開始/継続しない。
+- timer30秒・focus・visibility復帰によるReview19は `doneNextSessionInfo` と分離した `startAutomaticReview19()`。当日17source、18:55以降・上限なし、Start/weather入力・Review画面以外、未開始/未記録、fixed-timeでない、同日実開始18:30証拠なしが条件。18:25/19:25/20:25を理由に夜枠へ移らない。
+- Startの手動Review19も18:55以降、現在又は保存済み当日17sourceから開始でき、18:30次枠を条件にしない。手動・自動とも `beginReview19FromSource()` → `createReview19StartState()` を共用。17sourceの日付/cycle/startedAt/weather/referenceを使い、fake18session/AreaCount/実施済み扱いを作らない。
+- 共通入口で `finalizeUnmeasuredAreasForAutoTransition()`、既存日次snapshot保存、Review19 source保存が成功してから遷移する。実測値は保持し、未測定はnot_measured/auto_time_transition、未完了statusは未完了のまま。summaryは確定snapshot/保存済みtextだけを使う。保存失敗は17stateを保持しguardを解除してretry可能。once keyで通知/開始重複を防ぐ。
+- 旧版の実開始18:30session又はそのsnapshotは `hasStarted1830Session()` の同日対象外証拠としてreload後も使う。draft/early予約だけは証拠にしない。過去authoritative Review19を削除しない。
+- 旧夜枠current/checkpoint/undo/history/sourceは日付整理前に収集し、`DailySessionSnapshot.retiredOperation` optional metadataへ各原本AppStateを保全。UIは先に安全な開始表示へ隔離するが、IndexedDBへupsertし再readで全証拠bytes相当を照合してから元キーの解除・置換保存と通常操作の再開を許可する。既存snapshotの時刻/率/判定を優先。snapshotなしは保存済み確定率だけを使い、未保存basisをunavailableとして明示する。再計算率・測定値・完了・fake20記録を捏造しない。
+- 退避失敗中はcurrent/checkpoint/runtimeの保存・削除、補助容量回復、日次completion、AreaCount確定、Review19保存/sync・新規開始/resetを保護し、元キーを保持して再読込/開始操作でretry。fixed-timeは退避を含めproduction writeを行わない。
+- 今後の日次記録は実15/17 DailySessionSnapshotとReview19.daySnapshotに保持し、Review19 JSON/分析exportへ伝播する。20:30完了を前提とする旧formal finalized-dayの新規操作入口はないが、過去finalized-dayの読込/archive/backfill/exportは維持する。
 
 ### 保存・完了
 
@@ -410,7 +411,7 @@ archive件数が過去のlegacy local件数より多いことはremote canonical
 
 ### 9-22導入 / 9-23表示順: AreaCount自動判定の±1 quick adjustment
 
-- 通常の `rate_display` で履歴自動判定がready、countが存在する15/17/18/19 session（summer/normal）に、元の自動判定から1段上げる・1段下げるボタンをこの順で表示する。fewはhigherだけ、manyはlowerだけ。Review19、fixed-time、20:30、履歴不足・不明は対象外で、full manual selectorは残す。
+- 通常の `rate_display` で履歴自動判定がready、countが存在する15/17 session（summer/normal）に、元の自動判定から1段上げる・1段下げるボタンをこの順で表示する。fewはhigherだけ、manyはlowerだけ。Review19、fixed-time、20:30、履歴不足・不明は対象外で、full manual selectorは残す。
 - quickの基準は常に元の `automaticEvaluation`。連打や反対方向への押し直しで累積しない。`humanEvaluationDetails.evaluationAdjustment` に `applied/source/direction/steps/originalEvaluation/finalEvaluation` を保存し、`areaCountEvaluation` / `suggestedEvaluation` はfinal、`areaCountDecisionBasis.baseEvaluation` はoriginal、`finalEvaluation` と `areaRateAdjustment` はfinalに対応させる。
 - 保存は既存 `judgeCurrentArea()` → AreaCount record / current session / checkpoint / daily snapshot / finalized day / export / `record_details` の伝播経路を共用し、`rateDecisionSnapshot`へquick専用metadataを追加しない。既存のmany→slightly_many semanticと値引率engineを維持する。
 
@@ -443,7 +444,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ### 9-28: ユーザー向け「1日データ」機能を撤去
 
-- 通常Doneの「1日データを出力」・メモ入力/保存、設定の日次全件/最新出力・日次件数表示、Startの前日廃棄個数入力を削除。上部referenceConditionLabel、全エリア値引率一覧、戻る/home/18:30手動開始は維持。
+- 通常Doneの「1日データを出力」・メモ入力/保存、設定の日次全件/最新出力・日次件数表示、Startの前日廃棄個数入力を削除。上部referenceConditionLabel、全エリア値引率一覧、戻る/homeは維持。18:30手動開始は9-49で撤去。
 - 廃棄入力は前日のfinalized recordだけに依存し、値引計算・Review19・productionAnalysisの入力ではないため、UIと専用hook/APIのみ削除。過去recordの `memo` / `discardCount` は読み込み・保持する。
 - 日次download handlerと専用state/props/helper、旧未使用統合download actionを削除。Review19の完了時・設定全件/最新の3出力導線は既存builderとdownload処理を維持する。
 - `finalizedDayData`、20:30完了時の確定保存/失敗gate、`finalizedDayRecordId`、archive hydration、営業日/cycle判断、snapshot retention、AreaCount backfillは内部機能として維持。手動日次出力を廃止しても、これらの保存処理は必要。
@@ -483,21 +484,21 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 9-48: 全84/84 checks、専用Sunday-reference28/28、既存三連休33/33、関連長期連休17/17 PASS。47/48の同一fixture実行比較8ケースPASS。実RateDisplay TSXのReact SSRと実ブラウザ確認を区別。
-- TypeScript/build/PWA PASS、107 modules/precache10、build `build-20261010-190352-jst`。bundle `/assets/index-Fche_LNf.js` / SHA-256 `71920a6a7274f6223b420a53c5cdecbbe68460e2a521d57876c7a970c68b1c75`。
-- focused lint1 existing error/0 warnings（AreaJudgeScreen既存react-hooks/set-state-in-effect）、full9 existing errors/6 existing warnings。47比較file/rule/severity/message新規0、lint例外追加なし。
-- 最終production Edge390×844の実操作確認完了。普通日曜優先/fallback/片側/不足、17/18/19/20、実残数→表示率→完了保存/再読込、内訳・Review19人間評価/JSON・開始2列/注意7項目を確認。詳細・タッチemulationの範囲・native未実施・未確認事項はCHANGE_REPORTと外部browser summary参照。
-- SQL9/AGENTS/vite/dataVersion/過去CHANGE_REPORT56は47ZIPとbyte-identical。production103本中99本同一。CRC/path/除外物/version/build/schema/distPWA/対象file集合bytes/SHAはZIP再open結果参照。
-- 詳細: `CHANGE_REPORT_2026.8.9-48.md`、ZIP外`RELEASE_REPORT_2026.8.9-48.md` / `ZIP_VALIDATION_2026.8.9-48.json`。
+- 9-49: 全87/87 checks、専用time17/17、retirement13/13、実hook operation18/18、Review19 priority74/74、独立pendingguard9/9 PASS。46天候・48Sunday参照・fixed-time READ ONLY・storage/archive/outbox/export等を含む全項目を実行。
+- TypeScript/build/PWA PASS、108 modules/precache10、build `build-20261011-220012-jst`。bundle `/assets/index-PPPfQN2d.js` / SHA-256 `1b188d59af2f6fcb9775124abf5c2ec0335285df4013c5180354948369e06e65`。
+- focused lint0 errors/2 existing warnings、full9 existing errors/5 existing warnings（48は9/6）。file/rule/severity/message比較新規0、lint例外追加なし。large-chunk/caniuse-lite build警告は既存。
+- production Edge 155.0.4283.45、360×844/390×844で16ケース×2幅32/32 PASS。15→16:40の17→18:55 Review、夜の新規17、23:59復帰、未測定source、manual Review、旧夜枠原本退避/失敗retry/actual18除外を実操作。合法な9/29夏季fixtureでsession/snapshot/source=summer、18:54エリア完了effective17/late+5を確認。JSON6件を実download/parseし12人間raw9とreload後archive深一致を確認。横overflow/console error/想定外warning/外部通信0。意図的保存障害warning8件と検証環境SW block通知48件は別計上。全105 source/bundle hash不変。実機/PWA/実Supabase/長時間backgroundは未確認、pending resetと全遅延境界は自動testのみ。詳細はZIP外browser-work証拠。
+- SQL9/AGENTS/vite/dataVersion/過去CHANGE57は48ZIPとbyte-identical。指定protected104files同一、既存production103本中92本同一、11変更+2追加。209checked inputsをfreeze。CRC/path/除外物/version/build/schema/distPWA/対象file集合bytes/SHAはZIP再open結果参照。
+- 詳細: `CHANGE_REPORT_2026.8.9-49.md`、ZIP外`RELEASE_REPORT_2026.8.9-49.md` / `ZIP_VALIDATION_2026.8.9-49.json`。
 
 ## 13. 既知課題、検討中だが未実装の案
 
 既知課題:
 
-- 旧summer18:30 activeを実時計18時前に復元する場合の静的hint不一致。9-44で新規manual time入口は撤去したが、この保存状態例外は残る。第7節の9-44項を参照。業務規則・過去値は非変更。
+- 夏17時sessionを18時以降まで継続して新規中間評価を確定すると、既存の実時計18:00規則はhigher、指定静的hintは「15時・17時:少ない側」のため不一致が残る。確定済み評価を時計だけで再解決しない。今回曜日基準/案内文言は保留の指定のため変更せず、中間評価のhigher/lower解決規則は変えていない。旧summer18:30 activeの操作は9-49で退避し、通常UIから再開しない。
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
-- full project ESLintに既存9 errors / 6 warnings（9-37は9/7、新規0）。
+- full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
 - `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、全51本より少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
@@ -521,6 +522,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
+9-49追加: `clock.ts`/`operationalTime.ts`/`review19Flow.ts`、`retiredNightOperation.ts`/`retiredNightEvidence.ts`、hookのpending退避guardと17時18:00+late補正、専用`check-daytime-time49/retired-night49/daytime-operation49.ts`。
+
 9-48追加: `areaCountHistory.ts`のSunday参照/normalizer/共通formatter、`analysisMetadata.ts`の参照type、`RateDisplayScreen.tsx`の保存根拠details、専用`check-three-day-holiday-sunday-reference.ts`。
 
 9-46追加: `src/domain/eveningComfortRelief.ts`、`weekdayBase.ts`、`hourlyWeather.ts`、`rateDecisionSnapshot.ts`、`useNebikiApp.ts`、`stateNormalization.ts`、`StartScreen.tsx`、専用`check-evening-comfort-relief/flow.ts`。
@@ -528,7 +531,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-48.md`（完成baselineは `CHANGE_REPORT_2026.8.9-47.md`）
+4. `CHANGE_REPORT_2026.8.9-49.md`（完成baselineは `CHANGE_REPORT_2026.8.9-48.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

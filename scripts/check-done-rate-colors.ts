@@ -37,7 +37,7 @@ function item(patch: Partial<DoneSummaryItem> = {}): DoneSummaryItem {
 function render(summaryItems: DoneSummaryItem[]) {
   return renderToStaticMarkup(React.createElement(Done, {
     referenceConditionLabel: "10月・土曜日・17時", summaryItems,
-    onGoBack: noop, onReturnHome: noop, onStart1830: noop,
+    onGoBack: noop, onReturnHome: noop,
   }));
 }
 function line(markup: string, label: "多い" | "どちらでもない") {
@@ -99,20 +99,20 @@ test("non-numeric/final instructions, status, skip and order are preserved", () 
   assert.match(markup, /20時30分は最終値引です\n定番商品を確認/);
   assert.match(markup, /スキップ済み/);
   assert.match(markup, /今はスキップ/);
-  assert.match(markup, /18:30値引を開始/);
+  assert.doesNotMatch(markup, /18:30値引を開始|夜の値引を担当/);
   assert.match(markup, /10月・土曜日・17時/);
 });
 
-test("color changes leave the actual 9-39 Done markup text unchanged", () => {
+test("Done markup preserves the historical rate list while removing the retired-night controls", () => {
   const values = [
     item({ manyRatePercent: 30, normalRatePercent: 20, statusText: "完了", note: "既存注記" }),
     item({ areaId: "onigiri", areaName: "おにぎり", manyRateText: "0%", normalRateText: "0%", manyRatePercent: 0, normalRatePercent: 0 }),
     item({ areaId: "inari", areaName: "いなり", rateText: "スキップ済み", statusText: "後回し" }),
     item({ areaId: "tempura", areaName: "天ぷら", manyRateText: "30%・40%・50%", normalRateText: "30%・40%・50%" }),
   ];
-  // Captured from the verified 9-39 actual Done component for this fixture.
+  // The verified rate-list fixture is unchanged; only the 49 retired-night controls are removed.
   // Only the two intentional color styles are removed before comparison.
-  const baselineHash = "dae76e149a2ed5920691cc66280cbb9ebe2dbf768039eb2ff4e907c03d5e0190";
+  const baselineHash = "86166ba17e060f6bd81d7309d9eca3058c74aefce0602d3919c3f986db4bea47";
   const markup = render(values).replaceAll(/;color:#(?:ff0000|008000)/g, "");
   assert.equal(createHash("sha256").update(markup).digest("hex"), baselineHash);
 });

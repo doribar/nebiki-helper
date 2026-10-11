@@ -428,7 +428,7 @@ await test("legacy true-flag draft uses an existing weather lock without inventi
     const before = JSON.stringify(saved);
     const restored = retireManualDiscountTimeOverride(saved, { now: at(18, 25) });
     assert.equal(restored.sessionDraft.manualDiscountTimeOverride, false);
-    assert.equal(restored.sessionDraft.discountTime, lock ?? "18");
+    assert.equal(restored.sessionDraft.discountTime, lock ?? "17");
     assert.equal(restored.sessionDraft.weatherInputLockedDiscountTime, lock);
     assert.equal(JSON.stringify(saved), before);
   }

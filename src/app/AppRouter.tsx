@@ -6,7 +6,6 @@ import { AreaJudgeScreen } from "../components/screens/AreaJudgeScreen";
 import { AutoSkipNoticeScreen } from "../components/screens/AutoSkipNoticeScreen";
 import { AutoSkipCountScreen } from "../components/screens/AutoSkipCountScreen";
 import { RateDisplayScreen } from "../components/screens/RateDisplayScreen";
-import { FinalTimeScreen } from "../components/screens/FinalTimeScreen";
 import { DoneScreen } from "../components/screens/DoneScreen";
 import { Review19Screen } from "../components/screens/Review19Screen";
 import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
@@ -58,10 +57,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           onEditWeatherInput={actions.editWeatherInput}
           onStart={actions.confirmWeatherInput}
           startButtonLabel={derived.startButtonLabel}
-          canStartReview19={derived.canStartReview19Manually && (
-            state.sessionDraft.discountTime === "18" ||
-            (state.sessionDraft.discountTime === "17" && Boolean(derived.doneNextSessionInfo?.canStart))
-          )}
+          canStartReview19={derived.canStartReview19Manually}
           onStartReview19={actions.startReview19Manually}
           onOpenSettings={onOpenSettings}
           demandCycle={derived.demandCycle}
@@ -247,33 +243,13 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       );
 
     case "final_time":
-      if (!derived.finalGuide) return null;
-
-      return (
-        <FinalTimeScreen
-          weekdayText={derived.weekdayText}
-          timeText={derived.timeText}
-          areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
-          areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
-          timeSwitchNotice={derived.timeSwitchNotice}
-          finalGuide={derived.finalGuide}
-          finalStep={state.finalTimeStep}
-          onAdvance={actions.advanceFinalTimeStep}
-          onBack={actions.goBackOneScreen}
-          onReturnHome={handleReturnHome}
-        />
-      );
+      // 旧状態はhookで退避する。最終値引の作業画面を再開しない。
+      return null;
 
     case "done":
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
-          onStart1830={
-            !(testNow instanceof Date) && state.session?.discountTime === "17" &&
-            derived.doneNextSessionInfo?.canStart
-              ? () => actions.startNextDoneSession()
-              : undefined
-          }
           referenceConditionLabel={derived.basisGuide.referenceConditionLabel}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}

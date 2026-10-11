@@ -400,6 +400,7 @@ try {
     const deny = () => { persistenceCalls++; throw new Error("fixed-time production write"); };
     const context = {
       ...completionContext(state), isTestMode: true, review19SaveInFlightRef: { current: false },
+      retiredNightRecoveryPendingRef: { current: false }, preserveRetiredNightOperations: deny,
       setState: (update: (previous: AppState) => AppState) => { state = update(state); },
       persistCompletedReview19LocalFirstAsync: deny, saveReview19ToHistoricalArchive: deny,
       enqueueReview19RecordForCloud: deny, releaseAuxiliaryStorageForReview19: deny,

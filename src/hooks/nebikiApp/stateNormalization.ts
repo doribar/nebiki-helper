@@ -187,7 +187,9 @@ export function getInitialTimeSwitchTarget(
   raw: unknown,
   isTestMode: boolean
 ): DiscountTime | null {
-  return !isTestMode && isValidDiscountTime(raw) ? raw : null;
+  // This is an operational target, not a saved-record normalizer. Historical
+  // night times remain valid above, but must never resume a retired workflow.
+  return !isTestMode && (raw === "15" || raw === "17") ? raw : null;
 }
 
 function isValidAreaRateAdjustment(value: unknown): value is AreaRateAdjustment {

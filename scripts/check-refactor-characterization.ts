@@ -153,7 +153,6 @@ function assertPublicHookContract(): void {
       "exportAllReview19Data",
       "exportLatestReview19Data",
       "exportCompletedReview19Data",
-      "start19DiscountAfterReview",
       "startNextDoneSession",
       "syncLocalDataToSupabase",
       "getStorageUsageDiagnostic",
@@ -184,7 +183,7 @@ function assertFacadeArchitectureGuards(): void {
   assert.match(body, /getStorageUsageDiagnostic/);
   assert.doesNotMatch(body, /cleanupReview19Debug20260825/);
   assert.doesNotMatch(body, /saveReview19Records\(/);
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 23);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 24); // 49 adds the guarded retired-night recovery effect.
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
 }
 
@@ -195,11 +194,11 @@ function assertTimeBoundaries(): void {
     [16, 39, "15"],
     [16, 40, "17"],
     [18, 24, "17"],
-    [18, 25, "18"],
-    [19, 24, "18"],
-    [19, 25, "19"],
-    [20, 24, "19"],
-    [20, 25, "20"],
+    [18, 25, "17"],
+    [19, 24, "17"],
+    [19, 25, "17"],
+    [20, 24, "17"],
+    [20, 25, "17"],
   ] as const) {
     assert.equal(resolveDiscountTime(at(hour, minute)), expected);
   }
@@ -207,16 +206,13 @@ function assertTimeBoundaries(): void {
   for (const [discountTime, hour, minute, canStart, target] of [
     ["15", 16, 39, false, "17"],
     ["15", 16, 40, true, "17"],
-    ["17", 18, 24, false, "18"],
-    ["17", 18, 25, true, "18"],
-    ["18", 19, 24, false, "19"],
-    ["18", 19, 25, true, "19"],
-    ["19", 20, 24, false, "20"],
-    ["19", 20, 25, true, "20"],
   ] as const) {
     const info = getNextDoneDiscountInfo(discountTime, at(hour, minute));
     assert.equal(info?.canStart, canStart);
     assert.equal(info?.targetDiscountTime, target);
+  }
+  for (const discountTime of ["17", "18", "19", "20"] as const) {
+    assert.equal(getNextDoneDiscountInfo(discountTime, at(23, 59)), null);
   }
 
   for (const [discountTime, hour, minute, expected] of [

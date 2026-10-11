@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-48",
+  "version": "2026.8.9-49",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -91,7 +91,10 @@
     "check:judge-hint-guidance": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-judge-hint-guidance.ts",
     "check:automatic-weekday-operation": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-automatic-weekday-operation.ts",
     "check:evening-comfort-relief": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-evening-comfort-relief.ts",
-    "check:evening-comfort-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-evening-comfort-flow.ts"
+    "check:evening-comfort-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-evening-comfort-flow.ts",
+    "check:daytime-time49": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daytime-time49.ts",
+    "check:retired-night49": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-retired-night49.ts",
+    "check:daytime-operation49": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daytime-operation49.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

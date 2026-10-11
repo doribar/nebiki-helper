@@ -323,10 +323,10 @@ test("runtime serialization keeps the 24-entry cap and independent durable undo/
   return counts;
 });
 
-test("legacy active 15/18/19 no-switch resumes preserve original time, identity and adopted progress", () => {
+test("legacy active daytime no-switch resumes preserve original time, identity and adopted progress", () => {
   fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
   const evidence = [];
-  for (const time of ["15", "18", "19"] as const) {
+  for (const time of ["15", "17"] as const) {
     const saved = initial(true);
     saved.session!.discountTime = time; saved.session!.manualDiscountTimeOverride = true;
     saved.sessionDraft.discountTime = time; saved.sessionDraft.manualDiscountTimeOverride = true;
@@ -512,7 +512,7 @@ test("undo and back restore an automatic weekday while retained navigation metad
 
 test("condition editing and no-switch resume preserve original session time, identity and automatic weekday", () => {
   fixedMs = new NativeDate("2026-10-01T17:05:00+09:00").getTime();
-  for (const time of ["15", "17", "18", "19"] as const) {
+  for (const time of ["15", "17"] as const) {
     const saved = legacyWeekdayState(true); saved.session!.discountTime = time; saved.sessionDraft.discountTime = time;
     saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
     Object.assign(saved.areaProgressMap.bento_men, { areaCount: 20, areaJudge: "normal", areaCountEvaluation: "normal", areaCountEvaluationSource: "manual", areaRateAdjustment: 0 });
@@ -525,7 +525,7 @@ test("condition editing and no-switch resume preserve original session time, ide
     assert.equal(JSON.stringify(hook.app.state.areaProgressMap), progress);
     hook.close();
   }
-  return { sessionTimes: ["15", "17", "18", "19"], weekday: 4 };
+  return { sessionTimes: ["15", "17"], weekday: 4 };
 });
 
 test("an unstarted draft crosses midnight with new date/weekday and clears the old weather lock", () => {

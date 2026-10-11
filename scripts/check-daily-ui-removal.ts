@@ -146,9 +146,8 @@ for (const cycle of ["normal", "summer"] as const) {
       for (const areaId of ROUTE) assert.ok(rendered.markup.includes(areaId));
       assert.equal((rendered.markup.match(/多い → 30%/g) ?? []).length, ROUTE.length);
       click(rendered, "戻る"); click(rendered, "トップに戻る");
-      if (time === "17") click(rendered, "18:30値引を開始");
-      else assert.doesNotMatch(rendered.markup, /18:30値引を開始/);
-      assert.deepEqual([back, home, next, obsolete], [1, 1, time === "17" ? 1 : 0, 0]);
+      assert.doesNotMatch(rendered.markup, /18:30値引を開始|夜の値引を担当/);
+      assert.deepEqual([back, home, next, obsolete], [1, 1, 0, 0]);
     });
   }
   for (const fixed of [false, true]) {

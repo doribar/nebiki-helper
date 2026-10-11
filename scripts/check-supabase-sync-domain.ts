@@ -1108,7 +1108,8 @@ await test("hook integration is local-first, fixed-isolated, and retry-safe", ()
   );
   assert.ok(retryStart >= 0 && retryEnd > retryStart);
   const retryBlock = hookSource.slice(retryStart, retryEnd);
-  assert.ok(retryBlock.includes("if (isTestMode)"));
+  // READ ONLY and unverified retirement evidence both stop the sync boundary.
+  assert.ok(retryBlock.includes("if (isTestMode || retiredNightRecoveryPendingRef.current)"));
   assert.ok(retryBlock.includes("let result = { ...firstPass }"));
   assert.equal(hookSource.includes("upsertRemoteAreaCountRecord(nextRecord)"), false);
   assert.ok(hookSource.includes('loadRemoteAreaCountRecords("normal")'));

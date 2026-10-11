@@ -258,20 +258,20 @@ test("Done keeps the single top reference label and rates without duplicate week
   assert.match(rendered.markup, /どちらでもない → 20%/);
 });
 
-test("Done retains back, home and manual 18:30 button handlers with the new label", () => {
+test("Done retains back and home but exposes no retired-night start action", () => {
   const tapped: string[] = [];
   const rendered = renderDone({
     referenceConditionLabel: "夏・木曜日・17時",
     onGoBack: () => tapped.push("back"), onReturnHome: () => tapped.push("home"),
-    onStart1830: () => tapped.push("18:30"),
   });
   assert.deepEqual(tapped, []);
-  for (const label of ["戻る", "トップに戻る", "18:30値引を開始"]) {
+  for (const label of ["戻る", "トップに戻る"]) {
     const button = rendered.nodes.find((node) => node.type === "button" && nodeText(node) === label);
     assert.ok(button, label);
     (button.props.onClick as () => void)();
   }
-  assert.deepEqual(tapped, ["back", "home", "18:30"]);
+  assert.deepEqual(tapped, ["back", "home"]);
+  assert.doesNotMatch(rendered.markup, /18:30値引を開始|夜の値引を担当/);
 });
 
 console.log(`advance discount UI checks passed: ${passed}/${passed}`);

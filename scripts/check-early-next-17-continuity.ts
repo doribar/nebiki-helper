@@ -26,15 +26,16 @@ import type {
 import { buildMergedBonusDisplay, getBasisGuideDisplay, getWeekdayBaseInfo } from "../src/domain/weekdayBase.ts";
 import { formatLocalDate } from "../src/hooks/nebikiApp/clock.ts";
 import { getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
-import { retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
+import { getOperationalEarlyNextMinus5TargetDiscountTime, retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
 import { retireManualWeekdayOverride } from "../src/hooks/nebikiApp/operationalWeekday.ts";
 import {
   buildCompletedRateSnapshot, buildCurrentNormalRatePresentation,
   buildNextSessionSkipRecord, shouldIgnoreNormalTimeRateCap,
 } from "../src/hooks/nebikiApp/ratePresentation.ts";
 import { createReview19StartState, getAutomaticReview19TransitionKey } from "../src/hooks/nebikiApp/review19Flow.ts";
+import { retireNightOperationalState } from "../src/hooks/nebikiApp/retiredNightOperation.ts";
 import { createDailySessionSnapshot } from "../src/hooks/nebikiApp/sessionSnapshots.ts";
-import { createInitialState, normalizeLoadedState } from "../src/hooks/nebikiApp/stateNormalization.ts";
+import { buildStartDefaultDraft, createInitialState, normalizeLoadedState } from "../src/hooks/nebikiApp/stateNormalization.ts";
 import { resolveSessionTemperatureComfort } from "../src/hooks/nebikiApp/temperatureComfortState.ts";
 import { createTimeSwitchPlan, getNextSkipTargetDiscountTime, refreshSessionDiscountTime } from "../src/hooks/nebikiApp/timeTransitions.ts";
 
@@ -129,13 +130,14 @@ function harness(state = fixture(), now = at(18, 40)) {
     getRuntimeNow: () => new Date(context.nowMs as number),
     getHistoricalDailySessionSnapshotsForDate: () => [],
     savedDailySessionSnapshots: [],
-    getEarlyNextMinus5TargetDiscountTime, getWeekdayBaseInfo, getBasisGuideDisplay, getEveningComfortReliefContext,
+    getEarlyNextMinus5TargetDiscountTime, getOperationalEarlyNextMinus5TargetDiscountTime, getWeekdayBaseInfo, getBasisGuideDisplay, getEveningComfortReliefContext,
     resolveSessionTemperatureComfort, normalizeDemandCycle, normalizeGlobalDiscountAdjustmentPercent,
     shouldIgnoreNormalTimeRateCap, buildMergedBonusDisplay, buildRateDecisionSnapshot,
     buildCurrentNormalRatePresentation, buildCompletedRateSnapshot, buildNextSessionSkipRecord,
     refreshSessionDiscountTime, getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap,
     getNormalFlowScreenForArea, getNextSkipTargetDiscountTime, getNextPendingCandidate, getPendingResumeScreen,
     createNavigationSnapshot, cloneAppState, cloneLastSessionWeatherRecord, popNavigationHistory, retireManualDiscountTimeOverride, retireManualWeekdayOverride,
+    retireNightOperationalState, buildStartDefaultDraft,
     window: { confirm: () => { throw new Error("unexpected weather confirmation"); } },
     finalGuide: null, lateTimeBonusNotice: null,
     setState: (update: AppState | ((previous: AppState) => AppState)) => {
@@ -189,15 +191,16 @@ function harness(state = fixture(), now = at(18, 40)) {
   };
 }
 
-function assertEarly(decision: ReturnType<ReturnType<typeof harness>["render"]>, label = "") {
-  assert.equal(decision.early?.targetDiscountTime, "18", label);
-  assert.equal(decision.effective, "18", label);
+function assertCurrent17(decision: ReturnType<ReturnType<typeof harness>["render"]>, label = "") {
+  assert.equal(decision.early, null, label);
+  assert.equal(decision.effective, "17", label);
   assert.ok(decision.snapshot, label);
+  const late = new Date(decision.snapshot.confirmedAt).getHours() >= 18 ? 5 : 0;
   assert.equal(decision.snapshot.sessionDiscountTime, "17", label);
-  assert.equal(decision.snapshot.effectiveRateDiscountTime, "18", label);
-  assert.equal(decision.snapshot.calculationMode, "early_next_minus5", label);
-  assert.equal(decision.snapshot.earlyNextAdjustmentPercent, -5, label);
-  assert.equal(decision.snapshot.lateTimeAdjustmentPercent, 0, label);
+  assert.equal(decision.snapshot.effectiveRateDiscountTime, "17", label);
+  assert.equal(decision.snapshot.calculationMode, late ? "late_plus5" : "normal", label);
+  assert.equal(decision.snapshot.earlyNextAdjustmentPercent, 0, label);
+  assert.equal(decision.snapshot.lateTimeAdjustmentPercent, late, label);
   assert.deepEqual(json(decision.snapshot.display), json(decision.presentation?.display), label);
 }
 
@@ -206,21 +209,12 @@ for (const [hour, minute] of [[17, 59], [18, 0], [18, 24], [18, 25], [18, 30], [
     const workflow = harness(fixture(), at(hour, minute));
     const decision = workflow.render();
     assert.equal(workflow.state.session?.discountTime, "17");
-    if (hour === 17) {
-      assert.equal(decision.early, null);
-      assert.equal(decision.effective, "17");
-      assert.equal(decision.snapshot?.sessionDiscountTime, "17");
-      assert.equal(decision.snapshot?.effectiveRateDiscountTime, "17");
-      assert.equal(decision.snapshot?.calculationMode, "normal");
-      assert.equal(decision.snapshot?.earlyNextAdjustmentPercent, 0);
-    } else {
-      assertEarly(decision);
-      assert.equal(workflow.state.areaProgressMap.bento_men.earlyNextMinus5TargetDiscountTime, "18");
-    }
+    assertCurrent17(decision);
+    assert.equal(workflow.state.areaProgressMap.bento_men.earlyNextMinus5TargetDiscountTime, undefined);
   });
 }
 
-test("17:00 early target has no upper clock bound; actual Review19 flow ends it", () => {
+test("legacy 17 early helper remains readable; new operation never adopts it and Review19 remains independent", () => {
   for (const [hour, minute] of [[18, 55], [19, 25], [23, 59]]) {
     assert.equal(getEarlyNextMinus5TargetDiscountTime({
       discountTime: "17", manualDiscountTimeOverride: false, nowMs: at(hour, minute).getTime(),
@@ -236,14 +230,15 @@ test("17:00 early target has no upper clock bound; actual Review19 flow ends it"
     const decision = harness({ ...reviewed, screen }, at(18, 55)).render();
     assert.equal(decision.early, null, screen);
   }
-  assertEarly(harness({ ...fixture(), screen: "done" }, at(18, 54)).render());
+  assertCurrent17(harness({ ...fixture(), screen: "done" }, at(18, 54)).render());
 });
 
-test("explicit 18:30 session ends the 17:00 early rate; the existing 18→19 boundary is unchanged", () => {
+test("legacy18 pure helper keeps its old 18→19 boundary; current hook cannot adopt new early rates", () => {
   const state = fixture();
   state.session = { ...state.session!, discountTime: "18", startedAt: at(18, 30).toISOString() };
   for (const [hour, minute, target] of [[18, 54, null], [19, 0, "19"], [19, 24, "19"], [19, 25, null]] as const) {
-    assert.equal(harness(state, at(hour, minute)).render().early?.targetDiscountTime ?? null, target);
+    assert.equal(getEarlyNextMinus5TargetDiscountTime({discountTime:"18",manualDiscountTimeOverride:false,nowMs:at(hour,minute).getTime()}), target);
+    assert.equal(harness(state, at(hour, minute)).render().early, null);
   }
 });
 
@@ -255,8 +250,8 @@ test("manual weekday selection is independent; explicit manual time suppression 
     override.session!.manualWeekdayOverride = true;
     const first = harness(normal).render();
     const second = harness(override).render();
-    assertEarly(first);
-    assertEarly(second);
+    assertCurrent17(first);
+    assertCurrent17(second);
     assert.deepEqual(second.snapshot, first.snapshot);
   }
   const manualTime = fixture();
@@ -270,16 +265,18 @@ test("manual weekday selection is independent; explicit manual time suppression 
 test("target weather and global -5/0/+5 apply exactly once to actual display and snapshot", () => {
   const decisions = ([-5, 0, 5] as const).map((global) => harness(fixture(global)).render());
   for (const decision of decisions) {
-    assertEarly(decision);
+    assertCurrent17(decision);
     const snapshot = decision.snapshot!;
-    assert.equal(snapshot.weatherComfortAdjustmentPercent, decision.early!.weekdayBaseInfo.baseRateBonus);
+    assert.equal(snapshot.weatherComfortAdjustmentPercent, getWeekdayBaseInfo(4, "17",
+      resolveSessionTemperatureComfort({date:DATE,discountTime:"17",weather:fixture().session!.weather,snapshots:[],lastSessionWeather:null}).resolvedWeather,
+      DATE, "normal", getEveningComfortReliefContext(fixture().session!)).baseRateBonus);
     assert.equal(snapshot.normalRateBeforeLimitsPercent,
-      snapshot.basicRatePercent + snapshot.weatherComfortAdjustmentPercent,
+      snapshot.basicRatePercent + snapshot.weatherComfortAdjustmentPercent + snapshot.lateTimeAdjustmentPercent,
       "weather must be added once before limits");
-    assert.equal(snapshot.normalRatePercent, snapshot.normalRateAfterBaseLimitsPercent - 5);
+    assert.equal(snapshot.normalRatePercent, snapshot.normalRateAfterBaseLimitsPercent);
     assert.equal(snapshot.displayedNormalRatePercent,
       snapshot.normalRatePercent + snapshot.globalDiscountAdjustmentPercent!,
-      "global adjustment must be added once after early offset");
+      "global adjustment must be added once after base limits");
     assert.equal(snapshot.displayedManyRatePercent,
       snapshot.manyRatePercent + snapshot.globalDiscountAdjustmentPercent!);
   }
@@ -287,44 +284,45 @@ test("target weather and global -5/0/+5 apply exactly once to actual display and
   assert.equal(decisions[2].snapshot!.displayedNormalRatePercent - decisions[1].snapshot!.displayedNormalRatePercent, 5);
 });
 
-test("reload, actual next-area action and actual back action keep effective18 after 18:25", () => {
+test("reload, actual next-area action and actual back action keep effective17 after 18:25", () => {
   const workflow = harness(fixture(), at(18, 24));
-  assertEarly(workflow.render());
+  assertCurrent17(workflow.render());
   saveCurrentSession(workflow.state);
   const restored = normalizeLoadedState(loadCurrentSession(), workflow.state.sessionDraft);
   const resumed = harness(restored, at(18, 40));
-  assertEarly(resumed.render());
+  assertCurrent17(resumed.render());
   resumed.remember();
   resumed.next();
   assert.equal(resumed.state.session?.discountTime, "17");
   assert.equal(resumed.state.currentAreaId, "tempura");
-  assert.equal(resumed.state.areaProgressMap.bento_men.rateDecisionSnapshot?.effectiveRateDiscountTime, "18");
+  assert.equal(resumed.state.areaProgressMap.bento_men.rateDecisionSnapshot?.effectiveRateDiscountTime, "17");
   resumed.state.areaProgressMap.tempura.areaJudge = "normal";
   resumed.state.areaProgressMap.tempura.areaRateAdjustment = 0;
   resumed.state.screen = "rate_display";
-  assertEarly(resumed.render());
+  assertCurrent17(resumed.render());
   resumed.back();
   assert.equal(resumed.state.currentAreaId, "bento_men");
   assert.equal(resumed.state.screen, "rate_display");
-  assertEarly(resumed.render());
+  assertCurrent17(resumed.render());
   saveCurrentSession(resumed.state);
-  assertEarly(harness(normalizeLoadedState(loadCurrentSession(), resumed.state.sessionDraft), at(18, 54)).render());
+  assertCurrent17(harness(normalizeLoadedState(loadCurrentSession(), resumed.state.sessionDraft), at(18, 54)).render());
 });
 
-test("actual completion after 18:25 reserves effective18 skip and next18 consumes it", () => {
+test("actual completion after 18:25 captures17 and creates no new skip; old skip consumption stays compatible", () => {
   const workflow = harness(fixture(), at(18, 40));
   const decision = workflow.render();
   workflow.next();
   const saved = workflow.state.areaProgressMap.bento_men.rateDecisionSnapshot;
-  assert.equal(saved?.effectiveRateDiscountTime, "18");
+  assert.equal(saved?.effectiveRateDiscountTime, "17");
   assert.equal(saved?.sessionDiscountTime, "17");
-  assert.equal(saved?.calculationMode, "early_next_minus5");
+  assert.equal(saved?.calculationMode, "late_plus5");
+  assert.equal(saved?.lateTimeAdjustmentPercent, 5);
   assert.deepEqual(saved, decision.snapshot);
-  assert.equal(workflow.skips.length, 1);
-  assert.equal(workflow.skips[0].targetDiscountTime, "18");
-  assert.equal(workflow.skips[0].sourceDiscountTime, "17");
-  assert.equal(workflow.skips[0].skipKind, "early_next_minus5");
-  const consumed = consumeSkipRecordsInMemory({ currentRecords: workflow.skips, date: DATE, targetDiscountTime: "18" });
+  assert.equal(workflow.skips.length, 0);
+  const legacySkip = buildNextSessionSkipRecord({date:DATE,targetDiscountTime:"18",areaId:"bento_men",
+    rateSnapshot:{completedRateText:"15%",completedNormalRateText:"15%",completedManyRateText:"25%"},
+    skipKind:"early_next_minus5",sourceSession:fixture().session!,earlyDiscountCompletedAt:at(18,5).toISOString()});
+  const consumed = consumeSkipRecordsInMemory({ currentRecords: [legacySkip], date: DATE, targetDiscountTime: "18" });
   assert.deepEqual(consumed.skippedAreaIds, ["bento_men"]);
   const plan = createTimeSwitchPlan({ previousMap: workflow.state.areaProgressMap,
     skippedRecords: consumed.skippedRecords, targetDiscountTime: "18", date: DATE });
@@ -332,7 +330,7 @@ test("actual completion after 18:25 reserves effective18 skip and next18 consume
   assert.equal(plan.areaProgressMap.bento_men.status, "auto_skipped_late_time");
 });
 
-test("completed before18 snapshot is unchanged while later areas, daily save and reload use effective18", () => {
+test("completed before18 snapshot is unchanged while later areas, daily save and reload still use17", () => {
   const workflow = harness(fixture(), at(17, 59));
   workflow.render();
   workflow.next();
@@ -343,10 +341,10 @@ test("completed before18 snapshot is unchanged while later areas, daily save and
   workflow.state.screen = "rate_display";
   workflow.state.areaProgressMap.tempura.areaJudge = "normal";
   workflow.state.areaProgressMap.tempura.areaRateAdjustment = 0;
-  assertEarly(workflow.render());
+  assertCurrent17(workflow.render());
   workflow.next();
   assert.deepEqual(workflow.state.areaProgressMap.bento_men.rateDecisionSnapshot, old);
-  assert.equal(workflow.state.areaProgressMap.tempura.rateDecisionSnapshot?.effectiveRateDiscountTime, "18");
+  assert.equal(workflow.state.areaProgressMap.tempura.rateDecisionSnapshot?.effectiveRateDiscountTime, "17");
   saveCurrentSession(workflow.state);
   const restored = normalizeLoadedState(loadCurrentSession(), workflow.state.sessionDraft);
   assert.deepEqual(restored.areaProgressMap.bento_men.rateDecisionSnapshot, old);
@@ -362,7 +360,7 @@ test("completed before18 snapshot is unchanged while later areas, daily save and
   const savedDaily = loadDailySessionSnapshots()[0];
   assert.equal(savedDaily.session.discountTime, "17");
   assert.deepEqual(savedDaily.areas.bento_men.rateDecisionSnapshot, old);
-  assert.equal(savedDaily.areas.tempura.rateDecisionSnapshot?.effectiveRateDiscountTime, "18");
+  assert.equal(savedDaily.areas.tempura.rateDecisionSnapshot?.effectiveRateDiscountTime, "17");
 });
 
 let passed = 0;
@@ -372,4 +370,4 @@ for (const entry of tests) {
   console.log(`PASS ${String(passed).padStart(2, "0")}: ${entry.name}`);
 }
 assert.equal(formatLocalDate(at(18, 40)), DATE);
-console.log(`Early-next 17 continuity checks passed: ${passed}/${tests.length}`);
+console.log(`Daytime17 continuity and legacy early compatibility checks passed: ${passed}/${tests.length}`);

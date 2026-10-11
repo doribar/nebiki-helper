@@ -343,9 +343,9 @@ test("AreaJudge retains saved suppression only when the newly entered raw compar
   assert.equal(retained.decreaseRecommendation?.direction, "more_many");
   assert.equal(retained.decreaseRecommendation?.currentDecreaseRate, raw.currentDecreaseRate);
 });
-test("actual AppRouter routes canonical current-area progress across count and skip/final screens", () => {
-  for (const screen of ["area_judge", "rate_display", "auto_skip_notice", "auto_skip_count", "final_time"] as const) {
-    const app = routedApp("bento_men", screen === "final_time" ? "20" : "17", screen);
+test("actual AppRouter routes canonical current-area progress across active count and skip screens", () => {
+  for (const screen of ["area_judge", "rate_display", "auto_skip_notice", "auto_skip_count"] as const) {
+    const app = routedApp("bento_men", "17", screen);
     let markup = routedMarkup(app);
     assert.match(markup, /エリア残数：20個/); assert.match(markup, /減少率：悪い/);
     app.state.areaProgressMap.bento_men.areaCount = 18;
@@ -355,6 +355,13 @@ test("actual AppRouter routes canonical current-area progress across count and s
     app.derived.currentAreaName = "おにぎり";
     markup = routedMarkup(app); assert.match(markup, /エリア残数：7個/); assert.doesNotMatch(markup, /エリア残数：(20|18)個/);
   }
+});
+
+test("actual AppRouter never renders the retired final-time operation, including fixed-time mode", () => {
+  const app = routedApp("bento_men", "20", "final_time");
+  assert.equal(routedMarkup(app), "");
+  assert.equal(routedMarkup(app, new Date("2026-10-03T11:30:00.000Z")), "");
+  assert.equal(app.state.areaProgressMap.bento_men.areaCount, 20);
 });
 test("actual AppRouter owns area/time eligibility and fixed-time suppression callback guard", () => {
   const targets: AreaId[] = ["bento_men", "tempura", "onigiri", "inari", "hosomaki", "ryomi", "autumn", "yakitori"];

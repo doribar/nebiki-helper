@@ -8,6 +8,7 @@ import {
   type StoredFinalizedDayData,
 } from "./finalizedDayData.ts";
 import { normalizeDemandCycle } from "./demandCycle.ts";
+import { mergeRetiredNightOperationEvidence } from "./retiredNightEvidence.ts";
 import {
   getAreaCountRecordIdentity,
   mergeAreaCountRecordCollections,
@@ -278,15 +279,24 @@ function preferDailySessionSnapshot(
   current: DailySessionSnapshot,
   candidate: DailySessionSnapshot,
 ): DailySessionSnapshot {
+  let selected: DailySessionSnapshot;
   if (
     getDailySessionCompletionSignature(current) ===
     getDailySessionCompletionSignature(candidate)
   ) {
-    return clone(current);
+    selected = clone(current);
+  } else {
+    selected = candidate.capturedAt >= current.capturedAt
+      ? clone(candidate)
+      : clone(current);
   }
-  return candidate.capturedAt >= current.capturedAt
-    ? clone(candidate)
-    : clone(current);
+  const retirement = mergeRetiredNightOperationEvidence(
+    current.retiredOperation,
+    candidate.retiredOperation,
+    selected.retiredOperation?.basisCaptureStatus,
+  );
+  if (retirement) selected.retiredOperation = retirement;
+  return selected;
 }
 
 export function mergeDailySessionSnapshotArchiveOperations(

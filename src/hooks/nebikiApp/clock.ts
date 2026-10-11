@@ -31,13 +31,8 @@ export function formatLocalDate(date = getRuntimeNow()): string {
 export function resolveDiscountTime(date = getRuntimeNow()): DiscountTime {
   const minutes = date.getHours() * 60 + date.getMinutes();
 
-  // 天候入力・値引開始準備の時刻で自動切替する。
-  // 15時・17時は冷惣菜値引もあるため20分前、それ以降は5分前。
-  if (minutes < 16 * 60 + 40) return "15";
-  if (minutes < 18 * 60 + 25) return "17";
-  if (minutes < 19 * 60 + 25) return "18";
-  if (minutes < 20 * 60 + 25) return "19";
-  return "20";
+  // 通常の新規値引は15時・17時だけ。冷惣菜の開始準備に合わせて20分前に切り替える。
+  return minutes < 16 * 60 + 40 ? "15" : "17";
 }
 
 export function getBasisTimeText(discountTime: DiscountTime): string {
@@ -77,24 +72,6 @@ export function getNextDoneDiscountInfo(
       unlockMinutes: 16 * 60 + 40,
       unlockText: "16:40からタップできます",
       targetDiscountTime: "17",
-    },
-    "17": {
-      label: "18時30分の値引に進む",
-      unlockMinutes: 18 * 60 + 25,
-      unlockText: "18:25からタップできます",
-      targetDiscountTime: "18",
-    },
-    "18": {
-      label: "19時30分の値引に進む",
-      unlockMinutes: 19 * 60 + 25,
-      unlockText: "19:25からタップできます",
-      targetDiscountTime: "19",
-    },
-    "19": {
-      label: "20時30分の最終値引に進む",
-      unlockMinutes: 20 * 60 + 25,
-      unlockText: "20:25からタップできます",
-      targetDiscountTime: "20",
     },
   };
 

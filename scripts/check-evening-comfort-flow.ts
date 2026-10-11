@@ -106,18 +106,24 @@ test("actual hook display handles exact5/sub5/same/improved in both seasons and 
     evidence.push({cycle,time,temp16,temp21,rates:rates(hook),analysis:guide(hook)});hook.close();
   }return evidence;
 });
-test("actual original15 delayed and original17 early-next use original eligibility with existing offsets",()=>{
+test("actual original15 after16 and original17 after18 each keep their basis with late+5 and relief applied once",()=>{
   const evidence=[];
-  for(const [time,clock,effective]of [["15","16:05","15"],["17","18:05","18"]]as const){const hook=fixture(state({time}),clock);verifyPure(hook);assert.equal(hook.app.state.session!.discountTime,time);assert.equal(guide(hook).sessionDiscountTime,time);assert.equal(guide(hook).effectiveRateDiscountTime,effective);assert.equal(guide(hook).applied,true);
+  for(const [time,clock,effective]of [["15","16:05","15"],["17","18:05","17"]]as const){const hook=fixture(state({time}),clock);verifyPure(hook);assert.equal(hook.app.state.session!.discountTime,time);assert.equal(guide(hook).sessionDiscountTime,time);assert.equal(guide(hook).effectiveRateDiscountTime,effective);assert.equal(guide(hook).applied,true);
     const visible=rates(hook),analysis=structuredClone(guide(hook));hook.app.actions.goToNextArea();hook.settle();const progress=hook.app.state.areaProgressMap.bento_men,snapshot=progress.rateDecisionSnapshot!;
     assert.deepEqual([progress.completedNormalRateText,progress.completedManyRateText],visible);assert.deepEqual(snapshot.eveningComfortRelief,analysis);assert.equal(snapshot.sessionDiscountTime,time);assert.equal(snapshot.effectiveRateDiscountTime,effective);
-    assert.equal(snapshot.calculationMode,time==="15"?"late_plus5":"early_next_minus5");assert.equal(snapshot.lateTimeAdjustmentPercent,time==="15"?5:0);assert.equal(snapshot.earlyNextAdjustmentPercent,time==="17"?-5:0);
+    assert.equal(snapshot.calculationMode,"late_plus5");assert.equal(snapshot.lateTimeAdjustmentPercent,5);assert.equal(snapshot.earlyNextAdjustmentPercent,0);
     evidence.push({time,clock,effective,visible,snapshot});hook.close();}return evidence;
 });
-test("independent evening sessions remain outside the condition in the complete hook",()=>{
-  const evidence=[];for(const [time,clock]of [["18","18:35"],["19","19:35"]]as const){const hook=fixture(state({time}),clock);verifyPure(hook);assert.equal(guide(hook).eligibleSession,false);assert.equal(guide(hook).applied,false);evidence.push({time,clock,rates:rates(hook)});hook.close();}
-  const raw=state({time:"20"});raw.screen="final_time";const final=fixture(raw,"20:35");assert.equal(guide(final).eligibleSession,false);assert.equal(guide(final).applied,false);assert.equal(final.app.derived.rateDisplay,null);
-  const countRates=[final.app.derived.finalGuide?.count1.main,final.app.derived.finalGuide?.count2.main,final.app.derived.finalGuide?.count3OrMore.main];assert.deepEqual(countRates,["30%","40%","50%"]);evidence.push({time:"20",clock:"20:35",rates:countRates});final.close();return evidence;
+test("historical evening sessions still exclude relief in the unchanged pure core and generic normalizer",()=>{
+  const evidence=[];
+  for(const time of ["18","19","20"] as const){
+    const raw=state({time}),before=JSON.stringify(raw);const normalized=normalizeLoadedState(raw,raw.sessionDraft),session=normalized.session!;
+    const resolved=resolveWeatherInputForDiscount(session.weather,time);
+    const info=getWeekdayBaseInfo(session.weekday,time,resolved,session.date,session.demandCycle,getEveningComfortReliefContext(session));
+    assert.equal(session.discountTime,time);assert.equal(info.eveningComfortRelief!.eligibleSession,false);assert.equal(info.eveningComfortRelief!.applied,false);
+    assert.equal(JSON.stringify(raw),before);evidence.push({time,analysis:info.eveningComfortRelief});
+  }
+  return evidence;
 });
 test("real completion action and daily effect freeze shown rates, comparison inputs and correction metadata",()=>{
   const evidence=[];

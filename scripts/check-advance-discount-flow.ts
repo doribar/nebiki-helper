@@ -31,6 +31,7 @@ import { buildTimeSwitchNotice, formatLocalDate } from "../src/hooks/nebikiApp/c
 import { getFirstNormalFlowAreaId, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
 import { retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
 import { retireManualWeekdayDraft, retireManualWeekdayOverride } from "../src/hooks/nebikiApp/operationalWeekday.ts";
+import { retireNightOperationalState } from "../src/hooks/nebikiApp/retiredNightOperation.ts";
 import { createDailySessionSnapshot } from "../src/hooks/nebikiApp/sessionSnapshots.ts";
 import {
   buildStartDefaultDraft, clonePersistedNebikiStateSnapshot, createInitialAreaProgressMap,
@@ -113,6 +114,10 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     demandCycleState: { selectedCycle: initial.sessionDraft.demandCycle, lockedDate: null, lockedCycle: null },
     resumeTargetScreen: options.resume ?? null, timeSwitchTarget: null,
     weatherConfirmationPending: null, weatherConfirmationSubmittingRef: { current: false },
+    retiredNightRecoveryPendingRef: { current: false },
+    preserveRetiredNightOperations: async () => {
+      context.retiredNightRetryCount = Number(context.retiredNightRetryCount ?? 0) + 1;
+    },
     suppressHistoryPushRef: { current: false }, screenHistoryRef: { current: [] as NavigationSnapshot[] },
     previousRenderRef: { current: null }, nextSessionSkipRecordsRef: { current: [] as NextSessionSkipRecord[] },
     nextSessionSkipRecords: [], lastSessionWeather: null, lastUsedSessionDraft: initial.sessionDraft,
@@ -126,6 +131,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     getFirstAvailableAreaId, isAutoSkipNoticePending, isValidDiscountTime,
     normalizeReview19ExcludedAreaIds, buildTimeSwitchNotice, buildStartDefaultDraft,
     normalizeSessionDraft, syncAfterRainSelection, createInitialState, retireManualDiscountTimeOverride,
+    retireNightOperationalState,
     retireManualWeekdayDraft, retireManualWeekdayOverride, getCalendarWeekday,
     matchesWeatherConfirmationDraft, createDailySessionSnapshot, getBasisGuideDisplay, getWeekdayBaseInfo, getEveningComfortReliefContext,
     cloneAppState, createNavigationSnapshot, appendNavigationHistory,
@@ -417,14 +423,17 @@ for (const cycle of ["normal", "summer"] as const) {
 }
 
 for (const time of ["18", "19", "20"] as const) {
-  test(`${time}: normal start bypasses advance instruction`, () => {
+  test(`${time}: retired night start cannot create a session or bypass the start screen`, () => {
     const h = harness({ state: fresh(time) });
+    const before = json(h.state);
+    h.start();
     h.request(); h.confirm();
-    assert.equal(h.state.screen, "area_judge");
-    const before = h.state;
+    assert.equal(h.state.screen, "start");
+    assert.equal(h.state.session, null);
     h.proceed();
-    assert.equal(h.state, before);
+    assert.deepEqual(json(h.state), before);
     assertUnmeasured(h.state);
+    assert.equal(h.snapshots.length, 0);
   });
 }
 for (const time of ["15", "17", "18", "19", "20"] as const) {
@@ -434,9 +443,34 @@ for (const time of ["15", "17", "18", "19", "20"] as const) {
     const before = [...memory.values];
     const h = harness({ state: fresh(time), fixed: true });
     h.request(); h.confirm(); h.proceed(); h.persist();
-    assert.equal(h.state.screen, "area_judge");
+    assert.equal(h.state.screen, time === "15" || time === "17" ? "area_judge" : "start");
+    if (time === "18" || time === "19" || time === "20") {
+      assert.equal(h.state.session, null);
+      assertUnmeasured(h.state);
+    }
     assert.deepEqual([...memory.values], before);
     assert.equal(h.snapshots.length, 0);
+  });
+}
+
+test("pending retired evidence blocks normal start and persistence while requesting a retry", () => {
+  const h = harness({ state: fresh("17") });
+  (h.context.retiredNightRecoveryPendingRef as { current: boolean }).current = true;
+  const before = json(h.state);
+  h.start(); h.persist();
+  assert.equal(h.context.retiredNightRetryCount, 1);
+  assert.deepEqual(json(h.state), before);
+  assert.equal(h.state.session, null);
+  assert.equal(memory.length, 0);
+});
+
+for (const time of ["15", "17"] as const) {
+  test(`${time}: a confirmed weather lock preserves the requested day operation after the clock advances`, () => {
+    const h = harness({ state: fresh(time), now: at(20, 30) });
+    h.request(); h.confirm();
+    assert.equal(h.state.screen, "advance_discount");
+    assert.equal(h.state.session?.discountTime, time);
+    assertUnmeasured(h.state);
   });
 }
 

@@ -570,54 +570,48 @@ test("確認表示モデルの過去判定は値引時刻ごとの入力対象�
   }
 });
 
-test("再読み込み時は入力値・対象時刻・確認待ちを保持し、正式セッションを作らない", () => {
-  localStorage.clear();
-  const now = new Date();
-  const date = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-");
-  const draft = {
-    ...createInitialSessionDraft(),
-    date,
-    weekday: now.getDay(),
-    discountTime: "18" as const,
-    weatherInputLockedDiscountTime: "18" as const,
-  };
-  draft.weather.hourlyForecasts["19"] = {
-    weather: "rain",
-    tempC: 31,
-    windMs: 5,
-  };
-  const storedState = createInitialState(draft);
-  localStorage.setItem(STORAGE_KEYS.currentSession, JSON.stringify(storedState));
-  localStorage.setItem(STORAGE_KEYS.lastUsedSessionDraft, JSON.stringify(draft));
-  saveRuntimeState({
-    areaJudgeSelection: null,
-    resumeTargetScreen: null,
-    timeSwitchTarget: null,
-    undoSnapshot: null,
-    screenHistory: [],
-    weatherConfirmationPending: { date, discountTime: "18" },
-  });
-
-  function Probe() {
-    const app = useNebikiApp();
-    assert.equal(app.derived.weatherConfirmationPending, true);
-    assert.equal(app.state.screen, "start");
-    assert.equal(app.state.session, null);
-    assert.equal(app.state.sessionDraft.discountTime, "18");
-    assert.equal(app.state.sessionDraft.weatherInputLockedDiscountTime, "18");
-    assert.deepEqual(app.state.sessionDraft.weather.hourlyForecasts["19"], {
-      weather: "rain",
-      tempC: 31,
-      windMs: 5,
-    });
-    return createElement("span", null, "restored");
+test("16:40境界の再読込は15/17天候lock・入力値・確認待ちを保持し、正式sessionを作らない", () => {
+  const NativeDate = Date;
+  const fixedMs = new NativeDate(2026, 8, 8, 16, 40).getTime();
+  class FixtureDate extends NativeDate {
+    constructor(value?: string | number | Date) { super(value === undefined ? fixedMs : value); }
+    static now() { return fixedMs; }
   }
-
-  assert.equal(renderToString(createElement(Probe)), "<span>restored</span>");
+  Object.defineProperty(globalThis, "Date", { configurable: true, value: FixtureDate });
+  try {
+    for (const discountTime of ["15", "17"] as const) {
+      localStorage.clear();
+      const date = "2026-09-08";
+      const draft = {
+        ...createInitialSessionDraft(), date, weekday: 2, discountTime,
+        weatherInputLockedDiscountTime: discountTime,
+      };
+      draft.weather.hourlyForecasts["18"] = { weather: "rain", tempC: 31, windMs: 5 };
+      const storedState = createInitialState(draft);
+      const before = JSON.stringify(storedState);
+      localStorage.setItem(STORAGE_KEYS.currentSession, before);
+      localStorage.setItem(STORAGE_KEYS.lastUsedSessionDraft, JSON.stringify(draft));
+      saveRuntimeState({
+        areaJudgeSelection: null, resumeTargetScreen: null, timeSwitchTarget: null,
+        undoSnapshot: null, screenHistory: [], weatherConfirmationPending: { date, discountTime },
+      });
+      function Probe() {
+        const app = useNebikiApp();
+        assert.equal(app.derived.weatherConfirmationPending, true);
+        assert.equal(app.state.screen, "start");
+        assert.equal(app.state.session, null);
+        assert.equal(app.state.sessionDraft.discountTime, discountTime);
+        assert.equal(app.state.sessionDraft.weatherInputLockedDiscountTime, discountTime);
+        assert.deepEqual(app.state.sessionDraft.weather.hourlyForecasts["18"], { weather: "rain", tempC: 31, windMs: 5 });
+        return createElement("span", null, "restored");
+      }
+      assert.equal(renderToString(createElement(Probe)), "<span>restored</span>");
+      assert.equal(JSON.stringify(storedState), before);
+      assert.deepEqual(loadRuntimeState().weatherConfirmationPending, { date, discountTime });
+    }
+  } finally {
+    Object.defineProperty(globalThis, "Date", { configurable: true, value: NativeDate });
+  }
 });
 
 test("確認用一覧の参照では天候補正の解決結果を変更しない", () => {

@@ -28,6 +28,7 @@ import {
   normalizeAnalysisCalendarContext,
 } from "./analysisMetadata.ts";
 import { FINALIZED_DAY_DATA_STORAGE_KEY } from "./finalizedDayData.ts";
+import { mergeRetiredNightOperationEvidence } from "./retiredNightEvidence.ts";
 import {
   LEGACY_NORMAL_AREA_COUNT_STORAGE_KEY,
   LEGACY_SUMMER_AREA_COUNT_STORAGE_KEY,
@@ -1041,6 +1042,12 @@ function buildUpsertedDailySessionSnapshots(
         doneSummaryItems: JSON.parse(JSON.stringify(previous.doneSummaryItems)),
       }
     : cloneDailySessionSnapshot(snapshot);
+  const retirement = mergeRetiredNightOperationEvidence(
+    previous?.retiredOperation,
+    snapshot.retiredOperation,
+    snapshotToStore.retiredOperation?.basisCaptureStatus,
+  );
+  if (retirement) snapshotToStore.retiredOperation = retirement;
   const next = [
     ...current.filter((item) => {
       return !(

@@ -154,7 +154,7 @@ try {
     assert.equal(result.failure?.ok, false);
   });
 
-  test("次値引の開始可能時刻を維持（17→18:30は明示操作専用）", () => {
+  test("次値引の開始は16:40以降の15→17だけ。夜枠の新規入口はない", () => {
     const at = (hour: number, minute: number) =>
       new Date(2026, 7, 16, hour, minute, 0, 0);
     const transitions: Array<{
@@ -164,9 +164,6 @@ try {
       to: DiscountTime;
     }> = [
       { from: "15", hour: 16, minute: 40, to: "17" },
-      { from: "17", hour: 18, minute: 25, to: "18" },
-      { from: "18", hour: 19, minute: 25, to: "19" },
-      { from: "19", hour: 20, minute: 25, to: "20" },
     ];
 
     for (const transition of transitions) {
@@ -183,7 +180,9 @@ try {
       });
       assert.match(dialog, /次の値引時刻に近づいたため/);
     }
-    assert.equal(getNextDoneDiscountInfo("20", at(21, 0)), null);
+    for (const from of ["17", "18", "19", "20"] as const) {
+      assert.equal(getNextDoneDiscountInfo(from, at(21, 0)), null);
+    }
   });
 
   test("doneは未完了エリア優先対象ではなく、作業中画面だけを優先", () => {
@@ -208,7 +207,8 @@ try {
     assert.match(source, /daily-session-completion/);
     assert.match(source, /final-session-snapshot/);
     assert.match(source, /auto-time-transition-snapshot/);
-    assert.match(source, /night-discount-session-start/);
+    assert.doesNotMatch(source, /night-discount-session-start/);
+    assert.match(source, /preserveRetiredNightOperations/);
   });
 
   test("通常の次値引遷移はsnapshot失敗を報告して続行し、Review19は専用guardで保全する", () => {
@@ -218,20 +218,20 @@ try {
       "utf8",
     ).replaceAll("\r\n", "\n");
     const start = source.indexOf("function startNextDoneSession");
-    const end = source.indexOf("function persistFinalizedDayMemo", start);
+    const end = source.indexOf("function exportAllReview19Data", start);
     const body = source.slice(start, end);
     const persistenceIndex = body.indexOf("persistDailySessionSnapshot");
     const dialogIndex = body.indexOf("window.alert(buildAutoTimeSwitchDialogText");
-    const openIndex = body.indexOf("openNextSessionInput(nextInfo.targetDiscountTime");
+    const openIndex = body.indexOf('openNextSessionInput("17"');
     assert.ok(persistenceIndex >= 0);
     assert.ok(openIndex > persistenceIndex);
     assert.ok(dialogIndex > openIndex);
-    assert.match(body, /const transitionOpened = openNextSessionInput/);
-    assert.match(body, /options\?\.autoTransition && transitionOpened/);
-    assert.match(body, /reportStorageOperationFailures\([\s\S]*?snapshotWriteResult\.attempts/);
+    assert.match(body, /const opened = openNextSessionInput/);
+    assert.match(body, /options\?\.autoTransition && opened/);
+    assert.match(body, /reportStorageOperationFailures\([\s\S]*?saved\.attempts/);
     assert.doesNotMatch(
       body,
-      /if\s*\(\s*!snapshotWriteResult\.ok[\s\S]{0,300}?\breturn\b/,
+      /if\s*\(\s*!saved\?\.ok[\s\S]{0,400}?\breturn\b/,
     );
   });
 
@@ -242,7 +242,7 @@ try {
       "utf8",
     ).replaceAll("\r\n", "\n");
     const start = source.indexOf("function startNextDoneSession");
-    const end = source.indexOf("function persistFinalizedDayMemo", start);
+    const end = source.indexOf("function exportAllReview19Data", start);
     const body = source.slice(start, end);
 
     assert.match(
@@ -251,29 +251,25 @@ try {
     );
     assert.match(
       body,
-      /const autoTransitionKey = options\?\.autoTransition[\s\S]*?state\.session\.date[\s\S]*?state\.session\.startedAt[\s\S]*?previousDiscountTime[\s\S]*?nextInfo\.targetDiscountTime/,
+      /const key = \[state\.session\.date, state\.session\.startedAt, "15", "17"\]/,
     );
     assert.match(
       body,
-      /if \(autoTransitionInFlightKeyRef\.current === autoTransitionKey\) return;/,
+      /if \(autoTransitionInFlightKeyRef\.current === key\) return;/,
     );
     assert.match(
       body,
-      /autoTransitionInFlightKeyRef\.current = autoTransitionKey;/,
+      /autoTransitionInFlightKeyRef\.current = key;/,
     );
     assert.match(
       body,
-      /if \(autoTransitionKey && !transitionOpened\) \{\s*autoTransitionInFlightKeyRef\.current = null;/,
+      /if \(!opened\) autoTransitionInFlightKeyRef\.current = null;/,
     );
 
-    const guardStart = body.indexOf("const autoTransitionKey");
-    const transitionedAt = body.indexOf("const transitionedAt");
+    const guardStart = body.indexOf("const key");
+    const transitionedAt = body.indexOf("const capturedAt");
     assert.ok(guardStart >= 0 && guardStart < transitionedAt);
-    assert.match(
-      body.slice(guardStart, transitionedAt),
-      /options\?\.autoTransition/,
-      "manual transitionはin-flight guardの対象にしない",
-    );
+    assert.match(body, /state\.session\.discountTime !== "15"/);
   });
 
   test("20:30正本保存失敗時は完了stateを偽装しない", () => {

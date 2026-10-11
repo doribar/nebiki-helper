@@ -646,6 +646,22 @@ export type Review19Snapshot = {
 };
 
 
+/** Original operation states retained when the night workflow is retired.
+ * They are evidence only and must never be restored as an operational session.
+ */
+export type RetiredNightOperationEvidence = {
+  source: "current_session" | "work_session_checkpoint" | "review19_source" | "undo" | "history";
+  state: AppState;
+};
+
+export type RetiredNightOperation = {
+  reason: "night_workflow_retired";
+  retiredAt: string;
+  /** A newly captured fallback basis is not a historical adopted decision. */
+  basisCaptureStatus: "preserved" | "unavailable";
+  evidence: RetiredNightOperationEvidence[];
+};
+
 export type DailySessionSnapshot = {
   version: 1;
   dataSchemaVersion?: number;
@@ -657,6 +673,8 @@ export type DailySessionSnapshot = {
   analysisWeatherContext?: AnalysisWeatherContext;
   basisCapturedAt?: string;
   sessionEndReason?: "completed" | "auto_time_transition";
+  /** Schema-3 compatible evidence; no inferred completion or replacement time. */
+  retiredOperation?: RetiredNightOperation;
   rateLogicVersion?: RateLogicVersion;
   screen: ScreenName;
   session: {
@@ -981,7 +999,6 @@ export type UseNebikiAppActions = {
   exportAllReview19Data: () => boolean;
   exportLatestReview19Data: () => boolean;
   exportCompletedReview19Data: () => boolean;
-  start19DiscountAfterReview: () => void;
   startNextDoneSession: () => void;
   syncLocalDataToSupabase: () => Promise<SupabaseBackfillResult>;
   getStorageUsageDiagnostic: () => Promise<NebikiStorageUsageDiagnostic>;
