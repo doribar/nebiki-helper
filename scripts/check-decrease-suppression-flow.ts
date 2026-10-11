@@ -29,7 +29,6 @@ import { createInitialState } from "../src/hooks/nebikiApp/stateNormalization.ts
 import type { AppState, AreaCountEvaluation, AreaId, DemandCycle, DiscountTime, HumanEvaluationAdjustment, HumanEvaluationSelection, SessionDraft } from "../src/domain/types.ts";
 
 const DATE = "2026-09-08";
-const AT = `${DATE}T08:10:00.000Z`;
 const AREA = "bento_men";
 const EVALUATIONS: AreaCountEvaluation[] = ["few", "slightly_few", "normal", "slightly_many", "many"];
 const tests: { name: string; run: () => void | Promise<void> }[] = [];
@@ -109,7 +108,7 @@ function harness(options: {
     previousRenderRef: { current: snapshot(state) as NavigationSnapshot | null },
     suppressHistoryPushRef: { current: false }, remoteAreaCountHistoryRef: { current: [] as AreaCountRecord[] },
     applyObonRule: true,
-    getRuntimeNow: () => new Date(Date.parse(AT) + clockCalls++),
+    getRuntimeNow: () => new Date(Date.parse(`${DATE}T${time === "15" ? "06" : "08"}:10:00.000Z`) + clockCalls++),
     getAreaEvaluationQuickAdjustments, createHumanEvaluationSelection, resolveHumanEvaluationForDiscount,
     normalizeDemandCycle, buildAreaCountDecisionBasis, buildSessionAnalysisCalendarContext,
     buildAnalysisWeatherContext, getCurrentDataVersionInfo, getActualWeekdayLabel,

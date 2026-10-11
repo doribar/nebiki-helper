@@ -61,6 +61,7 @@ function canQuick(params: {
     screen: "rate_display",
     discountTime: params.discountTime,
     isTestMode: false,
+    now: new Date(`2026-09-08T${params.discountTime === "15" ? "06" : "08"}:10:00.000Z`),
     progress: {
       areaId: "bento_men",
       status: "unstarted",

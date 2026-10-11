@@ -13,6 +13,7 @@ import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresenta
 import { isSummerModeAvailable } from "../domain/demandCycle.ts";
 import { canSuppressAreaCountDecreaseAdjustment } from "../domain/areaCountHistory.ts";
 import { getAreaEvaluationQuickAdjustments } from "../domain/areaEvaluationAdjustment.ts";
+import { getRuntimeNow } from "../hooks/nebikiApp/clock.ts";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -214,6 +215,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
             screen: state.screen,
             discountTime: state.session.discountTime,
             isTestMode: testNow instanceof Date,
+            now: getRuntimeNow(),
             progress: state.currentAreaId ? state.areaProgressMap[state.currentAreaId] : undefined,
           })}
           onApplyAreaEvaluationAdjustment={actions.applyAreaEvaluationAdjustment}

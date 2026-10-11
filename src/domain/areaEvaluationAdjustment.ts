@@ -15,6 +15,21 @@ const EVALUATIONS_ASCENDING: AreaCountEvaluation[] = [
   "many",
 ];
 
+/** 元の15/17時sessionに対応するJSTの下げ操作終了時刻までの時間。 */
+export function getAreaEvaluationLowerQuickAdjustmentDelayMs(
+  discountTime: DiscountTime,
+  now: Date,
+): number | null {
+  const boundaryHour = discountTime === "15" ? 16 : discountTime === "17" ? 18 : null;
+  if (boundaryHour === null) return null;
+  const timestamp = now.getTime();
+  if (!Number.isFinite(timestamp)) return 0;
+  const jst = new Date(timestamp + 9 * 60 * 60 * 1000);
+  const elapsedMs = ((jst.getUTCHours() * 60 + jst.getUTCMinutes()) * 60
+    + jst.getUTCSeconds()) * 1000 + jst.getUTCMilliseconds();
+  return Math.max(0, boundaryHour * 60 * 60 * 1000 - elapsedMs);
+}
+
 export function createAreaEvaluationQuickAdjustment(
   originalEvaluation: AreaCountEvaluation,
   direction: HumanEvaluationAdjustment["direction"],
@@ -41,6 +56,7 @@ export function getAreaEvaluationQuickAdjustments(params: {
   screen: ScreenName;
   discountTime: DiscountTime;
   isTestMode: boolean;
+  now: Date;
   progress?: AreaProgress;
 }): HumanEvaluationAdjustment[] {
   if (
@@ -57,6 +73,10 @@ export function getAreaEvaluationQuickAdjustments(params: {
   if (automatic?.status !== "ready") return [];
 
   return (["higher", "lower"] as const).flatMap((direction) => {
+    if (direction === "lower"
+      && getAreaEvaluationLowerQuickAdjustmentDelayMs(params.discountTime, params.now) === 0) {
+      return [];
+    }
     const adjustment = createAreaEvaluationQuickAdjustment(
       automatic.evaluation,
       direction,

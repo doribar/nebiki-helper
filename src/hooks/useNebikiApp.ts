@@ -312,6 +312,7 @@ import {
   resolveHumanEvaluationForDiscount,
 } from "../domain/humanEvaluation.ts";
 import {
+  getAreaEvaluationLowerQuickAdjustmentDelayMs,
   getAreaEvaluationQuickAdjustments,
 } from "../domain/areaEvaluationAdjustment.ts";
 import {
@@ -1408,6 +1409,17 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   useEffect(() => {
     setNowMs(getRuntimeNowMs());
   }, [testNowMs]);
+
+  useEffect(() => {
+    if (isTestMode || state.screen !== "rate_display" || !state.session) return;
+    const delayMs = getAreaEvaluationLowerQuickAdjustmentDelayMs(
+      state.session.discountTime,
+      getRuntimeNow(),
+    );
+    if (delayMs === null || delayMs <= 0) return;
+    const id = window.setTimeout(() => setNowMs(getRuntimeNowMs()), delayMs);
+    return () => window.clearTimeout(id);
+  }, [isTestMode, state.screen, state.session, nowMs]);
 
 
   useEffect(() => {
@@ -3766,6 +3778,7 @@ const lateSkipNotice = useMemo(() => {
       screen: state.screen,
       discountTime: state.session.discountTime,
       isTestMode,
+      now: getRuntimeNow(),
       progress,
     }).find((candidate) => candidate.direction === direction);
     if (!adjustment || typeof progress.areaCount !== "number") return;

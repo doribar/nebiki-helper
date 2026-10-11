@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-49",
+  "version": "2026.8.9-50",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -94,7 +94,8 @@
     "check:evening-comfort-flow": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-evening-comfort-flow.ts",
     "check:daytime-time49": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daytime-time49.ts",
     "check:retired-night49": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-retired-night49.ts",
-    "check:daytime-operation49": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daytime-operation49.ts"
+    "check:daytime-operation49": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-daytime-operation49.ts",
+    "check:late-area-quick50": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-late-area-quick50.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

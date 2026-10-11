@@ -93,6 +93,7 @@ function fixture(original: AreaCountEvaluation = "normal", time: DiscountTime = 
 
 const choices = (state: AppState, isTestMode = false) => getAreaEvaluationQuickAdjustments({
   screen: state.screen, discountTime: state.session!.discountTime, isTestMode,
+  now: new Date(`${DATE}T${state.session!.discountTime === "15" ? "06" : "08"}:10:00.000Z`),
   progress: state.currentAreaId ? state.areaProgressMap[state.currentAreaId] : undefined,
 });
 
@@ -203,7 +204,7 @@ function actionHarness(original: AreaCountEvaluation, options: {
     areaCountRecords: [] as AreaCountRecord[],
     remoteAreaCountHistoryRef: { current: [] },
     applyObonRule: true,
-    getRuntimeNow: () => new Date(AT),
+    getRuntimeNow: () => new Date(`${DATE}T${state.session!.discountTime === "15" ? "06" : "08"}:10:00.000Z`),
     getAreaEvaluationQuickAdjustments,
     createHumanEvaluationSelection,
     resolveHumanEvaluationForDiscount,
