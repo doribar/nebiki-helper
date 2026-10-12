@@ -50,6 +50,7 @@ const memory = new MemoryStorage();
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: memory });
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: false } });
 const intervals = new Map<number, () => void>();
+const timeouts = new Map<number, { callback: () => void; due: number }>();
 const listeners = new Map<string, Set<() => void>>();
 let timerId = 0;
 const events = {
@@ -63,7 +64,8 @@ Object.defineProperty(globalThis, "window", { configurable: true, value: {
   ...events,
   setInterval(callback: () => void) { const id = ++timerId; intervals.set(id, callback); return id; },
   clearInterval(id: number) { intervals.delete(id); },
-  setTimeout() { return ++timerId; }, clearTimeout() {},
+  setTimeout(callback: () => void, delay = 0) { const id = ++timerId; timeouts.set(id, { callback, due: fixedMs + delay }); return id; },
+  clearTimeout(id: number) { timeouts.delete(id); },
   confirm() { return true; }, alert(message: string) { throw new Error(message); },
 } });
 
@@ -124,7 +126,7 @@ class HookFixture {
         const text = String(callback);
         // Keep unrelated network/archive async effects outside this fixture;
         // all synchronous persistence/navigation/draft effects execute verbatim.
-        if (!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|setInterval\(updateNow|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)/.test(text)) continue;
+        if (!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)/.test(text)) continue;
         slot.cleanup?.(); const cleanup = callback(); slot.cleanup = typeof cleanup === "function" ? cleanup : undefined;
       }
       if (!this.dirty) return;
@@ -187,6 +189,11 @@ function measure(action: () => void) {
   counts.checkpointWrites = memory.writes.filter(key => key === storage.STORAGE_KEYS.workSessionCheckpoint).length;
   return counts;
 }
+function fireAlignedClock() {
+  const due = [...timeouts].filter(([, timer]) => timer.due <= fixedMs);
+  assert.ok(due.length > 0, "the real common clock has an elapsed timeout");
+  for (const [id, timer] of due) { timeouts.delete(id); timer.callback(); }
+}
 function changeTemperature(hook: HookFixture, tempC: number) {
   const input = hook.app.state.sessionDraft.weather;
   hook.app.actions.updateSessionDraft({weather:{...input,hourlyForecasts:{...input.hourlyForecasts,"18":{...input.hourlyForecasts["18"],tempC}}}});
@@ -222,7 +229,7 @@ test("render only and 30 second clock updates do not persist or rebuild historie
   const hook=fixture({active:true,historyCount:24}); const prepared={...hook.memoPreparations};
   const render=measure(()=>hook.settle(true));
   assert.equal(render.localStorageWrites,0); assert.equal(render.historyClonePayloads,0);
-  const clock=measure(()=>{fixedMs+=30000;for(const callback of intervals.values())callback();hook.settle();});
+  const clock=measure(()=>{fixedMs+=30000;fireAlignedClock();hook.settle();});
   assert.equal(clock.localStorageWrites,0);assert.equal(clock.historyClonePayloads,0);assert.deepEqual(hook.memoPreparations,prepared);
   hook.close(); return {render,clock};
 });
@@ -265,7 +272,7 @@ test("Done journal writes settle without repeated history invalidation and stay 
   const saved=storage.readRawDailySessionSnapshotJournal();assert.ok(saved);
   const snapshots=storage.loadDailySessionSnapshots();assert.equal(snapshots.length,1);
   assert.equal(snapshots[0].session.startedAt,"2026-10-01T08:00:00.000Z");
-  const counts=measure(()=>{fixedMs+=30000;for(const callback of intervals.values())callback();hook.settle();});
+  const counts=measure(()=>{fixedMs+=30000;fireAlignedClock();hook.settle();});
   assert.equal(counts.currentWrites,0);assert.equal(counts.runtimeWrites,0);
   assert.equal(storage.readRawDailySessionSnapshotJournal(),saved,"clock updates keep confirmed completion bytes");
   const renders=hook.renderCount;hook.close();return {renders,counts};
@@ -533,7 +540,7 @@ test("an unstarted draft crosses midnight with new date/weekday and clears the o
   const saved = legacyWeekdayState(); saved.sessionDraft.weatherInputLockedDiscountTime = "17";
   const hook = fixture({ rawState: saved }); assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);
   fixedMs = new NativeDate("2026-10-02T00:00:01+09:00").getTime();
-  for (const callback of intervals.values()) callback(); hook.settle();
+  fireAlignedClock(); hook.settle();
   assertAutomaticBusinessWeekday(hook, "2026-10-02", 5);
   assert.equal(hook.app.state.sessionDraft.weatherInputLockedDiscountTime, null);
   assert.equal(storage.loadCurrentSession().sessionDraft.weekday, 5);
@@ -545,7 +552,7 @@ test("an active session across midnight retains its business date and that day's
   const saved = legacyWeekdayState(true); saved.screen = "rate_display"; saved.currentAreaId = "bento_men";
   const hook = fixture({ active: true, rawState: saved });
   fixedMs = new NativeDate("2026-10-02T00:00:01+09:00").getTime();
-  for (const callback of intervals.values()) callback(); hook.settle();
+  fireAlignedClock(); hook.settle();
   assert.equal(hook.app.state.session?.date, "2026-10-01"); assert.equal(hook.app.state.session?.weekday, 4);
   hook.app.actions.startEditingConditions(); hook.settle();
   assertAutomaticBusinessWeekday(hook, "2026-10-01", 4);

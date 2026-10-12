@@ -186,9 +186,9 @@ class HookFixture {
     if (force || this.dirty || !this.app) this.render();
     for (let pass = 0; pass < 15; pass++) {
       for (const { callback, slot } of this.effects) {
-        // Run real clock/boundary/listener, navigation and persistence effects.
+        // Run the real shared clock/listener, navigation and persistence effects.
         // Unrelated asynchronous archive/network hydration is separate scope.
-        if (!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|setInterval\(updateNow|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(String(callback))) continue;
+        if (!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(String(callback))) continue;
         slot.cleanup?.(); const cleanup = callback(); slot.cleanup = typeof cleanup === "function" ? cleanup : undefined;
       }
       if (!this.dirty) return;
@@ -208,9 +208,11 @@ function fixture(raw: AppState, timestamp: number): HookFixture {
   memory.values.set(AREA_COUNT_LOCAL_STORAGE_KEY, JSON.stringify(history(raw.session!.discountTime, raw.session!.demandCycle)));
   const hook = new HookFixture(); hook.settle(true); return hook;
 }
-const boundaryTimeouts = () => [...timeouts.entries()].filter(([, timer]) => /setNowMs/.test(String(timer.callback)));
+// The common scheduler owns these timers on every operational screen. Avoid
+// selecting an implementation-specific callback string as50's rate-only timer did.
+const clockTimeouts = () => [...timeouts.entries()];
 function fireBoundaryTimers() {
-  for (const [id, timer] of [...boundaryTimeouts()]) {
+  for (const [id, timer] of clockTimeouts()) {
     if (timer.due <= nowMs) { timeouts.delete(id); timer.callback(); }
   }
 }
@@ -365,15 +367,16 @@ for (const cycle of ["normal", "summer"] as const) for (const time of ["15", "17
     const hook = fixture(state(time, cycle), cutoff(time) - 1);
     try {
       assert.deepEqual(renderRouter(hook).directions, ["higher", "lower"]);
-      const timer = boundaryTimeouts(); assert.equal(timer.length, 1); assert.equal(timer[0][1].delay, 1); assert.equal(timer[0][1].due, cutoff(time));
+      const timer = clockTimeouts(); assert.equal(timer.length, 1); assert.equal(timer[0][1].delay, 1); assert.equal(timer[0][1].due, cutoff(time));
       const stateBefore = json(hook.app.state), renders = hook.renders, writes = memory.writes.length;
       nowMs = cutoff(time); fireBoundaryTimers(); hook.settle();
       assert.ok(hook.renders > renders, "timeout forces React update at cutoff");
       assert.deepEqual(renderRouter(hook).directions, ["higher"]);
       assert.deepEqual(json(hook.app.state), stateBefore, "clock does not rewrite progress");
       assert.equal(memory.writes.length, writes, "clock-only rerender adds no persistence writes");
-      assert.equal(boundaryTimeouts().length, 0, "expired boundary is not rescheduled");
-      assert.ok([...intervals.values()].some(timer => timer.delay === 30000));
+      assert.equal(clockTimeouts().length, 1, "the shared clock keeps refreshing after lower expires");
+      assert.equal(clockTimeouts()[0][1].delay, 30000); assert.equal(clockTimeouts()[0][1].due, cutoff(time) + 30000);
+      assert.equal(intervals.size, 0, "the shared clock uses recursive aligned timeouts");
     } finally { hook.close(); }
     assert.equal(timeouts.size, 0); assert.equal(intervals.size, 0);
     assert.equal(windowEvents.listeners.get("focus")?.size ?? 0, 0);
@@ -402,39 +405,39 @@ for (const cycle of ["normal", "summer"] as const) for (const time of ["15", "17
   });
 }
 
-for (const time of ["15", "17"] as const) for (const trigger of ["focus", "visibility", "interval"] as const) {
-  await test(`${time}: ${trigger} updates expired quick buttons and refreshes boundary timeout from fresh clock`, () => {
+for (const time of ["15", "17"] as const) for (const trigger of ["focus", "visibility", "timeout"] as const) {
+  await test(`${time}: ${trigger} updates expired quick buttons and refreshes aligned timeout from fresh clock`, () => {
     const hook = fixture(state(time), cutoff(time) - 12345);
     try {
-      assert.equal(boundaryTimeouts()[0][1].delay, 12345);
+      assert.equal(clockTimeouts()[0][1].delay, 12345);
       nowMs = cutoff(time) - 100;
       if (trigger === "focus") windowEvents.emit("focus");
       if (trigger === "visibility") documentEvents.emit("visibilitychange");
-      if (trigger === "interval") [...intervals.values()].find(timer => timer.delay === 30000)!.callback();
+      if (trigger === "timeout") { const [id, timer] = clockTimeouts()[0]; timeouts.delete(id); timer.callback(); }
       hook.settle();
-      assert.equal(boundaryTimeouts().length, 1); assert.equal(boundaryTimeouts()[0][1].delay, 100);
+      assert.equal(clockTimeouts().length, 1); assert.equal(clockTimeouts()[0][1].delay, 100);
       const renders = hook.renders; nowMs = cutoff(time);
       if (trigger === "focus") windowEvents.emit("focus");
       if (trigger === "visibility") {
         documentFixture.hidden = true; documentEvents.emit("visibilitychange"); hook.settle(); assert.equal(hook.renders, renders, "hidden event does not wake clock");
         documentFixture.hidden = false; documentEvents.emit("visibilitychange");
       }
-      if (trigger === "interval") [...intervals.values()].find(timer => timer.delay === 30000)!.callback();
-      hook.settle(); assert.deepEqual(renderRouter(hook).directions, ["higher"]); assert.equal(boundaryTimeouts().length, 0);
+      if (trigger === "timeout") fireBoundaryTimers();
+      hook.settle(); assert.deepEqual(renderRouter(hook).directions, ["higher"]); assert.equal(clockTimeouts().length, 1); assert.equal(clockTimeouts()[0][1].delay, 30000);
     } finally { hook.close(); }
   });
 }
-await test("boundary timeout is limited to active rate screen and removed on navigation/session change/fixed mode", () => {
+await test("shared clock follows rate/start/area navigation and disposes all operational timers in fixed mode", () => {
   const hook = fixture(state("15"), at("15:59:00").getTime());
   try {
-    const first = boundaryTimeouts()[0][0];
+    const first = clockTimeouts()[0][0];
     hook.app.actions.startEditingConditions(); hook.settle();
-    assert.equal(hook.app.state.screen, "start"); assert.equal(timeouts.has(first), false); assert.equal(boundaryTimeouts().length, 0);
+    assert.equal(hook.app.state.screen, "start"); assert.equal(timeouts.has(first), false); assert.equal(clockTimeouts().length, 2);
     const stateSlot = hook.slots.find(slot => slot.value === hook.app.state)!;
     stateSlot.value = state("17"); hook.settle(true);
-    assert.equal(boundaryTimeouts().length, 1); assert.equal(boundaryTimeouts()[0][1].due, cutoff("17"));
+    assert.equal(clockTimeouts().length, 1); assert.equal(clockTimeouts()[0][1].due, nowMs + 30000);
     hook.fixedNow = new Date(at("17:59:00").getTime()); hook.settle(true);
-    assert.equal(boundaryTimeouts().length, 0); assert.deepEqual(renderRouter(hook).directions, []);
+    assert.equal(clockTimeouts().length, 0); assert.deepEqual(renderRouter(hook).directions, []);
   } finally { hook.close(); }
 });
 

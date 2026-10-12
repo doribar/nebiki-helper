@@ -37,12 +37,19 @@ const memory = new MemoryStorage();
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: memory });
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: false } });
 const intervals = new Map<number, () => void>();
+const timeouts = new Map<number, { callback: () => void; due: number }>();
 let timerId = 0;
 const events = { addEventListener() {}, removeEventListener() {} };
 Object.defineProperty(globalThis, "document", { configurable: true, value: { ...events, hidden: false } });
 Object.defineProperty(globalThis, "window", { configurable: true, value: { ...events,
   setInterval(callback: () => void) { const id = ++timerId; intervals.set(id, callback); return id; }, clearInterval(id: number) { intervals.delete(id); },
-  setTimeout() { return ++timerId; }, clearTimeout() {}, confirm() { return true; }, alert(message: string) { throw new Error(message); } } });
+  setTimeout(callback: () => void, delay = 0) { const id = ++timerId; timeouts.set(id, { callback, due: fixedMs + delay }); return id; },
+  clearTimeout(id: number) { timeouts.delete(id); }, confirm() { return true; }, alert(message: string) { throw new Error(message); } } });
+function fireAlignedClock() {
+  const due = [...timeouts].filter(([, timer]) => timer.due <= fixedMs);
+  assert.ok(due.length > 0, "the real common clock has an elapsed timeout");
+  for (const [id, timer] of due) { timeouts.delete(id); timer.callback(); }
+}
 type Slot = { value?: unknown; deps?: readonly unknown[]; cleanup?: () => void };
 const sameDeps = (a?: readonly unknown[], b?: readonly unknown[]) => a !== undefined && b !== undefined && a.length === b.length && a.every((value,index) => Object.is(value,b[index]));
 class HookFixture {
@@ -71,7 +78,7 @@ class HookFixture {
         const text=String(callback);
         // Exact production callbacks execute; unrelated asynchronous archive and
         // network hydration are intentionally outside this deterministic suite.
-        if(!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|setInterval\(updateNow|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text))continue;
+        if(!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text))continue;
         slot.cleanup?.();const cleanup=callback();slot.cleanup=typeof cleanup==="function"?cleanup:undefined;
       }
       if(!this.dirty)return;this.render();
@@ -191,7 +198,7 @@ test("new defaults and a new business day preserve values but require today's 16
 });
 test("actual unstarted draft midnight and explicit date edits invalidate comparison availability without erasing weather",()=>{
   const raw=createInitialState(state().sessionDraft);raw.screen="start";raw.session=null;const weatherBefore=JSON.stringify(raw.sessionDraft.weather.hourlyForecasts),hook=fixture(raw,"23:59");
-  fixedMs=new NativeDate("2026-09-09T00:00:01+09:00").getTime();for(const callback of [...intervals.values()])callback();hook.settle();
+  fixedMs=new NativeDate("2026-09-09T00:00:01+09:00").getTime();fireAlignedClock();hook.settle();
   assert.equal(hook.app.state.sessionDraft.date,"2026-09-09");assert.deepEqual(hook.app.state.sessionDraft.weather.eveningComfortUnavailableForecastHours,["16","21"]);assert.equal(JSON.stringify(hook.app.state.sessionDraft.weather.hourlyForecasts),weatherBefore);
   hook.app.actions.updateSessionDraft({date:DATE,weather:{...hook.app.state.sessionDraft.weather,eveningComfortUnavailableForecastHours:[]}});hook.settle();assert.deepEqual(hook.app.state.sessionDraft.weather.eveningComfortUnavailableForecastHours,["16","21"]);
   assert.equal(JSON.stringify(hook.app.state.sessionDraft.weather.hourlyForecasts),weatherBefore);const evidence={midnightDate:"2026-09-09",weatherRetained:true,marker:hook.app.state.sessionDraft.weather.eveningComfortUnavailableForecastHours};hook.close();return evidence;

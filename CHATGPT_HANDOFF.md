@@ -1,8 +1,8 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-50）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-51）
 
 最終更新: 2026-10-12 JST
 
-この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。長期的な開発ルールとリリース規則は先に `AGENTS.md` を読むこと。ここでは最新release、現行architecture、実装済み機能、検証範囲、既知課題、未実装事項を扱う。
+この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
 ## 1. 正本と現在のローカル状態
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-50.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-50.zip` |
-| appVersion | `2026.8.9-50` |
-| buildId | `build-20261012-025803-jst` |
+| ZIP | `nebiki-helper-2026.8.9-51.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-51.zip` |
+| appVersion | `2026.8.9-51` |
+| buildId | `build-20261012-040025-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-50.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-51.md`参照（自己参照回避） |
 
-application rootは`work/delayedQuick50/nebiki-helper`。比較基準は完成9-49 ZIP `nebiki-helper-2026.8.9-49.zip`（SHA-256 `8bddc3557d1612b2b4f4d11cd113a2ce90458dbec9ccc118bf45f727c84b8881`、build `build-20261011-220012-jst`）。9-50は元の15時sessionのJST16:00以降、17時sessionのJST18:00以降にdirection=lowerのquick buttonだけを非表示・操作拒否する。normal/summer共通、higher/手動判定/保存済みquick metadata・確定率・snapshotは保持。表示と操作は同じpure helperで判定し、rate画面の境界timeoutと既存30秒/focus/visibility更新で再表示、操作はfresh runtime clockで再確認する。
+application rootは`work/alignedClock51/nebiki-helper`。比較基準は完成50 ZIP `nebiki-helper-2026.8.9-50.zip`（SHA-256 `edfc2586e5b0e6e0ba81827b1cc9411762e7907623a0a90c002d33e27763c91d`、build `build-20261012-025803-jst`）。51は表示時計・Start draft同期・App日付確認を00秒/30秒へ毎回fresh clockからrecursive timeoutで整列する。起動/画面切替/focus/visibleで即反映し、fixed-timeは起動・指定時計の変更時に同期し、実時計timerを使わない。render時の表示計算もfresh runtime sampleを使い、50の境界後rate画面初期化でlowerだけ消えてlate+5が古いまま残る経路を修正する。
 
-9-49の15/17 only、16:40自動開始切替、15時16:00+ / 17時18:00+ late+5、独立Review19の18:55+開始・source保存/失敗retry、旧夜枠の原本退避と保存保護は維持。schema3・SQL/AGENTS/過去報告・build方式も維持。以下の過去release説明より9-50の操作条件を優先する。詳細は`CHANGE_REPORT_2026.8.9-50.md`。
+50の元15時session/JST16:00以降・元17時/JST18:00以降のlower quick非表示/操作拒否、fresh action再確認、higher/保存済みquick metadata/確定率/snapshot保持は維持。49の15/17 only・16:40切替・weather lock・late+5、独立Review19の18:55+開始/source保存/失敗retry、旧夜枠保全、46快適補正、48reference、schema3/SQL/AGENTS/過去報告/build方式も維持。詳細は`CHANGE_REPORT_2026.8.9-51.md`。過去release説明より51の現在時計更新を優先する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\delayedQuick50\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\alignedClock51\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -235,7 +235,7 @@ human 9-scaleのeven解決は、normalでは15時が少ない側、17時以降�
 
 - `getAreaEvaluationLowerQuickAdjustmentDelayMs()` は元session時刻15→JST16:00、17→JST18:00までのmsを返す。境界以降0、他のlegacy時刻はnull。JSTはUTC timestamp+9時間から取得し、端末timezone・weather/global/late補正値を判定に使わない。
 - `getAreaEvaluationQuickAdjustments()` は必須 `now: Date` を受け、direction=lowerかつdelay0だけ除外する。higher、元automatic基準±1・非累積、端点/ready/不足/Review19/fixed-timeの従来条件は維持。
-- AppRouterは `getRuntimeNow()` を渡す。hookのrate画面専用timeoutはfresh clockから境界までのdelayを求めて `setNowMs()`、既存30秒・focus・visibility更新も維持する。固定時計モードではquickなし・新境界timeoutなし。
+- AppRouterは `getRuntimeNow()` を渡す。50当時のrate専用境界timeoutは51で共通00/30 recursive時計へ整理。各renderのfresh clockとscreen/area切替の即同期でlate表示とlowerを揃える。固定時計ではquickなし・実時計timerなし。
 - actionも同じgetQuickへ操作時点の `getRuntimeNow()` を渡す。古いlower callbackでも境界後はjudge/save/undo/syncへ進まず拒否。確定済みhuman lower/採用評価/説明/rateDecisionSnapshot/履歴を戻したり時計だけで書換えたりしない。既存の現在推奨率のlate+5表示と、保存済み確定率を区別する。
 - RateDisplayScreen自体は非変更。lowerの保存説明と採用判定は残り、full manual selector/長押しも別操作として残る。曜日基準文言・夏のhint不一致は下の既知課題のまま。
 
@@ -446,6 +446,15 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-51: 時計更新は毎回00秒・30秒へ整列
+
+- `getNextAlignedRuntimeClockDelayMs(nowMs)` は秒/msを含むtimestampから次の正のdelayを返す。境界ちょうどは30000ms、12.345秒なら次30.000秒。`startAlignedRuntimeClock()` は初期即更新、各更新後fresh時計を再readしてrecursive setTimeout。固定interval・毎秒poll・遅延分の連続実行は使わない。
+- focus / hidden→visibleでは旧予約cancel→即反映→再予約。generation/disposedガードとtimeout/listener cleanupで取消済callback・StrictMode・画面/モード変更の重複を防ぐ。hiddenイベントだけではrefreshしない。通信/retry/UI長押し等のtimerは対象外。
+- hook表示clock・Start syncDraftTime・App日付確認へ同helperを使用する。fixed clockは起動・指定ms変更時に同期し、実時計timerなし、READ ONLY保持。Start同期bodyは不変で16:40切替/天候lock/業務日保持、App日付ブロックも維持。
+- hookのclock stateはwakeup専用、派生nowMsは各renderのfresh `getRuntimeNowMs()`。screen/current areaのeffect初期化にも即sampleし、50の境界後delay0returnによる古いlate推奨率/説明を持ち越さない。全画面へ時計tickを供給し、rate-only timeout/testNow単独effectを整理。
+- lower/higher semantic・保存済み評価/確定rate/snapshot/履歴は不変。現在推奨率のlate+5とsaved確定率を区別し、時計だけで評価を再解決せず、保存・同期を無条件追加しない。
+
+
 ### 9-47: 開始画面の曜日・時刻は同幅2列
 
 - StartScreenの表示JSXだけを変更。grid `repeat(2, minmax(0, 1fr))` / gap12px、子列minWidth0。左曜日/右時刻、ラベル上・既存表示欄下の2行。順序は全体値引補正→2列→天候。既存文字サイズ・padding/枠/色を維持。
@@ -494,13 +503,12 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- 全check:* **88/88 PASS**（全88実行後、初回失敗2件をtest fixture/effect数期待の修正後に再実行）。専用late-area-quick50 **29/29**、area quick **40/40**、reference quick **29/29**、decrease suppression **15/15**、独立runtime **38/38 PASS**。
-- TypeScript、production build、PWA generateSW **PASS**。108 modules / precache10。build `build-20261012-025803-jst`、asset `/assets/index-VfzdDVUq.js`、bundle SHA-256 `e9fd99ec360f85e7081eefb4b80c58a59b295ed6064d7b6e51460f555084520a`。既存chunk/Browserslist警告は残る。
-- focused ESLint **0 errors / 2 existing warnings**、full lint **9 errors / 5 warnings**。49 baselineとのfile/rule/severity/message比較で新規diagnostic **0**。full lintは既存診断でexit1、全体PASSとはしない。
-- 実Edge 155.0.4283.45 headless production preview、360/390×normal/summer×15/17×6flow **48/48 PASS**。352 software touch、136 geometry checks。境界999ms/1000ms（30秒tick前）、higher、stale lower拒否、保存済みlower説明/確定snapshot保持、reload/area移動/focus/visibility、late+5非累積を確認。console error/想定外warning/外部通信0、SW遮断のharness通知104件は別記。
-- src105本とbundleはbrowser前後hash一致。build inputs120 / checked inputs210も最終候補一致。3 production file以外のsrc102本、root SQL9本、AGENTS、過去CHANGE58本は49ZIPとbyte-identical。RateDisplayScreen、計算/保存/履歴/同期coreは変更なし。
-- 完成ZIPはsingle root `nebiki-helper`でCRC/duplicate/path/symlink/除外物/credential/dist/PWA/version/build/schemaとfile集合・bytesを再open検査する。SHAと最終検査はZIP外のRELEASE_REPORT / ZIP_VALIDATION / `.zip.sha256`を参照。
-- 店舗の物理端末タッチ、インストール済みPWA更新、実Supabase、端末長時間background復帰は未確認。ブラウザは人工fixture/時計制御、stale callbackはinstrumentationを使用。既存の夏17時hint不一致と曜日基準の文言は今回変更しない。
+- appVersion `2026.8.9-51` / buildId `build-20261012-040025-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
+- 全check **89/89 PASS**、時計専用 **20/20 PASS**、独立scheduler **12/12 PASS**。TypeScript / production build / PWA generateSW PASS（precache10）。
+- focused ESLint **0 errors / 2 existing warnings**、full **9 errors / 5 warnings**。50baselineとのfile/rule/severity/message比較で新規0・削除0。既存full lintはexit1。
+- 実Edge155 production preview、360/390×normal/summer×15/17: **108/108 PASS**。初回partial予約、area_judge境界、rate切替race、focus/visible、stale lower拒否、higher、保存済lower/確定snapshot保持、reload、Start16:40/weather lock、日付block、fixed clock/READ ONLY、Review18:55/source/onceを確認。別途完成50とのrace比較 **2/2 PASS**（50 many15%/説明なし → 51 many20%/late説明あり）。
+- 横overflow・unexpected console error/warning・外部通信0。SW登録block通知はharness警告として別計上。時計/復帰を注入した実ブラウザで、物理端末・長時間background・実Supabase mutation・インストール済PWAは未確認。証拠はworkspace `work/alignedClock51/browser-work`、ZIP外。
+- src105のうちclock/App/hook3本だけ変更、保護src102・SQL9・AGENTS・過去CHANGE59・dataVersion/Vite/depsは完成50ZIPと同一。全check入力211/build入力120をhash照合。完成ZIP再openでCRC・重複・path・symlink・除外物・version/build/schema/distPWA・working treeの集合/bytes一致を確認する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -510,7 +518,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、全51本より少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全89 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -533,7 +541,9 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
-9-50追加: `areaEvaluationAdjustment.ts`のJST lower条件/境界delay、AppRouterのruntime時計、hookの境界timeout/fresh action clock、専用`check-late-area-quick50.ts`。
+9-51追加: `clock.ts`の共通00/30時計helper、hookのfresh render clock/screen初期同期/Start予約、App日付timer、専用`check-aligned-clock51.ts`。
+
+9-50追加: `areaEvaluationAdjustment.ts`のJST lower条件、AppRouterのruntime時計、hookのfresh action clock、専用`check-late-area-quick50.ts`。50当時の画面専用境界timeoutは51の共通時計更新へ置換済み。
 
 9-49追加: `clock.ts`/`operationalTime.ts`/`review19Flow.ts`、`retiredNightOperation.ts`/`retiredNightEvidence.ts`、hookのpending退避guardと17時18:00+late補正、専用`check-daytime-time49/retired-night49/daytime-operation49.ts`。
 
@@ -544,7 +554,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-50.md`（完成baselineは `CHANGE_REPORT_2026.8.9-49.md`）
+4. `CHANGE_REPORT_2026.8.9-51.md`（完成baselineは `CHANGE_REPORT_2026.8.9-50.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

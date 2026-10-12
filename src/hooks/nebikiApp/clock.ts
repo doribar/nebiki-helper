@@ -21,6 +21,57 @@ export function getRuntimeNowMs(): number {
   return runtimeNowOverrideMs === null ? Date.now() : runtimeNowOverrideMs;
 }
 
+/** 毎分00秒・30秒までの時間。境界ちょうどなら次の境界を予約する。 */
+export function getNextAlignedRuntimeClockDelayMs(nowMs: number): number {
+  if (!Number.isFinite(nowMs)) return 30000;
+  const elapsedMs = ((nowMs % 30000) + 30000) % 30000;
+  return 30000 - elapsedMs;
+}
+
+/** 表示時計だけを更新し、毎回実時計から次の00秒・30秒を予約し直す。 */
+export function startAlignedRuntimeClock(
+  onUpdate: (nowMs: number) => void,
+  getNowMs: () => number = getRuntimeNowMs,
+): () => void {
+  let timeoutId: number | undefined;
+  let generation = 0;
+  let disposed = false;
+
+  const cancelPending = () => {
+    generation += 1;
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    timeoutId = undefined;
+  };
+
+  const refresh = () => {
+    if (disposed) return;
+    cancelPending();
+    onUpdate(getNowMs());
+    if (disposed) return;
+    const scheduledGeneration = generation;
+    const delayMs = getNextAlignedRuntimeClockDelayMs(getNowMs());
+    timeoutId = window.setTimeout(() => {
+      if (disposed || scheduledGeneration !== generation) return;
+      timeoutId = undefined;
+      refresh();
+    }, delayMs);
+  };
+
+  const onVisibilityChange = () => {
+    if (!document.hidden) refresh();
+  };
+  window.addEventListener("focus", refresh);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  refresh();
+
+  return () => {
+    disposed = true;
+    cancelPending();
+    window.removeEventListener("focus", refresh);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+  };
+}
+
 export function formatLocalDate(date = getRuntimeNow()): string {
   const y = date.getFullYear();
   const m = `${date.getMonth() + 1}`.padStart(2, "0");

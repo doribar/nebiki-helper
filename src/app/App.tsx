@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppRouter } from "./AppRouter";
 import { useNebikiApp } from "../hooks/useNebikiApp";
+import { getRuntimeNowMs, startAlignedRuntimeClock } from "../hooks/nebikiApp/clock.ts";
 import { getCanonicalUrlForLegacyHash } from "../domain/fullMode";
 import { AdminSettingsDialog } from "../components/common/AdminSettingsDialog";
 import {
@@ -338,6 +339,7 @@ export default function App() {
   const testMode = getCurrentTestMode();
   const isTestMode = Boolean(testMode);
   const testModeNow = testMode?.now;
+  const testModeNowMs = testModeNow?.getTime() ?? null;
   const [archiveReady, setArchiveReady] = useState(isTestMode);
   const [loadedDate] = useState(() => formatLocalDate(testModeNow));
   const [todayDate, setTodayDate] = useState(() => formatLocalDate(testModeNow));
@@ -397,16 +399,13 @@ export default function App() {
   }, [isTestMode]);
 
   useEffect(() => {
-    const updateTodayDate = () => setTodayDate(formatLocalDate(testModeNow));
-    const intervalId = window.setInterval(updateTodayDate, 30 * 1000);
-    window.addEventListener("focus", updateTodayDate);
-    document.addEventListener("visibilitychange", updateTodayDate);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", updateTodayDate);
-      document.removeEventListener("visibilitychange", updateTodayDate);
-    };
-  }, [testModeNow]);
+    const updateTodayDate = (nowMs: number) => setTodayDate(formatLocalDate(new Date(nowMs)));
+    if (testModeNowMs !== null) {
+      updateTodayDate(testModeNowMs);
+      return;
+    }
+    return startAlignedRuntimeClock(updateTodayDate, getRuntimeNowMs);
+  }, [testModeNowMs]);
 
   if (hasDateChanged) return <DateChangedBlocker loadedDate={loadedDate} />;
   if (!archiveReady && getHistoricalArchiveRuntimeStatus() !== "complete") {

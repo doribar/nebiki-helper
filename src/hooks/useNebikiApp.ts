@@ -232,6 +232,7 @@ import {
   getRuntimeNowMs,
   resolveDiscountTime,
   setRuntimeNowOverride,
+  startAlignedRuntimeClock,
 } from "./nebikiApp/clock.ts";
 import {
   addReview19ExcludedAreaId,
@@ -311,10 +312,7 @@ import {
   resolveHumanEvaluationDetails,
   resolveHumanEvaluationForDiscount,
 } from "../domain/humanEvaluation.ts";
-import {
-  getAreaEvaluationLowerQuickAdjustmentDelayMs,
-  getAreaEvaluationQuickAdjustments,
-} from "../domain/areaEvaluationAdjustment.ts";
+import { getAreaEvaluationQuickAdjustments } from "../domain/areaEvaluationAdjustment.ts";
 import {
   buildAnalysisWeatherContext,
   buildSessionAnalysisCalendarContext,
@@ -541,7 +539,9 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   const weatherConfirmationSubmittingRef = useRef(false);
   const autoTransitionInFlightKeyRef = useRef<string | null>(null);
 
-  const [nowMs, setNowMs] = useState(() => getRuntimeNowMs());
+  const [, setNowMs] = useState(() => getRuntimeNowMs());
+  // timerは再描画の契機。画面切替の描画でも現在時計を使い、古い表示率を持ち越さない。
+  const nowMs = getRuntimeNowMs();
   const [nextSessionSkipRecords, setNextSessionSkipRecords] = useState<NextSessionSkipRecord[]>(() =>
     cloneSkipRecords(initialPersistenceRef.current?.nextSessionSkipRecords ?? [])
   );
@@ -1390,36 +1390,12 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   }, [state.session]);
 
   useEffect(() => {
-    const updateNow = () => setNowMs(getRuntimeNowMs());
-    const onVisibilityChange = () => {
-      if (!document.hidden) updateNow();
-    };
-
-    const id = window.setInterval(updateNow, 30000);
-    window.addEventListener("focus", updateNow);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.clearInterval(id);
-      window.removeEventListener("focus", updateNow);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    setNowMs(getRuntimeNowMs());
-  }, [testNowMs]);
-
-  useEffect(() => {
-    if (isTestMode || state.screen !== "rate_display" || !state.session) return;
-    const delayMs = getAreaEvaluationLowerQuickAdjustmentDelayMs(
-      state.session.discountTime,
-      getRuntimeNow(),
-    );
-    if (delayMs === null || delayMs <= 0) return;
-    const id = window.setTimeout(() => setNowMs(getRuntimeNowMs()), delayMs);
-    return () => window.clearTimeout(id);
-  }, [isTestMode, state.screen, state.session, nowMs]);
+    if (isTestMode) {
+      setNowMs(getRuntimeNowMs());
+      return;
+    }
+    return startAlignedRuntimeClock(setNowMs);
+  }, [isTestMode, testNowMs, state.screen, state.currentAreaId]);
 
 
   useEffect(() => {
@@ -1479,10 +1455,11 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     });
   };
 
-  syncDraftTime();
-  const id = window.setInterval(syncDraftTime, 30000);
-
-  return () => window.clearInterval(id);
+  if (isTestMode) {
+    syncDraftTime();
+    return;
+  }
+  return startAlignedRuntimeClock(syncDraftTime);
 }, [state.screen, testNowMs, isTestMode, timeSwitchTarget]);
 
   useEffect(() => {

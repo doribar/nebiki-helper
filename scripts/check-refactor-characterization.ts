@@ -183,8 +183,10 @@ function assertFacadeArchitectureGuards(): void {
   assert.match(body, /getStorageUsageDiagnostic/);
   assert.doesNotMatch(body, /cleanupReview19Debug20260825/);
   assert.doesNotMatch(body, /saveReview19Records\(/);
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 25); // 50 adds the quick-adjustment boundary timeout; 49's recovery gate remains.
-  assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 2);
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 23); //51 consolidates the50 rate-only timer and fixed-clock refresh into the shared clock.
+  assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 0);
+  assert.equal([...body.matchAll(/startAlignedRuntimeClock\(/g)].length, 2);
+  assert.match(body, /const nowMs = getRuntimeNowMs\(\)/);
 }
 
 function assertTimeBoundaries(): void {
