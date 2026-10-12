@@ -438,8 +438,10 @@ test("productionAnalysisは同じ観測値と判断を持つ新旧calendarContex
 
 // Reference/insufficient semantics were rechecked against the verified 9-35
 // baseline. Only summaryText/detailLines are omitted because 9-36 intentionally
-// removes summer-only history wording. All reference and calculation fields
-// remain pinned; no old checkout is needed when this check runs.
+// removes summer-only history wording. 9-52 adds optional captured evidence
+// for the explicitly changed 15:00 holiday/Sunday selection; its contents are
+// checked in check-holiday-sunday-reference52.ts. All prior reference and
+// calculation fields remain pinned; no old checkout is needed for this check.
 const GOLDEN_NON17 = "b0b546a1476a57f4483cc7e169bce952af576141d10cd967b20cbe29c098626f";
 const GOLDEN_RATES = "6627b95b633e13e93beb137abd3ed315fe4167ea38d3ff64ed396f345156ad67";
 const goldenDates = ["2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2028-05-06", "2029-05-05"];
@@ -449,7 +451,7 @@ test("非17時のreference・履歴比較・履歴不足条件64条件はbaselin
   for (const date of goldenDates) for (const demandCycle of ["normal", "summer"] as const) for (const discountTime of ["15", "18", "19", "20"] as const) {
     const params = paramsFor(date, discountTime);
     const result = recommendation(date, [], discountTime, demandCycle);
-    const semantics = Object.fromEntries(Object.entries(result).filter(([key]) => key !== "summaryText" && key !== "detailLines"));
+    const semantics = Object.fromEntries(Object.entries(result).filter(([key]) => key !== "summaryText" && key !== "detailLines" && key !== "holidayBeforeNormalWeekdayReference"));
     values.push([params, demandCycle, getIndividualAmountReferenceContext(params), getAreaCountFallbackWeekdayGroup(params), getAreaCountComparisonWeekdayGroup(params), semantics]);
   }
   assert.equal(values.length, 64);

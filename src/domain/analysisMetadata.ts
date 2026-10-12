@@ -29,6 +29,7 @@ import type {
   ForecastHourKey,
   HumanEvaluationScale,
   HumanEvaluationScore9,
+  HolidayBeforeNormalWeekdayReference,
   Review19DayCheckSnapshot,
   Review19AreaEvaluation,
   Review19AreaSnapshot,
@@ -65,6 +66,8 @@ export type CalendarAreaCountReference = {
   referenceWeekdayGroups: ActualWeekdayGroup[];
   comparisonMode: AreaCountComparisonMode | null;
   reason: CalendarAreaCountReferenceReason;
+  /** Present only when the adopted Sunday/fallback source was captured. */
+  holidayBeforeNormalWeekdayReference?: HolidayBeforeNormalWeekdayReference;
 };
 
 /**
@@ -365,6 +368,52 @@ function normalizeIndividualAmountReference(
   };
 }
 
+/** Normalize saved evidence only; never infer it from the calendar or history. */
+export function normalizeHolidayBeforeNormalWeekdayReference(
+  raw: unknown,
+): HolidayBeforeNormalWeekdayReference | undefined {
+  if (!isObject(raw)) return undefined;
+  const nonNegativeInteger = (value: unknown): value is number =>
+    typeof value === "number" && Number.isInteger(value) && value >= 0;
+  if (
+    (raw.source !== "weekday" && raw.source !== "fallback_group") ||
+    typeof raw.adopted !== "boolean" ||
+    !nonNegativeInteger(raw.weekdaySampleSize) ||
+    !nonNegativeInteger(raw.requiredSampleSize) ||
+    (raw.fallbackWeekdayGroup !== "金土日" && raw.fallbackWeekdayGroup !== "火木日") ||
+    !nonNegativeInteger(raw.fallbackSampleSize) ||
+    !nonNegativeInteger(raw.sampleSize) ||
+    !nonNegativeInteger(raw.shortSampleSize) ||
+    !nonNegativeInteger(raw.longSampleSize)
+  ) return undefined;
+  const medianFields = ["medianCount", "shortMedianCount", "longMedianCount"] as const;
+  const medians: Pick<HolidayBeforeNormalWeekdayReference, typeof medianFields[number]> = {};
+  for (const field of medianFields) {
+    const value = raw[field];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      medians[field] = value;
+    }
+  }
+  return {
+    source: raw.source,
+    adopted: raw.adopted,
+    weekdaySampleSize: raw.weekdaySampleSize,
+    requiredSampleSize: raw.requiredSampleSize,
+    fallbackWeekdayGroup: raw.fallbackWeekdayGroup,
+    fallbackSampleSize: raw.fallbackSampleSize,
+    sampleSize: raw.sampleSize,
+    shortSampleSize: raw.shortSampleSize,
+    longSampleSize: raw.longSampleSize,
+    ...medians,
+    ...(typeof raw.medianDownGuardApplied === "boolean"
+      ? { medianDownGuardApplied: raw.medianDownGuardApplied }
+      : {}),
+    ...(raw.fallbackReason === "insufficient_sunday_history"
+      ? { fallbackReason: raw.fallbackReason }
+      : {}),
+  };
+}
+
 function normalizeAreaCountReference(
   raw: unknown,
 ): CalendarAreaCountReference | null {
@@ -412,6 +461,9 @@ function normalizeAreaCountReference(
     return null;
   }
 
+  const holidayReference = normalizeHolidayBeforeNormalWeekdayReference(
+    raw.holidayBeforeNormalWeekdayReference,
+  );
   return {
     sessionStartedAt: raw.sessionStartedAt,
     discountTime: raw.discountTime,
@@ -426,6 +478,7 @@ function normalizeAreaCountReference(
     )],
     comparisonMode: raw.comparisonMode as AreaCountComparisonMode | null,
     reason: raw.reason as CalendarAreaCountReferenceReason,
+    ...(holidayReference ? { holidayBeforeNormalWeekdayReference: holidayReference } : {}),
   };
 }
 
@@ -533,12 +586,16 @@ function buildAreaCountReference(params: {
   basis?: AreaCountDecisionBasis;
 }): CalendarAreaCountReference {
   const comparisonMode = params.basis?.comparisonMode ?? null;
+  const holidayReference = normalizeHolidayBeforeNormalWeekdayReference(
+    params.basis?.holidayBeforeNormalWeekdayReference,
+  );
   const base = {
     sessionStartedAt: params.sessionStartedAt,
     discountTime: params.discountTime,
     areaId: params.areaId,
     recommendationStatus: params.basis?.recommendationStatus ?? null,
     comparisonMode,
+    ...(holidayReference ? { holidayBeforeNormalWeekdayReference: holidayReference } : {}),
   };
 
   if (!params.basis) {
@@ -627,10 +684,24 @@ function buildAreaCountReference(params: {
         };
   }
 
+  if (comparisonMode === "holiday_before_normal_weekday" &&
+    holidayReference?.source === "weekday" && holidayReference.adopted) {
+    return {
+      ...base,
+      type: "weekday",
+      referenceWeekday: "日",
+      referenceWeekdayGroup: null,
+      referenceWeekdayGroups: [],
+      reason: hasSufficientHistory
+        ? "holiday_before_normal_weekday_history"
+        : "insufficient_history",
+    };
+  }
+
   const group = comparisonMode === "holiday_before_normal_weekday"
-    ? params.discountTime === "15"
+    ? holidayReference?.fallbackWeekdayGroup ?? (params.discountTime === "15"
       ? "金土日"
-      : "火木日"
+      : "火木日")
     : comparisonMode === "fallback_group" &&
         isActualWeekdayGroup(params.basis.actualWeekdayGroup)
       ? params.basis.actualWeekdayGroup

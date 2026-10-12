@@ -1,4 +1,4 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-51）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-52）
 
 最終更新: 2026-10-12 JST
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-51.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-51.zip` |
-| appVersion | `2026.8.9-51` |
-| buildId | `build-20261012-040025-jst` |
+| ZIP | `nebiki-helper-2026.8.9-52.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-52.zip` |
+| appVersion | `2026.8.9-52` |
+| buildId | `build-20261012-115730-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-51.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-52.md`参照（自己参照回避） |
 
-application rootは`work/alignedClock51/nebiki-helper`。比較基準は完成50 ZIP `nebiki-helper-2026.8.9-50.zip`（SHA-256 `edfc2586e5b0e6e0ba81827b1cc9411762e7907623a0a90c002d33e27763c91d`、build `build-20261012-025803-jst`）。51は表示時計・Start draft同期・App日付確認を00秒/30秒へ毎回fresh clockからrecursive timeoutで整列する。起動/画面切替/focus/visibleで即反映し、fixed-timeは起動・指定時計の変更時に同期し、実時計timerを使わない。render時の表示計算もfresh runtime sampleを使い、50の境界後rate画面初期化でlowerだけ消えてlate+5が古いまま残る経路を修正する。
+application rootは`work/holidaySunday52/nebiki-helper`。比較基準は完成51 ZIP `nebiki-helper-2026.8.9-51.zip`（SHA-256 `f310bffe230fc33c5ee45ba46e683b3b3aca5f5e65b42f5bad17aff6a2177fc4`、build `build-20261012-040025-jst`）。52は法定祝日・振替休日で翌日が通常平日の日の15/17 AreaCountについて、通常日曜3件以上なら日曜単体、0〜2件なら15金土日/17火木日を採用する。実曜日・履歴分類は保持し、任意の採用根拠を保存する。詳細は`CHANGE_REPORT_2026.8.9-52.md`。
 
-50の元15時session/JST16:00以降・元17時/JST18:00以降のlower quick非表示/操作拒否、fresh action再確認、higher/保存済みquick metadata/確定率/snapshot保持は維持。49の15/17 only・16:40切替・weather lock・late+5、独立Review19の18:55+開始/source保存/失敗retry、旧夜枠保全、46快適補正、48reference、schema3/SQL/AGENTS/過去報告/build方式も維持。詳細は`CHANGE_REPORT_2026.8.9-51.md`。過去release説明より51の現在時計更新を優先する。
+51の毎回00秒/30秒へ整列する時計更新、focus/visible/画面切替の即同期、fixed clock/READ ONLY、50のlower期限/操作拒否、49の15/17 only・遅延+5・独立Review19/旧夜枠保全、46快適補正、48三連休中日、schema3/SQL/AGENTS/build方式は保持する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\alignedClock51\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\holidaySunday52\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -183,6 +183,15 @@ legacy migrationは次の順で行う。
 - 共通 `getThreeDayHolidayMiddleReferenceDetailLines()` は保存metadataだけを読み、日曜単独/代替理由・実件数/中央値/guard・50:50か片側かを表示する。RateDisplayの三連休時だけdetails「三連休中日の履歴基準」を追加。開閉は判定・保存・再計算しない。AreaJudgeの静的火木日50:50断定は内訳案内へ変更。
 - Review19参考統計も共通median処理を使い、optional参照根拠を保存する。正式評価は9段階人間入力のまま。auto5段階を復活させずproductionAnalysisは変更しない。過去のsundayReference欠損へ新ルール採用実績を補完せず、保存済み率/評価/中央値は再計算しない。
 - 15時/通常日曜/その他曜日/4日以上の連休、基本率/天候46快適緩和/area・商品・global/時刻補正/20:30固定本体、47開始2列/注意7項目/長押しは非変更。新storage key/migration/SQLなし、schema3。
+
+### 9-52: 翌日通常平日の祝日は通常日曜を優先
+
+- 新規判定・明示再判定の15/17だけ、`isHolidayBeforeNormalWeekday(date)`がtrueの法定祝日/振替休日へ適用。2026-10-12は対象。共有分類「翌日平日祝日」だけで判定せず、Obon-onlyへ広げない。48の三連休中日合成、他時刻/通常曜日/他の暦条件は維持。
+- 同area/time・date<today・既存canonical merge/同日1観測・通年normal/summer履歴から通常日曜を抽出。実weekdayと実日付が日曜、15は金土日/17+は火木日という既存分類を確認し、holiday/祝前日/三連休/長期連休/captured特殊暦/当時versionまたはcaptured Obonを除外。record自体は再分類しない。
+- 有効日曜3件以上なら日曜だけのshort16/long52中央値、単独weekdayの`max(short,long-2)` guardを使用。日曜不足時だけ15金土日/17火木日（既存groupのshort中央値/guardなし）、代替も不足ならinsufficient/manual。減り方補正は採用したmatchedRecordsを既存式へ渡す。
+- `holidayBeforeNormalWeekdayReference?`をrecommendation/AreaCountDecisionBasis/calendar.areaCountReferenceへ保持。source=`weekday`または`fallback_group`、adopted、通常日曜件数/必要3、代替group/件数/不足理由、採用全件/short/long件数・中央値/guardを保存。両不足はadopted=falseで中央値を生成しない。comparisonModeは暦条件`holiday_before_normal_weekday`、actualWeekday=月、actualWeekdayGroup=翌日平日祝日を維持する。
+- calendar参照はcaptured source=weekdayかつadopted時だけreferenceWeekday=日。fallbackは従来group。UIはAreaJudge内訳とRateDisplayのdetails「祝日翌日平日の履歴基準」に保存根拠を表示する。details開閉は判定・保存・履歴再計算をしない。
+- basisはprogress/AreaCount decisionBasis→daily/Review source snapshot→daySnapshot/finalized/Review19 exportとAreaCount record_detailsの既存経路で保持。area snapshot内ではrateDecisionSnapshotと隣接し、rateDecisionSnapshot内部へ新metadataは追加しない。過去にfieldがなければ欠損のまま、現在の履歴から日曜採用を補完せず確定済み率/評価を再計算しない。新storage key/migration/SQLなし、schema3。
 
 ## 6. calendar、reference、summer / normal
 
@@ -503,12 +512,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-51` / buildId `build-20261012-040025-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
-- 全check **89/89 PASS**、時計専用 **20/20 PASS**、独立scheduler **12/12 PASS**。TypeScript / production build / PWA generateSW PASS（precache10）。
-- focused ESLint **0 errors / 2 existing warnings**、full **9 errors / 5 warnings**。50baselineとのfile/rule/severity/message比較で新規0・削除0。既存full lintはexit1。
-- 実Edge155 production preview、360/390×normal/summer×15/17: **108/108 PASS**。初回partial予約、area_judge境界、rate切替race、focus/visible、stale lower拒否、higher、保存済lower/確定snapshot保持、reload、Start16:40/weather lock、日付block、fixed clock/READ ONLY、Review18:55/source/onceを確認。別途完成50とのrace比較 **2/2 PASS**（50 many15%/説明なし → 51 many20%/late説明あり）。
-- 横overflow・unexpected console error/warning・外部通信0。SW登録block通知はharness警告として別計上。時計/復帰を注入した実ブラウザで、物理端末・長時間background・実Supabase mutation・インストール済PWAは未確認。証拠はworkspace `work/alignedClock51/browser-work`、ZIP外。
-- src105のうちclock/App/hook3本だけ変更、保護src102・SQL9・AGENTS・過去CHANGE59・dataVersion/Vite/depsは完成50ZIPと同一。全check入力211/build入力120をhash照合。完成ZIP再openでCRC・重複・path・symlink・除外物・version/build/schema/distPWA・working treeの集合/bytes一致を確認する。
+- appVersion `2026.8.9-52` / buildId `build-20261012-115730-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
+- 全check **90/90 PASS**、52専用 **63/63 PASS**。実51/52のdomain/rate比較 **48/48 PASS**、独立scope/gate/legacy **1,922/1,922 PASS**。TypeScript / production build / PWA generateSW PASS（108 modules/precache10）。
+- focused ESLint **1 existing error / 0 warnings**、full **9 errors / 5 warnings**。51baselineとのfile/rule/severity/message比較で新規0・削除0。対象テスト2本とdomain3は0error/0warning。既存full/focused lintはexit1。
+- 実Edge155 production preview、360/390幅: **28/28 PASS**。15/17の通常日曜採用、0/1/2件fallback、両不足manual、保存根拠/reload、51legacy欠損/fixed READ ONLYを確認。横overflow/ unexpected console error・warning/外部通信0。人工fixture・時計の実ブラウザであり、物理端末/実Supabase mutation/インストール済PWAは未確認。生証拠はworkspace `work/holidaySunday52/browser-work`、ZIP外。
+- src105のうちdomain3+UI2だけ変更、保護src100・SQL9・AGENTS・過去CHANGE60・dataVersion/Vite/depsは完成51ZIPと同一。check入力212/build入力120のhashを照合。完成ZIP再openでCRC・重複・path・symlink・除外物・version/build/schema/distPWA・working treeの集合/bytes一致を確認する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -518,7 +526,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全89 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全90 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -541,6 +549,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
+9-52追加: areaCountHistoryの通常日曜共用抽出/対象祝日15・17採用、types/analysisMetadataのoptional根拠、AreaJudge/RateDisplayの保存根拠、`check-holiday-sunday-reference52.ts`。
+
 9-51追加: `clock.ts`の共通00/30時計helper、hookのfresh render clock/screen初期同期/Start予約、App日付timer、専用`check-aligned-clock51.ts`。
 
 9-50追加: `areaEvaluationAdjustment.ts`のJST lower条件、AppRouterのruntime時計、hookのfresh action clock、専用`check-late-area-quick50.ts`。50当時の画面専用境界timeoutは51の共通時計更新へ置換済み。
@@ -554,7 +564,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-51.md`（完成baselineは `CHANGE_REPORT_2026.8.9-50.md`）
+4. `CHANGE_REPORT_2026.8.9-52.md`（完成baselineは `CHANGE_REPORT_2026.8.9-51.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

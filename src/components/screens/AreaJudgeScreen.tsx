@@ -207,6 +207,15 @@ function getComparisonNotice(
   }
 
   if (recommendation.comparisonMode === "holiday_before_normal_weekday") {
+    const reference = recommendation.holidayBeforeNormalWeekdayReference;
+    if (reference) {
+      if (!reference.adopted) {
+        return "※通常の日曜履歴と代替グループの履歴が不足しているため、手動で判定してください。";
+      }
+      return reference.source === "weekday"
+        ? "※通常の日曜履歴を採用しています。"
+        : `※通常の日曜履歴が不足しているため、${reference.fallbackWeekdayGroup}を採用しています。`;
+    }
     return "※祝日で明日が平日のため、日曜日と同じ残数基準で判定しています。";
   }
 

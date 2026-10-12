@@ -231,6 +231,24 @@ export type ActualWeekdayGroup =
   | "金土"
   | "三連休中日"
   | "翌日平日祝日";
+/** Captured adoption evidence; missing means the Sunday-first rule was not recorded. */
+export type HolidayBeforeNormalWeekdayReference = {
+  source: "weekday" | "fallback_group";
+  adopted: boolean;
+  /** Valid ordinary Sundays before today, after the existing canonical merge. */
+  weekdaySampleSize: number;
+  requiredSampleSize: number;
+  fallbackWeekdayGroup: "金土日" | "火木日";
+  fallbackSampleSize: number;
+  sampleSize: number;
+  shortSampleSize: number;
+  longSampleSize: number;
+  medianCount?: number;
+  shortMedianCount?: number;
+  longMedianCount?: number;
+  medianDownGuardApplied?: boolean;
+  fallbackReason?: "insufficient_sunday_history";
+};
 export type AreaCountEvaluation = "many" | "slightly_many" | "normal" | "slightly_few" | "few";
 export type HumanEvaluationScore9 = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 export type HumanEvaluationScale = 5 | 9;

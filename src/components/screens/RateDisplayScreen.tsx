@@ -25,7 +25,7 @@ import {
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
-import { evaluationText, getThreeDayHolidayMiddleReferenceDetailLines, type AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
+import { evaluationText, getHolidayBeforeNormalWeekdayReferenceDetailLines, getThreeDayHolidayMiddleReferenceDetailLines, type AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
 import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
 import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
 import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
@@ -434,6 +434,37 @@ export function RateDisplayScreen({
             {getThreeDayHolidayMiddleReferenceDetailLines(
               areaCountDecisionBasis.threeDayHolidayMiddleReference,
               areaCountDecisionBasis.requiredSampleSize,
+            ).map((line) => <div key={line}>{line}</div>)}
+          </div>
+        </details>
+      ) : null}
+
+      {areaCountDecisionBasis?.comparisonMode === "holiday_before_normal_weekday" &&
+        areaCountDecisionBasis.holidayBeforeNormalWeekdayReference ? (
+        <details
+          aria-label="祝日翌日平日の履歴基準"
+          onTouchStart={(event) => {
+            event.stopPropagation();
+            cancelSwipeGesture();
+          }}
+          style={{
+            border: "1px solid #cbd5e1",
+            borderRadius: 10,
+            padding: "9px 11px",
+            marginBottom: 12,
+            background: "#f8fafc",
+            color: "#334155",
+            fontSize: 14,
+            lineHeight: 1.6,
+            overflowWrap: "anywhere",
+          }}
+        >
+          <summary style={{ fontWeight: 800, cursor: "pointer" }}>
+            祝日翌日平日の履歴基準
+          </summary>
+          <div style={{ marginTop: 6 }}>
+            {getHolidayBeforeNormalWeekdayReferenceDetailLines(
+              areaCountDecisionBasis.holidayBeforeNormalWeekdayReference,
             ).map((line) => <div key={line}>{line}</div>)}
           </div>
         </details>
