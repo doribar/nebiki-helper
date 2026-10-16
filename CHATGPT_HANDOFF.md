@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-52）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-53）
 
-最終更新: 2026-10-12 JST
+最終更新: 2026-10-16 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-52.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-52.zip` |
-| appVersion | `2026.8.9-52` |
-| buildId | `build-20261012-115730-jst` |
+| ZIP | `nebiki-helper-2026.8.9-53.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-53.zip` |
+| appVersion | `2026.8.9-53` |
+| buildId | `build-20261016-101454-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-52.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-53.md`参照（自己参照回避） |
 
-application rootは`work/holidaySunday52/nebiki-helper`。比較基準は完成51 ZIP `nebiki-helper-2026.8.9-51.zip`（SHA-256 `f310bffe230fc33c5ee45ba46e683b3b3aca5f5e65b42f5bad17aff6a2177fc4`、build `build-20261012-040025-jst`）。52は法定祝日・振替休日で翌日が通常平日の日の15/17 AreaCountについて、通常日曜3件以上なら日曜単体、0〜2件なら15金土日/17火木日を採用する。実曜日・履歴分類は保持し、任意の採用根拠を保存する。詳細は`CHANGE_REPORT_2026.8.9-52.md`。
+application rootは`work/doneDim53/nebiki-helper`。比較基準は完成52 ZIP `nebiki-helper-2026.8.9-52.zip`（SHA-256 `7090a7f897446d8a72a45fc2cd38798a91a64aa20e86b2a1280d8b20d9231305`、build `build-20261012-115730-jst`）。53は通常Doneの全エリア率一覧で、元15session/JST16:00以降・元17session/JST18:00以降に既知数値の「どちらでもない → ○％」だけopacity0.45にする。表示propのみで永続化しない。詳細は`CHANGE_REPORT_2026.8.9-53.md`。
 
-51の毎回00秒/30秒へ整列する時計更新、focus/visible/画面切替の即同期、fixed clock/READ ONLY、50のlower期限/操作拒否、49の15/17 only・遅延+5・独立Review19/旧夜枠保全、46快適補正、48三連休中日、schema3/SQL/AGENTS/build方式は保持する。
+52の対象祝日15/17通常日曜優先/不足時groupと採用根拠、51の共通00/30時計と復帰、50のlower期限/操作拒否、49の15/17 only・遅延+5・Review19/旧夜枠保全、46快適補正、48三連休中日、schema3/SQL/AGENTS/build方式は保持する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\holidaySunday52\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\doneDim53\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -455,6 +455,13 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-53: 通常Doneの「どちらでもない」だけ境界後に薄く表示
+
+- AppRouterのdone分岐で元の`state.session.discountTime`とfresh `getRuntimeNow()`を既存`getAreaEvaluationLowerQuickAdjustmentDelayMs()`へ渡し、15→JST16:00:00以降/17→JST18:00:00以降を判定する。通常/夏共通、fixed-timeは既存runtime overrideの時計。見かけの基準時刻、表示率、確定時刻、global/weather補正から境界を推測しない。新17sessionはその18時境界で再評価する。
+- DoneScreenのoptional `dimNormalRate` prop（省略false）を使い、既知の有限・非負normalRatePercentを持つ行の「どちらでもない → 率」文字divだけopacity0.45。緑/黒のcolor指定は不変で、淡い緑/淡いグレーになる。多い/エリア名/status/背景/行全体、skip/unfinished/unknown/旧数値metadata欠損は従来通り。
+- 既存hookの全画面共通00/30 clockがDoneも再renderする。画面進入/切替、focus/visibleでfresh時計を使い、Done専用timer/listener/stateを追加しない。固定時計は実時計で上書きせずREAD ONLYを維持する。
+- hook/types/domain/rate/保存は52とbyte-identical。現在一覧のlate+5と保存済み確定率を区別し、opacityやUI propをstate/summary/snapshot/exportへ保存しない。既存completion effectが境界で同一bytesの日次journalを再保存する場合は従来の動作で、本変更の描画自身はwriteしない。
+
 ### 9-51: 時計更新は毎回00秒・30秒へ整列
 
 - `getNextAlignedRuntimeClockDelayMs(nowMs)` は秒/msを含むtimestampから次の正のdelayを返す。境界ちょうどは30000ms、12.345秒なら次30.000秒。`startAlignedRuntimeClock()` は初期即更新、各更新後fresh時計を再readしてrecursive setTimeout。固定interval・毎秒poll・遅延分の連続実行は使わない。
@@ -512,11 +519,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-52` / buildId `build-20261012-115730-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
-- 全check **90/90 PASS**、52専用 **63/63 PASS**。実51/52のdomain/rate比較 **48/48 PASS**、独立scope/gate/legacy **1,922/1,922 PASS**。TypeScript / production build / PWA generateSW PASS（108 modules/precache10）。
-- focused ESLint **1 existing error / 0 warnings**、full **9 errors / 5 warnings**。51baselineとのfile/rule/severity/message比較で新規0・削除0。対象テスト2本とdomain3は0error/0warning。既存full/focused lintはexit1。
-- 実Edge155 production preview、360/390幅: **28/28 PASS**。15/17の通常日曜採用、0/1/2件fallback、両不足manual、保存根拠/reload、51legacy欠損/fixed READ ONLYを確認。横overflow/ unexpected console error・warning/外部通信0。人工fixture・時計の実ブラウザであり、物理端末/実Supabase mutation/インストール済PWAは未確認。生証拠はworkspace `work/holidaySunday52/browser-work`、ZIP外。
-- src105のうちdomain3+UI2だけ変更、保護src100・SQL9・AGENTS・過去CHANGE60・dataVersion/Vite/depsは完成51ZIPと同一。check入力212/build入力120のhashを照合。完成ZIP再openでCRC・重複・path・symlink・除外物・version/build/schema/distPWA・working treeの集合/bytes一致を確認する。
+- appVersion `2026.8.9-53` / buildId `build-20261016-101454-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
+- 全check **91/91 PASS**、53専用 **39/39 PASS**、独立実TSX/3hostTZ audit **183/183 PASS**。TypeScript / production build / PWA generateSW PASS（108 modules/precache10）。
+- focused ESLint **0 errors / 0 warnings**、full **9 existing errors / 5 existing warnings**。52baselineとのfile/rule/severity/message比較で新規0・削除0。full lint自体はexit1。
+- 実Edge production preview、360/390幅: **48/48 PASS**。境界前/ちょうど/後、開いたままの00/30更新、境界後進入/復帰/reload、new17、normal/summer/fixed、緑・黒0%/非対象、late+5と確定snapshot保持を確認。横overflow/新規アプリconsole診断/外部通信0。人工fixture・時計のブラウザ確認で、物理端末/実Supabase/インストール済PWAは未確認。証拠はZIP外`work/doneDim53/browser-work`。
+- src105の差分はAppRouter/DoneScreen2本のみ。保護src103・SQL9・AGENTS・過去CHANGE61・dataVersion/Vite/depsは完成52ZIPと同一。check入力213/build入力120をhash照合。完成ZIP再openでCRC・重複・path・symlink・除外物・版/build/schema/PWA・working tree集合と全bytesを確認する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -526,7 +533,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全90 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全91 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -549,6 +556,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
+9-53追加: AppRouter doneの元session/runtime境界prop、DoneScreen normal文字divのopacity、`scripts/check-done-normal-dim53.ts`。
+
 9-52追加: areaCountHistoryの通常日曜共用抽出/対象祝日15・17採用、types/analysisMetadataのoptional根拠、AreaJudge/RateDisplayの保存根拠、`check-holiday-sunday-reference52.ts`。
 
 9-51追加: `clock.ts`の共通00/30時計helper、hookのfresh render clock/screen初期同期/Start予約、App日付timer、専用`check-aligned-clock51.ts`。
@@ -564,7 +573,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-52.md`（完成baselineは `CHANGE_REPORT_2026.8.9-51.md`）
+4. `CHANGE_REPORT_2026.8.9-53.md`（完成baselineは `CHANGE_REPORT_2026.8.9-52.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

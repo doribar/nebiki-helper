@@ -6,6 +6,7 @@ type DoneScreenProps = {
   onReturnHome: () => void;
   referenceConditionLabel?: string;
   summaryItems: DoneSummaryItem[];
+  dimNormalRate?: boolean;
 };
 
 const subActionButtonStyle: CSSProperties = {
@@ -34,6 +35,7 @@ export function DoneScreen({
   onReturnHome,
   referenceConditionLabel,
   summaryItems,
+  dimNormalRate = false,
 }: DoneScreenProps) {
   return (
     <main style={{ padding: 16, maxWidth: 560, margin: "0 auto" }}>
@@ -127,6 +129,9 @@ export function DoneScreen({
                       color: typeof item.normalRatePercent === "number" &&
                         Number.isFinite(item.normalRatePercent) && item.normalRatePercent > 0
                         ? "#008000" : undefined,
+                      opacity: dimNormalRate && typeof item.normalRatePercent === "number" &&
+                        Number.isFinite(item.normalRatePercent) && item.normalRatePercent >= 0
+                        ? 0.45 : undefined,
                     }}>
                       どちらでもない → {item.normalRateText ?? item.rateText}
                     </div>

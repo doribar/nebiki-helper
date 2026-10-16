@@ -12,7 +12,10 @@ import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresentation.ts";
 import { isSummerModeAvailable } from "../domain/demandCycle.ts";
 import { canSuppressAreaCountDecreaseAdjustment } from "../domain/areaCountHistory.ts";
-import { getAreaEvaluationQuickAdjustments } from "../domain/areaEvaluationAdjustment.ts";
+import {
+  getAreaEvaluationLowerQuickAdjustmentDelayMs,
+  getAreaEvaluationQuickAdjustments,
+} from "../domain/areaEvaluationAdjustment.ts";
 import { getRuntimeNow } from "../hooks/nebikiApp/clock.ts";
 
 type AppRouterProps = {
@@ -252,6 +255,11 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
+          dimNormalRate={Boolean(state.session &&
+            getAreaEvaluationLowerQuickAdjustmentDelayMs(
+              state.session.discountTime,
+              getRuntimeNow(),
+            ) === 0)}
           referenceConditionLabel={derived.basisGuide.referenceConditionLabel}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
