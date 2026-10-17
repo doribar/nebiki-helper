@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   AreaId,
   DemandCycle,
@@ -31,6 +31,8 @@ import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
 import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
 import type { MedianEvaluationDisplay } from "../../domain/medianEvaluationPresentation.ts";
 import { formatGlobalDiscountAdjustment } from "../../domain/globalDiscountAdjustment.ts";
+import { getAreaEvaluationLowerQuickAdjustmentDelayMs } from "../../domain/areaEvaluationAdjustment.ts";
+import { getRuntimeNow } from "../../hooks/nebikiApp/clock.ts";
 
 type RateDisplayScreenProps = {
   weekdayText: string;
@@ -71,7 +73,7 @@ type RateDisplayScreenProps = {
   showThreeDayHolidayMiddleNotice?: boolean;
   showHolidayBeforeNormalWeekdayNotice?: boolean;
   finalGuide?: FinalGuideData;
-  onNextArea: () => void;
+  onNextArea: () => boolean | void;
   onSkip: () => void;
   onGoBack: () => void;
   onReturnHome: () => void;
@@ -112,7 +114,7 @@ function buildRateInstructionSteps(params: {
   } = params;
   if (!rateDisplay) return [];
 
-  return [
+  const steps: RateInstructionStep[] = [
     {
       key: "many",
       title: (
@@ -136,6 +138,7 @@ function buildRateInstructionSteps(params: {
       color: normalColor,
     },
   ];
+  return steps.filter((step) => step.rateLine.main.trim().length > 0);
 }
 
 function RateInstructionCard({
@@ -314,6 +317,10 @@ export function RateDisplayScreen({
   const [showSkipTargetPicker, setShowSkipTargetPicker] = useState(false);
   const [showManualEvaluationOverride, setShowManualEvaluationOverride] = useState(false);
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
+  const rateInstructionActionRef = useRef({ stepIndex: 0, completing: false });
+  const isLateInstructionBoundary =
+    getAreaEvaluationLowerQuickAdjustmentDelayMs(discountTime, getRuntimeNow()) === 0;
+  const showManyInstructionOnly = discountTime === "15" && isLateInstructionBoundary;
   const manyColor = "#ff0000";
   const normalColor = "#008000";
   const productAmountReferenceText = basisGuide.referenceConditionLabel;
@@ -346,42 +353,103 @@ export function RateDisplayScreen({
     rateDisplay?.few.main ?? "",
     rateDisplay?.few.note ?? "",
   ].join("|");
+  // Manual decisions still restart instructions when their rate changes. Clock
+  // updates keep the current step, including the removed late-15 normal step.
+  const manualRateChangeSignature = JSON.stringify([
+    globalDiscountAdjustmentPercent,
+    areaCountDecisionBasis?.finalEvaluation,
+    areaCountDecisionBasis?.areaRateAdjustment,
+    areaCountDecisionBasis?.decreaseAdjustment?.suppressed,
+    humanEvaluationDetails,
+  ]);
+  const previousRateInstructionContextRef = useRef({
+    areaName,
+    canChooseSkipTarget,
+    discountTime,
+    rateDisplaySignature,
+    manualRateChangeSignature,
+    isLateInstructionBoundary,
+  });
 
   useEffect(() => {
-    // Existing screen-change reset: keep the three related UI states in sync.
+    const previous = previousRateInstructionContextRef.current;
+    const screenChanged = previous.areaName !== areaName ||
+      previous.canChooseSkipTarget !== canChooseSkipTarget ||
+      previous.discountTime !== discountTime;
+    const rateChanged = previous.rateDisplaySignature !== rateDisplaySignature;
+    const manualRateChanged = previous.manualRateChangeSignature !== manualRateChangeSignature;
+    const clockBoundaryChanged = previous.isLateInstructionBoundary !== isLateInstructionBoundary;
+    previousRateInstructionContextRef.current = {
+      areaName, canChooseSkipTarget, discountTime, rateDisplaySignature,
+      manualRateChangeSignature, isLateInstructionBoundary,
+    };
+    // A new manual decision can supersede a queued completion even when rate
+    // limits keep the text unchanged. Keep a removed normal step retryable.
+    if (manualRateChanged) rateInstructionActionRef.current.completing = false;
+    if (!screenChanged && !rateChanged) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowSkipTargetPicker(false);
     setShowManualEvaluationOverride(false);
-    setRateInstructionStepIndex(0);
+    // Late rates may arrive on the parent's next existing clock update after
+    // a fresh click has already observed the deadline inside this screen.
+    const preserveClockStep = !manualRateChanged &&
+      (isLateInstructionBoundary || clockBoundaryChanged);
+    const normalStepWasRemoved = showManyInstructionOnly && rateInstructionStepIndex > 0;
+    if (screenChanged || (!preserveClockStep && !normalStepWasRemoved)) {
+      rateInstructionActionRef.current = { stepIndex: 0, completing: false };
+      setRateInstructionStepIndex(0);
+    }
   }, [
     areaName,
     canChooseSkipTarget,
     discountTime,
     rateDisplaySignature,
+    manualRateChangeSignature,
+    isLateInstructionBoundary,
+    showManyInstructionOnly,
+    rateInstructionStepIndex,
   ]);
   const rateInstructionSteps = buildRateInstructionSteps({
     rateDisplay,
     manyColor,
     normalColor,
   });
-  const currentRateInstructionStep =
-    rateInstructionSteps[
-      Math.min(
-        rateInstructionStepIndex,
-        Math.max(rateInstructionSteps.length - 1, 0),
-      )
-    ];
+  const selectedRateInstructionStepIndex = Math.min(
+    rateInstructionStepIndex,
+    Math.max(rateInstructionSteps.length - 1, 0),
+  );
+  const selectedRateInstructionStep = rateInstructionSteps[selectedRateInstructionStepIndex];
+  const visibleRateInstructionSteps = rateInstructionSteps.filter(
+    (step) => !showManyInstructionOnly || step.key !== "normal",
+  );
+  const showNeutralInstructionFinish = showManyInstructionOnly && (
+    rateInstructionStepIndex > 0 || selectedRateInstructionStep?.key !== "many"
+  );
+  const currentRateInstructionStep = showNeutralInstructionFinish
+    ? undefined : selectedRateInstructionStep;
   const finalInstructionSteps = finalGuide
     ? getFinalTimeInstructionSteps(finalGuide)
     : [];
 
   function handleRateInstructionDone() {
-    if (rateInstructionStepIndex < rateInstructionSteps.length - 1) {
-      setRateInstructionStepIndex((current) => current + 1);
+    const action = rateInstructionActionRef.current;
+    if (action.completing || action.stepIndex !== rateInstructionStepIndex) return;
+    const deadlineAtClick = getAreaEvaluationLowerQuickAdjustmentDelayMs(discountTime, getRuntimeNow());
+    const isLate15AtClick = discountTime === "15" && deadlineAtClick === 0;
+    if (!isLate15AtClick && rateInstructionStepIndex < rateInstructionSteps.length - 1) {
+      action.stepIndex = rateInstructionStepIndex + 1;
+      setRateInstructionStepIndex(action.stepIndex);
       return;
     }
 
-    onNextArea();
+    action.completing = true;
+    try {
+      // A refused completion remains available for an explicit retry.
+      if (onNextArea() === false) action.completing = false;
+    } catch (error) {
+      action.completing = false;
+      throw error;
+    }
   }
 
   return (
@@ -566,8 +634,10 @@ export function RateDisplayScreen({
         >
           {rateDisplayBeforeGlobalAdjustment ? (
             <>
-              基準値引率：
-              <strong>{rateDisplayBeforeGlobalAdjustment.normal.main}</strong>
+              {showManyInstructionOnly ? "多い商品の基準値引率：" : "基準値引率："}
+              <strong>{showManyInstructionOnly
+                ? rateDisplayBeforeGlobalAdjustment.many.main
+                : rateDisplayBeforeGlobalAdjustment.normal.main}</strong>
               <br />
             </>
           ) : null}
@@ -578,7 +648,10 @@ export function RateDisplayScreen({
           {rateDisplay ? (
             <>
               <br />
-              補正後：<strong>{rateDisplay.normal.main}</strong>
+              {showManyInstructionOnly ? "多い商品の補正後：" : "補正後："}
+              <strong>{showManyInstructionOnly
+                ? rateDisplay.many.main
+                : rateDisplay.normal.main}</strong>
             </>
           ) : null}
         </section>
@@ -695,19 +768,29 @@ export function RateDisplayScreen({
             <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
               <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
               <br />
-              <span>各商品の量が「</span>
-              <span style={{ color: "#ff0000", fontWeight: 700 }}>
-                多い
-              </span>
-              <span>・</span>
-              <span style={{ color: "#0000ff", fontWeight: 700 }}>
-                少ない
-              </span>
-              <span>・</span>
-              <span style={{ color: "#008000", fontWeight: 700 }}>
-                どちらでもない
-              </span>
-              <span>」のどれかを確認してください。</span>
+              {showManyInstructionOnly ? (
+                <>
+                  各商品の量が「
+                  <span style={{ color: "#ff0000", fontWeight: 700 }}>多い</span>
+                  」か確認してください。
+                </>
+              ) : (
+                <>
+                  <span>各商品の量が「</span>
+                  <span style={{ color: "#ff0000", fontWeight: 700 }}>
+                    多い
+                  </span>
+                  <span>・</span>
+                  <span style={{ color: "#0000ff", fontWeight: 700 }}>
+                    少ない
+                  </span>
+                  <span>・</span>
+                  <span style={{ color: "#008000", fontWeight: 700 }}>
+                    どちらでもない
+                  </span>
+                  <span>」のどれかを確認してください。</span>
+                </>
+              )}
             </div>
 
             <DayBeforeHolidayNotice visible={showDayBeforeHolidayNotice} />
@@ -721,11 +804,20 @@ export function RateDisplayScreen({
             {currentRateInstructionStep ? (
               <RateInstructionCard
                 step={currentRateInstructionStep}
-                currentIndex={rateInstructionStepIndex}
-                totalCount={rateInstructionSteps.length}
+                currentIndex={visibleRateInstructionSteps.indexOf(currentRateInstructionStep)}
+                totalCount={visibleRateInstructionSteps.length}
                 demandCycle={demandCycle}
                 onDone={handleRateInstructionDone}
               />
+            ) : showNeutralInstructionFinish ? (
+              <div>
+                <div style={{ lineHeight: 1.8 }}>
+                  このエリアの作業を終えたら、次のエリアへ進んでください。
+                </div>
+                <div style={{ marginTop: 24 }}>
+                  <PrimaryButton onClick={handleRateInstructionDone}>終わった</PrimaryButton>
+                </div>
+              </div>
             ) : null}
           </>
         ) : (

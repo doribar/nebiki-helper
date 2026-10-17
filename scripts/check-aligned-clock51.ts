@@ -119,7 +119,7 @@ class ReactFixture<T> {
   }
   close() { this.slots.forEach(slot => { slot.cleanup?.(); slot.cleanup = undefined; }); }
 }
-const hookEffects = (text: string) => /app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime|startAutomaticReview19/.test(text);
+const hookEffects = (text: string) => /app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|areaCompletionStateRef\.current|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime|startAutomaticReview19/.test(text);
 function draft(time: DiscountTime = "15"): SessionDraft {
   const hourlyForecasts = createDefaultHourlyForecasts();
   for (const forecast of Object.values(hourlyForecasts)) Object.assign(forecast, { weather: "sunny", tempC: 29, windMs: 2 });

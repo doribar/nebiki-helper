@@ -8,6 +8,7 @@ import ts from "typescript";
 import type { AdvanceDiscountScreen } from "../src/components/screens/AdvanceDiscountScreen.tsx";
 import type { RateDisplayScreen } from "../src/components/screens/RateDisplayScreen.tsx";
 import { getAdvanceDiscountRate } from "../src/domain/advanceDiscount.ts";
+import { getAreaEvaluationLowerQuickAdjustmentDelayMs } from "../src/domain/areaEvaluationAdjustment.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { getEveningComfortReliefContext } from "../src/domain/eveningComfortRelief.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
@@ -102,6 +103,7 @@ function hookDecision(session: SessionData, resolvedWeather = resolveWeatherInpu
     state, sessionSource: session, sessionSourceResolvedWeather: resolvedWeather,
     currentAreaProgress: progress, clickedProgress: progress, clickedAreaId: "bento_men",
     completedAt: CONFIRMED_AT, lateTimeBonus: 0, lateTimeBonusNotice: null,
+    actionNow: new Date(CONFIRMED_AT), getAreaEvaluationLowerQuickAdjustmentDelayMs,
     earlyNextMinus5Info: null, effectiveRateDiscountTime: session.discountTime,
     effectiveRateIgnoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
     applyObonRule: true, useMemo: (factory: () => unknown) => factory(),
@@ -112,6 +114,8 @@ function hookDecision(session: SessionData, resolvedWeather = resolveWeatherInpu
   const weekdayBaseInfo = executeHookValue<ReturnType<typeof getWeekdayBaseInfo>>("weekdayBaseInfo", context);
   const basisGuide = executeHookValue<ReturnType<typeof getBasisGuideDisplay>>("basisGuide", context);
   const presentation = executeHookValue<ReturnType<typeof buildCurrentNormalRatePresentation>>("ratePresentation", context);
+  executeHookValue("daytimeSession", context);
+  assert.equal(executeHookValue("actionLateTimeBonus", context), 0, "the fixture confirms before the daytime deadline");
   const snapshot = executeHookValue<RateDecisionSnapshot | null>("clickedRateDecisionSnapshot", context);
   assert.ok(presentation);
   assert.ok(snapshot);

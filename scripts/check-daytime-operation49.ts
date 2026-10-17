@@ -91,7 +91,7 @@ class HookFixture {
         // clock and history. Async archive/network hydration is browser scope.
         const text=String(callback);
         const retirementEffect=this.includeRetiredPreservationEffect && /void preserveRetiredNightOperations\(\)/.test(text);
-        if (!retirementEffect && !/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text)) continue;
+        if (!retirementEffect && !/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|areaCompletionStateRef\.current|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text)) continue;
         if (/daily-session-completion/.test(text)) this.effectRuns.daily++;
         if (/app-state-effect/.test(text)) this.effectRuns.appState++;
         if (/runtime-state-effect/.test(text)) this.effectRuns.runtime++;

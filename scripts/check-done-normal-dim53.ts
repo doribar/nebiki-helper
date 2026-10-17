@@ -55,7 +55,7 @@ const windowFixture = {
   addEventListener: windowEvents.addEventListener, removeEventListener: windowEvents.removeEventListener,
   setTimeout(callback: () => void, delay = 0) { const id = ++timerId; timeouts.set(id, { callback, delay, due: nowMs + delay }); return id; },
   clearTimeout(id: number) { timeouts.delete(id); },
-  setInterval() { assert.fail("Done dimming must reuse the aligned timeout clock"); }, clearInterval() {},
+  setInterval() { assert.fail("Done strike-through must reuse the aligned timeout clock"); }, clearInterval() {},
   location: { search: "", hash: "", href: "http://done53.invalid/", pathname: "/" },
   confirm() { return true; }, scrollTo() {}, alert(message: string) { assert.fail(`Unexpected alert: ${message}`); },
 };
@@ -120,7 +120,7 @@ class ReactFixture<T> {
   }
   close() { this.slots.forEach(slot => { slot.cleanup?.(); slot.cleanup = undefined; }); }
 }
-const hookEffects = (text: string) => /app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text);
+const hookEffects = (text: string) => /app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|areaCompletionStateRef\.current|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text);
 const modules = new Map<string, Record<string, unknown>>();
 async function loadTsx(url: URL): Promise<Record<string, unknown>> {
   const cached = modules.get(url.href); if (cached) return cached;
@@ -145,17 +145,19 @@ const noop = () => {};
 function item(patch: Partial<DoneSummaryItem> = {}): DoneSummaryItem {
   return { areaId: AREA, areaName: "弁当・麺", judgeText: "普通", rateText: "20%", manyRateText: "30%", normalRateText: "20%", manyRatePercent: 30, normalRatePercent: 20, statusText: "完了", ...patch };
 }
-function renderDone(summaryItems: DoneSummaryItem[], dimNormalRate?: boolean) {
-  return renderToStaticMarkup(React.createElement(Done, { summaryItems, dimNormalRate, referenceConditionLabel: "9月・火曜日・17時", onGoBack: noop, onReturnHome: noop }));
+function renderDone(summaryItems: DoneSummaryItem[], strikeNormalRate?: boolean) {
+  return renderToStaticMarkup(React.createElement(Done, { summaryItems, strikeNormalRate, referenceConditionLabel: "9月・火曜日・17時", onGoBack: noop, onReturnHome: noop }));
 }
 function line(markup: string, label: "多い" | "どちらでもない") {
   const match = markup.match(new RegExp(`<div style="([^"]*)">${label} → ([^<]*)</div>`));
   assert.ok(match, `actual Done ${label} line exists`); return { style: match[1], text: match[2] };
 }
-const withoutDim = (markup: string) => markup.replace(/;opacity:0\.45/g, "");
-function assertDim(markup: string, expected: boolean) {
-  assert.equal(/(?:^|;)opacity:0\.45(?:;|$)/.test(line(markup, "どちらでもない").style), expected);
-  assert.doesNotMatch(line(markup, "多い").style, /opacity:/);
+const withoutStrike = (markup: string) => markup.replace(/;text-decoration-line:line-through;text-decoration-style:solid/g, "");
+function assertStrike(markup: string, expected: boolean) {
+  assert.equal(/(?:^|;)text-decoration-line:line-through(?:;|$)/.test(line(markup, "どちらでもない").style), expected);
+  assert.equal(/(?:^|;)text-decoration-style:solid(?:;|$)/.test(line(markup, "どちらでもない").style), expected);
+  assert.doesNotMatch(markup, /opacity:/);
+  assert.doesNotMatch(line(markup, "多い").style, /text-decoration/);
 }
 function draft(time: DiscountTime, cycle: DemandCycle): SessionDraft {
   const hourlyForecasts = createDefaultHourlyForecasts();
@@ -187,20 +189,20 @@ function minimalApp(time?: DiscountTime, cycle: DemandCycle = "normal") {
 let passed = 0;
 async function test(name: string, run: () => void | Promise<void>) { await run(); clean(); passed++; console.log(`PASS ${String(passed).padStart(2, "0")}: ${name}`); }
 
-await test("optional dim flag defaults to the existing complete markup", () => {
+await test("optional strike flag defaults to the existing complete markup", () => {
   assert.equal(renderDone([item()]), renderDone([item()], false));
-  assertDim(renderDone([item()]), false);
+  assertStrike(renderDone([item()]), false);
 });
-for (const value of [0, 5, 20, 50]) await test(`numeric normal ${value}% dims only its complete line and preserves independent red/green`, () => {
-  const values = [item({ normalRatePercent: value, normalRateText: `${value}%` })], before = JSON.stringify(values), plain = renderDone(values, false), dim = renderDone(values, true);
-  assertDim(dim, true); assert.equal(withoutDim(dim), plain); assert.equal(JSON.stringify(values), before);
-  assert.match(line(dim, "多い").style, /color:#ff0000(?:;|$)/);
-  assert.equal(line(dim, "どちらでもない").style.includes("color:#008000"), value > 0);
-  assert.equal(line(dim, "どちらでもない").text, `${value}%`);
+for (const value of [0, 5, 20, 50]) await test(`numeric normal ${value}% strikes only its complete line and preserves independent red/green`, () => {
+  const values = [item({ normalRatePercent: value, normalRateText: `${value}%` })], before = JSON.stringify(values), plain = renderDone(values, false), strike = renderDone(values, true);
+  assertStrike(strike, true); assert.equal(withoutStrike(strike), plain); assert.equal(JSON.stringify(values), before);
+  assert.match(line(strike, "多い").style, /color:#ff0000(?:;|$)/);
+  assert.equal(line(strike, "どちらでもない").style.includes("color:#008000"), value > 0);
+  assert.equal(line(strike, "どちらでもない").text, `${value}%`);
 });
-for (const value of [undefined, null, NaN, Infinity, -Infinity, -1, "20"]) await test(`unknown/invalid normal ${String(value)} never infers numeric dimming from 20% text`, () => {
+for (const value of [undefined, null, NaN, Infinity, -Infinity, -1, "20"]) await test(`unknown/invalid normal ${String(value)} never infers numeric strike-through from 20% text`, () => {
   const values = [item({ normalRatePercent: value as number })];
-  assert.equal(renderDone(values, true), renderDone(values, false)); assertDim(renderDone(values, true), false);
+  assert.equal(renderDone(values, true), renderDone(values, false)); assertStrike(renderDone(values, true), false);
 });
 await test("skip, unfinished, unknown instructions, status, labels and area order remain byte-identical", () => {
   const values = [
@@ -208,24 +210,24 @@ await test("skip, unfinished, unknown instructions, status, labels and area orde
     item({ areaId: "onigiri", areaName: "おにぎり", rateText: "未完了", manyRateText: "未完了", normalRateText: "未完了", manyRatePercent: undefined, normalRatePercent: undefined, statusText: "未完了" }),
     item({ areaId: "inari", areaName: "いなり", rateText: "前回値引率不明", manyRateText: undefined, normalRateText: undefined, manyRatePercent: undefined, normalRatePercent: undefined, statusText: "保存済みの状態\n再確認" }),
   ];
-  const dim = renderDone(values, true); assert.equal(dim, renderDone(values, false)); assert.doesNotMatch(dim, /opacity:/);
-  assert.ok(dim.indexOf("弁当・麺") < dim.indexOf("おにぎり")); assert.ok(dim.indexOf("おにぎり") < dim.indexOf("いなり"));
-  for (const text of ["9月・火曜日・17時", "スキップ済み", "今はスキップ", "未完了", "前回値引率不明", "保存済みの状態\n再確認", "戻る", "トップに戻る"]) assert.ok(dim.includes(text), text);
+  const strike = renderDone(values, true); assert.equal(strike, renderDone(values, false)); assert.doesNotMatch(strike, /opacity:/);
+  assert.ok(strike.indexOf("弁当・麺") < strike.indexOf("おにぎり")); assert.ok(strike.indexOf("おにぎり") < strike.indexOf("いなり"));
+  for (const text of ["9月・火曜日・17時", "スキップ済み", "今はスキップ", "未完了", "前回値引率不明", "保存済みの状態\n再確認", "戻る", "トップに戻る"]) assert.ok(strike.includes(text), text);
 });
 for (const cycle of ["normal", "summer"] as const) for (const time of ["15", "17"] as const) {
   const before = time === "15" ? "15:59:59.999" : "17:59:59.999", boundary = time === "15" ? "16:00:00" : "18:00:00", after = time === "15" ? "16:00:00.001" : "18:00:00.001";
   for (const [clock, expected] of [[before, false], [boundary, true], [after, true]] as const) await test(`${cycle}/${time}: actual Router uses runtime JST ${clock}`, () => {
     nowMs = at("12:00:00"); setRuntimeNowOverride(new Date(at(clock)));
     const app = minimalApp(time, cycle), beforeState = JSON.stringify(app), html = renderRouter(app, new Date(at("12:00:00")));
-    assertDim(html, expected); assert.equal(JSON.stringify(app), beforeState); assert.equal(timeouts.size, 0);
+    assertStrike(html, expected); assert.equal(JSON.stringify(app), beforeState); assert.equal(timeouts.size, 0);
   });
 }
-for (const time of [undefined, "18", "19", "20"] as const) await test(`missing/legacy ${String(time)} session never dims at 20:45`, () => {
-  setRuntimeNowOverride(new Date(at("20:45:00"))); assertDim(renderRouter(minimalApp(time)), false);
+for (const time of [undefined, "18", "19", "20"] as const) await test(`missing/legacy ${String(time)} session never strikes at 20:45`, () => {
+  setRuntimeNowOverride(new Date(at("20:45:00"))); assertStrike(renderRouter(minimalApp(time)), false);
 });
 for (const cycle of ["normal", "summer"] as const) for (const time of ["15", "17"] as const) {
   const before = time === "15" ? "15:59:59.999" : "17:59:59.999", boundary = time === "15" ? "16:00:00" : "18:00:00";
-  await test(`${cycle}/${time}: real completion and aligned 00/30 ticks dim current +5 rates while retaining captured/storage evidence`, () => {
+  await test(`${cycle}/${time}: real completion and aligned 00/30 ticks strike current +5 rates while retaining captured/storage evidence`, () => {
     const hook = hookFixture(time, cycle, before);
     try {
       const expected = time === "15" ? [0, 10] : [10, 20];
@@ -237,7 +239,7 @@ for (const cycle of ["normal", "summer"] as const) for (const time of ["15", "17
       const currentBefore = hook.value.derived.doneSummaryItems.find(value => value.areaId === AREA)!;
       assert.deepEqual([currentBefore.normalRatePercent, currentBefore.manyRatePercent], expected);
       const beforeHtml = renderRouter({ ...hook.value, derived: { ...hook.value.derived, doneSummaryItems: [currentBefore] } });
-      assertDim(beforeHtml, false); assertOneAlignedTimer();
+      assertStrike(beforeHtml, false); assertOneAlignedTimer();
       const bytes = [...memory.values], writes = memory.writes.length, removals = memory.removals.length, records = loadLocalAreaCountRecords(), queue = loadPendingSupabaseSyncQueue();
       const daily = storage.loadDailySessionSnapshots(); assert.ok(daily.length > 0, "real Done completion persists its captured daily snapshot");
       const dailyArea = daily.at(-1)!.areas[AREA]; assert.deepEqual(JSON.parse(JSON.stringify(dailyArea.rateDecisionSnapshot)), JSON.parse(captured));
@@ -246,8 +248,8 @@ for (const cycle of ["normal", "summer"] as const) for (const time of ["15", "17
       assert.deepEqual([current.normalRatePercent, current.manyRatePercent], expected.map(value => value + 5), "existing current-rate late bonus remains exactly +5 points");
       const renderWrites = memory.writes.length;
       const html = renderRouter({ ...hook.value, derived: { ...hook.value.derived, doneSummaryItems: [current] } });
-      assert.equal(memory.writes.length, renderWrites, "actual Router/Done dim rendering never writes storage");
-      assertDim(html, true); assert.match(line(html, "多い").style, /color:#ff0000/); assert.match(line(html, "どちらでもない").style, /color:#008000/);
+      assert.equal(memory.writes.length, renderWrites, "actual Router/Done strike rendering never writes storage");
+      assertStrike(html, true); assert.match(line(html, "多い").style, /color:#ff0000/); assert.match(line(html, "どちらでもない").style, /color:#008000/);
       assert.equal(line(html, "どちらでもない").text, `${expected[0] + 5}%`);
       assert.equal(JSON.stringify(hook.value.state), state); assert.equal(JSON.stringify(hook.value.state.areaProgressMap[AREA].rateDecisionSnapshot), captured);
       assert.deepEqual([...memory.values], bytes); assert.equal(memory.removals.length, removals);
@@ -256,42 +258,42 @@ for (const cycle of ["normal", "summer"] as const) for (const time of ["15", "17
       assert.ok(memory.writes.slice(writes).every(key => key === storage.STORAGE_KEYS.dailySessionSnapshots), JSON.stringify(memory.writes.slice(writes)));
       assert.deepEqual(storage.loadDailySessionSnapshots(), daily); assert.deepEqual(loadLocalAreaCountRecords(), records); assert.deepEqual(loadPendingSupabaseSyncQueue(), queue); assertOneAlignedTimer();
       nowMs = at(time === "15" ? "16:00:30" : "18:00:30"); fireDueTimers(); hook.settle();
-      assert.deepEqual(hook.value.derived.doneSummaryItems.find(value => value.areaId === AREA), current); assertDim(renderRouter({ ...hook.value, derived: { ...hook.value.derived, doneSummaryItems: [current] } }), true);
+      assert.deepEqual(hook.value.derived.doneSummaryItems.find(value => value.areaId === AREA), current); assertStrike(renderRouter({ ...hook.value, derived: { ...hook.value.derived, doneSummaryItems: [current] } }), true);
       assert.deepEqual([...memory.values], bytes); assertOneAlignedTimer();
-      assert.doesNotMatch(JSON.stringify([hook.value.state, current, ...memory.values]), /dimNormalRate/);
+      assert.doesNotMatch(JSON.stringify([hook.value.state, current, ...memory.values]), /strikeNormalRate/);
     } finally { hook.close(); }
   });
-  await test(`${cycle}/${time}: fixed runtime controls dimming while real time/focus cannot advance it or add a timer/write`, () => {
+  await test(`${cycle}/${time}: fixed runtime controls strike-through while real time/focus cannot advance it or add a timer/write`, () => {
     const hook = hookFixture(time, cycle, before);
     try {
       hook.value.actions.goToNextArea(); hook.settle();
       hook.fixedNow = new Date(at(before)); hook.settle(true); assert.equal(timeouts.size, 0);
       const bytes = [...memory.values], writes = memory.writes.length, captured = JSON.stringify(hook.value.state.areaProgressMap[AREA].rateDecisionSnapshot);
-      assertDim(renderRouter(hook.value, hook.fixedNow), false);
+      assertStrike(renderRouter(hook.value, hook.fixedNow), false);
       nowMs = at(time === "15" ? "16:10:00" : "18:10:00"); windowEvents.emit("focus"); documentEvents.emit("visibilitychange"); hook.settle();
-      assertDim(renderRouter(hook.value, hook.fixedNow), false); assert.equal(timeouts.size, 0);
-      hook.fixedNow = new Date(at(boundary)); hook.settle(true); assertDim(renderRouter(hook.value, hook.fixedNow), true);
-      hook.fixedNow = new Date(at(before)); hook.settle(true); assertDim(renderRouter(hook.value, hook.fixedNow), false);
+      assertStrike(renderRouter(hook.value, hook.fixedNow), false); assert.equal(timeouts.size, 0);
+      hook.fixedNow = new Date(at(boundary)); hook.settle(true); assertStrike(renderRouter(hook.value, hook.fixedNow), true);
+      hook.fixedNow = new Date(at(before)); hook.settle(true); assertStrike(renderRouter(hook.value, hook.fixedNow), false);
       assert.equal(timeouts.size, 0); assert.deepEqual([...memory.values], bytes); assert.equal(memory.writes.length, writes);
       assert.equal(JSON.stringify(hook.value.state.areaProgressMap[AREA].rateDecisionSnapshot), captured);
     } finally { hook.close(); }
   });
 }
-await test("a late/focus return uses the existing scheduler once and dims immediately", () => {
+await test("a late/focus return uses the existing scheduler once and strikes immediately", () => {
   const hook = hookFixture("17", "normal", "17:59:07.125");
   try {
-    hook.value.actions.goToNextArea(); hook.settle(); assertDim(renderRouter(hook.value), false);
-    nowMs = at("18:02:17.345"); windowEvents.emit("focus"); hook.settle(); assertDim(renderRouter(hook.value), true); assertOneAlignedTimer();
+    hook.value.actions.goToNextArea(); hook.settle(); assertStrike(renderRouter(hook.value), false);
+    nowMs = at("18:02:17.345"); windowEvents.emit("focus"); hook.settle(); assertStrike(renderRouter(hook.value), true); assertOneAlignedTimer();
     documentFixture.hidden = true; documentEvents.emit("visibilitychange"); hook.settle(); assertOneAlignedTimer();
-    documentFixture.hidden = false; documentEvents.emit("visibilitychange"); hook.settle(); assertDim(renderRouter(hook.value), true); assertOneAlignedTimer();
+    documentFixture.hidden = false; documentEvents.emit("visibilitychange"); hook.settle(); assertStrike(renderRouter(hook.value), true); assertOneAlignedTimer();
   } finally { hook.close(); }
 });
-await test("Done/Router add no state, storage or timers; domain/summary types carry no UI dim flag", () => {
+await test("Done/Router add no state, storage or timers; domain/summary types carry no UI strike flag", () => {
   for (const path of ["../src/components/screens/DoneScreen.tsx", "../src/app/AppRouter.tsx"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.doesNotMatch(source, /\b(?:setInterval|setTimeout|startAlignedRuntimeClock|localStorage|sessionStorage|useState|useReducer)\b/);
   }
-  for (const path of ["../src/domain/types.ts", "../src/hooks/useNebikiApp.ts", "../src/hooks/nebikiApp/sessionSnapshots.ts"]) assert.doesNotMatch(readFileSync(new URL(path, import.meta.url), "utf8"), /dimNormalRate/);
+  for (const path of ["../src/domain/types.ts", "../src/hooks/useNebikiApp.ts", "../src/hooks/nebikiApp/sessionSnapshots.ts"]) assert.doesNotMatch(readFileSync(new URL(path, import.meta.url), "utf8"), /strikeNormalRate/);
 });
 Object.defineProperty(globalThis, "Date", { configurable: true, value: NativeDate });
-console.log(`Done normal dim53 checks passed: ${passed}/${passed}`);
+console.log(`Done normal strike54 compatibility checks passed: ${passed}/${passed}`);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { getAreaEvaluationLowerQuickAdjustmentDelayMs } from "../src/domain/areaEvaluationAdjustment.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { getEveningComfortReliefContext } from "../src/domain/eveningComfortRelief.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
@@ -29,7 +30,7 @@ import { getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap, getNormalFlow
 import { getOperationalEarlyNextMinus5TargetDiscountTime, retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
 import { retireManualWeekdayOverride } from "../src/hooks/nebikiApp/operationalWeekday.ts";
 import {
-  buildCompletedRateSnapshot, buildCurrentNormalRatePresentation,
+  buildCompletedRateSnapshot, buildCurrentNormalRateDisplay, buildCurrentNormalRatePresentation,
   buildNextSessionSkipRecord, shouldIgnoreNormalTimeRateCap,
 } from "../src/hooks/nebikiApp/ratePresentation.ts";
 import { createReview19StartState, getAutomaticReview19TransitionKey } from "../src/hooks/nebikiApp/review19Flow.ts";
@@ -126,14 +127,15 @@ function harness(state = fixture(), now = at(18, 40)) {
     screenHistoryRef: { current: [] as NavigationSnapshot[] },
     suppressHistoryPushRef: { current: false }, weatherConfirmationSubmittingRef: { current: false },
     nextSessionSkipRecordsRef: { current: [] as NextSessionSkipRecord[] },
+    areaCompletionStateRef: { current: state }, completedAreaActionsRef: { current: new WeakSet() },
     useMemo: (factory: () => unknown) => factory(),
     getRuntimeNow: () => new Date(context.nowMs as number),
     getHistoricalDailySessionSnapshotsForDate: () => [],
     savedDailySessionSnapshots: [],
     getEarlyNextMinus5TargetDiscountTime, getOperationalEarlyNextMinus5TargetDiscountTime, getWeekdayBaseInfo, getBasisGuideDisplay, getEveningComfortReliefContext,
     resolveSessionTemperatureComfort, normalizeDemandCycle, normalizeGlobalDiscountAdjustmentPercent,
-    shouldIgnoreNormalTimeRateCap, buildMergedBonusDisplay, buildRateDecisionSnapshot,
-    buildCurrentNormalRatePresentation, buildCompletedRateSnapshot, buildNextSessionSkipRecord,
+    shouldIgnoreNormalTimeRateCap, buildMergedBonusDisplay, buildRateDecisionSnapshot, getAreaEvaluationLowerQuickAdjustmentDelayMs,
+    buildCurrentNormalRateDisplay, buildCurrentNormalRatePresentation, buildCompletedRateSnapshot, buildNextSessionSkipRecord,
     refreshSessionDiscountTime, getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap,
     getNormalFlowScreenForArea, getNextSkipTargetDiscountTime, getNextPendingCandidate, getPendingResumeScreen,
     createNavigationSnapshot, cloneAppState, cloneLastSessionWeatherRecord, popNavigationHistory, retireManualDiscountTimeOverride, retireManualWeekdayOverride,
@@ -159,6 +161,7 @@ function harness(state = fixture(), now = at(18, 40)) {
     "moveToNextPendingOrDone", "goToNextArea", "goBackOneScreen"]) installAction(name, context);
   function render() {
     const current = context.state as AppState;
+    (context.areaCompletionStateRef as { current: AppState }).current = current;
     context.sessionSource = current.session ?? current.sessionDraft;
     hookValue("sessionSourceResolvedWeather", context);
     hookValue("weekdayBaseInfo", context);
@@ -174,6 +177,9 @@ function harness(state = fixture(), now = at(18, 40)) {
     const areaId = current.currentAreaId;
     context.clickedAreaId = areaId;
     context.clickedProgress = areaId ? current.areaProgressMap[areaId] : null;
+    context.actionNow = new Date(context.nowMs as number);
+    hookValue("daytimeSession", context);
+    assert.equal(hookValue("actionLateTimeBonus", context), context.lateTimeBonus, "the production click bonus matches a display at the same fixture clock");
     context.completedAt = new Date(context.nowMs as number).toISOString();
     const snapshot = hookValue<RateDecisionSnapshot | null>("clickedRateDecisionSnapshot", context);
     runEarlyTargetEffect(context);

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
+import { getAreaEvaluationLowerQuickAdjustmentDelayMs } from "../src/domain/areaEvaluationAdjustment.ts";
 import { getNormalTimeRateDisplay } from "../src/domain/discount.ts";
 import {
   FULL_MODE_NOTICE_ITEMS,
@@ -102,7 +104,7 @@ function coreOf(record: StoredFinalizedDayData): unknown {
   return cloned;
 }
 
-test("15時セッションの16時超過は表示案内だけ16時へ変える", () => {
+test("元15/17セッションの16/18時超過は表示案内だけ変え、保存元と計算基準を保持する", () => {
   const displayBlock = hookSource.slice(
     hookSource.indexOf("const displayBasisGuide"),
     hookSource.indexOf("const ignoreNormalTimeRateCap"),
@@ -112,26 +114,35 @@ test("15時セッションの16時超過は表示案内だけ16時へ変える",
     hookSource.indexOf("const finalGuide"),
   );
 
-  assert.match(displayBlock, /session\.discountTime !== "15"/);
-  assert.match(displayBlock, /minutes < 16 \* 60/);
-  assert.match(displayBlock, /"15時を基準に考えて"/);
-  assert.match(displayBlock, /"16時を基準に考えて"/);
+  assert.match(displayBlock, /sourceTime !== "15" && sourceTime !== "17"/);
+  assert.match(displayBlock, /getAreaEvaluationLowerQuickAdjustmentDelayMs\(sourceTime, new Date\(nowMs\)\) !== 0/);
+  assert.match(displayBlock, /sourceTime === "15" \? "16" : "18"/);
   assert.match(hookSource, /basisGuide: displayBasisGuide/);
   assert.equal(rateBlock.includes("displayBasisGuide"), false);
 
-  const fixedInput = {
-    discountTime: "15" as const,
-    weekday: 2,
-    date: "2026-07-28",
-    weatherBonus: 10,
-    areaJudge: "normal" as const,
-    areaRateAdjustment: 5 as const,
-  };
-  const before16 = getNormalTimeRateDisplay(fixedInput);
-  const after16 = getNormalTimeRateDisplay(fixedInput);
-  assert.deepEqual(after16, before16);
-  assert.equal(after16.normal.main, "15%");
-  assert.equal(after16.many.main, "25%");
+  for (const [sourceTime, displayTime, cutoffHour] of [["15", "16", 16], ["17", "18", 18]] as const) {
+    for (const difference of [-1, 0, 1]) {
+      const state = { session: { discountTime: sourceTime } };
+      const basisGuide = { referenceText: `7月の火曜日の${sourceTime}時を基準に考えて`, referenceConditionLabel: `7月・火曜日・${sourceTime}時`, bonusSummaryText: "補正10%" };
+      const before = JSON.stringify({ state, basisGuide });
+      // Execute the actual production display memo with the actual JST helper.
+      const result = runInNewContext(displayBlock + "\ndisplayBasisGuide", {
+        state, basisGuide, nowMs: new Date(`2026-07-28T${cutoffHour}:00:00+09:00`).getTime() + difference,
+        Date, getAreaEvaluationLowerQuickAdjustmentDelayMs, useMemo: (read: () => unknown) => read(),
+      }) as typeof basisGuide;
+      const expectedTime = difference < 0 ? sourceTime : displayTime;
+      assert.equal(result.referenceText, `7月の火曜日の${expectedTime}時を基準に考えて`);
+      assert.equal(result.referenceConditionLabel, `7月・火曜日・${expectedTime}時`);
+      assert.equal(result.bonusSummaryText, basisGuide.bonusSummaryText);
+      assert.equal(JSON.stringify({ state, basisGuide }), before, "display does not rewrite the original saved session or guide");
+      if (difference < 0) assert.equal(result, basisGuide);
+    }
+    const fixedInput = { discountTime: sourceTime, weekday: 2, date: "2026-07-28", weatherBonus: 10, areaJudge: "normal" as const, areaRateAdjustment: 5 as const };
+    const before = getNormalTimeRateDisplay(fixedInput), after = getNormalTimeRateDisplay(fixedInput);
+    assert.deepEqual(after, before);
+    assert.equal(after.normal.main, sourceTime === "15" ? "15%" : "25%");
+    assert.equal(after.many.main, sourceTime === "15" ? "25%" : "35%");
+  }
 });
 
 test("確定日次は初回本体を保護し、メモ・廃棄だけ更新する", () => {

@@ -183,7 +183,14 @@ function assertFacadeArchitectureGuards(): void {
   assert.match(body, /getStorageUsageDiagnostic/);
   assert.doesNotMatch(body, /cleanupReview19Debug20260825/);
   assert.doesNotMatch(body, /saveReview19Records\(/);
-  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 23); //51 consolidates the50 rate-only timer and fixed-clock refresh into the shared clock.
+  // 51 consolidated the rate-only clock. 54 adds one committed-state ref sync
+  // so stale completion events are rejected before undo or persistence changes.
+  assert.equal([...body.matchAll(/\buseEffect\(\(\) =>/g)].length, 24);
+  assert.match(body, /const areaCompletionStateRef = useRef\(state\);\s*useEffect\(\(\) => \{\s*areaCompletionStateRef\.current = state;\s*\}, \[state\]\);/);
+  const completionBlock = body.slice(body.indexOf("function goToNextArea"), body.indexOf("function goToNextArea") + 1900);
+  assert.match(completionBlock, /const current = areaCompletionStateRef\.current/);
+  assert.match(completionBlock, /current\.screen !== "rate_display"/);
+  assert.match(completionBlock, /current\.areaProgressMap\[clickedAreaId\] !== clickedProgress/);
   assert.equal([...body.matchAll(/window\.setInterval\(/g)].length, 0);
   assert.equal([...body.matchAll(/startAlignedRuntimeClock\(/g)].length, 2);
   assert.match(body, /const nowMs = getRuntimeNowMs\(\)/);

@@ -78,7 +78,7 @@ class HookFixture {
         const text=String(callback);
         // Exact production callbacks execute; unrelated asynchronous archive and
         // network hydration are intentionally outside this deterministic suite.
-        if(!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text))continue;
+        if(!/app-state-effect|runtime-state-effect|daily-session-completion|appendNavigationHistory|areaCompletionStateRef\.current|previousRenderRef\.current|setLastUsedSessionDraft|syncAfterRainSelection|syncDraftTime|setAreaJudgeSelection|startAlignedRuntimeClock|setNowMs\(getRuntimeNowMs|window\.addEventListener\("storage", refresh\)|earlyNextMinus5TargetDiscountTime/.test(text))continue;
         slot.cleanup?.();const cleanup=callback();slot.cleanup=typeof cleanup==="function"?cleanup:undefined;
       }
       if(!this.dirty)return;this.render();

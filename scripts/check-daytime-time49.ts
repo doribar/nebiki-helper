@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { getAreaEvaluationLowerQuickAdjustmentDelayMs } from "../src/domain/areaEvaluationAdjustment.ts";
 import { getEarlyNextMinus5TargetDiscountTime, shouldReserveEarlyNextMinus5OnAutoTransition } from "../src/domain/earlyNextMinus5.ts";
 import { getEveningComfortReliefContext } from "../src/domain/eveningComfortRelief.ts";
 import { createDefaultHourlyForecasts, resolveWeatherInputForDiscount } from "../src/domain/hourlyWeather.ts";
@@ -53,7 +54,7 @@ function value<T>(name:string,context:Record<string,unknown>):T {
 }
 function decision(time:DiscountTime,now:Date,cycle:DemandCycle="normal") {
   const state=fixture(time,cycle);
-  const context:Record<string,unknown>={Date,state,nowMs:now.getTime(),isTestMode:false,applyObonRule:true,
+  const context:Record<string,unknown>={Date,state,nowMs:now.getTime(),actionNow:now,getAreaEvaluationLowerQuickAdjustmentDelayMs,isTestMode:false,applyObonRule:true,
     sessionSource:state.session,lastSessionWeather:null,savedDailySessionSnapshots:[],useMemo:(get:()=>unknown)=>get(),
     getOperationalEarlyNextMinus5TargetDiscountTime,getWeekdayBaseInfo,getBasisGuideDisplay,getEveningComfortReliefContext,
     resolveSessionTemperatureComfort,normalizeDemandCycle,normalizeGlobalDiscountAdjustmentPercent,
@@ -62,6 +63,8 @@ function decision(time:DiscountTime,now:Date,cycle:DemandCycle="normal") {
   for(const name of ["sessionSourceResolvedWeather","weekdayBaseInfo","earlyNextMinus5Info","lateTimeBonus","ignoreNormalTimeRateCap",
     "effectiveRateDiscountTime","effectiveRateIgnoreTimeRateCap","currentAreaProgress"]) value(name,context);
   const presentation=value<ReturnType<typeof buildCurrentNormalRatePresentation>>("ratePresentation",context);
+  value("daytimeSession",context);
+  assert.equal(value("actionLateTimeBonus",context),context.lateTimeBonus,"fresh click preparation agrees with the same-clock display bonus");
   const snapshot=value<RateDecisionSnapshot>("clickedRateDecisionSnapshot",context);
   return {state,context,presentation,snapshot};
 }

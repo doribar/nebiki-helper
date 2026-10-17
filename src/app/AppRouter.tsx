@@ -163,6 +163,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
 
       return (
         <RateDisplayScreen
+          key={`${state.session.startedAt}:${state.currentAreaId}:${state.areaCountCorrection?.targetAreaId ?? ""}`}
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
           areaName={derived.currentAreaName}
@@ -255,7 +256,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
       return (
         <DoneScreen
           summaryItems={derived.doneSummaryItems}
-          dimNormalRate={Boolean(state.session &&
+          strikeNormalRate={Boolean(state.session &&
             getAreaEvaluationLowerQuickAdjustmentDelayMs(
               state.session.discountTime,
               getRuntimeNow(),

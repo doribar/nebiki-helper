@@ -8,6 +8,7 @@ import ts from "typescript";
 import type { RateDisplayScreen } from "../src/components/screens/RateDisplayScreen.tsx";
 import {
   createAreaEvaluationQuickAdjustment,
+  getAreaEvaluationLowerQuickAdjustmentDelayMs,
   getAreaEvaluationQuickAdjustments,
 } from "../src/domain/areaEvaluationAdjustment.ts";
 import {
@@ -304,14 +305,16 @@ test("fixed-time and Review19 action calls perform no writes or state changes", 
 
 // Use the production completion expression, including its final adopted area adjustment.
 function capturedRateFor(state: AppState) {
-  const declaration = findNode((node): node is ts.VariableDeclaration =>
-    ts.isVariableDeclaration(node) && node.name.getText(hookAst) === "clickedRateDecisionSnapshot",
-  );
-  const code = `const ${declaration.getText(hookAst)}; clickedRateDecisionSnapshot;`;
+  // Include the production click-time bonus preparation, rather than supplying
+  // a fixture-only actionLateTimeBonus to the completion expression.
+  const declarations = ["daytimeSession", "actionLateTimeBonus", "clickedRateDecisionSnapshot"].map(name =>
+    findNode((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText(hookAst) === name));
+  const code = declarations.map(declaration => `const ${declaration.getText(hookAst)};`).join("\n") + "\nclickedRateDecisionSnapshot;";
   return runInNewContext(ts.transpileModule(code, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText, {
     state, clickedAreaId: AREA, clickedProgress: state.areaProgressMap[AREA], completedAt: AT,
+    actionNow: new Date(AT), getAreaEvaluationLowerQuickAdjustmentDelayMs,
     finalGuide: null, effectiveRateDiscountTime: state.session!.discountTime,
     earlyNextMinus5Info: null, lateTimeBonus: 0, weekdayBaseInfo: { baseRateBonus: 10 },
     sessionSourceResolvedWeather: resolveWeatherInputForDiscount(state.session!.weather, state.session!.discountTime),

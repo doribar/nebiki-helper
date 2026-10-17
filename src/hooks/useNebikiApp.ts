@@ -312,7 +312,10 @@ import {
   resolveHumanEvaluationDetails,
   resolveHumanEvaluationForDiscount,
 } from "../domain/humanEvaluation.ts";
-import { getAreaEvaluationQuickAdjustments } from "../domain/areaEvaluationAdjustment.ts";
+import {
+  getAreaEvaluationLowerQuickAdjustmentDelayMs,
+  getAreaEvaluationQuickAdjustments,
+} from "../domain/areaEvaluationAdjustment.ts";
 import {
   buildAnalysisWeatherContext,
   buildSessionAnalysisCalendarContext,
@@ -538,6 +541,11 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     useState(0);
   const weatherConfirmationSubmittingRef = useRef(false);
   const autoTransitionInFlightKeyRef = useRef<string | null>(null);
+  const completedAreaActionsRef = useRef(new WeakSet<AreaProgress>());
+  const areaCompletionStateRef = useRef(state);
+  useEffect(() => {
+    areaCompletionStateRef.current = state;
+  }, [state]);
 
   const [, setNowMs] = useState(() => getRuntimeNowMs());
   // timerは再描画の契機。画面切替の描画でも現在時計を使い、古い表示率を持ち越さない。
@@ -1718,12 +1726,12 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
 
   // 15時基準の値引中に16時を超えた
   if (state.session.discountTime === "15") {
-    return minutes >= 16 * 60 ? 5 : 0;
+    return getAreaEvaluationLowerQuickAdjustmentDelayMs("15", now) === 0 ? 5 : 0;
   }
 
   // 17時の計算基準を維持し、18:00以降は15時の遅延補正と同じく+5%。
   if (state.session.discountTime === "17") {
-    return minutes >= 18 * 60 ? 5 : 0;
+    return getAreaEvaluationLowerQuickAdjustmentDelayMs("17", now) === 0 ? 5 : 0;
   }
 
   // 18時30分基準の19:00〜19:24は、+5%ではなく19時30分値引率-5%で表示する。
@@ -1827,23 +1835,25 @@ const lateSkipNotice = useMemo(() => {
 ]);
 
   const displayBasisGuide = useMemo(() => {
-    if (!state.session || state.session.discountTime !== "15") {
+    const sourceTime = state.session?.discountTime;
+    if (sourceTime !== "15" && sourceTime !== "17") {
       return basisGuide;
     }
 
-    const current = new Date(nowMs);
-    const minutes = current.getHours() * 60 + current.getMinutes();
-    if (minutes < 16 * 60) return basisGuide;
+    if (getAreaEvaluationLowerQuickAdjustmentDelayMs(sourceTime, new Date(nowMs)) !== 0) {
+      return basisGuide;
+    }
+    const displayTime = sourceTime === "15" ? "16" : "18";
 
     return {
       ...basisGuide,
       referenceText: basisGuide.referenceText.replace(
-        "15時を基準に考えて",
-        "16時を基準に考えて",
+        `${sourceTime}時を基準に考えて`,
+        `${displayTime}時を基準に考えて`,
       ),
       referenceConditionLabel: basisGuide.referenceConditionLabel.replace(
-        /15時$/,
-        "16時",
+        new RegExp(`${sourceTime}時$`),
+        `${displayTime}時`,
       ),
     };
   }, [basisGuide, nowMs, state.session]);
@@ -3975,19 +3985,42 @@ const lateSkipNotice = useMemo(() => {
     });
   }
 
-  function goToNextArea() {
-    setUndoSnapshot(createUndoSnapshot());
-    setUndoNotice(null);
-
+  function goToNextArea(): boolean {
     const clickedAreaId = state.currentAreaId;
     const clickedProgress = clickedAreaId ? state.areaProgressMap[clickedAreaId] : null;
-    const completedAt = getRuntimeNow().toISOString();
+    const daytimeSession = state.session?.discountTime === "15" ||
+      state.session?.discountTime === "17";
+    if (daytimeSession) {
+      const current = areaCompletionStateRef.current;
+      if (state.screen !== "rate_display" || !clickedAreaId || !clickedProgress?.areaJudge ||
+        current.screen !== "rate_display" || current.currentAreaId !== clickedAreaId ||
+        current.session?.startedAt !== state.session?.startedAt ||
+        current.areaProgressMap[clickedAreaId] !== clickedProgress ||
+        completedAreaActionsRef.current.has(clickedProgress)) return false;
+    }
+
+    const actionNow = getRuntimeNow();
+    const completedAt = actionNow.toISOString();
+    // 古い表示のクリックでも、確定時の時計から遅延補正を1回だけ解決する。
+    const actionLateTimeBonus = daytimeSession && state.session
+      ? (!state.session.manualDiscountTimeOverride &&
+        getAreaEvaluationLowerQuickAdjustmentDelayMs(state.session.discountTime, actionNow) === 0 ? 5 : 0)
+      : lateTimeBonus;
+    const actionRateDisplay = daytimeSession
+      ? buildCurrentNormalRateDisplay({
+          session: state.session,
+          progress: clickedProgress,
+          effectiveDiscountTime: effectiveRateDiscountTime,
+          weatherBonus: weekdayBaseInfo.baseRateBonus + actionLateTimeBonus,
+          ignoreTimeRateCap: effectiveRateIgnoreTimeRateCap,
+        })
+      : rateDisplay;
     const clickedRateSnapshot = clickedAreaId && clickedProgress
       ? buildCompletedRateSnapshot({
           session: state.session,
           progress: clickedProgress,
-          weatherBonus: weekdayBaseInfo.baseRateBonus + lateTimeBonus,
-          rateDisplayOverride: rateDisplay,
+          weatherBonus: weekdayBaseInfo.baseRateBonus + actionLateTimeBonus,
+          rateDisplayOverride: actionRateDisplay,
         })
       : null;
     const clickedRateDecisionSnapshot =
@@ -4009,7 +4042,7 @@ const lateSkipNotice = useMemo(() => {
             effectiveRateDiscountTime,
             calculationMode: earlyNextMinus5Info
               ? "early_next_minus5"
-              : lateTimeBonus > 0
+              : actionLateTimeBonus > 0
               ? "late_plus5"
               : "normal",
             weatherComfortAdjustmentPercent: earlyNextMinus5Info
@@ -4044,6 +4077,13 @@ const lateSkipNotice = useMemo(() => {
               clickedRateDecisionSnapshot.display.many.main,
           }
         : clickedRateSnapshot;
+
+    if (!clickedAreaId || !confirmedRateSnapshot) return false;
+    if (daytimeSession && clickedProgress) {
+      completedAreaActionsRef.current.add(clickedProgress);
+    }
+    setUndoSnapshot(createUndoSnapshot());
+    setUndoNotice(null);
 
     let skipRecordToAdd: NextSessionSkipRecord | null = null;
     if (
@@ -4082,6 +4122,9 @@ const lateSkipNotice = useMemo(() => {
 
     setState((prev) => {
       if (!clickedAreaId || prev.currentAreaId !== clickedAreaId || !confirmedRateSnapshot) return prev;
+      if (daytimeSession && (prev.screen !== "rate_display" ||
+        prev.session?.startedAt !== state.session?.startedAt ||
+        prev.areaProgressMap[clickedAreaId] !== clickedProgress)) return prev;
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       const updatedMap = {
@@ -4177,6 +4220,7 @@ const lateSkipNotice = useMemo(() => {
         appendNextSessionSkipRecords([skipRecordToAdd]);
       }
     }
+    return true;
   }
 
   function advanceAfterAutoSkippedArea(
