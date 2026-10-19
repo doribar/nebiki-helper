@@ -1,9 +1,10 @@
 import type { AreaId, AreaProgress } from "../../domain/types";
-import { getAreaRouteFromStoredIds } from "../../domain/area";
+import { getAreaRouteFromStoredIds, isAreaActiveForCurrentWork } from "../../domain/area";
 import { isAutoSkipNoticePending } from "./autoSkipFlow.ts";
 
 function isNormalFlowWorkArea(progress: AreaProgress | undefined): boolean {
-  return progress?.status === "unstarted" || isAutoSkipNoticePending(progress);
+  return !!progress && isAreaActiveForCurrentWork(progress.areaId) &&
+    (progress.status === "unstarted" || isAutoSkipNoticePending(progress));
 }
 
 export function getNormalFlowScreenForArea(
@@ -54,6 +55,20 @@ export function getNextNormalFlowAreaIdWithWrap(
     normalFlowOrder.find((areaId) => isNormalFlowWorkArea(areaProgressMap[areaId])) ??
     null
   );
+}
+
+/** Continue from the saved normal destination after a temporary priority visit. */
+export function getNormalFlowContinuationAreaId(
+  areaProgressMap: Record<AreaId, AreaProgress>,
+  resumeAreaId: AreaId | null,
+  normalFlowOrder: readonly AreaId[] = getAreaRouteFromStoredIds(undefined, Object.keys(areaProgressMap)),
+): AreaId | null {
+  if (!resumeAreaId) return null;
+  const resumeIndex = normalFlowOrder.indexOf(resumeAreaId);
+  if (resumeIndex < 0) return null;
+  return normalFlowOrder.slice(resumeIndex).find((areaId) =>
+    isNormalFlowWorkArea(areaProgressMap[areaId]),
+  ) ?? null;
 }
 
 export function hasRemainingNormalFlowArea(

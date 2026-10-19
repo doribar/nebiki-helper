@@ -46,6 +46,8 @@ import {
 } from "../domain/dayBeforeHolidayNotice.ts";
 import {
   getNormalRoute,
+  getOperationalAreaRoute,
+  isAreaActiveForCurrentWork,
   getAreaRouteFromStoredIds,
   getAreaName,
 } from "../domain/area";
@@ -95,6 +97,7 @@ import type { NavigationSnapshot } from "../domain/navigationHistory";
 import {
   getCurrentAreaSkipDecision,
   getNextPendingCandidate,
+  getNextPriorityPendingCandidate,
   getPendingRemainingCount,
   getPendingResumeScreen,
   getSkipTargetOptions,
@@ -254,6 +257,7 @@ import {
   getNextNormalFlowAreaId,
   getNextNormalFlowAreaIdWithWrap,
   getNormalFlowScreenForArea,
+  getNormalFlowContinuationAreaId,
   hasRemainingNormalFlowArea,
 } from "./nebikiApp/normalFlow.ts";
 import {
@@ -341,6 +345,8 @@ import {
   buildRetiredNightDoneSummaryItems as buildStoredRateSummaryItems,
 } from "./nebikiApp/retiredNightOperation.ts";
 import { collectNebikiStorageUsageDiagnostic } from "../domain/storageDiagnostics.ts";
+import { retireInactiveAreaWork } from "./nebikiApp/operationalAreas.ts";
+import { createPriorityReturnContext, normalizePriorityReturnContext } from "./nebikiApp/priorityFlow.ts";
 
 export { selectReview19SourceState } from "./nebikiApp/review19Flow.ts";
 
@@ -381,7 +387,7 @@ function retireOperationalOverrides(
        state.sessionDraft.weatherInputLockedDiscountTime === "20")) {
     state = { ...state, sessionDraft: buildStartDefaultDraft(state.sessionDraft) };
   }
-  const restored = retireManualWeekdayOverride(retireManualDiscountTimeOverride(state, params), params);
+  const restored = retireInactiveAreaWork(retireManualWeekdayOverride(retireManualDiscountTimeOverride(state, params), params));
   if (!params.fixedTime && restored.sessionDraft.date !== state.sessionDraft.date) {
     return { ...restored, sessionDraft: { ...restored.sessionDraft, weather: {
       ...restored.sessionDraft.weather, eveningComfortUnavailableForecastHours: ["16", "21"],
@@ -1924,7 +1930,7 @@ const lateSkipNotice = useMemo(() => {
       });
     }
 
-    return getAreaRouteFromStoredIds(session.date, state.normalFlowOrder ?? Object.keys(state.areaProgressMap)).reverse().map((areaId) => {
+    return getOperationalAreaRoute(session.date, state.normalFlowOrder ?? Object.keys(state.areaProgressMap)).reverse().map((areaId) => {
       const progress = state.areaProgressMap[areaId];
       const statusText = progress ? getAreaStatusText(progress) : "未完了";
 
@@ -2169,7 +2175,7 @@ const lateSkipNotice = useMemo(() => {
   const cloudSyncErrorDetails = buildPendingSupabaseSyncErrorDetails(
     pendingCloudSyncItems,
   );
-  const editableAreaCounts = (state.normalFlowOrder ?? getAreaRouteFromStoredIds(state.session?.date, Object.keys(state.areaProgressMap))).flatMap((areaId) => {
+  const editableAreaCounts = (state.normalFlowOrder ?? getOperationalAreaRoute(state.session?.date, Object.keys(state.areaProgressMap))).filter(isAreaActiveForCurrentWork).flatMap((areaId) => {
     const count = state.areaProgressMap[areaId]?.areaCount;
     return typeof count === "number"
       ? [{ areaId, areaName: getAreaName(areaId), count }]
@@ -2490,6 +2496,7 @@ const lateSkipNotice = useMemo(() => {
       referenceAreaId: params.referenceAreaId,
       deferredAreaIds: effectiveDeferredAreaIds,
       preferredReason: params.preferredNextReason ?? null,
+      normalFlowOrder: params.prev.normalFlowOrder,
     });
 
     if (!nextCandidate) {
@@ -2549,6 +2556,46 @@ const lateSkipNotice = useMemo(() => {
       pendingDeferredAreaIds: nextDeferredAreaIds,
       finalTimeStep: 0,
       screen: nextScreen,
+    };
+  }
+
+  function resumeAfterPriority(params: {
+    prev: AppState; updatedMap: Record<AreaId, AreaProgress>; referenceAreaId: AreaId;
+    nextSession: SessionData | null; timeSwitchNotice: string | null;
+  }): AppState {
+    const context = normalizePriorityReturnContext(params.prev.priorityReturnContext, params.prev.session);
+    const nextAreaId = getNormalFlowContinuationAreaId(params.updatedMap,
+      context?.normalResumeAreaId ?? null, params.prev.normalFlowOrder);
+    const prev = { ...params.prev, priorityReturnContext: undefined };
+    if (!nextAreaId) return moveToNextPendingOrDone({ ...params, prev });
+    return {
+      ...prev, session: params.nextSession, timeSwitchNotice: params.timeSwitchNotice,
+      areaProgressMap: params.updatedMap, currentAreaId: nextAreaId,
+      lastReferenceAreaId: params.referenceAreaId, currentFlow: "normal",
+      pendingDeferredAreaIds: [], finalTimeStep: 0,
+      screen: getNormalFlowScreenForArea(params.updatedMap, nextAreaId),
+    };
+  }
+
+  /** Called only after all instructions for another area have been completed. */
+  function returnToPrioritySkippedArea(params: {
+    prev: AppState; updatedMap: Record<AreaId, AreaProgress>; referenceAreaId: AreaId;
+    nextSession: SessionData | null; timeSwitchNotice: string | null;
+  }): AppState | null {
+    const { prev, updatedMap, referenceAreaId } = params;
+    const context = normalizePriorityReturnContext(prev.priorityReturnContext, prev.session);
+    const candidate = getNextPriorityPendingCandidate({ areaProgressMap: updatedMap,
+      referenceAreaId, normalFlowOrder: prev.normalFlowOrder });
+    if (!candidate) return context ? resumeAfterPriority(params) : null;
+    return {
+      ...prev, session: params.nextSession, timeSwitchNotice: params.timeSwitchNotice,
+      areaProgressMap: updatedMap, currentAreaId: candidate.areaId,
+      lastReferenceAreaId: referenceAreaId, currentFlow: "pending",
+      pendingDeferredAreaIds: [], finalTimeStep: 0,
+      priorityReturnContext: context ?? createPriorityReturnContext(prev,
+        prev.currentFlow === "normal"
+          ? getNextNormalFlowAreaId(updatedMap, referenceAreaId, prev.normalFlowOrder) : null),
+      screen: getPendingResumeScreen(updatedMap[candidate.areaId]),
     };
   }
 
@@ -2891,6 +2938,9 @@ const lateSkipNotice = useMemo(() => {
       };
     }
 
+    if (prev.priorityReturnContext) return resumeAfterPriority({ prev, updatedMap,
+      referenceAreaId: currentAreaId, nextSession, timeSwitchNotice });
+
     if (prev.currentFlow === "pending") {
       const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
 
@@ -3078,6 +3128,7 @@ const lateSkipNotice = useMemo(() => {
         currentAreaId: firstAreaId,
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
+        priorityReturnContext: undefined,
         pendingDeferredAreaIds: [],
         timeSwitchNotice: buildTimeSwitchNotice(nextSession.discountTime),
         review19ExcludedAreaIds: nextReview19ExcludedAreaIds,
@@ -3127,6 +3178,7 @@ const lateSkipNotice = useMemo(() => {
         currentAreaId: firstAreaId,
         lastReferenceAreaId: firstAreaId,
         currentFlow: "normal",
+        priorityReturnContext: undefined,
         pendingDeferredAreaIds: [],
         timeSwitchNotice: null,
         finalTimeStep: 0,
@@ -3801,7 +3853,7 @@ const lateSkipNotice = useMemo(() => {
   }
 
   function startAreaCountCorrection(areaId: AreaId) {
-    if (!state.session || typeof state.areaProgressMap[areaId]?.areaCount !== "number") {
+    if (!isAreaActiveForCurrentWork(areaId) || !state.session || typeof state.areaProgressMap[areaId]?.areaCount !== "number") {
       return;
     }
 
@@ -3839,6 +3891,7 @@ const lateSkipNotice = useMemo(() => {
         currentAreaId: areaId,
         lastReferenceAreaId: areaId,
         currentFlow: "normal",
+        priorityReturnContext: undefined,
         pendingDeferredAreaIds: [],
         finalTimeStep: 0,
         timeSwitchNotice: null,
@@ -3855,6 +3908,7 @@ const lateSkipNotice = useMemo(() => {
             returnFinalTimeStep: prev.finalTimeStep,
             returnTimeSwitchNotice: prev.timeSwitchNotice,
             returnHistoryLength: screenHistoryRef.current.length,
+            returnPriorityReturnContext: prev.priorityReturnContext,
             },
       }, { now: getRuntimeNow(), fixedTime: isTestMode });
     });
@@ -3885,6 +3939,12 @@ const lateSkipNotice = useMemo(() => {
 
   function skipCurrentArea() {
     if (!state.currentAreaId) return;
+    const clickedAreaId = state.currentAreaId;
+    const clickedProgress = state.areaProgressMap[clickedAreaId];
+    const live = areaCompletionStateRef.current;
+    if (!isAreaActiveForCurrentWork(clickedAreaId) || live.currentAreaId !== clickedAreaId ||
+      live.session?.startedAt !== state.session?.startedAt || live.screen !== state.screen ||
+      live.areaProgressMap[clickedAreaId] !== clickedProgress) return;
 
     const skipDecision = getCurrentAreaSkipDecision({
       areaProgressMap: state.areaProgressMap,
@@ -3899,13 +3959,17 @@ const lateSkipNotice = useMemo(() => {
     setUndoNotice(null);
 
     setState((prev) => {
-      if (!prev.currentAreaId) return prev;
+      if (prev.currentAreaId !== clickedAreaId || prev.areaProgressMap[clickedAreaId] !== clickedProgress ||
+        prev.session?.startedAt !== state.session?.startedAt || prev.screen !== state.screen) return prev;
       const currentAreaId = prev.currentAreaId;
       const currentProgress = prev.areaProgressMap[currentAreaId];
       const { nextSession, timeSwitchNotice } = refreshSessionDiscountTime(prev.session);
 
       if (prev.currentFlow === "pending") {
         const nextDeferredAreaIds = [...prev.pendingDeferredAreaIds, currentAreaId];
+
+        if (prev.priorityReturnContext) return resumeAfterPriority({ prev,
+          updatedMap: prev.areaProgressMap, referenceAreaId: currentAreaId, nextSession, timeSwitchNotice });
 
         return moveToNextPendingOrDone({
           prev,
@@ -3958,6 +4022,7 @@ const lateSkipNotice = useMemo(() => {
 
 
   function chooseSkipTargetArea(targetAreaId: AreaId) {
+    if (!isAreaActiveForCurrentWork(targetAreaId)) return;
     setUndoSnapshot(createUndoSnapshot());
     setUndoNotice(null);
 
@@ -4150,7 +4215,7 @@ const lateSkipNotice = useMemo(() => {
           correction.returnHistoryLength,
         );
         suppressHistoryPushRef.current = true;
-        return {
+        return retireInactiveAreaWork({
           ...prev,
           areaProgressMap: updatedMap,
           screen: correction.returnScreen,
@@ -4161,8 +4226,13 @@ const lateSkipNotice = useMemo(() => {
           finalTimeStep: correction.returnFinalTimeStep,
           timeSwitchNotice: correction.returnTimeSwitchNotice,
           areaCountCorrection: null,
-        };
+          priorityReturnContext: correction.returnPriorityReturnContext,
+        });
       }
+
+      const priorityState = returnToPrioritySkippedArea({ prev, updatedMap,
+        referenceAreaId: clickedAreaId, nextSession, timeSwitchNotice });
+      if (priorityState) return priorityState;
 
       if (prev.currentFlow === "pending") {
         return moveToNextPendingOrDone({
@@ -4362,7 +4432,7 @@ const lateSkipNotice = useMemo(() => {
           correction.returnHistoryLength,
         );
         suppressHistoryPushRef.current = true;
-        return {
+        return retireInactiveAreaWork({
           ...prev,
           areaProgressMap: updatedMap,
           screen: correction.returnScreen,
@@ -4373,7 +4443,8 @@ const lateSkipNotice = useMemo(() => {
           finalTimeStep: correction.returnFinalTimeStep,
           timeSwitchNotice: correction.returnTimeSwitchNotice,
           areaCountCorrection: null,
-        };
+          priorityReturnContext: correction.returnPriorityReturnContext,
+        });
       }
       return advanceAfterAutoSkippedArea(prev, updatedMap, currentAreaId);
     });
@@ -5001,6 +5072,7 @@ const lateSkipNotice = useMemo(() => {
         sessionDraft: nextDraft,
         timeSwitchNotice: null,
         areaCountCorrection: null,
+        priorityReturnContext: undefined,
       });
       setAreaJudgeSelection(null);
       setResumeTargetScreen(null);

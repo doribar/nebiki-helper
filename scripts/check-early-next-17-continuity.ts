@@ -14,7 +14,7 @@ import {
   createNavigationSnapshot, popNavigationHistory,
 } from "../src/domain/navigationHistory.ts";
 import type { NavigationSnapshot } from "../src/domain/navigationHistory.ts";
-import { getNextPendingCandidate, getPendingResumeScreen } from "../src/domain/pending.ts";
+import { getNextPendingCandidate, getNextPriorityPendingCandidate, getPendingResumeScreen } from "../src/domain/pending.ts";
 import { buildRateDecisionSnapshot, normalizeRateDecisionSnapshot } from "../src/domain/rateDecisionSnapshot.ts";
 import {
   consumeSkipRecordsInMemory, loadCurrentSession, loadDailySessionSnapshots,
@@ -26,7 +26,9 @@ import type {
 } from "../src/domain/types.ts";
 import { buildMergedBonusDisplay, getBasisGuideDisplay, getWeekdayBaseInfo } from "../src/domain/weekdayBase.ts";
 import { formatLocalDate } from "../src/hooks/nebikiApp/clock.ts";
-import { getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
+import { getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap, getNormalFlowContinuationAreaId, getNormalFlowScreenForArea } from "../src/hooks/nebikiApp/normalFlow.ts";
+import { retireInactiveAreaWork } from "../src/hooks/nebikiApp/operationalAreas.ts";
+import { createPriorityReturnContext, normalizePriorityReturnContext } from "../src/hooks/nebikiApp/priorityFlow.ts";
 import { getOperationalEarlyNextMinus5TargetDiscountTime, retireManualDiscountTimeOverride } from "../src/hooks/nebikiApp/operationalTime.ts";
 import { retireManualWeekdayOverride } from "../src/hooks/nebikiApp/operationalWeekday.ts";
 import {
@@ -137,9 +139,11 @@ function harness(state = fixture(), now = at(18, 40)) {
     shouldIgnoreNormalTimeRateCap, buildMergedBonusDisplay, buildRateDecisionSnapshot, getAreaEvaluationLowerQuickAdjustmentDelayMs,
     buildCurrentNormalRateDisplay, buildCurrentNormalRatePresentation, buildCompletedRateSnapshot, buildNextSessionSkipRecord,
     refreshSessionDiscountTime, getNextNormalFlowAreaId, getNextNormalFlowAreaIdWithWrap,
-    getNormalFlowScreenForArea, getNextSkipTargetDiscountTime, getNextPendingCandidate, getPendingResumeScreen,
+    getNormalFlowScreenForArea, getNormalFlowContinuationAreaId, getNextSkipTargetDiscountTime,
+    getNextPendingCandidate, getNextPriorityPendingCandidate, getPendingResumeScreen,
+    createPriorityReturnContext, normalizePriorityReturnContext,
     createNavigationSnapshot, cloneAppState, cloneLastSessionWeatherRecord, popNavigationHistory, retireManualDiscountTimeOverride, retireManualWeekdayOverride,
-    retireNightOperationalState, buildStartDefaultDraft,
+    retireNightOperationalState, retireInactiveAreaWork, buildStartDefaultDraft,
     window: { confirm: () => { throw new Error("unexpected weather confirmation"); } },
     finalGuide: null, lateTimeBonusNotice: null,
     setState: (update: AppState | ((previous: AppState) => AppState)) => {
@@ -158,7 +162,7 @@ function harness(state = fixture(), now = at(18, 40)) {
     },
   };
   for (const name of ["retireOperationalOverrides", "buildNavigationSnapshot", "createUndoSnapshot", "restoreNavigationSnapshot",
-    "moveToNextPendingOrDone", "goToNextArea", "goBackOneScreen"]) installAction(name, context);
+    "moveToNextPendingOrDone", "resumeAfterPriority", "returnToPrioritySkippedArea", "goToNextArea", "goBackOneScreen"]) installAction(name, context);
   function render() {
     const current = context.state as AppState;
     (context.areaCompletionStateRef as { current: AppState }).current = current;

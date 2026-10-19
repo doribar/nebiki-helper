@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-54）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-55）
 
-最終更新: 2026-10-17 JST
+最終更新: 2026-10-19 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-54.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-54.zip` |
-| appVersion | `2026.8.9-54` |
-| buildId | `build-20261016-210409-jst` |
+| ZIP | `nebiki-helper-2026.8.9-55.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-55.zip` |
+| appVersion | `2026.8.9-55` |
+| buildId | `build-20261019-160904-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-54.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-55.md`参照（自己参照回避） |
 
-application rootは`work/lateFlow54/nebiki-helper`。比較基準は完成53 ZIP `nebiki-helper-2026.8.9-53.zip`（SHA-256 `a18095b28e99123d13605889be9bbde58788f1eb2321082770801aab25c69c87`、build `build-20261016-101454-jst`）。54はDone一覧の薄字を撤回して境界後の通常商品率に実線取消線を付け、元15session/JST16:00以降のエリア指示を多い商品だけにする。元17sessionは18時以降も2段階を維持し、表示reference時刻だけ18時へ変える。詳細は`CHANGE_REPORT_2026.8.9-54.md`。
+application rootは`work/priority55/nebiki-helper`。比較基準は完成54 ZIP `nebiki-helper-2026.8.9-54.zip`（SHA-256 `23daa050f822e25328b5e0ec7e7274e4ebb83fe0fa5b77885e0d9e30a6e2ee11`、build `build-20261016-210409-jst`）。55は秋商品の一時無効化と、多い側で明示スキップしたエリアへの完遂時優先復帰を追加する。詳細は`CHANGE_REPORT_2026.8.9-55.md`。
 
-52の対象祝日15/17通常日曜優先/不足時groupと採用根拠、51の共通00/30時計と復帰、50のlower期限/操作拒否、49の15/17 only・遅延+5・Review19/旧夜枠保全、46快適補正、48三連休中日、schema3/SQL/AGENTS/build方式は保持する。
+54の15時16:00以降1段階・17時18:00以降2段階/基準表示18時・Done取消線、52の対象祝日日曜優先、51の00/30時計、50のlower期限、49の15/17 only/遅延+5/Review19/旧夜枠保全、46快適補正、48三連休中日、schema3/SQL/AGENTS/build方式は保持する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\lateFlow54\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\priority55\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -39,7 +39,7 @@ application rootは`work/lateFlow54/nebiki-helper`。比較基準は完成53 ZIP
 翌日廃棄の目安は理想5点以下、許容10点以下、10点超は改善対象。19時に売場が薄すぎる状態と、20時半額でも捌けないほど残る状態の双方を避ける。
 
 - 新規の値引session: 15:00、17:00。16:40以降は夜起動を含め17時。旧18:30/19:30/20:30は保存・同期・分析・export互換だけを維持。
-- Review19: 19:00時点の対象エリア残数と人間評価（6〜11月12、12〜5月11。過去保存routeは保持）。主に15時・17時判断と製造量の評価地点。
+- Review19: 19:00時点の対象エリア残数と人間評価（新規は6〜9月12、10〜5月11。秋商品は一時無効化、過去保存routeは保持）。主に15時・17時判断と製造量の評価地点。
 - 旧版で同日18:30を実開始した証拠が残る日は、既存のReview19対象外判定を維持する。9-49で新しい18:30sessionは開始できない。
 - 天候入力: 16時〜21時。fresh起動時は最初の欄へ自動scrollせず、入力後は次欄へ進む。
 
@@ -146,7 +146,7 @@ legacy migrationは次の順で行う。
 - prepared populationは呼出側が明示的に渡す不変snapshot。内部索引はprivate WeakMap、返す選択履歴は独立clone。従来のpreparedなし呼出は毎回freshに計算し、入力配列のin-place変更にも対応する。保存のcycle-aware canonical merge、通年計算時の1観測化、16/52・3件・group/long guard・decrease・20:30の意味は変更しない。
 - Review19履歴も `prepareReview19HistoryPopulation()` へまとめて準備し、local/remote arrayが置き換わったときだけmemory mergeと前処理を再実行する。統計だけを返し、廃止済みの5段階auto判定は復活させない。archive/outbox/localStorage/Supabaseの責務は変更しない。
 - 9-37当時の17→18:30 early-nextは9-49で通常経路から撤去。17sessionは18:00以降もeffectiveRateDiscountTime="17"、late_plus5。15sessionは16:00以降late_plus5。旧early snapshot/skip記録は互換読込を維持するが、新15/17の率・次枠予約へ適用しない。時計だけで確定済みarea snapshotを書き換えない。
-- `ryomi` のIDは維持し、master表示名だけ「夏商品」。新規 `autumn`「秋商品」は独立ID。6〜9月はryomi、10〜11月はautumn、12〜5月は季節枠なし。新sessionはsession日付を基準に、天ぷらとコロッケ系の間へ片方だけ置く。通常/Done/Review19/dataQuality/exportで対象数12/12/11を揃える。
+- `ryomi` のIDは維持し、master表示名は「夏商品」。9-37で `autumn`「秋商品」を独立IDとして追加したが、9-55では現在の作業だけ一時無効化した。6〜9月はryomiを含む12、10〜5月は11。ID/name/type・旧10〜11月12エリアの保存証拠は保持。無効化はarea.tsの1か所で指定し、解除日/自動復活/UI toggleはない。
 - 保存済みroute/map/expectedAreaIdsを尊重し、9-36以前の10月11エリアへ秋商品の欠測を捏造しない。Review19Result/Review19Check/Review19DaySnapshotへschema3互換optional `expectedAreaIds` を保持し、legacyは保存証拠と当時の季節枠から解決する。legacyの `areaName:"涼味商品"` は物理変更しない。現masterから表示する画面と新snapshotは「夏商品」。ryomiとautumnのhistory/median/Review/analysis/backfillは独立、autumn3件未満は既存insufficient/manual。
 - 巡回のunfinished priority順と表示用canonical順を分け、Done/Review19/日次snapshotでは保存された季節slotの通常業務順を使う。他エリアの順を変えない。productionAnalysisの判定関数・定義はbyte-identical、追加エリアを渡す対象範囲だけ拡張。
 
@@ -401,7 +401,7 @@ Review19は保存された季節routeの19時実残数と正式評価human raw9�
 
 completion:
 
-1. 12/12 stateとmetadataを完成。
+1. 保存されたexpectedAreaIdsの全対象（新規は10〜5月11、6〜9月12）のstateとmetadataを完成。
 2. IndexedDB `review19`へauthoritative save。
 3. 成功後だけ `review19_ref_v1` lightweight outboxを準備。
 4. cloud送信を試し、local正本成功を前提にdoneへ進む。
@@ -454,6 +454,17 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 現場確認用の注意書きのみ。商品数input/自動加算/state/key/metadataを追加せず、ProductAdjustmentPolicySnapshot/保存形式/値引率の計算は変更しない。不人気/やや不人気などとの重複時の加算方法を新設・変更しない。
 
 ## 11. そのほかの現行UX
+
+### 9-55: 秋商品一時無効化・多い側スキップの優先復帰
+
+- `area.ts` の `TEMPORARILY_DISABLED_AREA_IDS` にautumnを指定。新しい10月の入力/判定/指示/Done/候補/訂正/Review19は11エリア、天ぷら→コロッケ系。ryomiの季節条件は変更しない。マスターの既知ID・過去履歴・同期対象からautumnを削除しない。
+- `getOperationalAreaRoute` と保存routeの復元を分離。旧進行中のautumn観測・確定評価/率はmap/sourceへ残し、現作業先/後回し候補から外す。Back/Undo/訂正後の復帰も同じ境界を通す。未recordedの旧Review19は対象を11へ絞りdataQualityを再解決するが、記録済み12エリアReview19のqualityを変更しない。
+- 新規DailySessionSnapshotへoptional `expectedAreaIds`。旧Doneの保存route12と旧snapshotの対象数/field欠損は保持。新しい進行中snapshotの分母はactive11、観測のある旧autumnは追加の証拠として保持し、未観測placeholderから架空の欠測・評価・製造不足signalを作らない。新Review19の対象11と旧17source12が同じ日次payloadに共存できる。既存productionAnalysisのautumn値も保持する。
+- 優先候補はactive route内の `skipped_manual` かつ最新の採用済み5段階 `many` / `slightly_many`。元auto/3区分areaJudgeは使わず、保存済み中間評価を時計で再解決しない。両評価は同順位、`abs(getAreaOrder(current)-getAreaOrder(candidate))`の小さい順、同距離は既存area orderの昇順。
+- 候補確認は実際の全手順完遂の後だけ。15時16時前/17時は2段階、15時16時以降は1段階。判定・残数・1段階目・スキップ・auto-skip確認では発火しない。既存の訂正後returnを先に尊重する。
+- `priorityReturnContext` は元sessionStartedAt/date/timeと `normalResumeAreaId` だけのoptional context。候補queue/評価の複製はない。優先復帰のたびにlive mapから候補を選び直し、尽きたら保存した通常の続き、通常終了後は一般pending/Doneへ戻す。例②は中華完了→焼鳥→フライ→おにぎり。
+- 再スキップ直後に自身へ戻さず、通常の続きへ戻る。別エリアを完遂した時点で再候補になる。最後の1エリアのskip拒否を維持。current/checkpoint/navigation/undoの既存state境界でcontextを保持し、session/date/time不一致や新15→17開始では持ち越さない。移動だけで完了snapshotを作らない。古いFinishに加え古いskip eventも最新area/progress/sessionと照合して拒否する。
+- 保存形式はschema3互換optional拡張だけ。新storage key/migration/raw localStorage write/SQL/Supabase構造変更なし。rate/median/reference/天候/快適/global/product/human解決/clockの式は変更しない。
 
 ### 9-54: 境界後の一覧取消線・15時多いだけ・17時の18時表示
 
@@ -521,11 +532,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-54` / buildId `build-20261016-210409-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
-- 全check **92/92 PASS**、54専用 **54/54 PASS**、更新した53一覧check **39/39 PASS**。TypeScript / production build / PWA generateSW PASS（108 modules/precache10）。境界±1ms・fresh旧handler・二重操作・同一batch手動判定/retry・保存snapshot保持を実TSX/hook fixtureで検証した。
-- focused ESLint **0 errors / 2 existing warnings**、full **9 existing errors / 5 existing warnings**。53baselineとのfile/rule/severity/message比較で新規0・削除0。full lint自体はexit1。buildのchunk-size/Browserslist案内も既存由来。
-- 実Edge production preview、360/390×844: **112/112 PASS**。Done線/元色、15の1段階・通常中の中立Finish、17の2段階維持・18時reference、fresh操作/復帰/reload、normal/summer/fixed、late+5と確定snapshot保持を確認。横overflow/新規アプリconsole診断/不要な外部通信0。harnessのSW遮断通知128件は別計上。16時ちょうどの固定時計UIはquery非対応で自動testのみ。人工fixture・時計の確認で、物理端末/実Supabase/インストール済PWAは未確認。証拠はZIP外`work/lateFlow54/browser-work`。
-- src105の差分はAppRouter/DoneScreen/RateDisplayScreen/useNebikiAppの4本。保護src101・SQL9・AGENTS・過去CHANGE62・dataVersion/Vite/depsは完成53ZIPと同一。check入力214/build入力120をhash照合。完成ZIPを再openしCRC・path・除外物・version/build/schema/PWA・working tree集合/全bytesを検査する。
+- appVersion `2026.8.9-55` / buildId `build-20261019-160904-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
+- 全check **95/95 PASS**。55専用: inactive秋商品 **19/19**、priority pure **13/13**、実hook/TSX flow **45/45**。旧12/旧11互換、2例、両季節/15・17、再スキップ/最後/戻る/undo/reload/訂正/時刻切替/古いevent/Review19保存を含む。54専用54/54・一覧39/39もPASS。
+- TypeScript / production build / PWA generateSW PASS（110 modules/precache10）。focused ESLint **0 errors / 2 existing warnings**、full **9 existing errors / 5 existing warnings**。54baselineとのfile/rule/severity/message比較で新規0・削除0。full lint自体はexit1。chunk-size/Browserslist案内は既存由来。
+- 実Edge production preview、360/390×844: **32/32 PASS**。人工fixture/時計による実UI操作1006回、幅測定1038回。両例/通常再開/再スキップ/訂正/復元/15・17境界/11エリア完了/Review19 JSON/夏商品/fixed READ ONLYを確認。横overflow、新規アプリconsole診断、不要な外部通信0。harnessのSW遮断通知38件は別記録。Undo・条件編集/トップ再開のhook action、詳細race/保存失敗/日付・session跨ぎ/同距離分岐等は自動testのみ。物理端末/実Supabase/インストール済PWA/長時間backgroundは未確認。証拠はZIP外`work/priority55/browser-work`。
+- src107は既存13本変更+2本追加、残る92本は完成54ZIPと同一。SQL9・AGENTS・過去CHANGE63・dataVersion/Vite/depsも同一。check入力219/build入力122をhash照合。完成ZIPを再openしCRC・path・除外物・version/build/schema/PWA・対象working tree集合/全bytesを検査する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -535,7 +546,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全92 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全95 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -558,6 +569,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
+9-55追加: area.tsの操作用gate/保存route分離、pending.tsのpriority selector、normalFlow/priorityFlow/operationalAreas、hookの完遂/通常続き/skip/訂正復帰、snapshot分母と旧analysis保持。専用 `check-disabled-autumn55.ts` / `check-priority-pending55.ts` / `check-priority-flow55.ts`。
+
 9-54追加: RateDisplayの境界/段階/完了guard、hookのfresh確定時計と表示reference17→18、Done/RouterのstrikeNormalRate、`scripts/check-late-operation54.ts`。53一覧checkは取消線へ更新した。
 
 9-52追加: areaCountHistoryの通常日曜共用抽出/対象祝日15・17採用、types/analysisMetadataのoptional根拠、AreaJudge/RateDisplayの保存根拠、`check-holiday-sunday-reference52.ts`。
@@ -575,7 +588,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-54.md`（完成baselineは `CHANGE_REPORT_2026.8.9-53.md`）
+4. `CHANGE_REPORT_2026.8.9-55.md`（完成baselineは `CHANGE_REPORT_2026.8.9-54.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

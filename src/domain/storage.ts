@@ -1040,6 +1040,7 @@ function buildUpsertedDailySessionSnapshots(
         basis: JSON.parse(JSON.stringify(previous.basis)),
         areas: JSON.parse(JSON.stringify(previous.areas)),
         doneSummaryItems: JSON.parse(JSON.stringify(previous.doneSummaryItems)),
+        expectedAreaIds: previous.expectedAreaIds ? [...previous.expectedAreaIds] : undefined,
       }
     : cloneDailySessionSnapshot(snapshot);
   const retirement = mergeRetiredNightOperationEvidence(

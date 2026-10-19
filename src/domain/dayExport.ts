@@ -35,9 +35,10 @@ export function buildAutomaticDayExportDataQuality(params: {
   daySnapshot: Review19DaySnapshot;
 }): AutomaticDayExportDataQuality {
   const dayExpectedAreaIds = getExpectedAreaIdsForStoredRecord(params.date, params.daySnapshot);
-  const expectedAreaIdSet = new Set(dayExpectedAreaIds);
   const records = params.daySnapshot.areaCountRecords.filter((record) => {
-    return record.date === params.date && expectedAreaIdSet.has(record.areaId);
+    // Each saved session owns its denominator. A new eleven-area Review19
+    // must not hide an earlier twelve-area session's observed autumn count.
+    return record.date === params.date;
   });
 
   const coverageByDiscountTime = DAY_EXPORT_DISCOUNT_TIMES.map((discountTime) => {

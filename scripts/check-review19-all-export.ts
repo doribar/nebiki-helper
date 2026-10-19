@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
-import { getNormalRoute } from "../src/domain/area.ts";
+import { getAreaRouteFromStoredIds, getNormalRoute, isAutumnSeason } from "../src/domain/area.ts";
 import {
   HistoricalArchiveRepository,
   LEGACY_REVIEW19_STORAGE_KEY,
@@ -31,7 +31,7 @@ import {
   createReview19Snapshot,
   selectLatestReview19DayCheck,
 } from "../src/hooks/nebikiApp/sessionSnapshots.ts";
-import { createInitialState } from "../src/hooks/nebikiApp/stateNormalization.ts";
+import { createInitialAreaProgressMap, createInitialState } from "../src/hooks/nebikiApp/stateNormalization.ts";
 
 const EXPORTED_AT = "2026-10-04T15:23:45.000Z";
 const DATES = ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-04"];
@@ -39,6 +39,14 @@ const tests: Array<{ name: string; run: () => void | Promise<void> }> = [];
 const test = (name: string, run: () => void | Promise<void>) => tests.push({ name, run });
 const json = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 type ExportPayload = ReturnType<typeof buildAllReview19DataExportPayload>;
+
+// These are saved 9-40 records. Their autumn target predates the current
+// temporary exclusion and must remain explicit historical fixture evidence.
+function historicalFixtureRoute(date: string) {
+  return getAreaRouteFromStoredIds(date, [
+    ...getNormalRoute(date), ...(isAutumnSeason(date) ? ["autumn"] : []),
+  ]);
+}
 
 // Rich records come from the production session/Review19 builders. The missing
 // count and human observation on 9/30 remain an actual incomplete recorded day.
@@ -52,6 +60,9 @@ function fixture(date: string, demandCycle: DemandCycle, incomplete = false): Re
   };
   draft.weather.hourlyForecasts["19"] = { weather: "rain", tempC: 24, windMs: 3 };
   const state = createInitialState(draft);
+  const expectedAreaIds = historicalFixtureRoute(date);
+  state.normalFlowOrder = expectedAreaIds;
+  state.areaProgressMap = createInitialAreaProgressMap(date, expectedAreaIds);
   state.session = {
     ...draft, startedAt: `${date}T08:00:00.000Z`, dataSchemaVersion: 3,
     appVersion: "2026.8.9-40", buildId: `source-${date}`, globalDiscountAdjustmentPercent: 5,
@@ -81,7 +92,8 @@ function fixture(date: string, demandCycle: DemandCycle, incomplete = false): Re
     snapshots: [daily], lastSessionWeather: null,
   });
   const record = started.review19!;
-  for (const [index, areaId] of getNormalRoute(date).entries()) {
+  record.expectedAreaIds = [...expectedAreaIds];
+  for (const [index, areaId] of expectedAreaIds.entries()) {
     const count = 5 + index;
     record.areaCounts[areaId] = count;
     record.areaCountRecordedAt[areaId] = recordedAt;
@@ -112,6 +124,8 @@ function fixture(date: string, demandCycle: DemandCycle, incomplete = false): Re
     ...snapshotArgs, session: state.session, areaProgressMap: state.areaProgressMap,
     excludedAreaIds: [], reviewReference: record.reference,
   });
+  // Replay the already-saved 9-40 source, including its original autumn slot.
+  record.snapshot.areas = json(daily.areas);
   record.calendarContext = record.reference?.calendarContext;
   record.analysisWeatherContext = record.reference?.analysisWeatherContext;
   record.daySnapshot = createReview19DaySnapshot({
@@ -290,8 +304,9 @@ test("all JSON keeps source versions, all rich metadata, raw9, statistics, seaso
       assert.ok(record[key], `rich metadata present: ${record.date} ${key}`);
       assert.deepEqual(json(record[key]), json(source[key]), `source metadata preserved: ${record.date} ${key}`);
     }
-    assert.deepEqual(record.expectedAreaIds, getNormalRoute(record.date));
+    assert.deepEqual(record.expectedAreaIds, historicalFixtureRoute(record.date));
     assert.equal(record.expectedAreaIds?.includes(index < 3 ? "ryomi" : "autumn"), true);
+    assert.ok(record.snapshot?.areas[index < 3 ? "ryomi" : "autumn"]);
     assert.equal(record.reference?.weather.hourlyForecasts["19"].weather, "rain");
     assert.equal(record.areaEvaluations?.bento_men?.humanEvaluationDetails?.humanEvaluationScore9, 7);
     assert.equal(record.areaEvaluations?.bento_men?.autoEvaluationBasis?.recommendationStatus, "insufficient");

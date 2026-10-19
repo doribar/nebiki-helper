@@ -4,6 +4,7 @@ import {
   ALL_AREA_IDS, LEGACY_AREA_MASTERS, getAreaMasters, getAreaName,
   getAreaOrder, getDoneSummaryRoute, getNormalRoute, getNextNormalArea,
   getExpectedAreaIdsForStoredRecord,
+  getAreaRouteFromStoredIds,
 } from "../src/domain/area.ts";
 import { getAreaCountRecommendation, normalizeAreaCountRecords } from "../src/domain/areaCountHistory.ts";
 import type { AreaCountRecord } from "../src/domain/areaCountHistory.ts";
@@ -54,7 +55,7 @@ function dailySnapshot(state: AppState) {
 
 for (const [date, seasonal] of [
   ["2026-05-31", null], ["2026-06-01", "ryomi"], ["2026-09-30", "ryomi"],
-  ["2026-10-01", "autumn"], ["2026-11-30", "autumn"], ["2026-12-01", null],
+  ["2026-10-01", null], ["2026-11-30", null], ["2026-12-01", null],
   ["2027-01-01", null], ["2027-05-31", null], ["2027-06-01", "ryomi"],
 ] as const) {
   test(`${date}: route/master/Done has exactly the seasonal slot`, () => {
@@ -89,6 +90,7 @@ test("master keeps ryomi identity, renames only current display and puts autumn 
 
 const oct = "2026-10-01";
 const legacyOctRoute = getNormalRoute(oct).filter((id) => id !== "autumn");
+const historicalOctRoute = getAreaRouteFromStoredIds(oct, [...legacyOctRoute, "autumn"]);
 test("old October saved route/map and navigation remain eleven areas after reload", () => {
   const old = stateAt(oct); old.normalFlowOrder = legacyOctRoute; delete old.areaProgressMap.autumn;
   old.session!.appVersion = "2026.8.9-36";
@@ -118,14 +120,13 @@ test("historical summer progress and skipped IDs survive loading outside the sum
   assert.equal(loaded.areaProgressMap.autumn, undefined);
 });
 
-test("autumn stays in normal, pending, time transition and auto-skip flows", () => {
+test("disabled autumn stays out of new normal, pending, time transition and auto-skip flows", () => {
   const state = stateAt(oct);
-  assert.equal(getNextNormalFlowAreaId(state.areaProgressMap, "tempura", state.normalFlowOrder), "autumn");
-  state.areaProgressMap.autumn.status = "skipped_manual";
-  assert.equal(getNextPendingCandidate({ areaProgressMap: state.areaProgressMap, referenceAreaId: "tempura", normalFlowOrder: state.normalFlowOrder })?.areaId, "autumn");
+  assert.equal(getNextNormalFlowAreaId(state.areaProgressMap, "tempura", state.normalFlowOrder), "croquette");
+  assert.equal(getNextPendingCandidate({ areaProgressMap: state.areaProgressMap, referenceAreaId: "tempura", normalFlowOrder: state.normalFlowOrder }), null);
   const plan = createTimeSwitchPlan({ previousMap: state.areaProgressMap, date: oct, areaIds: state.normalFlowOrder, targetDiscountTime: "18", skippedRecords: [{ date: oct, targetDiscountTime: "18", areaId: "autumn", skipKind: "early_next_minus5" }] });
-  assert.equal(plan.areaProgressMap.autumn.status, "auto_skipped_late_time"); assert.equal(plan.areaProgressMap.ryomi, undefined);
-  assert.equal(finalizeUnmeasuredAreasForAutoTransition(state, `${oct}T18:55:00+09:00`).areaProgressMap.autumn.missingReason, "auto_time_transition");
+  assert.equal(plan.areaProgressMap.autumn, undefined); assert.equal(plan.areaProgressMap.ryomi, undefined);
+  assert.equal(finalizeUnmeasuredAreasForAutoTransition(state, `${oct}T18:55:00+09:00`).areaProgressMap.autumn, undefined);
 });
 
 test("unfinished priority during 15→17 changes navigation only; Review19, Done and snapshot retain canonical seasonal position", () => {
@@ -151,8 +152,8 @@ function completeReview(date: string, expectedAreaIds = getNormalRoute(date)): R
   return { ...initial, areaCounts, areaEvaluations, recordedAt: `${date}T19:01:00+09:00`, dataQuality: buildReview19DataQuality({ date, expectedAreaIds, areaCounts, areaEvaluations, excludedAreaIds: [] }) };
 }
 
-test("new October Review19 counts and exported/Supabase payload include autumn and raw human assessment", () => {
-  const review = completeReview(oct);
+test("historical twelve-area October Review19 and Supabase payload preserve autumn and raw human assessment", () => {
+  const review = completeReview(oct, historicalOctRoute);
   const normalized = normalizeReview19Result(review)!;
   assert.equal(normalized.dataQuality.expectedAreaCount, 12); assert.equal(normalized.dataQuality.complete, true);
   assert.equal(normalized.areaCounts.autumn, 6); assert.equal(normalized.areaCounts.ryomi, undefined);
@@ -179,7 +180,10 @@ test("saved old areaName is unchanged while new snapshots use 夏商品/秋商�
   old.snapshot = { version: 1, capturedAt: snapshot.capturedAt, session: snapshot.session, basis: snapshot.basis, areas: snapshot.areas };
   old.snapshot.areas.ryomi.areaName = "涼味商品";
   assert.equal(normalizeReview19Result(old)!.snapshot!.areas.ryomi.areaName, "涼味商品");
-  assert.equal(dailySnapshot(stateAt(oct)).areas.autumn.areaName, "秋商品");
+  assert.equal(dailySnapshot(stateAt(oct)).areas.autumn, undefined);
+  const oldAutumn = stateAt(oct);
+  oldAutumn.areaProgressMap.autumn = { areaId: "autumn", status: "completed", areaJudge: "normal", areaCount: 6 };
+  assert.equal(dailySnapshot(oldAutumn).areas.autumn.areaName, "秋商品");
 });
 
 function countRecord(areaId: AreaId, date: string, count: number, demandCycle: "normal" | "summer" = "normal"): AreaCountRecord {
@@ -207,18 +211,23 @@ test("AreaCount normalization/backfill/Supabase preserve both area IDs and cycle
   }
 });
 
-test("new and legacy day export/finalized analysis respect their saved areas without changing analysis definition", () => {
-  for (const legacy of [false, true]) {
+test("new eleven-area and historical twelve-area export/finalized analysis respect saved areas", () => {
+  for (const historicalTwelve of [false, true]) {
     const state = stateAt(oct);
-    if (legacy) { state.normalFlowOrder = legacyOctRoute; delete state.areaProgressMap.autumn; }
+    if (historicalTwelve) {
+      state.normalFlowOrder = historicalOctRoute;
+      state.areaProgressMap.autumn = { areaId: "autumn", status: "completed", areaJudge: "normal", areaCount: 4 };
+    }
     const session = dailySnapshot(state);
+    // Model bytes saved before the temporary operational exclusion.
+    if (historicalTwelve) delete session.expectedAreaIds;
     const ids = state.normalFlowOrder!;
     const day = createReview19DaySnapshot({ capturedAt: `${oct}T20:30:00+09:00`, date: oct, sessions: [session], areaCountRecords: ids.map((id) => countRecord(id, oct, 4)) });
     const original = JSON.stringify(day);
     const finalized = normalizeReview19DaySnapshotDemandCycle(day);
     const payload = buildAutomaticDayExportPayload({ date: oct, exportedAt: `${oct}T20:31:00+09:00`, daySnapshot: finalized });
-    assert.equal(payload.dataQuality.coverageByDiscountTime.find((item) => item.discountTime === "17")!.expectedAreaCount, legacy ? 11 : 12);
-    assert.equal(Boolean(payload.daySnapshot.productionAnalysis?.areas.autumn), !legacy);
+    assert.equal(payload.dataQuality.coverageByDiscountTime.find((item) => item.discountTime === "17")!.expectedAreaCount, historicalTwelve ? 12 : 11);
+    assert.equal(Boolean(payload.daySnapshot.productionAnalysis?.areas.autumn), historicalTwelve);
     assert.equal(payload.dataSchemaVersion, 3); assert.equal(JSON.stringify(day), original);
   }
 });

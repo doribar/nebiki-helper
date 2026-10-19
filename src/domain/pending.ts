@@ -1,5 +1,6 @@
-import { getAreaRouteFromStoredIds, getAreaName, getAreaOrder } from "./area.ts";
+import { getAreaRouteFromStoredIds, getAreaName, getAreaOrder, isAreaActiveForCurrentWork } from "./area.ts";
 import type {
+  AreaCountEvaluation,
   AreaId,
   AreaProgress,
   PendingAreaCandidate,
@@ -135,7 +136,8 @@ export function getNextPendingCandidate(params: {
   const route = params.normalFlowOrder ?? getAreaRouteFromStoredIds(undefined, Object.keys(params.areaProgressMap));
   const deferredSet = new Set(params.deferredAreaIds ?? []);
   const allPendingWithCurrent = Object.values(params.areaProgressMap).filter((p) => {
-    return p.status === "skipped_manual" || p.status === "postponed_few";
+    return isAreaActiveForCurrentWork(p.areaId) &&
+      (p.status === "skipped_manual" || p.status === "postponed_few");
   });
   // 「今はスキップ」の直後だけ現在エリアを候補から外す。
   // status自体は変えないため、別エリアへ進んだ後は通常どおり再訪できる。
@@ -184,6 +186,38 @@ export function getNextPendingCandidate(params: {
   };
 }
 
+function getAdoptedEvaluation(progress: AreaProgress): AreaCountEvaluation | undefined {
+  // These are saved adopted results. Do not re-resolve a human intermediate
+  // selection using the return time, or fall back to the raw automatic result.
+  return progress.areaCountEvaluation ??
+    progress.humanEvaluationDetails?.resolvedEvaluation ??
+    progress.areaCountDecisionBasis?.finalEvaluation;
+}
+
+/** The caller invokes this only after another area's discount work is complete. */
+export function getNextPriorityPendingCandidate(params: {
+  areaProgressMap: Record<AreaId, AreaProgress>;
+  referenceAreaId: AreaId;
+  normalFlowOrder?: readonly AreaId[];
+}): PendingAreaCandidate | null {
+  const activeRoute = new Set(params.normalFlowOrder ??
+    getAreaRouteFromStoredIds(undefined, Object.keys(params.areaProgressMap)));
+  const candidates = Object.values(params.areaProgressMap).filter((progress) => {
+    if (!isAreaActiveForCurrentWork(progress.areaId) ||
+      !activeRoute.has(progress.areaId) ||
+      progress.areaId === params.referenceAreaId ||
+      progress.status !== "skipped_manual") return false;
+    const evaluation = getAdoptedEvaluation(progress);
+    return evaluation === "many" || evaluation === "slightly_many";
+  });
+  const picked = sortByDistance(candidates, params.referenceAreaId)[0];
+  return picked ? {
+    areaId: picked.areaId,
+    areaName: getAreaName(picked.areaId),
+    reason: "manual",
+  } : null;
+}
+
 
 export function getPendingResumeScreen(progress: AreaProgress): "area_judge" | "rate_display" {
   if (progress.areaJudge) {
@@ -197,7 +231,8 @@ export function getPendingRemainingCount(
   areaProgressMap: Record<AreaId, AreaProgress>
 ): number {
   return Object.values(areaProgressMap).filter(
-    (p) => p.status === "skipped_manual" || p.status === "postponed_few"
+    (p) => isAreaActiveForCurrentWork(p.areaId) &&
+      (p.status === "skipped_manual" || p.status === "postponed_few")
   ).length;
 }
 
@@ -208,6 +243,7 @@ export function getSkipTargetOptions(params: {
   return Object.values(params.areaProgressMap)
     .filter(
       (progress) =>
+        isAreaActiveForCurrentWork(progress.areaId) &&
         progress.areaId !== params.currentAreaId &&
         progress.status !== "completed" &&
         progress.status !== "auto_skipped_late_time"

@@ -3,6 +3,14 @@ import type { AreaId, AreaMaster } from "./types";
 const SUMMER_MONTHS = new Set([6, 7, 8, 9]);
 const AUTUMN_MONTHS = new Set([10, 11]);
 
+// Temporary operational exclusion. Removing an ID here restores its existing
+// seasonal rule; historical identity, saved routes and observations stay valid.
+const TEMPORARILY_DISABLED_AREA_IDS: ReadonlySet<AreaId> = new Set(["autumn"]);
+
+export function isAreaActiveForCurrentWork(areaId: AreaId): boolean {
+  return !TEMPORARILY_DISABLED_AREA_IDS.has(areaId);
+}
+
 function getMonthFromDateLike(dateLike?: string | Date | null): number {
   if (dateLike instanceof Date) return dateLike.getMonth() + 1;
   if (typeof dateLike === "string") {
@@ -57,7 +65,7 @@ export function getNormalRoute(dateLike?: string | Date | null): AreaId[] {
     "inari",
     "hosomaki",
   ];
-  return route;
+  return route.filter(isAreaActiveForCurrentWork);
 }
 
 export function getDoneSummaryRoute(dateLike?: string | Date | null): AreaId[] {
@@ -85,7 +93,7 @@ export function normalizeAreaIds(raw: unknown): AreaId[] {
   return Array.isArray(raw) ? [...new Set(raw.filter(isKnownAreaId))] : [];
 }
 
-/** Keep the saved seasonal slot when resuming or reading a historical record. */
+/** Keep the saved seasonal slot when reading a historical record or source. */
 export function getAreaRouteFromStoredIds(
   dateLike: string | Date | null | undefined,
   storedAreaIds: readonly unknown[],
@@ -99,6 +107,29 @@ export function getAreaRouteFromStoredIds(
   });
 }
 
+/** Resume the saved seasonal route while excluding temporarily disabled work. */
+export function getOperationalAreaRoute(
+  dateLike: string | Date | null | undefined,
+  storedAreaIds: readonly unknown[],
+): AreaId[] {
+  return getAreaRouteFromStoredIds(dateLike, storedAreaIds).filter(isAreaActiveForCurrentWork);
+}
+
+/** Existing analysis is evidence even when its area is no longer operational. */
+export function getAreaIdsIncludingStoredAnalysis(
+  expectedAreaIds: readonly AreaId[],
+  ...storedAnalyses: unknown[]
+): AreaId[] {
+  return normalizeAreaIds([
+    ...expectedAreaIds,
+    ...storedAnalyses.flatMap((analysis) => {
+      if (!analysis || typeof analysis !== "object") return [];
+      const areas = (analysis as { areas?: unknown }).areas;
+      return areas && typeof areas === "object" ? Object.keys(areas) : [];
+    }),
+  ]);
+}
+
 /** New records save their expected route; legacy autumn months have no autumn area. */
 export function getExpectedAreaIdsForStoredRecord(
   date: string,
@@ -108,13 +139,13 @@ export function getExpectedAreaIdsForStoredRecord(
     areaCounts?: unknown;
     excludedAreaIds?: unknown;
     dataQuality?: { expectedAreaCount?: number; missingAreaIds?: unknown; notMeasuredAreaIds?: unknown };
-    snapshot?: { areas?: unknown };
-    sessions?: Array<{ areas?: unknown }>;
+    snapshot?: { expectedAreaIds?: unknown; areas?: unknown };
+    sessions?: Array<{ expectedAreaIds?: unknown; areas?: unknown }>;
     review19Check?: { expectedAreaIds?: unknown; areaCounts?: unknown; excludedAreaIds?: unknown };
     areaCountRecords?: Array<{ areaId?: unknown }>;
   },
 ): AreaId[] {
-  const explicit = normalizeAreaIds(record.expectedAreaIds ?? record.review19Check?.expectedAreaIds);
+  const explicit = normalizeAreaIds(record.expectedAreaIds ?? record.review19Check?.expectedAreaIds ?? record.snapshot?.expectedAreaIds);
   if (explicit.length > 0) return explicit;
   const keys = (value: unknown) => value && typeof value === "object" ? Object.keys(value) : [];
   const savedIds = normalizeAreaIds([
@@ -123,7 +154,10 @@ export function getExpectedAreaIdsForStoredRecord(
     ...normalizeAreaIds(record.dataQuality?.missingAreaIds),
     ...normalizeAreaIds(record.dataQuality?.notMeasuredAreaIds),
     ...keys(record.snapshot?.areas),
-    ...(record.sessions ?? []).flatMap((session) => keys(session.areas)),
+    ...(record.sessions ?? []).flatMap((session) => {
+      const expected = normalizeAreaIds(session.expectedAreaIds);
+      return expected.length > 0 ? expected : keys(session.areas);
+    }),
     ...keys(record.review19Check?.areaCounts),
     ...normalizeAreaIds(record.review19Check?.excludedAreaIds),
     ...(record.areaCountRecords ?? []).map((item) => item.areaId),

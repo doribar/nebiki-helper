@@ -686,6 +686,8 @@ export type DailySessionSnapshot = {
   appVersion?: string;
   buildId?: string;
   capturedAt: string;
+  /** Current work denominator, separate from retained inactive-area evidence. */
+  expectedAreaIds?: AreaId[];
   demandCycle?: DemandCycle;
   calendarContext?: AnalysisCalendarContext;
   analysisWeatherContext?: AnalysisWeatherContext;
@@ -873,6 +875,13 @@ export type SupabaseBackfillResult = {
   skippedReason?: "fixed_time_mode";
 };
 
+export type PriorityReturnContext = {
+  sessionStartedAt: string;
+  sessionDate: string;
+  sessionDiscountTime: DiscountTime;
+  normalResumeAreaId: AreaId | null;
+};
+
 export type AreaCountCorrectionContext = {
   mode?: "normal" | "auto_skip_count_only";
   targetAreaId: AreaId;
@@ -884,6 +893,7 @@ export type AreaCountCorrectionContext = {
   returnFinalTimeStep: FinalTimeStep;
   returnTimeSwitchNotice: string | null;
   returnHistoryLength: number;
+  returnPriorityReturnContext?: PriorityReturnContext;
 };
 
 export type AppState = {
@@ -897,6 +907,8 @@ export type AppState = {
   lastReferenceAreaId: AreaId | null;
   currentFlow: FlowMode;
   pendingDeferredAreaIds: AreaId[];
+  /** Only the suspended normal continuation; pending candidates remain derived. */
+  priorityReturnContext?: PriorityReturnContext;
   timeSwitchNotice: string | null;
   finalTimeStep: FinalTimeStep;
   review19: Review19Result | null;

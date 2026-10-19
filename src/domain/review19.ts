@@ -1,4 +1,4 @@
-import { ALL_AREA_IDS, getAreaName, getNormalRoute, getAreaRouteFromStoredIds, getExpectedAreaIdsForStoredRecord, normalizeAreaIds, isKnownAreaId } from "./area.ts";
+import { ALL_AREA_IDS, getAreaName, getNormalRoute, getAreaRouteFromStoredIds, getExpectedAreaIdsForStoredRecord, getAreaIdsIncludingStoredAnalysis, normalizeAreaIds, isKnownAreaId } from "./area.ts";
 import {
   normalizeAreaCountDecisionBasis,
   normalizeAreaCountRecords,
@@ -697,7 +697,7 @@ function normalizeReview19DayCheckSnapshot(
   ]);
   const productionAnalysis = normalizeProductionAnalysis(
     raw.productionAnalysis,
-    expectedAreaIds,
+    getAreaIdsIncludingStoredAnalysis(expectedAreaIds, raw.productionAnalysis),
   );
 
   return JSON.parse(JSON.stringify({
@@ -843,10 +843,16 @@ function normalizeReview19DaySnapshot(
     sessions,
     review19Check,
   });
-  const productionAnalysis = mergeProductionAnalyses({
+  const analysisAreaIds = getAreaIdsIncludingStoredAnalysis(expectedAreaIds, raw.productionAnalysis, review19Check?.productionAnalysis);
+  const persistedProductionAnalysis = mergeProductionAnalyses({
     persisted: raw.productionAnalysis,
+    rebuilt: review19Check?.productionAnalysis,
+    areaIds: analysisAreaIds,
+  });
+  const productionAnalysis = mergeProductionAnalyses({
+    persisted: persistedProductionAnalysis,
     rebuilt: rebuiltProductionAnalysis,
-    areaIds: expectedAreaIds,
+    areaIds: analysisAreaIds,
   });
   if (review19Check) {
     review19Check.productionAnalysis = productionAnalysis;
@@ -1018,7 +1024,7 @@ export function normalizeReview19Result(
   const productionAnalysis = mergeProductionAnalyses({
     persisted: raw.productionAnalysis,
     rebuilt: daySnapshot?.productionAnalysis,
-    areaIds: expectedAreaIds,
+    areaIds: getAreaIdsIncludingStoredAnalysis(expectedAreaIds, raw.productionAnalysis, daySnapshot?.productionAnalysis),
   });
 
   return {

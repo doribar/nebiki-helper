@@ -5,7 +5,7 @@ import type {
   Review19Result,
 } from "../../domain/types";
 import { normalizeDemandCycle } from "../../domain/demandCycle.ts";
-import { getAreaRouteFromStoredIds } from "../../domain/area.ts";
+import { getOperationalAreaRoute, isAreaActiveForCurrentWork } from "../../domain/area.ts";
 import { supportsObonCalendarRule } from "../../domain/obon.ts";
 import { createInitialReview19Result } from "../../domain/review19.ts";
 import { canStartReview19FromCurrentState, formatLocalDate } from "./clock.ts";
@@ -78,8 +78,8 @@ export function createReview19StartState(params: {
     demandCycle: normalizeDemandCycle(session.demandCycle),
     sessionStartedAt: session.startedAt,
     reviewStartedAt: now.toISOString(),
-    excludedAreaIds: sourceState.review19ExcludedAreaIds,
-    expectedAreaIds: getAreaRouteFromStoredIds(session.date, sourceState.normalFlowOrder ?? Object.keys(sourceState.areaProgressMap)),
+    excludedAreaIds: sourceState.review19ExcludedAreaIds.filter(isAreaActiveForCurrentWork),
+    expectedAreaIds: getOperationalAreaRoute(session.date, sourceState.normalFlowOrder ?? Object.keys(sourceState.areaProgressMap)),
   });
   const reviewTemperatureComfort = resolveSessionTemperatureComfort({
     date: reviewDraft.date,
@@ -100,6 +100,7 @@ export function createReview19StartState(params: {
     review19ExcludedAreaIds: sourceState.review19ExcludedAreaIds,
     currentAreaId: null,
     currentFlow: "normal",
+    priorityReturnContext: undefined,
     pendingDeferredAreaIds: [],
     timeSwitchNotice: null,
     review19: {

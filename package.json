@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-54",
+  "version": "2026.8.9-55",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -99,7 +99,10 @@
     "check:aligned-clock51": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-aligned-clock51.ts",
     "check:holiday-sunday-reference52": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-holiday-sunday-reference52.ts",
     "check:done-normal-dim53": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-done-normal-dim53.ts",
-    "check:late-operation54": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-late-operation54.ts"
+    "check:late-operation54": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-late-operation54.ts",
+    "check:disabled-autumn55": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-disabled-autumn55.ts",
+    "check:priority-pending55": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-priority-pending55.ts",
+    "check:priority-flow55": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-priority-flow55.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

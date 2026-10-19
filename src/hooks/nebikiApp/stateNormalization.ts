@@ -43,6 +43,7 @@ import {
 } from "../../domain/demandCycle.ts";
 import { normalizeGlobalDiscountAdjustmentPercent } from "../../domain/globalDiscountAdjustment.ts";
 import { isValidEveningComfortForecastEntry } from "../../domain/eveningComfortRelief.ts";
+import { normalizePriorityReturnContext } from "./priorityFlow.ts";
 import {
   formatLocalDate,
   getRuntimeNow,
@@ -116,12 +117,14 @@ function isValidScreenName(value: unknown): value is ScreenName {
 
 function normalizeAreaCountCorrectionContext(
   raw: unknown,
+  session: SessionData | null,
 ): AreaCountCorrectionContext | null {
   if (!raw || typeof raw !== "object") return null;
   const source = raw as Partial<AreaCountCorrectionContext>;
   if (!isValidAreaId(source.targetAreaId) || !isValidScreenName(source.returnScreen)) {
     return null;
   }
+  const returnPriorityReturnContext = normalizePriorityReturnContext(source.returnPriorityReturnContext, session);
 
   return {
     mode:
@@ -154,6 +157,7 @@ function normalizeAreaCountCorrectionContext(
       source.returnHistoryLength >= 0
         ? source.returnHistoryLength
         : 0,
+    ...(returnPriorityReturnContext ? { returnPriorityReturnContext } : {}),
   };
 }
 
@@ -762,6 +766,7 @@ export function normalizeLoadedState(
     lastReferenceAreaId,
     currentFlow: (loaded as Partial<AppState>).currentFlow ?? "normal",
     pendingDeferredAreaIds,
+    priorityReturnContext: normalizePriorityReturnContext(loaded.priorityReturnContext, session),
     timeSwitchNotice:
       (loaded as Partial<AppState>).timeSwitchNotice ?? null,
     finalTimeStep:
@@ -772,6 +777,7 @@ export function normalizeLoadedState(
     review19ExcludedAreaIds: normalizeReview19ExcludedAreaIds((loaded as Partial<AppState>).review19ExcludedAreaIds),
     areaCountCorrection: normalizeAreaCountCorrectionContext(
       (loaded as Partial<AppState>).areaCountCorrection,
+      session,
     ),
     finalizedDayRecordId:
       typeof (loaded as Partial<AppState>).finalizedDayRecordId === "string"

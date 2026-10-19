@@ -18,7 +18,7 @@ import type {
   AreaCountDecisionBasis,
   AreaCountRecord,
 } from "../../domain/areaCountHistory.ts";
-import { getAreaName, getAreaRouteFromStoredIds, getExpectedAreaIdsForStoredRecord } from "../../domain/area";
+import { getAreaName, getAreaRouteFromStoredIds, getOperationalAreaRoute, getExpectedAreaIdsForStoredRecord, getAreaIdsIncludingStoredAnalysis, isAreaActiveForCurrentWork, normalizeAreaIds } from "../../domain/area";
 import { getBasisGuideDisplay, getWeekdayBaseInfo } from "../../domain/weekdayBase";
 import { getFinalTimeGuide, getFinalTimeInstructionSteps } from "../../domain/discount";
 import { loadReview19Records } from "../../domain/storage";
@@ -36,6 +36,7 @@ import {
   buildAnalysisWeatherContext,
   buildDayAnalysisCalendarContext,
   buildProductionAnalysis,
+  mergeProductionAnalyses,
   buildSessionAnalysisCalendarContext,
   chooseBestAnalysisWeatherContext,
   normalizeAnalysisCalendarContext,
@@ -75,6 +76,19 @@ function cloneDailySessionSnapshotWithDemandCycle(
       demandCycle,
     },
   };
+}
+
+/** A disabled placeholder is not a new observation or an unfinished work item. */
+function hasSavedAreaObservation(progress: AreaProgress | undefined): boolean {
+  return Boolean(progress && (
+    typeof progress.areaCount === "number" ||
+    progress.areaJudge != null ||
+    progress.areaCountEvaluation ||
+    progress.humanEvaluationDetails ||
+    progress.rateDecisionSnapshot ||
+    progress.completedAt ||
+    progress.status === "completed"
+  ));
 }
 
 function buildAreaSnapshotsFromState(params: {
@@ -181,7 +195,15 @@ export function createDailySessionSnapshot(params: {
   const session = params.state.session;
   if (!session) return null;
   const demandCycle = normalizeDemandCycle(session.demandCycle);
-  const areaIds = getAreaRouteFromStoredIds(session.date, params.state.normalFlowOrder ?? Object.keys(params.state.areaProgressMap));
+  const storedAreaIds = params.state.normalFlowOrder ?? Object.keys(params.state.areaProgressMap);
+  // A completed legacy source keeps its original denominator. In-progress work
+  // uses the active route, while retained disabled observations remain evidence.
+  const expectedAreaIds = params.state.screen === "done"
+    ? getAreaRouteFromStoredIds(session.date, storedAreaIds)
+    : getOperationalAreaRoute(session.date, storedAreaIds);
+  const retainedDisabledIds = normalizeAreaIds(Object.keys(params.state.areaProgressMap))
+    .filter((areaId) => !isAreaActiveForCurrentWork(areaId) && hasSavedAreaObservation(params.state.areaProgressMap[areaId]));
+  const areaIds = getAreaRouteFromStoredIds(session.date, [...expectedAreaIds, ...retainedDisabledIds]);
   const calendarContext = buildSessionAnalysisCalendarContext({
     date: session.date,
     weekday: session.weekday,
@@ -198,6 +220,7 @@ export function createDailySessionSnapshot(params: {
   return {
     version: 1,
     ...getCurrentDataVersionInfo(),
+    expectedAreaIds,
     demandCycle,
     calendarContext,
     analysisWeatherContext: buildAnalysisWeatherContext(
@@ -453,7 +476,7 @@ export function createReview19DaySnapshot(params: {
     ...sessions.toReversed().map((session) => session.analysisWeatherContext),
   ]);
   const expectedAreaIds = getExpectedAreaIdsForStoredRecord(params.date, { sessions, review19Check, areaCountRecords });
-  const productionAnalysis = buildProductionAnalysis({
+  const rebuiltProductionAnalysis = buildProductionAnalysis({
     date: params.date,
     demandCycle,
     areaIds: expectedAreaIds,
@@ -461,6 +484,11 @@ export function createReview19DaySnapshot(params: {
     sessions,
     review19Check,
   });
+  const productionAnalysis = mergeProductionAnalyses({
+    persisted: review19Check?.productionAnalysis,
+    rebuilt: rebuiltProductionAnalysis,
+    areaIds: getAreaIdsIncludingStoredAnalysis(expectedAreaIds, review19Check?.productionAnalysis),
+  })!;
   if (review19Check) {
     review19Check.calendarContext =
       normalizeAnalysisCalendarContext(review19Check.calendarContext) ??
@@ -502,7 +530,8 @@ export function createReview19Snapshot(params: {
   doneSummaryItems: DoneSummaryItem[];
 }): Review19Snapshot {
   const demandCycle = normalizeDemandCycle(params.session.demandCycle);
-  const areaIds = getAreaRouteFromStoredIds(params.session.date, Object.keys(params.areaProgressMap));
+  const areaIds = getAreaRouteFromStoredIds(params.session.date, Object.keys(params.areaProgressMap))
+    .filter((areaId) => isAreaActiveForCurrentWork(areaId) || hasSavedAreaObservation(params.areaProgressMap[areaId]));
   const areas = buildAreaSnapshotsFromState({
     areaIds,
     areaProgressMap: params.areaProgressMap,
