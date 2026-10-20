@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-55）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-56）
 
-最終更新: 2026-10-19 JST
+最終更新: 2026-10-20 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-55.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-55.zip` |
-| appVersion | `2026.8.9-55` |
-| buildId | `build-20261019-160904-jst` |
+| ZIP | `nebiki-helper-2026.8.9-56.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-56.zip` |
+| appVersion | `2026.8.9-56` |
+| buildId | `build-20261020-211241-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-55.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-56.md`参照（自己参照回避） |
 
-application rootは`work/priority55/nebiki-helper`。比較基準は完成54 ZIP `nebiki-helper-2026.8.9-54.zip`（SHA-256 `23daa050f822e25328b5e0ec7e7274e4ebb83fe0fa5b77885e0d9e30a6e2ee11`、build `build-20261016-210409-jst`）。55は秋商品の一時無効化と、多い側で明示スキップしたエリアへの完遂時優先復帰を追加する。詳細は`CHANGE_REPORT_2026.8.9-55.md`。
+application rootは`work/manyException56/nebiki-helper`。比較基準は完成55 ZIP `nebiki-helper-2026.8.9-55.zip`（SHA-256 `8efcb2fafefcb93de60696129a8a0225b9032a9cc5fb336bdb6da78c9b811486`、build `build-20261019-160904-jst`）。56は元15時session/JST16:00以降でも、保存済み最終採用5段階が正確にmanyなら作業中の多い→通常の2段階を維持する例外を追加した。その他4評価/旧不明は1段階、17時は従来どおり。詳細は`CHANGE_REPORT_2026.8.9-56.md`。
 
-54の15時16:00以降1段階・17時18:00以降2段階/基準表示18時・Done取消線、52の対象祝日日曜優先、51の00/30時計、50のlower期限、49の15/17 only/遅延+5/Review19/旧夜枠保全、46快適補正、48三連休中日、schema3/SQL/AGENTS/build方式は保持する。
+Done一覧の取消線/色、55の秋商品除外とpriority復帰、52の対象祝日日曜優先、51の00/30時計、50のlower期限、49の15/17 only/遅延+5/Review19/旧夜枠保全、46快適補正、48三連休中日、schema3/SQL/AGENTS/build方式を保持する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\priority55\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\manyException56\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -455,13 +455,22 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-56: late15の最終manyは2段階を維持
+
+- 元sessionが15、JST16:00以降でも、保存済み最終採用5段階がexactly `many` なら多い商品→どちらでもない商品の2段階。自動manyの採用・手動でmanyへ上げた場合とも対象、manyからslightly_manyへ下げた場合は対象外。その他4評価/最終不明の旧状態は従来の1段階。15時境界前と17時（18時以降を含む）は既存どおり。
+- 正本は `areaCountEvaluation`、欠損時だけ保存済み `humanEvaluationDetails.resolvedEvaluation`、次に `areaCountDecisionBasis.finalEvaluation`。55 pendingの既存 `getAdoptedEvaluation()` をexportしてRouterから `adoptedAreaEvaluation` を渡す。raw auto/base/3区分areaJudge/補正率/手動flagから推測せず、中間評価を現在時刻で解決し直さない。
+- RateDisplayの同一predicateを描画・段階数・fresh click・全体補正欄に使う。最終manyの1回目は次の指示へ進むだけで完了/保存/priorityを呼ばず、2回目で既存正規完了へ接続。normal段階中に16時を跨いでもmanyなら継続、非manyなら従来の中立文/明示Finish待ちを維持。時計だけで完了しない。
+- Reactのchild内step更新だけではparent hookが再描画されず、未tickの境界直後に通常指示へ進むとrate propが境界前のままになる経路を確認。次段階へ進む時の `refreshRuntimeClock` actionは既存 `setNowMs(getRuntimeNowMs())` のみを呼び、parentの現在推奨率/referenceを更新する。新timer・business state・snapshot・storage keyは追加しない。固定時計も既存runtime時計を使う。
+- adopted値を既存manual signatureへ含め、旧handlerのsignatureが最新commitと違えばchild進行も拒否する。同率clampでも古い採用値で完了しない。time-only更新は既存の段階維持、通常の手動率変更は既存reset、保存失敗/false/throwのretry・二重操作guardは保持。
+- Done一覧は例外の対象外。最終manyでも元15の16時/元17の18時以降に通常文字全体へsolid取消線。0%黒/正%緑、many/エリア名/未完了等は既存どおり。DoneScreen自体は55とbyte-identical。
+
 ### 9-55: 秋商品一時無効化・多い側スキップの優先復帰
 
 - `area.ts` の `TEMPORARILY_DISABLED_AREA_IDS` にautumnを指定。新しい10月の入力/判定/指示/Done/候補/訂正/Review19は11エリア、天ぷら→コロッケ系。ryomiの季節条件は変更しない。マスターの既知ID・過去履歴・同期対象からautumnを削除しない。
 - `getOperationalAreaRoute` と保存routeの復元を分離。旧進行中のautumn観測・確定評価/率はmap/sourceへ残し、現作業先/後回し候補から外す。Back/Undo/訂正後の復帰も同じ境界を通す。未recordedの旧Review19は対象を11へ絞りdataQualityを再解決するが、記録済み12エリアReview19のqualityを変更しない。
 - 新規DailySessionSnapshotへoptional `expectedAreaIds`。旧Doneの保存route12と旧snapshotの対象数/field欠損は保持。新しい進行中snapshotの分母はactive11、観測のある旧autumnは追加の証拠として保持し、未観測placeholderから架空の欠測・評価・製造不足signalを作らない。新Review19の対象11と旧17source12が同じ日次payloadに共存できる。既存productionAnalysisのautumn値も保持する。
 - 優先候補はactive route内の `skipped_manual` かつ最新の採用済み5段階 `many` / `slightly_many`。元auto/3区分areaJudgeは使わず、保存済み中間評価を時計で再解決しない。両評価は同順位、`abs(getAreaOrder(current)-getAreaOrder(candidate))`の小さい順、同距離は既存area orderの昇順。
-- 候補確認は実際の全手順完遂の後だけ。15時16時前/17時は2段階、15時16時以降は1段階。判定・残数・1段階目・スキップ・auto-skip確認では発火しない。既存の訂正後returnを先に尊重する。
+- 候補確認は実際の全手順完遂の後だけ。15時16時前/17時は2段階、15時16時以降は最終manyなら2段階、その他/不明は1段階（56の例外）。判定・残数・1段階目・スキップ・auto-skip確認では発火しない。既存の訂正後returnを先に尊重する。
 - `priorityReturnContext` は元sessionStartedAt/date/timeと `normalResumeAreaId` だけのoptional context。候補queue/評価の複製はない。優先復帰のたびにlive mapから候補を選び直し、尽きたら保存した通常の続き、通常終了後は一般pending/Doneへ戻す。例②は中華完了→焼鳥→フライ→おにぎり。
 - 再スキップ直後に自身へ戻さず、通常の続きへ戻る。別エリアを完遂した時点で再候補になる。最後の1エリアのskip拒否を維持。current/checkpoint/navigation/undoの既存state境界でcontextを保持し、session/date/time不一致や新15→17開始では持ち越さない。移動だけで完了snapshotを作らない。古いFinishに加え古いskip eventも最新area/progress/sessionと照合して拒否する。
 - 保存形式はschema3互換optional拡張だけ。新storage key/migration/raw localStorage write/SQL/Supabase構造変更なし。rate/median/reference/天候/快適/global/product/human解決/clockの式は変更しない。
@@ -469,9 +478,9 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 ### 9-54: 境界後の一覧取消線・15時多いだけ・17時の18時表示
 
 - Done一覧は53のopacity0.45を撤回し、元15session/JST16:00:00以降・元17session/JST18:00:00以降に既知の有限・非負normalRatePercentを持つ「どちらでもない → 率」の文字div全体へ`line-through` / `solid`を付ける。`strikeNormalRate`は非永続prop、省略false。緑/黒の元色・濃さを保持し、多い/エリア名/status/背景、skip/unfinished/unknown/数値metadata欠損を変更しない。
-- 元15session/JST16:00以降は多い商品の1段階だけ。多い表示中の境界通過後は次の「終わった」で正規完了する。すでに通常段階を表示中なら指示/率を除き、中立文と明示「終わった」を残す。多いへ戻さず、時計だけで完了/保存/次エリア移動をしない。全体補正欄も多い率と明記し、通常商品率は計算/保存から削除しない。
+- 元15session/JST16:00以降は多い商品の1段階だけ（56では最終manyを除く）。非manyでは多い表示中の境界通過後、次の「終わった」で正規完了する。最終manyなら通常指示へ進み、もう1回の「終わった」で完了する。すでに通常段階を表示中なら非manyでは指示/率を除き、中立文と明示「終わった」を残す。最終manyの通常指示は継続する。多いへ戻さず、時計だけで完了/保存/次エリア移動をしない。全体補正欄も多い率と明記し、通常商品率は計算/保存から削除しない。
 - 元17sessionは18時以降も多い→通常の2段階。時計による+5で段階をresetしない。元のsession時刻17・採用曜日referenceを保持し、表示用referenceText/referenceConditionLabelの時刻部分のみ17→18へ変更する。15→16の表示は維持する。保存元のbasisGuide/sessionを18時へ変更しない。
-- RateDisplayの段階ref/完了ref、Routerの元session startedAt/current area/correction target keyで古いevent・二重完了・別エリア混入を防ぐ。false/例外は明示retry可、手動判定変更でもlockを解除する。通常の手動率変更では従来の段階resetを維持し、late15の消した通常段階は再表示しない。未確定の画面内段階を新しい永続fieldへ保存せず、reload時の既存初期化方針は保持する。
+- RateDisplayの段階ref/完了ref、Routerの元session startedAt/current area/correction target keyで古いevent・二重完了・別エリア混入を防ぐ。false/例外は明示retry可、手動判定変更でもlockを解除する。通常の手動率変更では従来の段階resetを維持し、late15で非対象の通常段階は再表示しない（56の最終many例外を除く）。未確定の画面内段階を新しい永続fieldへ保存せず、reload時の既存初期化方針は保持する。
 - goToNextAreaはfresh runtime時計で15/17の遅延+5を再確認し、同じ既存rate core/snapshot builderで確定する。snapshotへbase weatherとlate_plus5を渡し、+5を二重加算しない。最新commit済screen/session/area/progress照合、progressのWeakSetとreducer再照合で古い完了操作を拒否し、戻る/reset後の拒否はundo以前に行う。確定済みの採用評価を時計だけで再解決しない。
 - 既存JST境界helperと51の共通00/30 runtime clock/focus/visible/画面進入同期を利用し、専用timer/listenerを増やさない。fixedは固定時計とREAD ONLYを保持する。現在推奨率と保存済み確定率を区別し、clock/styleだけで過去のsnapshot/履歴を書き換えない。既存completion effectの同一bytesの日次journal再保存が生じる場合は従来の動作である。
 
@@ -532,11 +541,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-55` / buildId `build-20261019-160904-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
-- 全check **95/95 PASS**。55専用: inactive秋商品 **19/19**、priority pure **13/13**、実hook/TSX flow **45/45**。旧12/旧11互換、2例、両季節/15・17、再スキップ/最後/戻る/undo/reload/訂正/時刻切替/古いevent/Review19保存を含む。54専用54/54・一覧39/39もPASS。
-- TypeScript / production build / PWA generateSW PASS（110 modules/precache10）。focused ESLint **0 errors / 2 existing warnings**、full **9 existing errors / 5 existing warnings**。54baselineとのfile/rule/severity/message比較で新規0・削除0。full lint自体はexit1。chunk-size/Browserslist案内は既存由来。
-- 実Edge production preview、360/390×844: **32/32 PASS**。人工fixture/時計による実UI操作1006回、幅測定1038回。両例/通常再開/再スキップ/訂正/復元/15・17境界/11エリア完了/Review19 JSON/夏商品/fixed READ ONLYを確認。横overflow、新規アプリconsole診断、不要な外部通信0。harnessのSW遮断通知38件は別記録。Undo・条件編集/トップ再開のhook action、詳細race/保存失敗/日付・session跨ぎ/同距離分岐等は自動testのみ。物理端末/実Supabase/インストール済PWA/長時間backgroundは未確認。証拠はZIP外`work/priority55/browser-work`。
-- src107は既存13本変更+2本追加、残る92本は完成54ZIPと同一。SQL9・AGENTS・過去CHANGE63・dataVersion/Vite/depsも同一。check入力219/build入力122をhash照合。完成ZIPを再openしCRC・path・除外物・version/build/schema/PWA・対象working tree集合/全bytesを検査する。
+- appVersion `2026.8.9-56` / buildId `build-20261020-211241-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE / ZIP外RELEASE_REPORT / ZIP_VALIDATION。
+- 全check **96/96 PASS**、56専用 **76/76 PASS**。54指示54/54・55priority45/45・Done39/39も保証を維持。通常/夏季、auto/human採用、各fallback、±1ms、fresh旧click、save/priorityの2段階完遂、判定変更/同率clamp/再開/訂正/fixedを実hook/TSX eventで検証。
+- TypeScript / production build / PWA generateSW PASS（110 modules/precache10）。focused ESLint **0 errors / 2 existing warnings**、full **9 existing errors / 5 existing warnings**。55baselineとのfile/rule/severity/message比較で新規0・削除0。full lint自体はexit1。chunk-size/Browserslist案内も既存由来。
+- 実Edge production preview 360/390×844 **66/66 PASS**、人工データ/時計。実UI操作722回、幅測定788回。manyの2段階/非manyの1段階、normal中の境界、未tick stale firstclick後のfresh+5、auto many/手動上げ下げ/priority/再開/Done色線/fixed/17を確認。横overflow、新規アプリerror/warning、不要な外部通信0。harness SW遮断通知72件は別計上。詳細race/保存失敗/Undo等の自動test範囲と物理端末/実Supabase/PWA等の未確認は今回CHANGEを参照。証拠はZIP外`work/manyException56/browser-work`。
+- src107中5本のみ変更、保護102・SQL9・AGENTS・過去CHANGE64・dataVersion/Vite/depsは完成55ZIPと同一。check入力220/build入力122と独立source hashを照合。ZIPを再openしてCRC・集合/全bytes・path/除外物・version/build/schema/PWA/SHAを検査する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -546,7 +555,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全95 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全96 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -569,6 +578,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 14. 次セッションが最初に確認するファイル
 
+9-56追加: RateDisplayのmany例外/shared predicate/採用signature、Routerの採用値prop、pending既存resolver export、hook/typesのclock refresh action。新 `check-many-exception56.ts` と既存54/55/characterization更新。
+
 9-55追加: area.tsの操作用gate/保存route分離、pending.tsのpriority selector、normalFlow/priorityFlow/operationalAreas、hookの完遂/通常続き/skip/訂正復帰、snapshot分母と旧analysis保持。専用 `check-disabled-autumn55.ts` / `check-priority-pending55.ts` / `check-priority-flow55.ts`。
 
 9-54追加: RateDisplayの境界/段階/完了guard、hookのfresh確定時計と表示reference17→18、Done/RouterのstrikeNormalRate、`scripts/check-late-operation54.ts`。53一覧checkは取消線へ更新した。
@@ -588,7 +599,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-55.md`（完成baselineは `CHANGE_REPORT_2026.8.9-54.md`）
+4. `CHANGE_REPORT_2026.8.9-56.md`（完成baselineは `CHANGE_REPORT_2026.8.9-55.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

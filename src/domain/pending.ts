@@ -186,7 +186,7 @@ export function getNextPendingCandidate(params: {
   };
 }
 
-function getAdoptedEvaluation(progress: AreaProgress): AreaCountEvaluation | undefined {
+export function getAdoptedEvaluation(progress: AreaProgress): AreaCountEvaluation | undefined {
   // These are saved adopted results. Do not re-resolve a human intermediate
   // selection using the return time, or fall back to the raw automatic result.
   return progress.areaCountEvaluation ??

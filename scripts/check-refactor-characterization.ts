@@ -140,6 +140,7 @@ function assertPublicHookContract(): void {
       "skipCurrentArea",
       "chooseSkipTargetArea",
       "goToNextArea",
+      "refreshRuntimeClock",
       "startAutoSkippedAreaCountOnly",
       "saveAutoSkippedAreaCount",
       "skipAutoSkippedAreaWithoutMeasurement",
@@ -161,6 +162,7 @@ function assertPublicHookContract(): void {
       "changeDemandCycle",
       "changeGlobalDiscountAdjustment",
     ]);
+    assert.equal(typeof captured.actions.refreshRuntimeClock, "function");
     assert.equal(captured.state.screen, "start");
     assert.equal(captured.state.sessionDraft.discountTime, "15");
     return createElement("span", null, "probe");

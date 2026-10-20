@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   AreaId,
+  AreaCountEvaluation,
   DemandCycle,
   DiscountTime,
   EditableAreaCountItem,
@@ -56,6 +57,7 @@ type RateDisplayScreenProps = {
   lateSkipNotice?: string | null;
   discountTime: DiscountTime;
   areaCount?: number | null;
+  adoptedAreaEvaluation?: AreaCountEvaluation;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
   onToggleDecreaseAdjustmentSuppression?: () => void;
   rateDisplay: RateDisplayData | null;
@@ -74,6 +76,7 @@ type RateDisplayScreenProps = {
   showHolidayBeforeNormalWeekdayNotice?: boolean;
   finalGuide?: FinalGuideData;
   onNextArea: () => boolean | void;
+  onRefreshRuntimeClock?: () => void;
   onSkip: () => void;
   onGoBack: () => void;
   onReturnHome: () => void;
@@ -101,6 +104,15 @@ type RateInstructionStep = {
   rateLine: { main: string; note?: string };
   color?: string;
 };
+
+function shouldShowManyInstructionOnly(
+  discountTime: DiscountTime,
+  adoptedAreaEvaluation: AreaCountEvaluation | undefined,
+  now: Date,
+): boolean {
+  return discountTime === "15" && adoptedAreaEvaluation !== "many" &&
+    getAreaEvaluationLowerQuickAdjustmentDelayMs(discountTime, now) === 0;
+}
 
 function buildRateInstructionSteps(params: {
   rateDisplay: RateDisplayData | null;
@@ -285,6 +297,7 @@ export function RateDisplayScreen({
   lateSkipNotice,
   discountTime,
   areaCount,
+  adoptedAreaEvaluation,
   areaCountDecisionBasis,
   onToggleDecreaseAdjustmentSuppression,
   rateDisplay,
@@ -301,6 +314,7 @@ export function RateDisplayScreen({
   showHolidayBeforeNormalWeekdayNotice = false,
   finalGuide,
   onNextArea,
+  onRefreshRuntimeClock,
   onSkip,
   onGoBack,
   onReturnHome,
@@ -318,9 +332,12 @@ export function RateDisplayScreen({
   const [showManualEvaluationOverride, setShowManualEvaluationOverride] = useState(false);
   const [rateInstructionStepIndex, setRateInstructionStepIndex] = useState(0);
   const rateInstructionActionRef = useRef({ stepIndex: 0, completing: false });
+  const instructionNow = getRuntimeNow();
   const isLateInstructionBoundary =
-    getAreaEvaluationLowerQuickAdjustmentDelayMs(discountTime, getRuntimeNow()) === 0;
-  const showManyInstructionOnly = discountTime === "15" && isLateInstructionBoundary;
+    getAreaEvaluationLowerQuickAdjustmentDelayMs(discountTime, instructionNow) === 0;
+  const showManyInstructionOnly = shouldShowManyInstructionOnly(
+    discountTime, adoptedAreaEvaluation, instructionNow,
+  );
   const manyColor = "#ff0000";
   const normalColor = "#008000";
   const productAmountReferenceText = basisGuide.referenceConditionLabel;
@@ -357,6 +374,7 @@ export function RateDisplayScreen({
   // updates keep the current step, including the removed late-15 normal step.
   const manualRateChangeSignature = JSON.stringify([
     globalDiscountAdjustmentPercent,
+    adoptedAreaEvaluation,
     areaCountDecisionBasis?.finalEvaluation,
     areaCountDecisionBasis?.areaRateAdjustment,
     areaCountDecisionBasis?.decreaseAdjustment?.suppressed,
@@ -433,12 +451,16 @@ export function RateDisplayScreen({
 
   function handleRateInstructionDone() {
     const action = rateInstructionActionRef.current;
-    if (action.completing || action.stepIndex !== rateInstructionStepIndex) return;
-    const deadlineAtClick = getAreaEvaluationLowerQuickAdjustmentDelayMs(discountTime, getRuntimeNow());
-    const isLate15AtClick = discountTime === "15" && deadlineAtClick === 0;
-    if (!isLate15AtClick && rateInstructionStepIndex < rateInstructionSteps.length - 1) {
+    if (action.completing || action.stepIndex !== rateInstructionStepIndex ||
+      previousRateInstructionContextRef.current.manualRateChangeSignature !== manualRateChangeSignature) return;
+    const showManyOnlyAtClick = shouldShowManyInstructionOnly(
+      discountTime, adoptedAreaEvaluation, getRuntimeNow(),
+    );
+    if (!showManyOnlyAtClick && rateInstructionStepIndex < rateInstructionSteps.length - 1) {
       action.stepIndex = rateInstructionStepIndex + 1;
       setRateInstructionStepIndex(action.stepIndex);
+      // A local step render alone cannot refresh the parent's resolved rates.
+      onRefreshRuntimeClock?.();
       return;
     }
 

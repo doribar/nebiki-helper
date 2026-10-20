@@ -383,12 +383,13 @@ await test("a throwing completion releases its lock for an explicit successful r
   const value = new AppFixture(() => isolatedRate({ discountTime: "15", onNextArea: () => { if (++attempts === 1) throw new Error("fixture completion failure"); return true; } }));
   try { value.render(); await assert.rejects(value.click(), /fixture completion failure/); await value.click(); await value.click(); assert.equal(attempts, 2); } finally { value.close(); }
 });
-await test("queued manual judgment then old completion cannot capture the previous rates; neutral finish retries latest judgment", async () => {
+await test("queued manual judgment then old completion cannot capture previous rates; adopted many retries both latest instructions", async () => {
   const value = fixture("15", "normal", cutoff("15") - 1);
   try {
     await value.click(); nowMs = cutoff("15"); fireDueTimers(); value.render(); assertSuppressed(value);
     const old = value.button(); await value.app.actions.judgeCurrentArea("normal", 20, "many"); await invoke(old); value.render();
-    assert.equal(value.app.state.areaProgressMap[AREA].status, "unstarted"); assert.equal(value.app.state.areaProgressMap[AREA].rateDecisionSnapshot, undefined); assertSuppressed(value);
+    assert.equal(value.app.state.areaProgressMap[AREA].status, "unstarted"); assert.equal(value.app.state.areaProgressMap[AREA].rateDecisionSnapshot, undefined); assertMany(value, 25);
+    await value.click(); assertNormal(value, 15); assert.equal(value.app.state.areaProgressMap[AREA].status, "unstarted"); assert.equal(value.app.state.areaProgressMap[AREA].rateDecisionSnapshot, undefined);
     await value.click(); assert.equal(value.app.state.screen, "done"); const snapshot = value.app.state.areaProgressMap[AREA].rateDecisionSnapshot; assert.ok(snapshot);
     assert.equal(snapshot.areaCountAdjustmentPercent, 10); assert.equal(snapshot.lateTimeAdjustmentPercent, 5); assert.deepEqual([snapshot.normalRatePercent, snapshot.manyRatePercent], [15, 25]);
   } finally { value.close(); }

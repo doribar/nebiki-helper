@@ -5627,6 +5627,7 @@ const lateSkipNotice = useMemo(() => {
       skipCurrentArea,
       chooseSkipTargetArea,
       goToNextArea,
+      refreshRuntimeClock: () => setNowMs(getRuntimeNowMs()),
       startAutoSkippedAreaCountOnly,
       saveAutoSkippedAreaCount,
       skipAutoSkippedAreaWithoutMeasurement,

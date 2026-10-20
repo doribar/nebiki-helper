@@ -219,8 +219,10 @@ async function finish(value: AppFixture) {
   const id = value.app.state.currentAreaId; assert.ok(id); assert.equal(value.app.state.screen, "rate_display");
   const previouslyCompleted = value.app.state.areaProgressMap[id].status === "completed";
   const late15 = value.app.state.session?.discountTime === "15" && (value.fixedNow?.getTime() ?? nowMs) >= cutoff("15");
+  const progress = value.app.state.areaProgressMap[id];
+  const adopted = progress.areaCountEvaluation ?? progress.humanEvaluationDetails?.resolvedEvaluation ?? progress.areaCountDecisionBasis?.finalEvaluation;
   await value.click();
-  if (!late15) { current(value, id, "rate_display"); if (!previouslyCompleted) assert.notEqual(value.app.state.areaProgressMap[id].status, "completed"); await value.click(); }
+  if (!late15 || adopted === "many") { current(value, id, "rate_display"); if (!previouslyCompleted) assert.notEqual(value.app.state.areaProgressMap[id].status, "completed"); await value.click(); }
   assert.equal(value.app.state.areaProgressMap[id].status, "completed"); assert.ok(value.app.state.areaProgressMap[id].rateDecisionSnapshot);
 }
 function persistence() { return { records: loadLocalAreaCountRecords(), queue: loadPendingSupabaseSyncQueue(), daily: storage.loadDailySessionSnapshots(), skip: storage.loadNextSessionSkipRecords() }; }

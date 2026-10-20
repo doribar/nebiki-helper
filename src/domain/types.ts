@@ -1003,6 +1003,7 @@ export type UseNebikiAppActions = {
   chooseSkipTargetArea: (areaId: AreaId) => void;
 
   goToNextArea: () => void;
+  refreshRuntimeClock: () => void;
   startAutoSkippedAreaCountOnly: () => void;
   saveAutoSkippedAreaCount: (count: number) => void;
   skipAutoSkippedAreaWithoutMeasurement: () => void;

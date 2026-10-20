@@ -17,6 +17,7 @@ import {
   getAreaEvaluationQuickAdjustments,
 } from "../domain/areaEvaluationAdjustment.ts";
 import { getRuntimeNow } from "../hooks/nebikiApp/clock.ts";
+import { getAdoptedEvaluation } from "../domain/pending.ts";
 
 type AppRouterProps = {
   app: UseNebikiAppResult;
@@ -174,6 +175,8 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           lateSkipNotice={derived.lateSkipNotice}
           discountTime={state.session.discountTime}
           areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
+          adoptedAreaEvaluation={state.currentAreaId && state.areaProgressMap[state.currentAreaId]
+            ? getAdoptedEvaluation(state.areaProgressMap[state.currentAreaId]) : undefined}
           areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
           onToggleDecreaseAdjustmentSuppression={!(testNow instanceof Date) && canSuppressAreaCountDecreaseAdjustment({
             areaId: state.currentAreaId,
@@ -228,6 +231,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           showHolidayBeforeNormalWeekdayNotice={derived.showHolidayBeforeNormalWeekdayNotice}
           finalGuide={derived.finalGuide ?? undefined}
           onNextArea={actions.goToNextArea}
+          onRefreshRuntimeClock={actions.refreshRuntimeClock}
           onSkip={actions.skipCurrentArea}
           onGoBack={actions.goBackOneScreen}
           onReturnHome={handleReturnHome}
