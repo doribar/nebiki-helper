@@ -70,11 +70,11 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           canChangeDemandCycle={derived.canChangeDemandCycle}
           demandCycleChangeBlockedReason={derived.demandCycleChangeBlockedReason}
           onChangeDemandCycle={actions.changeDemandCycle}
-          globalDiscountAdjustmentPercent={
-            derived.globalDiscountAdjustmentPercent
+          startGlobalDiscountAdjustmentPercent={
+            derived.startGlobalDiscountAdjustmentPercent
           }
-          onChangeGlobalDiscountAdjustment={
-            actions.changeGlobalDiscountAdjustment
+          isResumingGlobalDiscountAdjustment={
+            derived.isResumingGlobalDiscountAdjustment
           }
         />
       );

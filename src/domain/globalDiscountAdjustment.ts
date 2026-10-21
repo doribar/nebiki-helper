@@ -1,5 +1,6 @@
 import type {
   GlobalDiscountAdjustmentPercent,
+  DiscountTime,
   RateDisplayData,
   RateLine,
 } from "./types.ts";
@@ -22,6 +23,35 @@ export type GlobalDiscountAdjustmentState = {
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** 当日設定の有効日は端末のタイムゾーンによらずJST。業務日の保存値とは分離する。 */
+export function getGlobalDiscountAdjustmentDate(now: Date): string {
+  return new Date(now.getTime() + 9 * 60 * 60 * 1000)
+    .toISOString().slice(0, 10);
+}
+
+/** 新規開始は当日設定、同じセッションの再開は採用済み値を使う。 */
+export function resolveSessionStartGlobalDiscountAdjustment(params: {
+  state: GlobalDiscountAdjustmentState;
+  date: string;
+  sessionDate?: string;
+  session: {
+    date: string;
+    discountTime: DiscountTime;
+    globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
+  } | null;
+  discountTime: DiscountTime;
+  timeSwitchTarget: DiscountTime | null;
+}): GlobalDiscountAdjustmentPercent {
+  if (params.session?.date === (params.sessionDate ?? params.date) &&
+      params.session.discountTime === params.discountTime &&
+      !params.timeSwitchTarget) {
+    return normalizeGlobalDiscountAdjustmentPercent(
+      params.session.globalDiscountAdjustmentPercent,
+    );
+  }
+  return selectGlobalDiscountAdjustmentForDate(params.state, params.date);
+}
 
 export function isGlobalDiscountAdjustmentPercent(
   value: unknown,

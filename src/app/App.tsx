@@ -17,6 +17,11 @@ import {
   getHistoricalArchiveRuntimeStatus,
   initializeHistoricalArchiveRuntime,
 } from "../domain/historicalArchiveRuntime.ts";
+import {
+  getGlobalDiscountAdjustmentDate,
+  loadGlobalDiscountAdjustmentState,
+  saveGlobalDiscountAdjustmentState,
+} from "../domain/globalDiscountAdjustment.ts";
 
 type TestModeConfig = {
   now: Date;
@@ -322,6 +327,11 @@ function AppRoot(props: { testMode: TestModeConfig | null }) {
       ) : null}
       {settingsOpen ? (
         <AdminSettingsDialog
+          globalDiscountAdjustmentPercent={app.derived.globalDiscountAdjustmentPercent}
+          globalDiscountAdjustmentDate={app.derived.globalDiscountAdjustmentDate}
+          startGlobalDiscountAdjustmentPercent={app.derived.startGlobalDiscountAdjustmentPercent}
+          isResumingGlobalDiscountAdjustment={app.derived.isResumingGlobalDiscountAdjustment}
+          onChangeGlobalDiscountAdjustment={app.actions.changeGlobalDiscountAdjustment}
           review19Count={app.derived.dataExport.review19Count}
           onExportAllReview19Data={app.actions.exportAllReview19Data}
           onExportLatestReview19Data={app.actions.exportLatestReview19Data}
@@ -343,6 +353,9 @@ export default function App() {
   const [archiveReady, setArchiveReady] = useState(isTestMode);
   const [loadedDate] = useState(() => formatLocalDate(testModeNow));
   const [todayDate, setTodayDate] = useState(() => formatLocalDate(testModeNow));
+  const [loadedGlobalDiscountAdjustmentDate] = useState(() =>
+    getGlobalDiscountAdjustmentDate(testModeNow ?? new Date(getRuntimeNowMs())),
+  );
   const hasDateChanged = !testMode && todayDate !== loadedDate;
 
   useEffect(() => {
@@ -399,13 +412,28 @@ export default function App() {
   }, [isTestMode]);
 
   useEffect(() => {
-    const updateTodayDate = (nowMs: number) => setTodayDate(formatLocalDate(new Date(nowMs)));
+    let observedGlobalDiscountAdjustmentDate = loadedGlobalDiscountAdjustmentDate;
+    const updateTodayDate = (nowMs: number) => {
+      const now = new Date(nowMs);
+      if (testModeNowMs === null) {
+        const date = getGlobalDiscountAdjustmentDate(now);
+        if (date !== observedGlobalDiscountAdjustmentDate) {
+          const nextState = loadGlobalDiscountAdjustmentState({ date, fixedTime: false });
+          const result = saveGlobalDiscountAdjustmentState({ state: nextState, fixedTime: false });
+          reportStorageOperationFailures("global-discount-adjustment-date-change", [result]);
+          observedGlobalDiscountAdjustmentDate = date;
+        }
+      }
+      // Normalize the small daily setting before the existing date blocker
+      // unmounts AppRoot. Saved sessions retain their captured adjustment.
+      setTodayDate(formatLocalDate(now));
+    };
     if (testModeNowMs !== null) {
       updateTodayDate(testModeNowMs);
       return;
     }
     return startAlignedRuntimeClock(updateTodayDate, getRuntimeNowMs);
-  }, [testModeNowMs]);
+  }, [testModeNowMs, loadedGlobalDiscountAdjustmentDate]);
 
   if (hasDateChanged) return <DateChangedBlocker loadedDate={loadedDate} />;
   if (!archiveReady && getHistoricalArchiveRuntimeStatus() !== "complete") {

@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import { APP_VERSION, BUILD_ID, DATA_SCHEMA_VERSION } from "../../domain/dataVersion.ts";
-import type { SupabaseBackfillResult } from "../../domain/types.ts";
+import type { GlobalDiscountAdjustmentPercent, SupabaseBackfillResult } from "../../domain/types.ts";
 import {
   formatStorageKiB,
   type NebikiStorageUsageDiagnostic,
@@ -14,6 +14,13 @@ import {
 type ExportAction = () => boolean | Promise<boolean>;
 
 type AdminSettingsDialogProps = {
+  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
+  globalDiscountAdjustmentDate?: string;
+  startGlobalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
+  isResumingGlobalDiscountAdjustment?: boolean;
+  onChangeGlobalDiscountAdjustment?: (
+    adjustmentPercent: GlobalDiscountAdjustmentPercent,
+  ) => boolean;
   review19Count?: number;
   onExportAllReview19Data?: ExportAction;
   onExportLatestReview19Data?: ExportAction;
@@ -69,6 +76,11 @@ function getAttemptCountText(group: PendingSupabaseSyncErrorGroup): string {
 }
 
 export function AdminSettingsDialog({
+  globalDiscountAdjustmentPercent = 0,
+  globalDiscountAdjustmentDate,
+  startGlobalDiscountAdjustmentPercent = 0,
+  isResumingGlobalDiscountAdjustment = false,
+  onChangeGlobalDiscountAdjustment,
   review19Count = 0,
   onExportAllReview19Data,
   onExportLatestReview19Data,
@@ -78,9 +90,26 @@ export function AdminSettingsDialog({
   onClose,
 }: AdminSettingsDialogProps) {
   const [status, setStatus] = useState<string | null>(null);
+  const [globalDiscountAdjustmentError, setGlobalDiscountAdjustmentError] =
+    useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [storageDiagnostic, setStorageDiagnostic] =
     useState<NebikiStorageUsageDiagnostic | null>(null);
+
+  const changeGlobalDiscountAdjustment = (
+    adjustmentPercent: GlobalDiscountAdjustmentPercent,
+  ) => {
+    if (!onChangeGlobalDiscountAdjustment || busy) return;
+    setGlobalDiscountAdjustmentError(null);
+    try {
+      if (onChangeGlobalDiscountAdjustment(adjustmentPercent)) return;
+    } catch {
+      // Keep the controlled selection unchanged when the storage action fails.
+    }
+    setGlobalDiscountAdjustmentError(
+      "全体値引補正を保存できませんでした。日付や端末の保存容量を確認し、もう一度選んでください。",
+    );
+  };
 
   const runExport = async (
     action: ExportAction | undefined,
@@ -224,6 +253,69 @@ export function AdminSettingsDialog({
           <br />
           データ形式: {DATA_SCHEMA_VERSION}
         </div>
+
+        <section aria-label="全体値引補正" style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
+            全体値引補正
+          </div>
+          {globalDiscountAdjustmentDate ? (
+            <div style={{ color: "#475569", fontSize: 13, lineHeight: 1.6, marginBottom: 6 }}>
+              対象日（日本時間）：{globalDiscountAdjustmentDate}
+            </div>
+          ) : null}
+          <div
+            role="group"
+            aria-label="全体値引補正を選択"
+            style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}
+          >
+            {([-5, 0, 5] as const).map((adjustmentPercent) => {
+              const selected = adjustmentPercent === globalDiscountAdjustmentPercent;
+              return (
+                <button
+                  key={adjustmentPercent}
+                  type="button"
+                  aria-pressed={selected}
+                  disabled={busy || !onChangeGlobalDiscountAdjustment}
+                  onClick={() => changeGlobalDiscountAdjustment(adjustmentPercent)}
+                  style={{
+                    minWidth: 0,
+                    minHeight: 44,
+                    padding: "8px 6px",
+                    borderRadius: 10,
+                    border: selected ? "2px solid #2563eb" : "1px solid #94a3b8",
+                    background: selected ? "#dbeafe" : "#fff",
+                    color: "#0f172a",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    cursor: busy || !onChangeGlobalDiscountAdjustment ? "default" : "pointer",
+                  }}
+                >
+                  {adjustmentPercent === 0
+                    ? "なし"
+                    : `${adjustmentPercent > 0 ? "＋" : "−"}${Math.abs(adjustmentPercent)}％`}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 8, color: "#475569", fontSize: 13, lineHeight: 1.6 }}>
+            新しく始める作業に適用し、日本時間の日付が変わると「なし」に戻ります。
+          </div>
+          {isResumingGlobalDiscountAdjustment &&
+          startGlobalDiscountAdjustmentPercent !== globalDiscountAdjustmentPercent ? (
+            <div style={{ marginTop: 6, color: "#334155", fontSize: 13, lineHeight: 1.6 }}>
+              再開する作業は開始時の補正（
+              {startGlobalDiscountAdjustmentPercent === 0
+                ? "なし"
+                : `${startGlobalDiscountAdjustmentPercent > 0 ? "＋" : "−"}${Math.abs(startGlobalDiscountAdjustmentPercent)}％`}
+              ）を保持します。
+            </div>
+          ) : null}
+          {globalDiscountAdjustmentError ? (
+            <div role="alert" style={{ marginTop: 8, padding: 10, borderRadius: 10, background: "#fff1f2", color: "#991b1b", fontSize: 13, lineHeight: 1.6 }}>
+              {globalDiscountAdjustmentError}
+            </div>
+          ) : null}
+        </section>
 
         <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>保存データ</div>
         <div style={{ color: "#475569", fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>

@@ -210,8 +210,10 @@ import {
   shouldIgnoreNormalTimeRateCap,
 } from "./nebikiApp/ratePresentation.ts";
 import {
+  getGlobalDiscountAdjustmentDate,
   loadGlobalDiscountAdjustmentState,
   normalizeGlobalDiscountAdjustmentPercent,
+  resolveSessionStartGlobalDiscountAdjustment,
   saveGlobalDiscountAdjustmentState,
   selectGlobalDiscountAdjustmentForDate,
   type GlobalDiscountAdjustmentState,
@@ -474,7 +476,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
   );
   const initialGlobalDiscountAdjustmentState =
     loadGlobalDiscountAdjustmentState({
-      date: initialToday,
+      date: getGlobalDiscountAdjustmentDate(getRuntimeNow()),
       fixedTime: isTestMode,
     });
   const initialLastUsedSessionDraftBase = buildStartDefaultDraft(
@@ -595,6 +597,7 @@ export function useNebikiApp(params?: { testNow?: Date | null }): UseNebikiAppRe
     useState<GlobalDiscountAdjustmentState>(
       initialGlobalDiscountAdjustmentState,
     );
+  const globalDiscountAdjustmentStateRef = useRef(initialGlobalDiscountAdjustmentState);
 
   const attemptStorageOperationWithAuxiliaryRecovery = useCallback((
     params: Parameters<typeof attemptStorageOperationWithAuxiliaryRecoveryCore>[0],
@@ -2287,11 +2290,31 @@ const lateSkipNotice = useMemo(() => {
       inferredOperationDemandCycle ??
       selectDemandCycleForDate(seasonalDemandCycleState, demandCycleDate)
     : "normal";
+  const globalDiscountAdjustmentDate = getGlobalDiscountAdjustmentDate(new Date(nowMs));
   const globalDiscountAdjustmentPercent =
     selectGlobalDiscountAdjustmentForDate(
       globalDiscountAdjustmentState,
-      state.sessionDraft.date,
+      globalDiscountAdjustmentDate,
     );
+  const startDiscountTime =
+    !isTestMode && state.session?.date === formatLocalDate(new Date(nowMs)) && !timeSwitchTarget
+      ? state.session.discountTime
+      : !state.sessionDraft.manualDiscountTimeOverride &&
+        isValidDiscountTime(state.sessionDraft.weatherInputLockedDiscountTime)
+      ? state.sessionDraft.weatherInputLockedDiscountTime
+      : state.sessionDraft.discountTime;
+  const isResumingGlobalDiscountAdjustment = Boolean(
+    state.session?.date === formatLocalDate(new Date(nowMs)) &&
+    state.session.discountTime === startDiscountTime && !timeSwitchTarget,
+  );
+  const startGlobalDiscountAdjustmentPercent = resolveSessionStartGlobalDiscountAdjustment({
+    state: globalDiscountAdjustmentState,
+    date: globalDiscountAdjustmentDate,
+    sessionDate: formatLocalDate(new Date(nowMs)),
+    session: state.session,
+    discountTime: startDiscountTime,
+    timeSwitchTarget,
+  });
   const canChangeDemandCycle =
     summerModeAvailable &&
     state.screen === "start" &&
@@ -2304,11 +2327,17 @@ const lateSkipNotice = useMemo(() => {
       : "当日の値引運用がすでに始まっているため、夏季モードを変更できません。";
 
   useEffect(() => {
-    const date = state.sessionDraft.date;
-    setGlobalDiscountAdjustmentState(
-      loadGlobalDiscountAdjustmentState({ date, fixedTime: isTestMode }),
-    );
-  }, [isTestMode, state.sessionDraft.date]);
+    const next = loadGlobalDiscountAdjustmentState({
+      date: globalDiscountAdjustmentDate, fixedTime: isTestMode,
+    });
+    const dateChanged = globalDiscountAdjustmentStateRef.current.date !== next.date;
+    // 失敗しても前日の設定を有効に戻さない。確定session/snapshotは変更しない。
+    globalDiscountAdjustmentStateRef.current = next;
+    setGlobalDiscountAdjustmentState(next);
+    if (dateChanged) {
+      persistGlobalDiscountAdjustmentStateSafely(next, "global-discount-adjustment-date-reset");
+    }
+  }, [isTestMode, globalDiscountAdjustmentDate, persistGlobalDiscountAdjustmentStateSafely]);
 
   useEffect(() => {
     if (summerModeAvailable) return;
@@ -2676,8 +2705,16 @@ const lateSkipNotice = useMemo(() => {
 
   function changeGlobalDiscountAdjustment(
     nextAdjustment: GlobalDiscountAdjustmentPercent,
-  ): void {
-    const date = state.sessionDraft.date;
+  ): boolean {
+    const date = getGlobalDiscountAdjustmentDate(getRuntimeNow());
+    if (date !== globalDiscountAdjustmentDate) {
+      // 古い設定画面のイベントを翌日の選択として採用しない。
+      const current = loadGlobalDiscountAdjustmentState({ date, fixedTime: isTestMode });
+      globalDiscountAdjustmentStateRef.current = current;
+      setGlobalDiscountAdjustmentState(current);
+      setNowMs(getRuntimeNowMs());
+      return false;
+    }
     const nextState: GlobalDiscountAdjustmentState = {
       version: 1,
       date,
@@ -2692,8 +2729,11 @@ const lateSkipNotice = useMemo(() => {
           : "global-discount-adjustment",
       )
     ) {
+      globalDiscountAdjustmentStateRef.current = nextState;
       setGlobalDiscountAdjustmentState(nextState);
+      return true;
     }
+    return false;
   }
 
   function buildDraftFromSource(source: SessionData | SessionDraft): SessionDraft {
@@ -2986,6 +3026,11 @@ const lateSkipNotice = useMemo(() => {
 
   function startSession() {
     const now = getRuntimeNow();
+    if (getGlobalDiscountAdjustmentDate(now) !== globalDiscountAdjustmentDate) {
+      // 日付変更通知より先に旧画面の開始操作が届いても、前日の入力を続行しない。
+      setNowMs(now.getTime());
+      return;
+    }
     const startedAt = now.toISOString();
     const currentDate = formatLocalDate(now);
     const currentWeekday = now.getDay();
@@ -3026,14 +3071,14 @@ const lateSkipNotice = useMemo(() => {
           ? { eveningComfortUnavailableForecastHours: ["16", "21"] as Array<"16" | "21"> } : {}),
       },
       globalDiscountAdjustmentPercent:
-        prev.session &&
-        prev.session.date === currentDate &&
-        prev.session.discountTime === resolvedDiscountTime &&
-        !timeSwitchTarget
-          ? normalizeGlobalDiscountAdjustmentPercent(
-              prev.session.globalDiscountAdjustmentPercent,
-            )
-          : globalDiscountAdjustmentPercent,
+        resolveSessionStartGlobalDiscountAdjustment({
+          state: globalDiscountAdjustmentStateRef.current,
+          date: getGlobalDiscountAdjustmentDate(now),
+          sessionDate: currentDate,
+          session: prev.session,
+          discountTime: resolvedDiscountTime,
+          timeSwitchTarget,
+        }),
       startedAt: canResumeCurrentSession ? prev.session!.startedAt : startedAt,
     };
     const isResumingSameDiscountSession = Boolean(
@@ -5565,6 +5610,9 @@ const lateSkipNotice = useMemo(() => {
   rateDisplay,
   rateDisplayBeforeGlobalAdjustment,
   globalDiscountAdjustmentPercent,
+  globalDiscountAdjustmentDate,
+  startGlobalDiscountAdjustmentPercent,
+  isResumingGlobalDiscountAdjustment,
   finalGuide,
   pendingBanner,
   timeSwitchNotice: state.timeSwitchNotice,

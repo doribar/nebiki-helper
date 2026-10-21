@@ -256,7 +256,6 @@ await test("Start displays weekday and time only for normal/fixed mode and old t
   for (const isFixedTimeMode of [false, true]) for (const legacyManualFlag of [false, true]) {
     const runtime = new Runtime();
     const patches: Partial<SessionDraft>[] = [];
-    const adjustments: number[] = [];
     const Start = (await runtime.loader.load("src/components/screens/StartScreen.tsx")).StartScreen as Component;
     runtime.mount(Start, {
       sessionDraft: { ...draft(), manualWeekdayOverride: legacyManualFlag }, previousSession: null, isFixedTimeMode,
@@ -265,7 +264,7 @@ await test("Start displays weekday and time only for normal/fixed mode and old t
       onChangeSessionDraft: (patch: Partial<SessionDraft>) => patches.push(patch), onRequestWeatherConfirmation: noop,
       onEditWeatherInput: noop, onStart: noop, demandCycle: "normal", summerModeAvailable: false,
       canChangeDemandCycle: true, onChangeDemandCycle: () => true, now: at("2026-10-01"),
-      onChangeGlobalDiscountAdjustment: (adjustment: number) => adjustments.push(adjustment),
+      startGlobalDiscountAdjustmentPercent: 5,
     });
     const row = runtime.find(node => node.props.role === "group" && node.props["aria-label"] === "曜日と時刻");
     const rowStyle = row.props.style as React.CSSProperties;
@@ -293,8 +292,8 @@ await test("Start displays weekday and time only for normal/fixed mode and old t
     assert.equal(runtime.buttons("手動で切り替える").length, 0);
     assert.equal(runtime.buttons("自動に戻す").length, 0);
     assert.deepEqual(patches, [], "wheel events cannot change the operational draft");
-    for (const label of ["-5%", "なし", "+5%"]) runtime.click(runtime.button(label));
-    assert.deepEqual(adjustments, [-5, 0, 5], "global adjustment buttons retain their callbacks");
+    assert.equal(below(runtime, adjustmentSection).filter(node => node.type === "button" || node.type === "select").length, 0, "global status has no operational picker");
+    assert.match(textOf(adjustmentSection), /全体値引補正：＋5％適用中/);
     runtime.click(runtime.find(node => node.type === "button" && textOf(node) === "+1" && !node.props.disabled));
     const expectedWeather = clone(draft().weather);
     expectedWeather.hourlyForecasts["18"].weather = "rain";

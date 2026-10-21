@@ -60,10 +60,8 @@ type StartScreenProps = {
   canChangeDemandCycle: boolean;
   demandCycleChangeBlockedReason?: string | null;
   onChangeDemandCycle: (demandCycle: DemandCycle) => boolean;
-  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
-  onChangeGlobalDiscountAdjustment?: (
-    adjustmentPercent: GlobalDiscountAdjustmentPercent,
-  ) => void;
+  startGlobalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
+  isResumingGlobalDiscountAdjustment?: boolean;
 };
 
 const TEMP_NUMBER_OPTIONS = Array.from({ length: 46 }, (_, index) => index - 5);
@@ -386,8 +384,8 @@ export function StartScreen({
   canChangeDemandCycle,
   demandCycleChangeBlockedReason = null,
   onChangeDemandCycle,
-  globalDiscountAdjustmentPercent = 0,
-  onChangeGlobalDiscountAdjustment,
+  startGlobalDiscountAdjustmentPercent = 0,
+  isResumingGlobalDiscountAdjustment = false,
 }: StartScreenProps) {
   const isFinalTime = sessionDraft.discountTime === "20";
   const activeHours = useMemo(
@@ -850,6 +848,7 @@ export function StartScreen({
       </section>
       ) : null}
 
+      {startGlobalDiscountAdjustmentPercent !== 0 ? (
       <section
         aria-label="全体値引補正"
         style={{
@@ -860,56 +859,18 @@ export function StartScreen({
           background: "#f8fafc",
         }}
       >
-        <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 900 }}>
-          全体値引補正
+        <div style={{ fontSize: 14, fontWeight: 900 }}>
+          全体値引補正：
+          {startGlobalDiscountAdjustmentPercent > 0 ? "＋" : "−"}
+          {Math.abs(startGlobalDiscountAdjustmentPercent)}％適用中
         </div>
-        <div
-          role="group"
-          aria-label="全体値引補正を選択"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 8,
-          }}
-        >
-          {([-5, 0, 5] as const).map((adjustmentPercent) => {
-            const selected =
-              adjustmentPercent === globalDiscountAdjustmentPercent;
-            const label =
-              adjustmentPercent === 0
-                ? "なし"
-                : `${adjustmentPercent > 0 ? "+" : ""}${adjustmentPercent}%`;
-            return (
-              <button
-                key={adjustmentPercent}
-                type="button"
-                aria-pressed={selected}
-                onClick={() =>
-                  onChangeGlobalDiscountAdjustment?.(adjustmentPercent)
-                }
-                style={{
-                  minWidth: 0,
-                  minHeight: 44,
-                  padding: "8px 6px",
-                  borderRadius: 10,
-                  border: selected
-                    ? "2px solid #2563eb"
-                    : "1px solid #94a3b8",
-                  background: selected ? "#dbeafe" : "#fff",
-                  color: "#0f172a",
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: onChangeGlobalDiscountAdjustment
-                    ? "pointer"
-                    : "default",
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        {isResumingGlobalDiscountAdjustment ? (
+          <div style={{ marginTop: 4, color: "#475569", fontSize: 12, lineHeight: 1.5 }}>
+            再開する作業の補正です。
+          </div>
+        ) : null}
       </section>
+      ) : null}
 
       <div
         role="group"

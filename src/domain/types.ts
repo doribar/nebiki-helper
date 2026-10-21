@@ -933,6 +933,9 @@ export type UseNebikiAppDerived = {
   /** 全体値引補正だけを適用する前の表示。 */
   rateDisplayBeforeGlobalAdjustment: RateDisplayData | null;
   globalDiscountAdjustmentPercent: GlobalDiscountAdjustmentPercent;
+  globalDiscountAdjustmentDate: string;
+  startGlobalDiscountAdjustmentPercent: GlobalDiscountAdjustmentPercent;
+  isResumingGlobalDiscountAdjustment: boolean;
   finalGuide: FinalGuideData | null;
   pendingBanner: PendingBannerInfo | null;
   timeSwitchNotice: string | null;
@@ -1038,7 +1041,7 @@ export type UseNebikiAppActions = {
   changeDemandCycle: (demandCycle: DemandCycle) => boolean;
   changeGlobalDiscountAdjustment: (
     adjustmentPercent: GlobalDiscountAdjustmentPercent,
-  ) => void;
+  ) => boolean;
 };
 
 export type UseNebikiAppResult = {

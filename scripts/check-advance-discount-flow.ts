@@ -10,7 +10,7 @@ import { getEveningComfortReliefContext } from "../src/domain/eveningComfortReli
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { lockDemandCycleForDate } from "../src/domain/demandCycleStorage.ts";
 import { addDaysToDateString, getCalendarWeekday, isJapaneseHolidayOrWeekend } from "../src/domain/japaneseHoliday.ts";
-import { normalizeGlobalDiscountAdjustmentPercent } from "../src/domain/globalDiscountAdjustment.ts";
+import { getGlobalDiscountAdjustmentDate, normalizeGlobalDiscountAdjustmentPercent, resolveSessionStartGlobalDiscountAdjustment } from "../src/domain/globalDiscountAdjustment.ts";
 import { cloneHourlyForecasts, createDefaultHourlyForecasts, resolveWeatherInputForDiscount } from "../src/domain/hourlyWeather.ts";
 import { appendNavigationHistory, cloneAppState, cloneSkipRecords, createNavigationSnapshot } from "../src/domain/navigationHistory.ts";
 import type { NavigationSnapshot } from "../src/domain/navigationHistory.ts";
@@ -112,6 +112,9 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     Date, state: initial, isTestMode: options.fixed ?? false,
     activeDemandCycle: initial.sessionDraft.demandCycle,
     globalDiscountAdjustmentPercent: 5,
+    globalDiscountAdjustmentDate: getGlobalDiscountAdjustmentDate(options.now ?? at(Number(initial.sessionDraft.discountTime))),
+    globalDiscountAdjustmentStateRef: { current: { version: 1, date: getGlobalDiscountAdjustmentDate(options.now ?? at(Number(initial.sessionDraft.discountTime))), adjustmentPercent: 5 } },
+    setNowMs: () => { assert.fail("existing same-day flow must not encounter the stale JST start guard"); },
     demandCycleState: { selectedCycle: initial.sessionDraft.demandCycle, lockedDate: null, lockedCycle: null },
     resumeTargetScreen: options.resume ?? null, timeSwitchTarget: null,
     weatherConfirmationPending: null, weatherConfirmationSubmittingRef: { current: false },
@@ -126,6 +129,7 @@ function harness(options: { state?: AppState; now?: Date; fixed?: boolean; resum
     getRuntimeNow: () => options.now ?? at(Number(initial.sessionDraft.discountTime)),
     NORMAL_ROUTE, getNormalRoute, getAreaRouteFromStoredIds, formatLocalDate, cloneHourlyForecasts, cloneSkipRecords,
     getCurrentDataVersionInfo, normalizeDemandCycle, normalizeGlobalDiscountAdjustmentPercent,
+    getGlobalDiscountAdjustmentDate, resolveSessionStartGlobalDiscountAdjustment,
     supportsObonCalendarRule, lockDemandCycleForDate, resolveSessionTemperatureComfort,
     consumeSkipRecordsInMemory, createTimeSwitchPlan, createInitialAreaProgressMap,
     createAreaProgressMapWithAutoSkippedAreas, getFirstNormalFlowAreaId, getNormalFlowScreenForArea,
@@ -356,6 +360,7 @@ for (const time of ["15", "17"] as const) {
       test(`${time}/${cycle}/global${global}: cold guide rates survive initial confirmation, condition return and reload`, () => {
         const h = harness({ state: fresh(time, cycle) });
         h.context.globalDiscountAdjustmentPercent = global;
+        (h.context.globalDiscountAdjustmentStateRef as { current: { adjustmentPercent: number } }).current.adjustmentPercent = global;
         h.request(); h.confirm(); h.persist();
         const expectedGuide = expectedColdGuide(h.state);
         const initialSession = json(h.state.session);
@@ -395,6 +400,7 @@ for (const cycle of ["normal", "summer"] as const) {
       }
       const h = harness({ state });
       h.context.globalDiscountAdjustmentPercent = global;
+      (h.context.globalDiscountAdjustmentStateRef as { current: { adjustmentPercent: number } }).current.adjustmentPercent = global;
       h.request(); h.confirm(); h.persist();
       assert.ok(h.state.session);
       const resolved = resolveWeatherInputForDiscount(h.state.session.weather, "17");

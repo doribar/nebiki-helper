@@ -314,7 +314,7 @@ test("旧session field欠損は物理migrationなしで0としてnormalizeする
   assert.equal(normalized.session?.globalDiscountAdjustmentPercent, 0);
 });
 
-test("StartScreen/RateDisplayは選択UIと非0補正の内訳を正規sourceから表示する", () => {
+test("Adminが選択UIを持ちStartは採用予定の非0状態だけ、RateDisplayは内訳を正規sourceから表示する", () => {
   const startSource = readFileSync(
     resolve(import.meta.dirname, "../src/components/screens/StartScreen.tsx"),
     "utf8",
@@ -327,15 +327,25 @@ test("StartScreen/RateDisplayは選択UIと非0補正の内訳を正規sourceか
     resolve(import.meta.dirname, "../src/app/AppRouter.tsx"),
     "utf8",
   );
+  const adminSource = readFileSync(
+    resolve(import.meta.dirname, "../src/components/common/AdminSettingsDialog.tsx"),
+    "utf8",
+  );
   assert.match(startSource, /全体値引補正/);
-  assert.match(startSource, /\[-5, 0, 5\]/);
-  assert.match(startSource, /adjustmentPercent > 0/);
+  assert.doesNotMatch(startSource, /\[-5, 0, 5\]|onChangeGlobalDiscountAdjustment/);
+  assert.match(startSource, /startGlobalDiscountAdjustmentPercent !== 0/);
+  assert.match(startSource, /isResumingGlobalDiscountAdjustment/);
+  assert.match(adminSource, /\[-5, 0, 5\]/);
+  assert.match(adminSource, /aria-pressed=\{selected\}/);
+  assert.match(adminSource, /onChangeGlobalDiscountAdjustment/);
+  assert.match(adminSource, /保存できませんでした/);
   assert.doesNotMatch(startSource, /通常の値引率へ最後に5ポイント加減します/);
   assert.doesNotMatch(startSource, /20時30分の固定値引には適用されません/);
   assert.match(rateSource, /全体補正/);
   assert.match(rateSource, /rateDisplayBeforeGlobalAdjustment/);
   assert.match(routerSource, /globalDiscountAdjustmentPercent/);
-  assert.match(routerSource, /changeGlobalDiscountAdjustment/);
+  assert.match(routerSource, /startGlobalDiscountAdjustmentPercent/);
+  assert.match(routerSource, /isResumingGlobalDiscountAdjustment/);
 });
 
 console.log(`Global discount adjustment checks passed: ${passed}/${passed}`);
