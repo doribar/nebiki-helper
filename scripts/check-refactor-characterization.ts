@@ -97,6 +97,7 @@ function assertPublicHookContract(): void {
       "showAfterRainRecoverySelector",
       "showBentoJudgeGuide",
       "areaCountAssistEnabled",
+      "areaCountDecreaseDisplayContext",
       "areaCountSameItemLimit",
       "showDayBeforeHolidayNotice",
       "showThreeDayHolidayMiddleNotice",

@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-57）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-58）
 
-最終更新: 2026-10-21 JST
+最終更新: 2026-10-27 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-57.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-57.zip` |
-| appVersion | `2026.8.9-57` |
-| buildId | `build-20261021-170010-jst` |
+| ZIP | `nebiki-helper-2026.8.9-58.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-58.zip` |
+| appVersion | `2026.8.9-58` |
+| buildId | `build-20261027-225436-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-57.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-58.md`参照（自己参照回避） |
 
-application rootは`work/globalSettings57/nebiki-helper`。比較基準は完成56 ZIP `nebiki-helper-2026.8.9-56.zip`（SHA-256 `92edae56dcf8d1ee6666704a8236f58c14d20540b34fc60e19dde662515dfc12`、build `build-20261020-211241-jst`）。57は全体値引補正の選択を設定へ移し、トップでは実際の開始/再開へ適用される非0値だけを方向付きで表示する。当日設定はJST現在日付へ限定し、旧draft日付で前日の設定を復活させない。詳細は`CHANGE_REPORT_2026.8.9-57.md`。
+application rootは`work/decreaseNumbers58/nebiki-helper`。比較基準は完成57 ZIP `nebiki-helper-2026.8.9-57.zip`（SHA-256 `34d452cbb8e712439ce976bd9c2599cec08caad990e9a8ca28e5e7e81503d853`、build `build-20261021-170010-jst`）。58は17時の共通残数パネルへ15→17実残数・減少率小数1桁・採用済み履歴中央値を追加。対象外のエリアも正式15時観測があれば数値だけ表示し、canUse/補正対象/評価/率を変更しない。詳細は`CHANGE_REPORT_2026.8.9-58.md`。
 
-56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休ルール、schema3/SQL/AGENTS/build方式を保持する。
+57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\globalSettings57\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\decreaseNumbers58\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -160,10 +160,19 @@ legacy migrationは次の順で行う。
 - 期間外のnormal lockとseason-normalizationが交互に更新される既存effect循環を解消。inferred lock候補にも既存normalizeDemandCycleStateForBusinessDateを通すだけで、7〜9月の夏季gate・active cycle・値引率は変えない。
 - archive repositoryが既にcanonical化した結果は、対応legacy fallbackが空なら再mergeしない。legacy overlap/失敗時の復元経路・migrationのverify/delete順・clone getterの独立性は維持。
 
+### 9-58: 17時の15→17減少率を数値で表示
+
+- 17時のAreaJudge/RateDisplay/AutoSkipNotice/AutoSkipCount共通パネルに、15時N個→17時M個、減少率xx.x％（既存分類）、履歴中央値xx.x％を表示する。15時/旧夜枠へ新しい時刻間数値を出さない。率は `(N-M)/N` の未丸め値、表示時だけ100倍して小数1桁にする。±20pt分類は既存raw directionから読み、表示値で再判定しない。
+- 保存済みdecreaseAdjustmentのpreviousCount/currentDecreaseRate/medianDecreaseRateを優先。保存比較元が0/不正、または率しか保存されていない場合は新しい観測で穴埋めせず算出不可。raw canUse=trueで中央値だけ未保存なら既存分類を保持して「履歴中央値：未保存」。履歴不足と旧metadata欠損を混同しない。
+- 保存根拠がない場合の比較元は既存prepared populationの正式15時観測だけ。date/area/timeの同一key、normal/summer通年canonical/normalize/同日重複選別を共有しcloneを返す。別日/別area/別時刻を混ぜない。非対象areaでもこの15時countと表示中17時countから割合だけを計算し、中央値は作らず「補正対象外」とする。
+- 有効pair/履歴不足なら今回率は表示し分類と中央値は履歴不足。比較元なしなら算出不可/比較元なし、比較元0/不正なら算出不可。17時0/15時正は100.0％。増加は負を保持し−31.8％（増加）等。NaN/Infinity/−0.0を表示しない。微小負値の表示丸めは0.0でもraw負値と増加の表示を保持する。
+- AreaJudgeは入力確定前に保存済みcount/basis、確定後にその入力の既存recommendationを表示する。area/session keyでremountし別areaの送信済みdraftが一瞬混ざることを防ぐ。AutoSkipCountは編集中countを表示し、保存countと異なれば旧capture率を流用しない。既存calculator draft保存・正式確定処理は変更しない。
+- 追加製造による補正取消/復元でもraw rate/median/directionは不変。既存Back/undoのsnapshot復元は維持し、古いcountへ戻る場合はそのcountと根拠を一緒に戻す。新しい表示用state/key/保存fieldは作らずderived contextだけを使う。対象・canUse・分類・率計算・過去データ・export/同期は変更しない。
+
 ### 9-40: エリア残数・減少率表示と追加製造例外
 
 - AreaJudge、RateDisplay（多い/どちらでもない/注意事項）、AutoSkipNotice、AutoSkipCount、FinalTimeの同一エリア画面で `AreaCountStatusPanel` を使う。値は現在の `areaProgressMap[currentAreaId].areaCount`。AreaJudgeの入力確定後は既存count draftとmemo済みrecommendationを使い、残数用の重複state/keyを追加しない。未知の数を捏造しない。
-- 減少率は保存済みdecisionBasisまたは既存recommendationのraw decreaseから表示。`canUse=false` は判定なし、`more_few` は良い、`none` は普通、`more_many` は悪い。比較は中央値±20pt、履歴最低3件。17時だけ、厳密な20pt境界の浮動小数点誤差をNumber.EPSILONで吸収する。19:30の判定式/結果は旧仕様を維持する。
+- 減少率は保存済みdecisionBasisまたは既存recommendationのraw decreaseから表示。`canUse=false` は従来の簡易表示では判定なし（58の17時数値表示では対象外/履歴不足/比較元なしを区別）、`more_few` は良い、`none` は普通、`more_many` は悪い。比較は中央値±20pt、履歴最低3件。17時だけ、厳密な20pt境界の浮動小数点誤差をNumber.EPSILONで吸収する。19:30の判定式/結果は旧仕様を維持する。
 - 17時15→17対象は `bento_men,tempura,onigiri,inari,hosomaki,ryomi,autumn,yakitori`。ryomiの内部ID・表示名「夏商品」は維持。croquette/fry_chicken/chuka_fish/sushi/futomaki_chumakiとlegacy balance_bentoは対象外。18:30は減少率比較なし。19:30は全エリアで18:30→19:30を維持。
 - 17時の対象エリアでready/canUse/raw more_many/previousTime15が成立し、fixed-timeではない場合だけ、RateDisplayで「追加製造あり・補正を取り消す」/「補正を戻す」を表示する。良い/普通/判定なし/対象外/19:30には取消UIを出さない。
 - canonical optional metadataは `AreaCountDecisionBasis.decreaseAdjustment.suppressed?: boolean` と `suppressionReason?: "additional_production"`。取消はtrue+reason、復元は両fieldを省略。raw currentDecreaseRate/medianDecreaseRate/directionは不変。欠損は取消なしとして読み、legacyをmigration/backfillで書き換えない。
@@ -552,11 +561,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-57` / buildId `build-20261021-170010-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
-- 全check **97/97 PASS**、57専用 **35/35 PASS**。実hook/Router/Start/Admin TSXイベントで選択/解除/同日復元、日付跨ぎ/focus/visible、stale action、保存失敗、捕捉値保持、checkpoint、fixed分離を検証。既存global計算/clamp/snapshot/export保証も維持。
-- TypeScript / production build / PWA generateSW PASS（110 modules/precache10）。focused ESLint **0 errors / 2 existing warnings**、full **9 existing errors / 5 existing warnings**。56baselineとのfile/rule/severity/message比較で新規0・削除0。full lint自体はexit1。chunk-size/Browserslist案内も既存由来。
-- 実Edge production preview 360/390×844 **32/32 PASS**、人工データ/時計。設定開閉/±5/なし/再読込、当日設定とsession採用値の差、日付境界/復帰/設定中/古いclick、保存失敗、固定時計分離、既存設定を確認。JST以外のtimezoneでも補正のJST失効を確認。横overflow、新規アプリerror/warning、不要な外部通信0。browserと自動testの範囲、実店舗/物理端末/PWA/実Supabase等の未確認は今回CHANGEを参照。証拠はZIP外`work/globalSettings57/browser-work`。
-- src107中7本のみ変更、保護100・SQL9・AGENTS・過去CHANGE65・dataVersion/Vite/depsは完成56ZIPと同一。check入力221/build入力122と独立source hashを照合。ZIP再openでCRC・集合/全bytes・path/除外物・version/build/schema/PWA/SHAを検査する。
+- appVersion `2026.8.9-58` / buildId `build-20261027-225436-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
+- 全check **98/98 PASS**、58専用 **24/24 PASS**。既存97チェックの保証はそのまま、characterizationにderived field1つを追加した。正式観測/ratio/丸め/分類・対象外・履歴不足・無効・保存根拠優先・実keypad訂正/取消/再訪/再読込/area切替・保存非変更を検証。
+- TypeScript / production build / PWA generateSW PASS（111 modules/precache10）。focused ESLint **1 existing errors / 2 existing warnings**、full **9 existing errors / 5 existing warnings**。57baselineとのfile/rule/severity/message比較で新規0・削除0。AreaJudgeの既存set-state-in-effectが今回の変更対象に含まれるためfocusedもexit1、cleanとはしない。chunk-size/Browserslist案内も既存。
+- 実Edge production preview 360/390×844 **20/20 PASS**、人工データ/時計。対象/非対象/不足/無効/100％/増加、訂正/再読込/area再訪、追加製造取消/復元、15時非表示、固定時計fallback/read-onlyを確認。横overflow、新規アプリerror/warning、不要な外部通信0。物理端末/PWA長時間/実Supabase等は未確認。証拠はZIP外`work/decreaseNumbers58/browser-work`。
+- src108 = 変更9/新規1/保護98。SQL9・AGENTS・過去CHANGE66・dataVersion/Vite/depsは完成57ZIPと同一。areaCountHistoryはexport2箇所の挿入を除く全既存bytesが同一。check入力223/build入力123を凍結し、独立source hashと完成ZIP再openを照合する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -566,7 +575,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全97 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全98 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -588,6 +597,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 実Supabase mutationによる9-19確認。
 
 ## 14. 次セッションが最初に確認するファイル
+
+9-58追加: areaDecreaseDisplay.ts（表示pure helper）、areaCountHistoryの正式観測reader/対象判定export、hookの17時derived context、Router/共通パネル/4consumer、check-decrease-numbers58.ts。既存判定式は変更なし。
 
 9-57追加: globalDiscountAdjustmentのJST日付/採用共通helper、hook当日stateとcapture/ref/stale guard、Start条件付き状態表示、Admin picker、App既存日付observer。新 `check-global-settings57.ts` と既存global/characterization/advance-flow/weekdayテスト更新。
 
@@ -612,7 +623,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-57.md`（完成baselineは `CHANGE_REPORT_2026.8.9-56.md`）
+4. `CHANGE_REPORT_2026.8.9-58.md`（完成baselineは `CHANGE_REPORT_2026.8.9-57.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

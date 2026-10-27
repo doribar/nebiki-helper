@@ -4,6 +4,7 @@ import { getEarlyNextMinus5CompletedText } from "../../domain/earlyNextMinus5.ts
 import { ScreenHeader } from "../layout/ScreenHeader";
 import type { AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
 import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
+import type { AreaDecreaseDisplayContext } from "../../domain/areaDecreaseDisplay.ts";
 
 type AutoSkipNoticeScreenProps = {
   weekdayText: string;
@@ -11,6 +12,7 @@ type AutoSkipNoticeScreenProps = {
   areaName: string;
   areaCount?: number | null;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
+  decreaseDisplayContext?: AreaDecreaseDisplayContext | null;
   onRecordCountOnly: () => void;
   onProcessNormally: () => void;
   onSkipWithoutMeasurement: () => void;
@@ -37,6 +39,7 @@ export function AutoSkipNoticeScreen({
   areaName,
   areaCount,
   areaCountDecisionBasis,
+  decreaseDisplayContext,
   onRecordCountOnly,
   onProcessNormally,
   onSkipWithoutMeasurement,
@@ -70,6 +73,7 @@ export function AutoSkipNoticeScreen({
       <AreaCountStatusPanel
         areaCount={areaCount}
         decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
+        decreaseDisplayContext={decreaseDisplayContext}
       />
 
       <section

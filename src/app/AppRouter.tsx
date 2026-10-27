@@ -85,6 +85,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
 
       return (
         <AreaJudgeScreen
+          key={`${state.session?.startedAt ?? "draft"}:${state.currentAreaId}`}
           weekdayText={derived.weekdayText}
           timeText={derived.timeText}
           areaId={state.currentAreaId!}
@@ -100,6 +101,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           initialAreaCount={state.areaProgressMap[state.currentAreaId!]?.areaCount}
           areaCount={state.areaProgressMap[state.currentAreaId!]?.areaCount}
           areaCountDecisionBasis={state.areaProgressMap[state.currentAreaId!]?.areaCountDecisionBasis}
+          decreaseDisplayContext={derived.areaCountDecreaseDisplayContext}
           initialStapleItemCount={state.areaProgressMap[state.currentAreaId!]?.stapleItemCount}
           editableAreaCounts={derived.editableAreaCounts}
           onStartAreaCountCorrection={actions.startAreaCountCorrection}
@@ -124,6 +126,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           timeText={derived.timeText}
           areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
           areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
+          decreaseDisplayContext={derived.areaCountDecreaseDisplayContext}
           areaName={derived.currentAreaName}
           autoSkipKind={
             state.currentAreaId
@@ -149,6 +152,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           timeText={derived.timeText}
           areaCount={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCount : undefined}
           areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
+          decreaseDisplayContext={derived.areaCountDecreaseDisplayContext}
           areaName={derived.currentAreaName}
           initialCount={state.areaProgressMap[state.currentAreaId]?.areaCount}
           editableAreaCounts={derived.editableAreaCounts}
@@ -178,6 +182,7 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
           adoptedAreaEvaluation={state.currentAreaId && state.areaProgressMap[state.currentAreaId]
             ? getAdoptedEvaluation(state.areaProgressMap[state.currentAreaId]) : undefined}
           areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
+          decreaseDisplayContext={derived.areaCountDecreaseDisplayContext}
           onToggleDecreaseAdjustmentSuppression={!(testNow instanceof Date) && canSuppressAreaCountDecreaseAdjustment({
             areaId: state.currentAreaId,
             discountTime: state.session.discountTime,

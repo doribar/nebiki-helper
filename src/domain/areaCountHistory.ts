@@ -204,6 +204,17 @@ const NO_AFTERNOON_ADD_AREA_IDS = new Set<AreaId>([
   "yakitori",
 ]);
 
+/** Whether the existing business rule permits a 15→17 decrease correction. */
+export function isAreaCountDecreaseComparisonEligible(params: {
+  areaId: AreaId | null | undefined;
+  discountTime: DiscountTime | null | undefined;
+}): boolean {
+  return Boolean(
+    params.discountTime === "17" &&
+    params.areaId && NO_AFTERNOON_ADD_AREA_IDS.has(params.areaId),
+  );
+}
+
 /** Present the existing raw decrease decision; suppression never changes this label. */
 export function getDecreaseRateAssessment(
   decrease: Pick<
@@ -1436,6 +1447,32 @@ function getLatestRecord(records: ReadonlyMap<string, AreaCountRecord>, params: 
   // The calculation population already contains one formal observation per
   // business date/area/time, including when persisted cycles differ.
   return records.get(getCalculationObservationKey(params)) ?? null;
+}
+
+/** Read the same formal observation used by calculations, without exposing its cache. */
+export function getAreaCountFormalObservation(params: {
+  records: readonly AreaCountRecord[];
+  preparedPopulation?: AreaCountCalculationPopulation;
+  date: string | null | undefined;
+  areaId: AreaId | null | undefined;
+  discountTime: DiscountTime | null | undefined;
+}): AreaCountRecord | null {
+  if (
+    !params.date || !params.areaId ||
+    !isAreaCountAssistDiscountTime(params.discountTime)
+  ) return null;
+
+  const preparedData = (params.preparedPopulation
+    ? preparedAreaCountPopulations.get(params.preparedPopulation)
+    : undefined) ?? preparedAreaCountPopulations.get(
+    prepareAreaCountCalculationPopulation(params.records),
+  )!;
+  const record = getLatestRecord(preparedData.recordsByObservation, {
+    date: params.date,
+    areaId: params.areaId,
+    discountTime: params.discountTime,
+  });
+  return record ? cloneAreaCountRecord(record) : null;
 }
 
 type ReferenceRecords = {

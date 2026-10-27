@@ -140,6 +140,7 @@ import {
   getActualWeekdayLabel,
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecordIdentity,
+  getAreaCountFormalObservation,
   getAreaCountRecommendation as buildAreaCountRecommendation,
   prepareAreaCountCalculationPopulation,
   getAreaCountSameItemLimit,
@@ -1882,6 +1883,26 @@ const lateSkipNotice = useMemo(() => {
     if (!state.currentAreaId) return null;
     return state.areaProgressMap[state.currentAreaId];
   }, [state.currentAreaId, state.areaProgressMap]);
+
+  const areaCountDecreaseDisplayContext = useMemo(() => {
+    if (state.session?.discountTime !== "17" || !state.currentAreaId ||
+        !["area_judge", "rate_display", "auto_skip_notice", "auto_skip_count"].includes(state.screen)) {
+      return null;
+    }
+    const previous = getAreaCountFormalObservation({
+      records: areaCountRecords,
+      preparedPopulation: areaCountCalculationPopulation.get(),
+      date: state.session.date,
+      areaId: state.currentAreaId,
+      discountTime: "15",
+    });
+    return {
+      areaId: state.currentAreaId,
+      discountTime: state.session.discountTime,
+      previousCount: previous?.count,
+    };
+  }, [state.session?.discountTime, state.session?.date, state.currentAreaId, state.screen,
+      areaCountRecords, areaCountCalculationPopulation]);
 
 
 
@@ -5620,6 +5641,7 @@ const lateSkipNotice = useMemo(() => {
   showAfterRainRecoverySelector,
   showBentoJudgeGuide,
   areaCountAssistEnabled,
+  areaCountDecreaseDisplayContext,
   areaCountSameItemLimit,
   showDayBeforeHolidayNotice,
   showThreeDayHolidayMiddleNotice,

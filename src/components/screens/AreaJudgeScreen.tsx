@@ -10,6 +10,7 @@ import type {
 } from "../../domain/types";
 import type { AreaCountDecisionBasis, AreaCountRecommendation } from "../../domain/areaCountHistory.ts";
 import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
+import type { AreaDecreaseDisplayContext } from "../../domain/areaDecreaseDisplay.ts";
 import { WeekdayBasePanel } from "../common/WeekdayBasePanel";
 import { ScreenHeader } from "../layout/ScreenHeader";
 import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
@@ -50,6 +51,7 @@ type AreaJudgeScreenProps = {
   initialAreaCount?: number | null;
   areaCount?: number | null;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
+  decreaseDisplayContext?: AreaDecreaseDisplayContext | null;
   initialStapleItemCount?: number | null;
   editableAreaCounts?: EditableAreaCountItem[];
   onStartAreaCountCorrection?: (areaId: AreaId) => void;
@@ -240,6 +242,7 @@ export function AreaJudgeScreen({
   initialAreaCount = null,
   areaCount,
   areaCountDecisionBasis,
+  decreaseDisplayContext,
   initialStapleItemCount = null,
   editableAreaCounts = [],
   onStartAreaCountCorrection,
@@ -471,6 +474,7 @@ export function AreaJudgeScreen({
       <AreaCountStatusPanel
         areaCount={areaCountSubmitted ? parsedAreaCount : areaCount ?? initialAreaCount}
         decreaseAdjustment={displayedDecreaseAdjustment}
+        decreaseDisplayContext={decreaseDisplayContext}
       />
 
       {timeSwitchNotice ? (

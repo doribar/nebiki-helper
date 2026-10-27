@@ -4,6 +4,7 @@ import type { AreaId, EditableAreaCountItem } from "../../domain/types.ts";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
 import type { AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
 import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
+import type { AreaDecreaseDisplayContext } from "../../domain/areaDecreaseDisplay.ts";
 
 type AutoSkipCountScreenProps = {
   weekdayText: string;
@@ -12,6 +13,7 @@ type AutoSkipCountScreenProps = {
   initialCount?: number | null;
   areaCount?: number | null;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
+  decreaseDisplayContext?: AreaDecreaseDisplayContext | null;
   onSave: (count: number) => void;
   onGoBack: () => void;
   onReturnHome: () => void;
@@ -51,6 +53,7 @@ export function AutoSkipCountScreen({
   initialCount,
   areaCount,
   areaCountDecisionBasis,
+  decreaseDisplayContext,
   onSave,
   onGoBack,
   onReturnHome,
@@ -92,8 +95,10 @@ export function AutoSkipCountScreen({
       />
 
       <AreaCountStatusPanel
-        areaCount={areaCount ?? initialCount}
-        decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
+        areaCount={parsedCount}
+        decreaseAdjustment={parsedCount === (areaCount ?? initialCount)
+          ? areaCountDecisionBasis?.decreaseAdjustment : undefined}
+        decreaseDisplayContext={decreaseDisplayContext}
       />
 
       <form onSubmit={handleSubmit}>

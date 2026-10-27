@@ -2,16 +2,19 @@ import {
   getDecreaseRateAssessment,
   type AreaCountDecisionBasis,
 } from "../../domain/areaCountHistory.ts";
+import { getAreaDecreaseDisplay, type AreaDecreaseDisplayContext } from "../../domain/areaDecreaseDisplay.ts";
 
 type AreaCountStatusPanelProps = {
   areaCount?: number | null;
   decreaseAdjustment?: AreaCountDecisionBasis["decreaseAdjustment"] | null;
+  decreaseDisplayContext?: AreaDecreaseDisplayContext | null;
   onToggleDecreaseAdjustmentSuppression?: () => void;
 };
 
 export function AreaCountStatusPanel({
   areaCount,
   decreaseAdjustment,
+  decreaseDisplayContext,
   onToggleDecreaseAdjustmentSuppression,
 }: AreaCountStatusPanelProps) {
   if (
@@ -21,6 +24,9 @@ export function AreaCountStatusPanel({
   ) return null;
 
   const assessment = getDecreaseRateAssessment(decreaseAdjustment);
+  const decreaseDisplay = decreaseDisplayContext
+    ? getAreaDecreaseDisplay({ ...decreaseDisplayContext, areaCount, decreaseAdjustment })
+    : null;
   const hasAdjustment = decreaseAdjustment?.canUse === true &&
     decreaseAdjustment.direction !== "none";
   const canToggleSuppression = onToggleDecreaseAdjustmentSuppression &&
@@ -46,8 +52,16 @@ export function AreaCountStatusPanel({
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 16px", fontWeight: 800 }}>
         <div>エリア残数：{areaCount}個</div>
-        <div>減少率：{assessment}</div>
+        {!decreaseDisplay ? <div>減少率：{assessment}</div> : null}
       </div>
+      {decreaseDisplay ? (
+        <div style={{ fontWeight: 800 }}>
+          <div>{decreaseDisplay.transitionText}</div>
+          <div>減少率：{decreaseDisplay.rateText}（{decreaseDisplay.assessmentText}）</div>
+          {decreaseDisplay.medianText ? <div>{decreaseDisplay.medianText}</div> : null}
+          {decreaseDisplay.contextText ? <div>減少率補正：{decreaseDisplay.contextText}</div> : null}
+        </div>
+      ) : null}
       {hasAdjustment ? (
         <div style={{ marginTop: 4 }}>
           減少率補正：

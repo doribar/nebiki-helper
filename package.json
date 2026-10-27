@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-57",
+  "version": "2026.8.9-58",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -104,7 +104,8 @@
     "check:priority-pending55": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-priority-pending55.ts",
     "check:priority-flow55": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-priority-flow55.ts",
     "check:many-exception56": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-many-exception56.ts",
-    "check:global-settings57": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-global-settings57.ts"
+    "check:global-settings57": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-global-settings57.ts",
+    "check:decrease-numbers58": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-decrease-numbers58.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

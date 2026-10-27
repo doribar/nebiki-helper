@@ -6,6 +6,7 @@ import type {
 import type { PendingSupabaseSyncErrorDetails } from "./supabaseSyncDiagnostics.ts";
 import type { NebikiStorageUsageDiagnostic } from "./storageDiagnostics.ts";
 import type { EveningComfortReliefAnalysis } from "./eveningComfortRelief.ts";
+import type { AreaDecreaseDisplayContext } from "./areaDecreaseDisplay.ts";
 import type {
   AnalysisCalendarContext,
   AnalysisWeatherContext,
@@ -943,6 +944,7 @@ export type UseNebikiAppDerived = {
   showAfterRainRecoverySelector: boolean;
   showBentoJudgeGuide: boolean;
   areaCountAssistEnabled: boolean;
+  areaCountDecreaseDisplayContext: AreaDecreaseDisplayContext | null;
   areaCountSameItemLimit: number | null;
   showDayBeforeHolidayNotice: boolean;
   showThreeDayHolidayMiddleNotice: boolean;

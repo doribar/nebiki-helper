@@ -28,6 +28,7 @@ import { getFinalTimeInstructionSteps } from "../../domain/discount";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
 import { evaluationText, getHolidayBeforeNormalWeekdayReferenceDetailLines, getThreeDayHolidayMiddleReferenceDetailLines, type AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
 import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
+import type { AreaDecreaseDisplayContext } from "../../domain/areaDecreaseDisplay.ts";
 import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
 import { HumanEvaluationSelector } from "../common/HumanEvaluationSelector.tsx";
 import type { MedianEvaluationDisplay } from "../../domain/medianEvaluationPresentation.ts";
@@ -59,6 +60,7 @@ type RateDisplayScreenProps = {
   areaCount?: number | null;
   adoptedAreaEvaluation?: AreaCountEvaluation;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
+  decreaseDisplayContext?: AreaDecreaseDisplayContext | null;
   onToggleDecreaseAdjustmentSuppression?: () => void;
   rateDisplay: RateDisplayData | null;
   rateDisplayBeforeGlobalAdjustment?: RateDisplayData | null;
@@ -299,6 +301,7 @@ export function RateDisplayScreen({
   areaCount,
   adoptedAreaEvaluation,
   areaCountDecisionBasis,
+  decreaseDisplayContext,
   onToggleDecreaseAdjustmentSuppression,
   rateDisplay,
   rateDisplayBeforeGlobalAdjustment = null,
@@ -493,6 +496,7 @@ export function RateDisplayScreen({
       <AreaCountStatusPanel
         areaCount={areaCount}
         decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
+        decreaseDisplayContext={decreaseDisplayContext}
         onToggleDecreaseAdjustmentSuppression={discountTime === "17"
           ? onToggleDecreaseAdjustmentSuppression : undefined}
       />
