@@ -276,8 +276,8 @@ test("19時・日次の全件／最新／direct exportを分離する", () => {
   assert.match(hookSource, /state\.screen !== "review19_done"/);
 });
 
-test("既存の商品補正注意を維持し、同一商品20個以上を独立表示", () => {
-  assert.equal(FULL_MODE_NOTICE_ITEMS.length, 7);
+test("既存の商品補正注意を維持し、同一商品と補正の重なりを個別に表示", () => {
+  assert.equal(FULL_MODE_NOTICE_ITEMS.length, 8);
   const minusItems = FULL_MODE_NOTICE_TEXTS.filter((text) => text.includes("-10%"));
   const plusItems = FULL_MODE_NOTICE_TEXTS.filter((text) => text.includes("+10%"));
   assert.deepEqual(minusItems, [
@@ -288,7 +288,8 @@ test("既存の商品補正注意を維持し、同一商品20個以上を独立
     "やや不人気な商品は、10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%",
   ]);
   assert.deepEqual(FULL_MODE_NOTICE_TEXTS.filter((text) => text.includes("＋10％")), [
-    "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。",
+    "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。小パックにはこの補正を適用しない。",
+    "補正が重なる場合は、−10％を最初に1回だけ適用し、その後、該当する項目ごとに＋10％。最終的な値引率は元の表示値引率＋10ポイントまでとする。",
   ]);
 });
 

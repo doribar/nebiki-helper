@@ -423,7 +423,7 @@ await test("natural weekday and holiday/Obon calculation reference remain separa
   }
 });
 
-await test("the 44 seven lower notices and their bold emphasis remain available", async () => {
+await test("all eight lower notices appear with the existing slightly-unpopular emphasis", async () => {
   const loader = new ModuleLoader(React);
   const Rate = (await loader.load("src/components/screens/RateDisplayScreen.tsx")).RateDisplayScreen as Component;
   const markup = renderToStaticMarkup(React.createElement(Rate, {
@@ -433,7 +433,7 @@ await test("the 44 seven lower notices and their bold emphasis remain available"
     onNextArea: noop, onSkip: noop, onGoBack: noop, onReturnHome: noop,
   }));
   const rows = [...markup.matchAll(/<div>・([\s\S]*?)<\/div>/g)].map(match => match[1]);
-  assert.equal(rows.length, 7);
+  assert.equal(rows.length, 8);
   assert.deepEqual(rows.map(row => row.replace(/<[^>]*>/g, "")), FULL_MODE_NOTICE_TEXTS);
   assert.deepEqual([...rows[4].matchAll(/<strong>(.*?)<\/strong>/g)].map(match => match[1]), ["やや不人気な商品", "10個以上", "+10%", "大パックのみ+10%"]);
   assert.ok(markup.includes("多い商品を30%"));

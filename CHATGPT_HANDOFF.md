@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-58）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-59）
 
-最終更新: 2026-10-27 JST
+最終更新: 2026-11-04 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-58.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-58.zip` |
-| appVersion | `2026.8.9-58` |
-| buildId | `build-20261027-225436-jst` |
+| ZIP | `nebiki-helper-2026.8.9-59.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-59.zip` |
+| appVersion | `2026.8.9-59` |
+| buildId | `build-20261104-125115-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-58.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-59.md`参照（自己参照回避） |
 
-application rootは`work/decreaseNumbers58/nebiki-helper`。比較基準は完成57 ZIP `nebiki-helper-2026.8.9-57.zip`（SHA-256 `34d452cbb8e712439ce976bd9c2599cec08caad990e9a8ca28e5e7e81503d853`、build `build-20261021-170010-jst`）。58は17時の共通残数パネルへ15→17実残数・減少率小数1桁・採用済み履歴中央値を追加。対象外のエリアも正式15時観測があれば数値だけ表示し、canUse/補正対象/評価/率を変更しない。詳細は`CHANGE_REPORT_2026.8.9-58.md`。
+application rootは`work/notice59/nebiki-helper`。比較基準は完成58 ZIP `nebiki-helper-2026.8.9-58.zip`（SHA-256 `0dc0b2e6b7cacf90322eb96374503f4239d1e21f85e5bc94d203e15a6f42b89e`、build `build-20261027-225436-jst`）。59は値引指示の注意事項のみ更新。小パックは20個以上の個数から除外し、その補正の対象にも含めない。続けて補正が重なる場合の手順を追加し、全8項目。他の6項目および値引計算・表示率・保存は不変。詳細は`CHANGE_REPORT_2026.8.9-59.md`。
 
-57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
+58減少率の数値表示、57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\decreaseNumbers58\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\notice59\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -159,6 +159,12 @@ legacy migrationは次の順で行う。
 - runtime effectはnavigation/undo等の実際のruntime条件だけに依存。current/checkpointには1回のnormalized snapshotとserializeを共用し、実localStorage bytesが一致すればwriteを省く。天候変更は従来どおり直ちに保存し、debounce/blur依存は導入しない。quota retry時や欠損copyは実storage比較で再保存する。
 - 期間外のnormal lockとseason-normalizationが交互に更新される既存effect循環を解消。inferred lock候補にも既存normalizeDemandCycleStateForBusinessDateを通すだけで、7〜9月の夏季gate・active cycle・値引率は変えない。
 - archive repositoryが既にcanonical化した結果は、対応legacy fallbackが空なら再mergeしない。legacy overlap/失敗時の復元経路・migrationのverify/delete順・clone getterの独立性は維持。
+
+### 9-59: 値引指示の注意事項を8項目に更新
+
+- `FULL_MODE_NOTICE_ITEMS` の6番目は、小パックを含めず同一商品が20個以上なら＋10％、小パック自体にはその補正を適用しない、と明記する。
+- 直後の7番目は、−10％が複数該当しても最初に1回、その後は該当項目ごとに＋10％、上限は商品別補正前の表示値引率＋10ポイント、と案内する。
+- 商品ごとの手作業向けの文言。既存太字の `emphasis` を使い、アスタリスクは表示しない。やや不人気の10個以上・大小パック条件を含む他6項目の本文・太字・相対順は保持する。自動計算・表示率・保存/同期は非変更。
 
 ### 9-58: 17時の15→17減少率を数値で表示
 
@@ -561,11 +567,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-58` / buildId `build-20261027-225436-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
-- 全check **98/98 PASS**、58専用 **24/24 PASS**。既存97チェックの保証はそのまま、characterizationにderived field1つを追加した。正式観測/ratio/丸め/分類・対象外・履歴不足・無効・保存根拠優先・実keypad訂正/取消/再訪/再読込/area切替・保存非変更を検証。
-- TypeScript / production build / PWA generateSW PASS（111 modules/precache10）。focused ESLint **1 existing errors / 2 existing warnings**、full **9 existing errors / 5 existing warnings**。57baselineとのfile/rule/severity/message比較で新規0・削除0。AreaJudgeの既存set-state-in-effectが今回の変更対象に含まれるためfocusedもexit1、cleanとはしない。chunk-size/Browserslist案内も既存。
-- 実Edge production preview 360/390×844 **20/20 PASS**、人工データ/時計。対象/非対象/不足/無効/100％/増加、訂正/再読込/area再訪、追加製造取消/復元、15時非表示、固定時計fallback/read-onlyを確認。横overflow、新規アプリerror/warning、不要な外部通信0。物理端末/PWA長時間/実Supabase等は未確認。証拠はZIP外`work/decreaseNumbers58/browser-work`。
-- src108 = 変更9/新規1/保護98。SQL9・AGENTS・過去CHANGE66・dataVersion/Vite/depsは完成57ZIPと同一。areaCountHistoryはexport2箇所の挿入を除く全既存bytesが同一。check入力223/build入力123を凍結し、独立source hashと完成ZIP再openを照合する。
+- appVersion `2026.8.9-59` / buildId `build-20261104-125115-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
+- 全check **98/98 PASS**。注意事項関連の既存7本を更新し、8項目の文言・太字・順序、他6項目の保持、通常/夏の表示と20:30の既存扱いを検証。
+- TypeScript / production build / PWA generateSW PASS（111 modules/precache10）。focused ESLint **0 errors / 0 warnings**。full **9 existing errors / 5 existing warnings**、58比較で新規診断0。
+- 実Edge production preview 360/390×844 **8/8 PASS**（人工fixture）。8項目、本文、太字、順序、アスタリスクなし、表示率不変を確認。文字欠け・ページ横overflow・新規アプリconsole問題・外部通信なし。物理店舗端末・インストール済みPWAの実動作・実Supabaseは未確認。
+- src108中変更はfullMode.tsだけ。SQL9本、AGENTS、既存CHANGE67本、依存・schemaは58と同一。完成ZIPを再openして全ファイルのCRC・集合・bytes・版情報・dist/PWA・SHA-256を検査する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -623,7 +629,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-58.md`（完成baselineは `CHANGE_REPORT_2026.8.9-57.md`）
+4. `CHANGE_REPORT_2026.8.9-59.md`（完成baselineは `CHANGE_REPORT_2026.8.9-58.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

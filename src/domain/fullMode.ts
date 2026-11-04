@@ -36,11 +36,21 @@ export const FULL_MODE_NOTICE_ITEMS: readonly (readonly FullModeNoticeSegment[])
   [
     { text: "同一商品", emphasis: true },
     { text: "が、" },
-    { text: "小パックを含めずに", emphasis: true },
-    { text: "20個以上", emphasis: true },
+    { text: "小パックを含めずに20個以上", emphasis: true },
     { text: "ある場合は、表示値引率に" },
     { text: "＋10％", emphasis: true },
     { text: "。" },
+    { text: "小パックにはこの補正を適用しない", emphasis: true },
+    { text: "。" },
+  ],
+  [
+    { text: "補正が重なる場合は、" },
+    { text: "−10％を最初に1回だけ", emphasis: true },
+    { text: "適用し、その後、" },
+    { text: "該当する項目ごとに＋10％", emphasis: true },
+    { text: "。最終的な値引率は" },
+    { text: "元の表示値引率＋10ポイントまで", emphasis: true },
+    { text: "とする。" },
   ],
   [
     { text: "多い・少ないの判断", emphasis: true },

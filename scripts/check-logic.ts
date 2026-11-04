@@ -2885,13 +2885,13 @@ const totalChecks = 91;
     getCanonicalUrlForLegacyHash({ pathname: '/app/', search: '', hash: '' }),
     null,
   );
-  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 7);
+  assert.equal(FULL_MODE_NOTICE_TEXTS.length, 8);
   passed += 1;
 }
 
 
 {
-  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 7);
+  assert.equal(new Set(FULL_MODE_NOTICE_TEXTS).size, 8);
   assert.equal(FULL_MODE_NOTICE_TEXTS[0], '残り2個の商品は「多い」にしない');
   assert.equal(
     FULL_MODE_NOTICE_TEXTS[2],
@@ -2903,10 +2903,14 @@ const totalChecks = 91;
   );
   assert.equal(
     FULL_MODE_NOTICE_TEXTS[5],
-    '同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。',
+    '同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。小パックにはこの補正を適用しない。',
   );
   assert.equal(
     FULL_MODE_NOTICE_TEXTS[6],
+    '補正が重なる場合は、−10％を最初に1回だけ適用し、その後、該当する項目ごとに＋10％。最終的な値引率は元の表示値引率＋10ポイントまでとする。',
+  );
+  assert.equal(
+    FULL_MODE_NOTICE_TEXTS[7],
     '多い・少ないの判断は、残り数だけでなく商品の減り方も含める',
   );
   passed += 1;

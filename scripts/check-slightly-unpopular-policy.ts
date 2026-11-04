@@ -30,7 +30,8 @@ import type {
 import { normalizeAreaProgressMap } from "../src/hooks/nebikiApp/stateNormalization.ts";
 
 const notice = "やや不人気な商品は、10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%";
-const sameItemNotice = "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。";
+const sameItemNotice = "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。小パックにはこの補正を適用しない。";
+const overlappingAdjustmentNotice = "補正が重なる場合は、−10％を最初に1回だけ適用し、その後、該当する項目ごとに＋10％。最終的な値引率は元の表示値引率＋10ポイントまでとする。";
 const legacyPolicy = {
   staplePercent: -10, nightSellerPercent: -10, poorAppearancePercent: 10,
   unpopularPercent: 10, advertisementPercent: -10, advertisementMode: "always",
@@ -231,11 +232,11 @@ test("Review19の実export builderとJSON往復が4モードの新旧snapshotを
   }
 });
 
-test("注意事項は既存6文言・順序を維持し同一商品20個以上を独立追加", () => {
+test("既存6項目の文言・順序を維持し、同一商品と補正の重なりを個別に表示", () => {
   assert.deepEqual(FULL_MODE_NOTICE_TEXTS, [
     "残り2個の商品は「多い」にしない", "残り1個の商品は「少ない」にする",
     "定番商品・夜によく売れる商品・広告商品は、表示値引率から-10%",
-    "見た目が悪い個別商品・不人気な商品は、表示値引率に+10%", notice, sameItemNotice,
+    "見た目が悪い個別商品・不人気な商品は、表示値引率に+10%", notice, sameItemNotice, overlappingAdjustmentNotice,
     "多い・少ないの判断は、残り数だけでなく商品の減り方も含める",
   ]);
 });
@@ -286,7 +287,7 @@ async function loadComponentModule(url: URL): Promise<Record<string, unknown>> {
 }
 const RuntimeRateScreen = (await loadComponentModule(new URL("../src/components/screens/RateDisplayScreen.tsx", import.meta.url))).RateDisplayScreen as typeof RateDisplayScreen;
 const noop = () => undefined;
-test("実RateDisplayScreenの通常/夏15〜19時に7項目・独立した20個注意と4強調を表示し20:30は非表示", () => {
+test("実RateDisplayScreenの通常/夏15〜19時に8項目と指定の強調を表示し20:30は非表示", () => {
   for (const demandCycle of ["normal", "summer"] as const) {
     for (const discountTime of ["15", "17", "18", "19", "20"] as const) {
       const props: React.ComponentProps<typeof RuntimeRateScreen> = {
@@ -303,6 +304,7 @@ test("実RateDisplayScreenの通常/夏15〜19時に7項目・独立した20個�
         assert.equal(text.includes("注意事項"), false);
         assert.equal(text.includes(notice), false);
         assert.equal(text.includes(sameItemNotice), false);
+        assert.equal(text.includes(overlappingAdjustmentNotice), false);
         continue;
       }
       assert.equal(text.split(notice).length - 1, 1);
@@ -312,22 +314,28 @@ test("実RateDisplayScreenの通常/夏15〜19時に7項目・独立した20個�
       // The actual screen uses separate div bullet rows, each with the existing
       // strong/span markup. Preserve that structure and the six older rows.
       const rows = [...markup.matchAll(/<div>・([\s\S]*?)<\/div>/g)].map((match) => match[1]);
-      assert.equal(rows.length, 7, `${demandCycle}/${discountTime}: seven separate notice rows`);
+      assert.equal(rows.length, 8, `${demandCycle}/${discountTime}: eight separate notice rows`);
       assert.deepEqual(rows.map((row) => row.replace(/<[^>]*>/g, "")), FULL_MODE_NOTICE_TEXTS);
       assert.equal(text.split(sameItemNotice).length - 1, 1);
+      assert.equal(text.split(overlappingAdjustmentNotice).length - 1, 1);
       assert.equal(rows[4].replace(/<[^>]*>/g, ""), notice);
       assert.deepEqual([...rows[4].matchAll(/<strong>(.*?)<\/strong>/g)].map((match) => match[1]), [
         "やや不人気な商品", "10個以上", "+10%", "大パックのみ+10%",
       ]);
       assert.equal(rows[5].replace(/<[^>]*>/g, ""), sameItemNotice);
-      assert.equal(rows[6].replace(/<[^>]*>/g, ""), "多い・少ないの判断は、残り数だけでなく商品の減り方も含める");
+      assert.equal(rows[6].replace(/<[^>]*>/g, ""), overlappingAdjustmentNotice);
+      assert.equal(rows[7].replace(/<[^>]*>/g, ""), "多い・少ないの判断は、残り数だけでなく商品の減り方も含める");
       assert.deepEqual([...rows[5].matchAll(/<strong>(.*?)<\/strong>/g)].map((match) => match[1]), [
-        "同一商品", "小パックを含めずに", "20個以上", "＋10％",
+        "同一商品", "小パックを含めずに20個以上", "＋10％", "小パックにはこの補正を適用しない",
+      ]);
+      assert.deepEqual([...rows[6].matchAll(/<strong>(.*?)<\/strong>/g)].map((match) => match[1]), [
+        "−10％を最初に1回だけ", "該当する項目ごとに＋10％", "元の表示値引率＋10ポイントまで",
       ]);
       assert.match(rows[5], /<span>が、<\/span>/);
       assert.match(rows[5], /<span>ある場合は、表示値引率に<\/span>/);
       assert.match(rows[5], /<span>。<\/span>/);
-      assert.doesNotMatch(rows[5], /<(?:input|button|select|textarea)\b/);
+      assert.doesNotMatch(rows.join(""), /\*/);
+      assert.doesNotMatch(rows.slice(5, 7).join(""), /<(?:input|button|select|textarea)\b/);
     }
   }
 });

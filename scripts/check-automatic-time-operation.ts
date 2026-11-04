@@ -257,14 +257,15 @@ await test("first instruction begins with many products and advances exactly onc
   }
 });
 
-await test("lower notices retain exact seven rows, order and slightly-unpopular emphasis", async () => {
+await test("lower notices display eight exact rows and preserve slightly-unpopular emphasis", async () => {
   const expected = [
     "残り2個の商品は「多い」にしない",
     "残り1個の商品は「少ない」にする",
     "定番商品・夜によく売れる商品・広告商品は、表示値引率から-10%",
     "見た目が悪い個別商品・不人気な商品は、表示値引率に+10%",
     "やや不人気な商品は、10個以上ある場合のみ表示値引率に+10%。大パックと小パックに分かれている場合は大パックのみ+10%",
-    "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。",
+    "同一商品が、小パックを含めずに20個以上ある場合は、表示値引率に＋10％。小パックにはこの補正を適用しない。",
+    "補正が重なる場合は、−10％を最初に1回だけ適用し、その後、該当する項目ごとに＋10％。最終的な値引率は元の表示値引率＋10ポイントまでとする。",
     "多い・少ないの判断は、残り数だけでなく商品の減り方も含める",
   ];
   assert.deepEqual(FULL_MODE_NOTICE_TEXTS, expected);
