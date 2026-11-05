@@ -1,5 +1,5 @@
 import { getCurrentDataVersionInfo } from "./dataVersion.ts";
-import { getBaseRate, getNormalTimeRateDisplay } from "./discount.ts";
+import { calculateNormalRateStages, getBaseRate, getNormalTimeRateCalculation, getNormalTimeRateDisplay } from "./discount.ts";
 import type {
   AreaJudge,
   AreaRateAdjustment,
@@ -19,7 +19,6 @@ import { normalizeDemandCycle } from "./demandCycle.ts";
 import { normalizeTemperatureComfortAnalysis } from "./temperatureComfort.ts";
 import { normalizeEveningComfortReliefAnalysis, type EveningComfortReliefAnalysis } from "./eveningComfortRelief.ts";
 import {
-  applyGlobalDiscountAdjustmentToDisplay,
   applyGlobalDiscountAdjustmentToRate,
   isGlobalDiscountAdjustmentPercent,
 } from "./globalDiscountAdjustment.ts";
@@ -435,19 +434,7 @@ export function buildRateDecisionSnapshot(
     params.areaJudge,
     params.areaRateAdjustment,
   );
-  const normalRateBeforeLimitsPercent =
-    basicRatePercent +
-    params.weatherComfortAdjustmentPercent +
-    modeAdjustments.lateTimeAdjustmentPercent +
-    areaCountAdjustmentPercent +
-    legacyAreaJudgeAdjustmentPercent;
-  const manyRateBeforeLimitsPercent = normalRateBeforeLimitsPercent + 10;
-  const normalRateAfterBaseLimitsPercent = clampRate(
-    normalRateBeforeLimitsPercent,
-  );
-  const manyRateAfterBaseLimitsPercent = clampRate(manyRateBeforeLimitsPercent);
-
-  const rawBaseDisplay = getNormalTimeRateDisplay({
+  const rateParams = {
     discountTime: params.effectiveRateDiscountTime,
     weekday: params.weekday,
     date: params.date,
@@ -459,60 +446,21 @@ export function buildRateDecisionSnapshot(
       params.weekday === 0 && params.effectiveRateDiscountTime === "15",
     ignoreTimeRateCap: params.ignoreTimeRateCap,
     areaRateAdjustment: params.areaRateAdjustment,
-  });
-  const computedBaseDisplay =
-    modeAdjustments.earlyNextAdjustmentPercent === 0
-      ? rawBaseDisplay
-      : applyRateOffsetToDisplay(
-          rawBaseDisplay,
-          modeAdjustments.earlyNextAdjustmentPercent,
-        );
-  const baseDisplay = cloneRateDisplay(computedBaseDisplay)!;
-  const display = cloneRateDisplay(
-    applyGlobalDiscountAdjustmentToDisplay(
-      baseDisplay,
-      globalDiscountAdjustmentPercent,
-    ),
-  )!;
-  const normalRatePercent = parseDisplayRatePercent(baseDisplay.normal.main);
-  const manyRatePercent = parseDisplayRatePercent(baseDisplay.many.main);
-  const displayedNormalRatePercent = parseDisplayRatePercent(
-    display.normal.main,
-  );
-  const displayedManyRatePercent = parseDisplayRatePercent(display.many.main);
-  if (normalRatePercent === undefined || manyRatePercent === undefined) {
-    throw new Error("normal rate display did not contain a valid percentage");
-  }
-  if (
-    displayedNormalRatePercent === undefined ||
-    displayedManyRatePercent === undefined
-  ) {
-    throw new Error("globally adjusted display did not contain a valid percentage");
-  }
-
-  const expectedNormalRatePercent = clampRate(
-    normalRateAfterBaseLimitsPercent +
-      modeAdjustments.earlyNextAdjustmentPercent,
-  );
-  const expectedManyRatePercent = clampRate(
-    manyRateAfterBaseLimitsPercent + modeAdjustments.earlyNextAdjustmentPercent,
-  );
-  if (
-    normalRatePercent !== expectedNormalRatePercent ||
-    manyRatePercent !== expectedManyRatePercent ||
-    displayedNormalRatePercent !==
-      applyGlobalDiscountAdjustmentToRate(
-        expectedNormalRatePercent,
-        globalDiscountAdjustmentPercent,
-      ) ||
-    displayedManyRatePercent !==
-      applyGlobalDiscountAdjustmentToRate(
-        expectedManyRatePercent,
-        globalDiscountAdjustmentPercent,
-      )
-  ) {
-    throw new Error("rate snapshot arithmetic differs from the displayed rate");
-  }
+    rateOffsetPercent: modeAdjustments.earlyNextAdjustmentPercent,
+    globalDiscountAdjustmentPercent,
+  };
+  const rates = getNormalTimeRateCalculation(rateParams);
+  const display = cloneRateDisplay(getNormalTimeRateDisplay(rateParams))!;
+  const {
+    normalRateBeforeLimitsPercent,
+    manyRateBeforeLimitsPercent,
+    normalRateAfterBaseLimitsPercent,
+    manyRateAfterBaseLimitsPercent,
+    normalRatePercent,
+    manyRatePercent,
+    displayedNormalRatePercent,
+    displayedManyRatePercent,
+  } = rates;
 
   return deepFreeze({
     version: 1,
@@ -522,6 +470,9 @@ export function buildRateDecisionSnapshot(
     sessionDiscountTime: params.sessionDiscountTime,
     effectiveRateDiscountTime: params.effectiveRateDiscountTime,
     calculationMode: params.calculationMode,
+    calculationOrder: "global_before_lower_limit_v1",
+    normalRateBeforeGlobalAdjustmentPercent: rates.normalRateBeforeGlobalAdjustmentPercent,
+    manyRateBeforeGlobalAdjustmentPercent: rates.manyRateBeforeGlobalAdjustmentPercent,
     rateLogicVersion: params.rateLogicVersion ?? "time_basic_rate_v1",
     basicRatePercent,
     weatherComfortAdjustmentPercent: params.weatherComfortAdjustmentPercent,
@@ -549,14 +500,7 @@ export function buildRateDecisionSnapshot(
           displayedManyRateBeforeGlobalAdjustmentPercent: manyRatePercent,
         }
       : {}),
-    limits: getLimitFlags({
-      normalBefore: normalRateBeforeLimitsPercent,
-      manyBefore: manyRateBeforeLimitsPercent,
-      normalAfterBase: normalRateAfterBaseLimitsPercent,
-      manyAfterBase: manyRateAfterBaseLimitsPercent,
-      earlyOffset: modeAdjustments.earlyNextAdjustmentPercent,
-      globalOffset: globalDiscountAdjustmentPercent,
-    }),
+    limits: rates.limits,
     displayedRatePercent: displayedNormalRatePercent,
     displayedRateText: display.normal.main,
     displayedNormalRatePercent,
@@ -737,6 +681,16 @@ export function normalizeRateDecisionSnapshot(
     return undefined;
   }
 
+  if (raw.calculationOrder !== undefined &&
+      raw.calculationOrder !== "global_before_lower_limit_v1") return undefined;
+  const hasSignedCalculationOrder = raw.calculationOrder === "global_before_lower_limit_v1";
+  const hasSignedRates = raw.normalRateBeforeGlobalAdjustmentPercent !== undefined ||
+    raw.manyRateBeforeGlobalAdjustmentPercent !== undefined;
+  if (hasSignedCalculationOrder
+    ? !isFiniteNumber(raw.normalRateBeforeGlobalAdjustmentPercent) ||
+      !isFiniteNumber(raw.manyRateBeforeGlobalAdjustmentPercent)
+    : hasSignedRates) return undefined;
+
   const numericKeys = [
     "basicRatePercent",
     "weatherComfortAdjustmentPercent",
@@ -799,6 +753,11 @@ export function normalizeRateDecisionSnapshot(
     sessionDiscountTime: raw.sessionDiscountTime,
     effectiveRateDiscountTime: raw.effectiveRateDiscountTime,
     calculationMode: raw.calculationMode,
+    ...(hasSignedCalculationOrder ? {
+      calculationOrder: "global_before_lower_limit_v1" as const,
+      normalRateBeforeGlobalAdjustmentPercent: raw.normalRateBeforeGlobalAdjustmentPercent as number,
+      manyRateBeforeGlobalAdjustmentPercent: raw.manyRateBeforeGlobalAdjustmentPercent as number,
+    } : {}),
     rateLogicVersion: raw.rateLogicVersion,
     basicRatePercent: raw.basicRatePercent as number,
     weatherComfortAdjustmentPercent:
@@ -852,6 +811,7 @@ export function normalizeRateDecisionSnapshot(
       raw.sessionDiscountTime !== "20" ||
       raw.effectiveRateDiscountTime !== "20" ||
       hasGlobalAdjustmentMetadata ||
+      hasSignedCalculationOrder ||
       raw.display !== null ||
       !finalGuide ||
       normalRate === undefined ||
@@ -912,21 +872,23 @@ export function normalizeRateDecisionSnapshot(
   const manyBefore = normalBefore + 10;
   const normalAfterBase = clampRate(normalBefore);
   const manyAfterBase = clampRate(manyBefore);
-  const normalRate = clampRate(
+  const signedRates = hasSignedCalculationOrder ? calculateNormalRateStages({
+    normalRateBeforeLimitsPercent: normalBefore,
+    manyRateBeforeLimitsPercent: manyBefore,
+    rateOffsetPercent: modeAdjustments.earlyNextAdjustmentPercent,
+    globalDiscountAdjustmentPercent,
+  }) : undefined;
+  const normalRate = signedRates?.normalRatePercent ?? clampRate(
     normalAfterBase + modeAdjustments.earlyNextAdjustmentPercent,
   );
-  const manyRate = clampRate(
+  const manyRate = signedRates?.manyRatePercent ?? clampRate(
     manyAfterBase + modeAdjustments.earlyNextAdjustmentPercent,
   );
-  const displayedNormalRate = applyGlobalDiscountAdjustmentToRate(
-    normalRate,
-    globalDiscountAdjustmentPercent,
-  );
-  const displayedManyRate = applyGlobalDiscountAdjustmentToRate(
-    manyRate,
-    globalDiscountAdjustmentPercent,
-  );
-  const expectedLimits = getLimitFlags({
+  const displayedNormalRate = signedRates?.displayedNormalRatePercent ??
+    applyGlobalDiscountAdjustmentToRate(normalRate, globalDiscountAdjustmentPercent);
+  const displayedManyRate = signedRates?.displayedManyRatePercent ??
+    applyGlobalDiscountAdjustmentToRate(manyRate, globalDiscountAdjustmentPercent);
+  const expectedLimits = signedRates?.limits ?? getLimitFlags({
     normalBefore,
     manyBefore,
     normalAfterBase,
@@ -948,6 +910,9 @@ export function normalizeRateDecisionSnapshot(
     raw.manyRateAfterBaseLimitsPercent !== manyAfterBase ||
     raw.normalRatePercent !== normalRate ||
     raw.manyRatePercent !== manyRate ||
+    (signedRates &&
+      (raw.normalRateBeforeGlobalAdjustmentPercent !== signedRates.normalRateBeforeGlobalAdjustmentPercent ||
+        raw.manyRateBeforeGlobalAdjustmentPercent !== signedRates.manyRateBeforeGlobalAdjustmentPercent)) ||
     (hasGlobalAdjustmentMetadata &&
       (raw.displayedRateBeforeGlobalAdjustmentPercent !== normalRate ||
         raw.displayedNormalRateBeforeGlobalAdjustmentPercent !== normalRate ||

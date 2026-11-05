@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-59）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-60）
 
-最終更新: 2026-11-04 JST
+最終更新: 2026-11-05 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,22 +10,22 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-59.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-59.zip` |
-| appVersion | `2026.8.9-59` |
-| buildId | `build-20261104-125115-jst` |
+| ZIP | `nebiki-helper-2026.8.9-60.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-60.zip` |
+| appVersion | `2026.8.9-60` |
+| buildId | `build-20261105-203915-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-59.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-60.md`参照（自己参照回避） |
 
-application rootは`work/notice59/nebiki-helper`。比較基準は完成58 ZIP `nebiki-helper-2026.8.9-58.zip`（SHA-256 `0dc0b2e6b7cacf90322eb96374503f4239d1e21f85e5bc94d203e15a6f42b89e`、build `build-20261027-225436-jst`）。59は値引指示の注意事項のみ更新。小パックは20個以上の個数から除外し、その補正の対象にも含めない。続けて補正が重なる場合の手順を追加し、全8項目。他の6項目および値引計算・表示率・保存は不変。詳細は`CHANGE_REPORT_2026.8.9-59.md`。
+application rootは`work/globalFloor60/nebiki-helper`。比較基準は完成59 ZIP `nebiki-helper-2026.8.9-59.zip`（SHA-256 `45304d86de3d80b55e8a5d1c6c3657159ba74ad8e8e0a1c3b7a0ef6cd564f820`、build `build-20261104-125115-jst`）。60は全体補正の前に負の計算値を0へ丸めて失う問題を修正した。作業中の指示・Done現在推奨率・新規確定snapshotは共通数値計算を使用する。旧確定データは旧計算順で保持する。詳細は`CHANGE_REPORT_2026.8.9-60.md`。
 
-58減少率の数値表示、57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
+59注意事項8項目、58減少率表示、57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
 
 ### Git
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\notice59\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\globalFloor60\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -376,7 +376,16 @@ rate計算の正本は `discount.ts`、`weekdayBase.ts`、`rateDecisionSnapshot.
 - 新しく確定する `rateDecisionSnapshot.weatherComfortAdjustmentPercent` は既存のweather bonus入力から-10を保持し、session/daily/day/finalized/exportへ既存経路で伝播する。保存済み-5をnormalization/exportで再計算しない。同identity・同完了signatureの再保存でも既存storage/archiveが旧basis/areasを保持する。migration・schema変更なし。
 
 
-現行15/17は、基本率 → weather/comfort/late-time → final AreaCount evaluation → 既存商品line/limit → 最後にglobal adjustment → 0〜50 clamp。early-nextは通常経路で使用しない。商品policyには表示line/metadataもあるため、全商品属性を単純加算と決めつけない。
+### 9-60: 全体補正まで負の計算値を保持
+
+- `discount.ts` の `getNormalTimeRateCalculation()` / `calculateNormalRateStages()` が数値計算の正本。基本率・天候/快適・遅延・採用エリア補正から得たnormal/manyの負値を保持し、既存の上限50→旧先取りoffset→上限50を維持してglobalを加算、その後0〜50へ制限する。現行15/17で先取りは使わない。遅延+5は従来どおりglobalより前に1回だけ加わる。
+- `ratePresentation` の指示・Done数値・完了text fallbackと、新規`rateDecisionSnapshot`が同じcoreを使用する。補正内訳は符号付き数値から「基準値引率：-5% / 全体補正：+5% / 補正後：0%」を表示する。表示文字列から失った負値を推測しない。真のraw0+5は5%、raw-5+5は0%。上限超55→50→global-5=45は従来どおり。
+- 新しい通常/late/互換early snapshotだけoptional `calculationOrder: "global_before_lower_limit_v1"` と `normalRateBeforeGlobalAdjustmentPercent` / `manyRateBeforeGlobalAdjustmentPercent` を保存する。既存の`normalRatePercent`や`displayed*BeforeGlobalAdjustmentPercent`はglobalなしで0〜50へ整えた従来の表示値の意味を保持し、符号付き入力と区別する。新しいlimitsは実際に最終下限を適用したかを記録する。
+- marker欠損は旧計算順で厳密検証し、appVersion等から新方式を推測しない。旧snapshotの率・limits・metadata欠損は保持する。不明marker、signed片方欠損/矛盾は拒否する。new metadataは既存のprogress→daily/daySnapshot→Review19/分析export経路を通る。schema3、storage key/migration追加なし。
+- 過去の確定値が5%の旧snapshotは5%のまま。Done一覧の「現在推奨率」は既存どおり現在計算で0%になり得るが、保存済み確定snapshot/completed textへ上書きしない。明示的に新規確定した値は0%として保存する。
+- G0/−5の率は59と同一。旧互換earlyでraw0→offset-5/G0の新limitsだけは実際の下限適用trueを記録する（旧flags=falseは旧データのまま保持）。`few`の「引かない」とglobal適用、先行値引、冷惣菜、forced finalは変更しない。商品policy・注意8項目は従来どおり手作業の案内。
+
+現行15/17は、基本率 → weather/comfort/late-time → final AreaCount evaluation → 既存上限 → global adjustment → 0〜50 clamp。全体補正前の負値を保持する。商品policyの手作業は別扱いで、自動加算しない。
 
 `globalDiscountAdjustmentPercent` は人間が選ぶ `-5 / 0 / +5` percentage points。当日設定はJST現在日付で失効し0（57）、同日内で復元、新規session開始時にcapture、同一session再開時は採用済み値を保持、完了済み過去sessionへ遡及適用しない。production/fixed-timeのsettingは分離。20:30 forced tierは対象外で、forced 50を45/55へしない。
 
@@ -567,11 +576,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-59` / buildId `build-20261104-125115-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
-- 全check **98/98 PASS**。注意事項関連の既存7本を更新し、8項目の文言・太字・順序、他6項目の保持、通常/夏の表示と20:30の既存扱いを検証。
-- TypeScript / production build / PWA generateSW PASS（111 modules/precache10）。focused ESLint **0 errors / 0 warnings**。full **9 existing errors / 5 existing warnings**、58比較で新規診断0。
-- 実Edge production preview 360/390×844 **8/8 PASS**（人工fixture）。8項目、本文、太字、順序、アスタリスクなし、表示率不変を確認。文字欠け・ページ横overflow・新規アプリconsole問題・外部通信なし。物理店舗端末・インストール済みPWAの実動作・実Supabaseは未確認。
-- src108中変更はfullMode.tsだけ。SQL9本、AGENTS、既存CHANGE67本、依存・schemaは58と同一。完成ZIPを再openして全ファイルのCRC・集合・bytes・版情報・dist/PWA・SHA-256を検査する。
+- appVersion `2026.8.9-60` / buildId `build-20261105-203915-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
+- 全check **99/99 PASS**。専用23/23、4224件の59との率比較、4032件のsigned計算、3780件の先行/冷惣菜比較、9本の真正59snapshot、daytime-time49の33/33（元17+追加16）を検証。
+- TypeScript / production build / PWA generateSW PASS（111 modules/precache10）。focused ESLint 1 existing error / 0 warnings、full 7 existing errors / 5 existing warnings。59の9/5とfile/rule/severity/message比較で新規0、不要になった旧helper引数の2件だけ減少。既存chunkサイズ/Browserslist警告は維持。
+- 実Edge 360/390×844 **32/32 PASS**（60の16＋比較59の16、人工データ/localhost）。入力・指示→確定→Done、境界、G0/−5/上限、旧snapshot保持、reload/dailyを確認。新規console問題・外部通信・横overflowなし。固定時計/旧export等の網羅は自動test。物理店舗端末、インストール済みPWA、実Supabaseは未確認。
+- src108中5本変更、残り103本・注意事項・SQL9本・AGENTS・過去CHANGE68本は完成59ZIPとbyte-identical。依存/build方式/schemaは維持。完成ZIPを再openしてCRC・集合・bytes・版情報・dist/PWA・SHAを検査する。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -580,8 +589,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 夏17時sessionを18時以降まで継続して新規中間評価を確定すると、既存の実時計18:00規則はhigher、指定静的hintは「15時・17時:少ない側」のため不一致が残る。確定済み評価を時計だけで再解決しない。今回曜日基準/案内文言は保留の指定のため変更せず、中間評価のhigher/lower解決規則は変えていない。旧summer18:30 activeの操作は9-49で退避し、通常UIから再開しない。
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
-- full project ESLintに既存9 errors / 5 warnings（9-37は9/7、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全98 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- full project ESLintに既存7 errors / 5 warnings（59の9/5から旧helper由来の2 errorsが減少、新規0）。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全99 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -603,6 +612,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 実Supabase mutationによる9-19確認。
 
 ## 14. 次セッションが最初に確認するファイル
+
+9-60追加: discount数値stages、global表示の明示signed引数、ratePresentation、snapshot計算順marker/旧normalizer分岐、types optional3field、check-global-negative60.tsと固定59fixture、既存49境界/characterization/policy/comfortチェック。
 
 9-58追加: areaDecreaseDisplay.ts（表示pure helper）、areaCountHistoryの正式観測reader/対象判定export、hookの17時derived context、Router/共通パネル/4consumer、check-decrease-numbers58.ts。既存判定式は変更なし。
 
@@ -629,7 +640,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-59.md`（完成baselineは `CHANGE_REPORT_2026.8.9-58.md`）
+4. `CHANGE_REPORT_2026.8.9-60.md`（完成baselineは `CHANGE_REPORT_2026.8.9-59.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

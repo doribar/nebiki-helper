@@ -7,7 +7,12 @@ import type {
   AreaCountEvaluation,
   AreaRateAdjustment,
   ForecastWeatherKind,
+  GlobalDiscountAdjustmentPercent,
 } from "./types";
+import {
+  applyGlobalDiscountAdjustmentToDisplay,
+  applyGlobalDiscountAdjustmentToRate,
+} from "./globalDiscountAdjustment.ts";
 const MAX_DISCOUNT_RATE = 50;
 
 function capAbsoluteDiscountRate(rawRate: number): number {
@@ -33,20 +38,11 @@ export function getBaseRate(
   }
 }
 
-function capNormalDiscountRate(
-  rawRate: number,
-  _discountTime: Exclude<DiscountTime, "20">,
-  _ignoreTimeRateCap: boolean
-): number {
-  // 通常値引も時刻別上限は設けず、絶対上限50%だけで止める。
-  return capAbsoluteDiscountRate(rawRate);
-}
-
 function toRateLine(main: string, note?: string): RateLine {
   return note ? { main, note } : { main };
 }
 
-type NormalTimeRateParams = {
+export type NormalTimeRateParams = {
   discountTime: Exclude<DiscountTime, "20">;
   weekday?: number;
   date?: string;
@@ -55,14 +51,52 @@ type NormalTimeRateParams = {
   isSunday?: boolean;
   ignoreTimeRateCap?: boolean;
   areaRateAdjustment?: AreaRateAdjustment;
+  rateOffsetPercent?: number;
+  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
 };
 
-/** 表示と同じ計算の数値を返す。Doneの色判定で表示文字列を解析しない。 */
-export function getNormalTimeRatePercentages(params: NormalTimeRateParams): {
-  manyRatePercent: number;
-  normalRatePercent: number;
-} {
-  const ignoreTimeRateCap = params.ignoreTimeRateCap ?? false;
+/** Upper limits retain their existing stages; only the lower limit follows global. */
+export function calculateNormalRateStages(params: {
+  normalRateBeforeLimitsPercent: number;
+  manyRateBeforeLimitsPercent: number;
+  rateOffsetPercent?: number;
+  globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
+}) {
+  const offset = params.rateOffsetPercent ?? 0;
+  const globalOffset = params.globalDiscountAdjustmentPercent ?? 0;
+  const normalBefore = params.normalRateBeforeLimitsPercent;
+  const manyBefore = params.manyRateBeforeLimitsPercent;
+  const normalAfterOffset = Math.min(MAX_DISCOUNT_RATE, normalBefore) + offset;
+  const manyAfterOffset = Math.min(MAX_DISCOUNT_RATE, manyBefore) + offset;
+  const normalBeforeGlobal = Math.min(MAX_DISCOUNT_RATE, normalAfterOffset);
+  const manyBeforeGlobal = Math.min(MAX_DISCOUNT_RATE, manyAfterOffset);
+  return {
+    normalRateBeforeLimitsPercent: normalBefore,
+    manyRateBeforeLimitsPercent: manyBefore,
+    // Retain the legacy pre-global visible values separately from signed inputs.
+    normalRateAfterBaseLimitsPercent: capAbsoluteDiscountRate(normalBefore),
+    manyRateAfterBaseLimitsPercent: capAbsoluteDiscountRate(manyBefore),
+    normalRatePercent: capAbsoluteDiscountRate(normalBeforeGlobal),
+    manyRatePercent: capAbsoluteDiscountRate(manyBeforeGlobal),
+    normalRateBeforeGlobalAdjustmentPercent: normalBeforeGlobal,
+    manyRateBeforeGlobalAdjustmentPercent: manyBeforeGlobal,
+    displayedNormalRatePercent: applyGlobalDiscountAdjustmentToRate(normalBeforeGlobal, globalOffset),
+    displayedManyRatePercent: applyGlobalDiscountAdjustmentToRate(manyBeforeGlobal, globalOffset),
+    limits: {
+      minimumPercent: 0 as const,
+      maximumPercent: 50 as const,
+      normalLowerLimitApplied: normalBeforeGlobal + globalOffset < 0,
+      normalUpperLimitApplied: normalBefore > MAX_DISCOUNT_RATE ||
+        normalAfterOffset > MAX_DISCOUNT_RATE || normalBeforeGlobal + globalOffset > MAX_DISCOUNT_RATE,
+      manyLowerLimitApplied: manyBeforeGlobal + globalOffset < 0,
+      manyUpperLimitApplied: manyBefore > MAX_DISCOUNT_RATE ||
+        manyAfterOffset > MAX_DISCOUNT_RATE || manyBeforeGlobal + globalOffset > MAX_DISCOUNT_RATE,
+    },
+  };
+}
+
+/** Display, Done numbers and new decision snapshots share these signed stages. */
+export function getNormalTimeRateCalculation(params: NormalTimeRateParams) {
   const base = getBaseRate(params.discountTime, {
     weekday: params.weekday,
     date: params.date,
@@ -80,27 +114,37 @@ export function getNormalTimeRatePercentages(params: NormalTimeRateParams): {
     }
   }
 
-  const manyRate = capNormalDiscountRate(
-    areaAdjustedBase + 10,
-    params.discountTime,
-    ignoreTimeRateCap
-  );
-  const normalRate = capNormalDiscountRate(
-    areaAdjustedBase,
-    params.discountTime,
-    ignoreTimeRateCap
-  );
+  return calculateNormalRateStages({
+    normalRateBeforeLimitsPercent: areaAdjustedBase,
+    manyRateBeforeLimitsPercent: areaAdjustedBase + 10,
+    rateOffsetPercent: params.rateOffsetPercent,
+    globalDiscountAdjustmentPercent: params.globalDiscountAdjustmentPercent,
+  });
+}
 
-  return { manyRatePercent: manyRate, normalRatePercent: normalRate };
+/** 表示と同じ計算の数値を返す。Doneの色判定で表示文字列を解析しない。 */
+export function getNormalTimeRatePercentages(params: NormalTimeRateParams): {
+  manyRatePercent: number;
+  normalRatePercent: number;
+} {
+  const rates = getNormalTimeRateCalculation(params);
+  return {
+    manyRatePercent: rates.displayedManyRatePercent,
+    normalRatePercent: rates.displayedNormalRatePercent,
+  };
 }
 
 export function getNormalTimeRateDisplay(params: NormalTimeRateParams): RateDisplayData {
-  const { manyRatePercent, normalRatePercent } = getNormalTimeRatePercentages(params);
-  return {
-    many: toRateLine(`${manyRatePercent}%`),
+  const rates = getNormalTimeRateCalculation(params);
+  const display = applyGlobalDiscountAdjustmentToDisplay({
+    many: toRateLine(`${rates.manyRatePercent}%`),
     few: toRateLine("引かない"),
-    normal: toRateLine(`${normalRatePercent}%`),
-  };
+    normal: toRateLine(`${rates.normalRatePercent}%`),
+  }, params.globalDiscountAdjustmentPercent ?? 0, {
+    normalRatePercent: rates.normalRateBeforeGlobalAdjustmentPercent,
+    manyRatePercent: rates.manyRateBeforeGlobalAdjustmentPercent,
+  });
+  return { many: display.many, few: display.few, normal: display.normal };
 }
 
 type FinalDiscountTier = 0 | 1 | 2;

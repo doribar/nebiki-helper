@@ -374,6 +374,11 @@ export type RateDecisionSnapshot = {
   sessionDiscountTime: DiscountTime;
   effectiveRateDiscountTime: DiscountTime;
   calculationMode: RateDecisionCalculationMode;
+  /** Missing means the saved legacy lower-limit-before-global arithmetic. */
+  calculationOrder?: "global_before_lower_limit_v1";
+  /** Signed numeric inputs to global; present only with calculationOrder. */
+  normalRateBeforeGlobalAdjustmentPercent?: number;
+  manyRateBeforeGlobalAdjustmentPercent?: number;
   rateLogicVersion: RateLogicVersion;
   basicRatePercent: number;
   weatherComfortAdjustmentPercent: number;
@@ -388,12 +393,13 @@ export type RateDecisionSnapshot = {
   };
   normalRateBeforeLimitsPercent: number;
   manyRateBeforeLimitsPercent: number;
+  /** Legacy pre-global visible values (0..50); signed inputs are stored above. */
   normalRateAfterBaseLimitsPercent: number;
   manyRateAfterBaseLimitsPercent: number;
   normalRatePercent: number;
   manyRatePercent: number;
   /**
-   * 通常ロジック（先取り等を含む）完了後、全体補正を掛ける直前の表示値。
+   * 全体補正なしで表示する0..50%の値（先取り等を含む）。符号付き入力とは別。
    * 4 fieldは新形式では一組で保存し、旧snapshotではすべて欠損=補正0として読む。
    */
   globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
@@ -931,7 +937,7 @@ export type UseNebikiAppDerived = {
   } | null;
   weatherGuideText: WeatherGuideText;
   rateDisplay: RateDisplayData | null;
-  /** 全体値引補正だけを適用する前の表示。 */
+  /** 全体値引補正直前の符号付き数値を示す説明用表示。 */
   rateDisplayBeforeGlobalAdjustment: RateDisplayData | null;
   globalDiscountAdjustmentPercent: GlobalDiscountAdjustmentPercent;
   globalDiscountAdjustmentDate: string;

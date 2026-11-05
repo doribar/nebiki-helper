@@ -428,7 +428,22 @@ function assertExportJsonCharacterization(): void {
   let newPolicyCopies = 0;
   let expectedRouteCopies = 0;
   let businessMonthCopies = 0;
+  const signedRateFields = {
+    calculationOrder: "global_before_lower_limit_v1",
+    normalRateBeforeGlobalAdjustmentPercent: 35,
+    manyRateBeforeGlobalAdjustmentPercent: 45,
+  } as const;
+  const signedRateCopies = new Map<string, number>();
+  assert.equal(rate.normalRateBeforeLimitsPercent, 35);
+  assert.equal(rate.manyRateBeforeLimitsPercent, 45);
+  assert.equal(rate.displayedNormalRatePercent, 35);
+  assert.equal(rate.displayedManyRatePercent, 45);
   const legacyJson = JSON.stringify(JSON.parse(json), (key, value) => {
+    if (Object.prototype.hasOwnProperty.call(signedRateFields, key)) {
+      assert.equal(value, signedRateFields[key as keyof typeof signedRateFields]);
+      signedRateCopies.set(key, (signedRateCopies.get(key) ?? 0) + 1);
+      return undefined;
+    }
     if (key === "businessMonth") {
       assert.equal(value, 7);
       businessMonthCopies += 1;
@@ -452,6 +467,9 @@ function assertExportJsonCharacterization(): void {
   assert.equal(newPolicyCopies, 2);
   assert.ok(expectedRouteCopies > 0);
   assert.equal(businessMonthCopies, 4);
+  // Automatic and all-data exports each retain all three signed-order fields.
+  // Only those explicitly verified additions are excluded from the old golden.
+  for (const key of Object.keys(signedRateFields)) assert.equal(signedRateCopies.get(key), 2);
   assert.equal(legacyJson.length, 34742);
   assert.equal(
     createHash("sha256").update(legacyJson).digest("hex"),

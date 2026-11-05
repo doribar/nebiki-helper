@@ -187,6 +187,7 @@ function applyAdjustmentToText(
 function applyAdjustmentToLine(
   line: RateLine,
   adjustmentPercent: GlobalDiscountAdjustmentPercent,
+  signedRatePercent?: number,
 ): RateLine {
   const baseIsNoDiscount = line.main.trim() === "引かない";
   const adjustedNoDiscountRate = applyGlobalDiscountAdjustmentToRate(
@@ -194,8 +195,9 @@ function applyAdjustmentToLine(
     adjustmentPercent,
   );
   return {
-    main:
-      baseIsNoDiscount && adjustedNoDiscountRate > 0
+    main: signedRatePercent !== undefined
+      ? `${applyGlobalDiscountAdjustmentToRate(signedRatePercent, adjustmentPercent)}%`
+      : baseIsNoDiscount && adjustedNoDiscountRate > 0
         ? `${adjustedNoDiscountRate}%`
         : applyAdjustmentToText(line.main, adjustmentPercent),
     ...(line.note
@@ -206,12 +208,23 @@ function applyAdjustmentToLine(
 
 /**
  * 曜日・残数・天候・時刻補正まで終えた通常表示へ、最後に一度だけ適用する。
+ * 新計算はsignedRatesを数値coreから渡し、表示文字列から負値を推測しない。
  * 20時台のfinal guideはこの関数へ渡さず、既存のforced ruleをそのまま使う。
  */
 export function applyGlobalDiscountAdjustmentToDisplay(
   baseDisplay: RateDisplayData,
   adjustmentPercent: GlobalDiscountAdjustmentPercent,
+  signedRates?: { manyRatePercent: number; normalRatePercent: number },
 ): RateDisplayData {
+  if (signedRates) {
+    return {
+      many: applyAdjustmentToLine(baseDisplay.many, adjustmentPercent, signedRates.manyRatePercent),
+      normal: applyAdjustmentToLine(baseDisplay.normal, adjustmentPercent, signedRates.normalRatePercent),
+      few: adjustmentPercent === 0
+        ? { ...baseDisplay.few }
+        : applyAdjustmentToLine(baseDisplay.few, adjustmentPercent),
+    };
+  }
   if (adjustmentPercent === 0) {
     return {
       many: { ...baseDisplay.many },

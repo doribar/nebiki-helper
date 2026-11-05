@@ -15,7 +15,7 @@ import type { AppState, DemandCycle, DiscountTime, RateDecisionSnapshot, Session
 import { getWeekdayBaseInfo, getBasisGuideDisplay } from "../src/domain/weekdayBase.ts";
 import { formatLocalDate, getNextDoneDiscountInfo, resolveDiscountTime } from "../src/hooks/nebikiApp/clock.ts";
 import { getOperationalEarlyNextMinus5TargetDiscountTime, shouldReserveOperationalEarlyNextMinus5OnAutoTransition } from "../src/hooks/nebikiApp/operationalTime.ts";
-import { buildCurrentNormalRatePresentation, shouldIgnoreNormalTimeRateCap } from "../src/hooks/nebikiApp/ratePresentation.ts";
+import { buildCompletedRateSnapshot, buildCurrentNormalRateDisplay, buildCurrentNormalRatePresentation, shouldIgnoreNormalTimeRateCap } from "../src/hooks/nebikiApp/ratePresentation.ts";
 import { createInitialState, normalizeLoadedState } from "../src/hooks/nebikiApp/stateNormalization.ts";
 import { resolveSessionTemperatureComfort } from "../src/hooks/nebikiApp/temperatureComfortState.ts";
 import { getNextSkipTargetDiscountTime } from "../src/hooks/nebikiApp/timeTransitions.ts";
@@ -29,14 +29,15 @@ const at = (hour: number, minute = 0, second = 0) => new Date(2026, 8, 8, hour, 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 let passed = 0;
 function test(name: string, run: () => void) { run(); console.log(`PASS ${++passed}: ${name}`); }
-function fixture(time: DiscountTime = "17", cycle: DemandCycle = "normal"): AppState {
+type FixtureOptions = { global?: -5 | 0 | 5; area?: -10 | -5 | 0 | 5 | 10; temperatureC?: number };
+function fixture(time: DiscountTime = "17", cycle: DemandCycle = "normal", options: FixtureOptions = {}): AppState {
   const hourlyForecasts = createDefaultHourlyForecasts();
-  for (const entry of Object.values(hourlyForecasts)) Object.assign(entry, {weather:"other",tempC:28,windMs:2});
+  for (const entry of Object.values(hourlyForecasts)) Object.assign(entry, {weather:"other",tempC:options.temperatureC ?? 28,windMs:2});
   const session: SessionData = {date:DATE,weekday:2,discountTime:time,demandCycle:cycle,
-    manualWeekdayOverride:false,manualDiscountTimeOverride:false,globalDiscountAdjustmentPercent:0,
+    manualWeekdayOverride:false,manualDiscountTimeOverride:false,globalDiscountAdjustmentPercent:options.global ?? 0,
     weather:{hourlyForecasts,afterRainSky:null},startedAt:at(time === "15" ? 15 : 17).toISOString()};
   const state = createInitialState(session); state.session=session; state.screen="rate_display"; state.currentAreaId="bento_men";
-  Object.assign(state.areaProgressMap.bento_men,{areaJudge:"normal",areaCount:20,areaRateAdjustment:0});
+  Object.assign(state.areaProgressMap.bento_men,{areaJudge:"normal",areaCount:20,areaRateAdjustment:options.area ?? 0});
   return state;
 }
 const hookSource = readFileSync(new URL("../src/hooks/useNebikiApp.ts", import.meta.url), "utf8");
@@ -52,21 +53,26 @@ function value<T>(name:string,context:Record<string,unknown>):T {
   const declaration=find(node=>ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text===name) as ts.VariableDeclaration;
   assert.ok(declaration.initializer);return context[name]=execute(`(${declaration.initializer.getText(ast)});`,context) as T;
 }
-function decision(time:DiscountTime,now:Date,cycle:DemandCycle="normal") {
-  const state=fixture(time,cycle);
-  const context:Record<string,unknown>={Date,state,nowMs:now.getTime(),actionNow:now,getAreaEvaluationLowerQuickAdjustmentDelayMs,isTestMode:false,applyObonRule:true,
+function decision(time:DiscountTime,now:Date,cycle:DemandCycle="normal",options:FixtureOptions={},actionNow:Date=now) {
+  const state=fixture(time,cycle,options);
+  const context:Record<string,unknown>={Date,state,nowMs:now.getTime(),actionNow,getAreaEvaluationLowerQuickAdjustmentDelayMs,isTestMode:false,applyObonRule:true,
     sessionSource:state.session,lastSessionWeather:null,savedDailySessionSnapshots:[],useMemo:(get:()=>unknown)=>get(),
     getOperationalEarlyNextMinus5TargetDiscountTime,getWeekdayBaseInfo,getBasisGuideDisplay,getEveningComfortReliefContext,
     resolveSessionTemperatureComfort,normalizeDemandCycle,normalizeGlobalDiscountAdjustmentPercent,
-    shouldIgnoreNormalTimeRateCap,buildCurrentNormalRatePresentation,buildRateDecisionSnapshot,
-    clickedAreaId:"bento_men",clickedProgress:state.areaProgressMap.bento_men,completedAt:now.toISOString(),finalGuide:null};
+    shouldIgnoreNormalTimeRateCap,buildCurrentNormalRatePresentation,buildCurrentNormalRateDisplay,buildCompletedRateSnapshot,buildRateDecisionSnapshot,
+    clickedAreaId:"bento_men",clickedProgress:state.areaProgressMap.bento_men,completedAt:actionNow.toISOString(),finalGuide:null};
   for(const name of ["sessionSourceResolvedWeather","weekdayBaseInfo","earlyNextMinus5Info","lateTimeBonus","ignoreNormalTimeRateCap",
     "effectiveRateDiscountTime","effectiveRateIgnoreTimeRateCap","currentAreaProgress"]) value(name,context);
   const presentation=value<ReturnType<typeof buildCurrentNormalRatePresentation>>("ratePresentation",context);
   value("daytimeSession",context);
-  assert.equal(value("actionLateTimeBonus",context),context.lateTimeBonus,"fresh click preparation agrees with the same-clock display bonus");
+  const actionLate=value<number>("actionLateTimeBonus",context);
+  if(actionNow.getTime()===now.getTime()) assert.equal(actionLate,context.lateTimeBonus,"fresh click preparation agrees with the same-clock display bonus");
+  context.rateDisplay=presentation?.display;
+  const actionDisplay=value<ReturnType<typeof buildCurrentNormalRateDisplay>>("actionRateDisplay",context);
+  value("clickedRateSnapshot",context);
   const snapshot=value<RateDecisionSnapshot>("clickedRateDecisionSnapshot",context);
-  return {state,context,presentation,snapshot};
+  const confirmed=value<ReturnType<typeof buildCompletedRateSnapshot>>("confirmedRateSnapshot",context);
+  return {state,context,presentation,snapshot,actionDisplay,confirmed};
 }
 
 test("new automatic time is15 before16:40 and17 for the remaining day, including retired night boundaries",()=>{
@@ -144,4 +150,30 @@ test("captured legacy night18/19/20 and early snapshots remain unchanged under g
     assert.deepEqual(normalizeRateDecisionSnapshot(clone(snapshot)),snapshot);assert.equal(JSON.stringify(snapshot),before);
   }
 });
+for(const cycle of ["normal","summer"] as const)for(const time of ["15","17"] as const){
+  const boundary=at(time==="15"?16:18),options:FixtureOptions={global:5,area:time==="15"?5:-10,temperatureC:20};
+  for(const offset of [-1,0,1])test(`v60 actual ${cycle}/${time} signed global+5 at late boundary ${offset}ms`,()=>{
+    const now=new Date(boundary.getTime()+offset),result=decision(time,now,cycle,options),late=offset<0?0:5;
+    assert.equal(result.snapshot.weatherComfortAdjustmentPercent,time==="15"?-10:-5);
+    assert.equal(result.snapshot.normalRateBeforeLimitsPercent,-5+late);
+    assert.equal(result.snapshot.normalRateBeforeGlobalAdjustmentPercent,-5+late);
+    assert.deepEqual([result.presentation?.display.normal.main,result.presentation?.display.many.main],[`${late}%`,`${10+late}%`]);
+    assert.equal(result.snapshot.calculationMode,late?"late_plus5":"normal");
+    assert.deepEqual(clone(result.actionDisplay),clone(result.presentation?.display));
+    assert.deepEqual(clone(result.snapshot.display),clone(result.actionDisplay));
+    assert.deepEqual(clone(result.confirmed),{completedRateText:`${late}%`,completedNormalRateText:`${late}%`,completedManyRateText:`${10+late}%`});
+    const state=result.state;state.screen="done";state.currentAreaId=null;
+    Object.assign(state.areaProgressMap.bento_men,{status:"completed",rateDecisionSnapshot:result.snapshot,...result.confirmed});
+    assert.deepEqual(normalizeLoadedState(clone(state),state.sessionDraft).areaProgressMap.bento_men.rateDecisionSnapshot,result.snapshot);
+  });
+  test(`v60 actual ${cycle}/${time} stale pre-boundary display click captures fresh signed late+5 exactly once`,()=>{
+    const result=decision(time,new Date(boundary.getTime()-1),cycle,options,boundary);
+    assert.deepEqual([result.presentation?.display.normal.main,result.presentation?.display.many.main],["0%","10%"]);
+    assert.deepEqual([result.actionDisplay?.normal.main,result.actionDisplay?.many.main],["5%","15%"]);
+    assert.equal(result.context.lateTimeBonus,0);assert.equal(result.context.actionLateTimeBonus,5);
+    assert.equal(result.snapshot.lateTimeAdjustmentPercent,5);assert.equal(result.snapshot.normalRateBeforeLimitsPercent,0);
+    assert.deepEqual(clone(result.snapshot.display),clone(result.actionDisplay));
+    assert.deepEqual(clone(result.confirmed),{completedRateText:"5%",completedNormalRateText:"5%",completedManyRateText:"15%"});
+  });
+}
 console.log(`daytime time49 checks passed: ${passed}/${passed}`);

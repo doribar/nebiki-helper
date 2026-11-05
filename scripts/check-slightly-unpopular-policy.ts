@@ -114,13 +114,26 @@ test("既存5商品補正を維持し、実数10個以上・+10ポイント・�
   assert.equal(getCurrentDataVersionInfo().dataSchemaVersion, 3);
 });
 
-test("通常・遅延・先取り・20:30の新規snapshotはpolicyとrelease情報以外9-29と一致", () => {
+test("通常・遅延・先取り・20:30の新規snapshotはpolicy・release情報・検証済み全体補正順metadata以外9-29と一致", () => {
   assert.deepEqual(getFinalTimeGuide({ weekday: 4, weather21: "sunny", temp21C: 28, comfortScore: 0 }), finalGuide);
   for (const fresh of freshSnapshots) {
     const expected = legacySnapshot(fresh.calculationMode);
     Object.assign(expected, getCurrentDataVersionInfo());
     expected.otherAdjustments.productPolicy.slightlyUnpopular = { ...slightlyUnpopular };
-    assert.deepEqual(fresh, expected, fresh.calculationMode);
+    const comparable = json(fresh);
+    if (fresh.calculationMode !== "final") {
+      assert.equal(fresh.calculationOrder, "global_before_lower_limit_v1");
+      assert.equal(fresh.normalRateBeforeGlobalAdjustmentPercent, expected.normalRatePercent);
+      assert.equal(fresh.manyRateBeforeGlobalAdjustmentPercent, expected.manyRatePercent);
+      delete comparable.calculationOrder;
+      delete comparable.normalRateBeforeGlobalAdjustmentPercent;
+      delete comparable.manyRateBeforeGlobalAdjustmentPercent;
+    } else {
+      assert.equal(fresh.calculationOrder, undefined);
+      assert.equal(fresh.normalRateBeforeGlobalAdjustmentPercent, undefined);
+      assert.equal(fresh.manyRateBeforeGlobalAdjustmentPercent, undefined);
+    }
+    assert.deepEqual(comparable, expected, fresh.calculationMode);
     assert.equal(Object.isFrozen(fresh.otherAdjustments.productPolicy.slightlyUnpopular), true);
     assert.notEqual(fresh.otherAdjustments.productPolicy.slightlyUnpopular, PRODUCT_ADJUSTMENT_POLICY_SNAPSHOT.slightlyUnpopular);
   }

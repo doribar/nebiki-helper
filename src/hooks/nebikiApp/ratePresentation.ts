@@ -9,11 +9,10 @@ import type {
   ResolvedWeatherInput,
   SessionData,
 } from "../../domain/types";
-import { getNormalTimeRateDisplay, getNormalTimeRatePercentages } from "../../domain/discount";
+import { getNormalTimeRateCalculation, getNormalTimeRateDisplay, getNormalTimeRatePercentages } from "../../domain/discount";
 import { resolveWeatherInputForDiscount } from "../../domain/hourlyWeather.ts";
 import {
   applyGlobalDiscountAdjustmentToDisplay,
-  applyGlobalDiscountAdjustmentToRate,
   normalizeGlobalDiscountAdjustmentPercent,
 } from "../../domain/globalDiscountAdjustment.ts";
 
@@ -61,7 +60,7 @@ export function applyRateOffsetToDisplay(
  * ここでは渡された有効時刻・補正をそのまま通常表示へ反映する。
  */
 export type CurrentNormalRatePresentation = {
-  /** 既存補正・先取り補正まで反映し、全体補正だけ未適用の表示。 */
+  /** 全体補正直前の符号付き計算値。補正欄の説明専用。 */
   baseDisplay: RateDisplayData;
   /** 全体補正を最終段で1回だけ適用した実表示。 */
   display: RateDisplayData;
@@ -87,7 +86,7 @@ export function buildCurrentNormalRatePresentation(params: {
     return null;
   }
 
-  const display = getNormalTimeRateDisplay({
+  const rateParams = {
     discountTime: effectiveDiscountTime,
     weekday: session.weekday,
     date: session.date,
@@ -96,12 +95,15 @@ export function buildCurrentNormalRatePresentation(params: {
     isSunday: session.weekday === 0 && effectiveDiscountTime === "15",
     ignoreTimeRateCap: params.ignoreTimeRateCap,
     areaRateAdjustment: progress.areaRateAdjustment,
-  });
-  const rateOffsetPercent = params.rateOffsetPercent ?? 0;
-
-  const baseDisplay = rateOffsetPercent === 0
-    ? display
-    : applyRateOffsetToDisplay(display, rateOffsetPercent);
+    rateOffsetPercent: params.rateOffsetPercent ?? 0,
+  };
+  const rates = getNormalTimeRateCalculation(rateParams);
+  const display = getNormalTimeRateDisplay(rateParams);
+  const baseDisplay = {
+    ...display,
+    many: { ...display.many, main: `${rates.manyRateBeforeGlobalAdjustmentPercent}%` },
+    normal: { ...display.normal, main: `${rates.normalRateBeforeGlobalAdjustmentPercent}%` },
+  };
   const globalDiscountAdjustmentPercent =
     normalizeGlobalDiscountAdjustmentPercent(
       session.globalDiscountAdjustmentPercent,
@@ -112,6 +114,10 @@ export function buildCurrentNormalRatePresentation(params: {
     display: applyGlobalDiscountAdjustmentToDisplay(
       baseDisplay,
       globalDiscountAdjustmentPercent,
+      {
+        manyRatePercent: rates.manyRateBeforeGlobalAdjustmentPercent,
+        normalRatePercent: rates.normalRateBeforeGlobalAdjustmentPercent,
+      },
     ),
     globalDiscountAdjustmentPercent,
   };
@@ -130,7 +136,7 @@ export function buildCurrentNormalRateNumbers(
   const { session, progress, effectiveDiscountTime } = params;
   if (!session || session.discountTime === "20" || !progress?.areaJudge ||
     !effectiveDiscountTime || effectiveDiscountTime === "20") return null;
-  const rates = getNormalTimeRatePercentages({
+  return getNormalTimeRatePercentages({
     discountTime: effectiveDiscountTime,
     weekday: session.weekday,
     date: session.date,
@@ -139,13 +145,11 @@ export function buildCurrentNormalRateNumbers(
     isSunday: session.weekday === 0 && effectiveDiscountTime === "15",
     ignoreTimeRateCap: params.ignoreTimeRateCap,
     areaRateAdjustment: progress.areaRateAdjustment,
+    rateOffsetPercent: params.rateOffsetPercent ?? 0,
+    globalDiscountAdjustmentPercent: normalizeGlobalDiscountAdjustmentPercent(
+      session.globalDiscountAdjustmentPercent,
+    ),
   });
-  const globalAdjustment = normalizeGlobalDiscountAdjustmentPercent(session.globalDiscountAdjustmentPercent);
-  const offset = params.rateOffsetPercent ?? 0;
-  return {
-    manyRatePercent: applyGlobalDiscountAdjustmentToRate(clampDisplayRate(rates.manyRatePercent + offset), globalAdjustment),
-    normalRatePercent: applyGlobalDiscountAdjustmentToRate(clampDisplayRate(rates.normalRatePercent + offset), globalAdjustment),
-  };
 }
 
 export function getAreaJudgeText(judge: AreaJudge): string {
@@ -230,7 +234,7 @@ export function buildCompletedRateSnapshot(params: {
         session.discountTime,
       );
 
-      const baseDisplay = getNormalTimeRateDisplay({
+      return getNormalTimeRateDisplay({
         discountTime: session.discountTime,
         weekday: session.weekday,
         date: session.date,
@@ -239,13 +243,10 @@ export function buildCompletedRateSnapshot(params: {
         isSunday: session.weekday === 0 && session.discountTime === "15",
         ignoreTimeRateCap: shouldIgnoreNormalTimeRateCap(resolvedWeather),
         areaRateAdjustment: progress.areaRateAdjustment,
-      });
-      return applyGlobalDiscountAdjustmentToDisplay(
-        baseDisplay,
-        normalizeGlobalDiscountAdjustmentPercent(
+        globalDiscountAdjustmentPercent: normalizeGlobalDiscountAdjustmentPercent(
           session.globalDiscountAdjustmentPercent,
         ),
-      );
+      });
     })();
 
   return {

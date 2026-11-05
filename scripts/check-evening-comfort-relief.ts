@@ -189,12 +189,15 @@ test("independent 18:30/19:30/20:30 are excluded; original 15/17 early and delay
     evidence.push({original,effective,late,early,before:rates(before),after:rates(after)});
   } return evidence;
 });
-test("area/global adjustments and clamps keep their existing order in actual rates and snapshot", () => {
+test("area/global adjustments apply upper50, then global, then lower0 in actual rates and snapshot", () => {
   const evidence=[];
   for(const time of ["15","17"] as const) for(const areaAdjustment of [-10,-5,0,5,10] as const) for(const global of [-5,0,5] as const) {
     const after=decision(session({time,global}),{areaAdjustment,late:true});
     const raw=(time==="15"?0:10)+after.info.baseRateBonus+5+areaAdjustment;
-    assert.deepEqual(rates(after),[Math.max(0,Math.min(50,Math.max(0,Math.min(50,raw))+global)),Math.max(0,Math.min(50,Math.max(0,Math.min(50,raw+10))+global))]);
+    const signedNormal=Math.min(50,raw),signedMany=Math.min(50,raw+10);
+    assert.equal(after.snapshot.normalRateBeforeGlobalAdjustmentPercent,signedNormal,"negative computed values remain signed until global adjustment");
+    assert.equal(after.snapshot.manyRateBeforeGlobalAdjustmentPercent,signedMany);
+    assert.deepEqual(rates(after),[Math.max(0,Math.min(50,signedNormal+global)),Math.max(0,Math.min(50,signedMany+global))]);
     evidence.push({time,areaAdjustment,global,rates:rates(after)});
   } return evidence;
 });
