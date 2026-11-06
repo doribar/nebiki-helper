@@ -343,7 +343,7 @@ export function RateDisplayScreen({
   );
   const manyColor = "#ff0000";
   const normalColor = "#008000";
-  const productAmountReferenceText = basisGuide.referenceConditionLabel;
+  const productAmountReferenceText = basisGuide.referenceConditionLabel.replaceAll("・", " ");
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -791,9 +791,17 @@ export function RateDisplayScreen({
       >
         {!isFinalTime ? (
           <>
-            <div style={{ marginBottom: 14, lineHeight: 1.8 }}>
-              <span style={{ fontWeight: 800 }}>{productAmountReferenceText}</span>
-              <br />
+            <div
+              aria-label="値引の基準とエリア判定"
+              style={{ marginBottom: 14, lineHeight: 1.8, overflowWrap: "anywhere" }}
+            >
+              <div style={{ fontWeight: 800 }}>
+                {productAmountReferenceText}{"　"}
+                <span style={{ whiteSpace: "nowrap" }}>
+                  エリア判定：{adoptedAreaEvaluation ? evaluationText(adoptedAreaEvaluation) : "未記録"}
+                </span>
+              </div>
+              <div>を基準に考えて</div>
               {showManyInstructionOnly ? (
                 <>
                   各商品の量が「

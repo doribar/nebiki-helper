@@ -132,14 +132,15 @@ test("Review19ラベルに19時30分を表示しない", () => {
   assert.doesNotMatch(value, /19時30分/);
 });
 
-test("対象UIに『を基準に考えて』が残らない", () => {
+test("AreaJudge / Review19 は中黒ラベルを維持し、Rate は採用判定付きの基準案内を表示", () => {
   for (const path of [
     "src/components/screens/AreaJudgeScreen.tsx",
-    "src/components/screens/RateDisplayScreen.tsx",
     "src/components/screens/Review19Screen.tsx",
   ]) {
     assert.doesNotMatch(source(path), /を基準に考えて/);
   }
+  assert.match(source("src/components/screens/RateDisplayScreen.tsx"), /を基準に考えて/);
+  assert.match(source("src/components/screens/RateDisplayScreen.tsx"), /エリア判定：/);
 });
 
 test("月ラベルは『の』を混ぜず中黒で統一", () => {

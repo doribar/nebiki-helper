@@ -134,7 +134,7 @@ for (const month of [1, 5, 7, 8, 9, 10, 12]) {
       })), label);
       assertRenderedLabel(renderToStaticMarkup(React.createElement(Rate, {
         ...shared, discountTime, rateDisplay: null, onNextArea: noop, onSkip: noop,
-      })), label);
+      })), label.replaceAll("・", " "));
       assertRenderedLabel(renderToStaticMarkup(React.createElement(Done, {
         referenceConditionLabel: label, summaryItems: [], onGoBack: noop, onReturnHome: noop,
       })), label);
