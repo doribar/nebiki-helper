@@ -76,7 +76,7 @@ function records(params: { sunday?: number[]; other?: number[]; time?: DiscountT
   const time = params.time ?? "17";
   return [
     ...dates([0], params.sunday?.length ?? 0, params.before).map((date, i) => record(date, params.sunday![i]!, time, { demandCycle: i % 2 ? "summer" : "normal" })),
-    ...dates(time === "15" ? [5, 6] : [2, 4], params.other?.length ?? 0, params.before).map((date, i) => record(date, params.other![i]!, time, { demandCycle: i % 2 ? "normal" : "summer" })),
+    ...dates(time === "15" ? [5, 6] : time === "17" ? [1, 2] : [2, 4], params.other?.length ?? 0, params.before).map((date, i) => record(date, params.other![i]!, time, { demandCycle: i % 2 ? "normal" : "summer" })),
   ];
 }
 function recommend(history: AreaCountRecord[], patch: Partial<Parameters<typeof getAreaCountRecommendation>[0]> = {}): AreaCountRecommendation {
@@ -103,7 +103,7 @@ for (const time of ["15", "17"] as const) {
     assert.equal(result.status, "ready"); assert.equal(result.actualWeekday, "月"); assert.equal(result.actualWeekdayGroup, "翌日平日祝日");
     assert.equal(result.medianCount, 6); assert.equal(result.baseEvaluation, "many"); assert.equal(result.suggestedEvaluation, "many"); assert.equal(result.areaRateAdjustment, 10);
     assert.equal(ref.source, "weekday"); assert.equal(ref.adopted, true); assert.equal(ref.weekdaySampleSize, 3); assert.equal(ref.requiredSampleSize, 3);
-    assert.equal(ref.fallbackWeekdayGroup, time === "15" ? "金土日" : "火木日"); assert.equal(ref.fallbackSampleSize, 83);
+    assert.equal(ref.fallbackWeekdayGroup, time === "15" ? "金土日" : "日月火"); assert.equal(ref.fallbackSampleSize, 83);
     assert.equal(ref.sampleSize, 3); assert.equal(ref.shortSampleSize, 3); assert.equal(ref.longSampleSize, 3); assert.equal(ref.medianCount, 6);
     assert.equal(ref.fallbackReason, undefined); assert.equal(ref.medianDownGuardApplied, false);
     assert.equal(result.matchedRecords.length, 3); assert.ok(result.matchedRecords.every(item => weekday(item.date) === 0 && ordinary(item.date)));
@@ -116,9 +116,9 @@ for (const time of ["15", "17"] as const) {
       const result = recommend(records({ sunday: Array(size).fill(6), other: Array(60).fill(30), time }), { discountTime: time }), ref = evidence(result);
       assert.equal(result.status, "ready"); assert.equal(result.medianCount, 30); assert.equal(result.baseEvaluation, "few"); assert.equal(result.areaRateAdjustment, -10);
       assert.equal(ref.source, "fallback_group"); assert.equal(ref.adopted, true); assert.equal(ref.weekdaySampleSize, size); assert.equal(ref.fallbackSampleSize, 60 + size);
-      assert.equal(ref.fallbackWeekdayGroup, time === "15" ? "金土日" : "火木日"); assert.equal(ref.fallbackReason, "insufficient_sunday_history");
+      assert.equal(ref.fallbackWeekdayGroup, time === "15" ? "金土日" : "日月火"); assert.equal(ref.fallbackReason, "insufficient_sunday_history");
       assert.equal(ref.sampleSize, 60 + size); assert.equal(ref.shortSampleSize, 16); assert.equal(ref.longSampleSize, 52); assert.equal(ref.medianDownGuardApplied, false);
-      assert.ok(result.matchedRecords.every(item => item.actualWeekdayGroup === ref.fallbackWeekdayGroup));
+      assert.ok(result.matchedRecords.every(item => (time === "15" ? [0, 5, 6] : [0, 1, 2]).includes(weekday(item.date))));
     });
   }
   test(`${time}: adding the third Sunday changes fallback 30/few/-10 to Sunday 6/many/+10`, () => {
@@ -262,7 +262,7 @@ test("calendar evidence distinguishes Sunday, fallback, insufficient and legacy 
   const fallback = buildAreaCountDecisionBasis({ recommendation: recommend(records({ sunday: [6, 6], other: Array(20).fill(30) })) });
   const none = buildAreaCountDecisionBasis({ recommendation: recommend(records({ sunday: [6, 6] })) });
   const legacy = copy(fallback); delete legacy.holidayBeforeNormalWeekdayReference;
-  for (const [basis, type, refDay, group] of [[ready, "weekday", "日", null], [fallback, "weekday_group", null, "火木日"], [none, "weekday_group", null, "火木日"], [legacy, "weekday_group", null, "火木日"]] as const) {
+  for (const [basis, type, refDay, group] of [[ready, "weekday", "日", null], [fallback, "weekday_group", null, "日月火"], [none, "weekday_group", null, "日月火"], [legacy, "weekday_group", null, "火木日"]] as const) {
     const context = calendar(basis), restored = normalizeAnalysisCalendarContext(copy(context))!;
     assert.equal(context.actualWeekday, "月"); assert.equal(context.calendarCondition, "holiday_before_normal_weekday");
     assert.equal(context.areaCountReference[0]!.type, type); assert.equal(context.areaCountReference[0]!.referenceWeekday, refDay); assert.equal(context.areaCountReference[0]!.referenceWeekdayGroup, group);
@@ -427,7 +427,7 @@ for (const time of ["15", "17"] as const) {
         assert.deepEqual(copy(area.areaCountDecisionBasis), copy(basis)); assert.deepEqual(copy(area.rateDecisionSnapshot), copy(rate));
         assert.deepEqual(snapshot.areaCountRecords[0]!.decisionBasis?.holidayBeforeNormalWeekdayReference, evidence(result));
         assert.deepEqual(ref.holidayBeforeNormalWeekdayReference, evidence(result)); assert.equal(ref.type, source === "weekday" ? "weekday" : "weekday_group");
-        assert.equal(ref.referenceWeekday, source === "weekday" ? "日" : null); assert.equal(ref.referenceWeekdayGroup, source === "weekday" ? null : time === "15" ? "金土日" : "火木日");
+        assert.equal(ref.referenceWeekday, source === "weekday" ? "日" : null); assert.equal(ref.referenceWeekdayGroup, source === "weekday" ? null : time === "15" ? "金土日" : "日月火");
       }
       const review = createInitialReview19Result({ date: TARGET, demandCycle: "normal", sessionStartedAt: state.session!.startedAt, reviewStartedAt: `${TARGET}T10:00:00.000Z` }); review.daySnapshot = day;
       const reviewExport = buildReview19ExportPayload({ records: [review], exportedAt: `${TARGET}T12:00:00.000Z` });
@@ -480,7 +480,7 @@ test("actual RateDisplay TSX renders collapsed captured Sunday/fallback/insuffic
     for (const line of getHolidayBeforeNormalWeekdayReferenceDetailLines(basis.holidayBeforeNormalWeekdayReference!)) assert.ok(html.includes(line), line);
     assert.doesNotMatch(html, /undefined個|undefined件|なし個|NaN/); assert.deepEqual(copy(basis), before);
   }
-  assert.match(markup(fixtures[0]), /通常の日曜/); assert.match(markup(fixtures[1]), /火木日/); assert.match(markup(fixtures[3]), /28個/); assert.match(markup(partial), /数値未保存/);
+  assert.match(markup(fixtures[0]), /通常の日曜/); assert.match(markup(fixtures[1]), /日月火/); assert.match(markup(fixtures[3]), /28個/); assert.match(markup(partial), /数値未保存/);
   const legacy = copy(fixtures[1]!); delete legacy.holidayBeforeNormalWeekdayReference;
   for (const basis of [undefined, legacy, { ...fixtures[0]!, comparisonMode: "weekday" as const }]) assert.doesNotMatch(markup(basis), /<details aria-label="祝日翌日平日の履歴基準"/);
 });
@@ -516,7 +516,7 @@ test("actual AreaJudge TSX displays ordinary-Sunday adoption and fallback notice
   for (const time of ["15", "17"] as const) {
     const ready = html(recommend(plentiful(time), { discountTime: time }), time), fallback = html(recommend(records({ sunday: [6, 6], other: Array(20).fill(30), time }), { discountTime: time }), time);
     assert.match(ready, /通常の日曜/); assert.doesNotMatch(ready, /通常の日曜の記録が足りないため/);
-    assert.match(fallback, /通常の日曜の記録が足りないため/); assert.ok(fallback.includes(time === "15" ? "金土日" : "火木日"));
+    assert.match(fallback, /通常の日曜の記録が足りないため/); assert.ok(fallback.includes(time === "15" ? "金土日" : "日月火"));
   }
 });
 

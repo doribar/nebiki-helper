@@ -140,7 +140,7 @@ test("15. 旧仕様の金曜17時履歴を金土として比較に利用", () =>
     makeRecord({ date: "2026-07-10", actualWeekday: "金", actualWeekdayGroup: "金土日", count: 14 }),
   ];
   const normalized = normalizeAreaCountRecords(records);
-  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), ["金土", "金土", "金土"]);
+  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), ["金土日", "金土日", "金土日"], "保存された旧labelを保持する");
 
   const recommendation = getAreaCountRecommendation({
     records,
@@ -155,14 +155,14 @@ test("15. 旧仕様の金曜17時履歴を金土として比較に利用", () =>
   assert.equal(recommendation.matchedRecords.length, 3);
 });
 
-test("16. 旧仕様の日曜17時履歴を火木日として比較に利用", () => {
+test("16. 旧仕様の日曜17時履歴は保存labelを保持し日月火として比較に利用", () => {
   const records = [
     makeRecord({ date: "2026-06-21", actualWeekday: "日", actualWeekdayGroup: "火木", count: 5 }),
     makeRecord({ date: "2026-06-28", actualWeekday: "日", actualWeekdayGroup: "火木", count: 7 }),
     makeRecord({ date: "2026-07-05", actualWeekday: "日", actualWeekdayGroup: "火木", count: 9 }),
   ];
   const normalized = normalizeAreaCountRecords(records);
-  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), ["火木日", "火木日", "火木日"]);
+  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), ["火木", "火木", "火木"]);
 
   const recommendation = getAreaCountRecommendation({
     records,
@@ -177,7 +177,7 @@ test("16. 旧仕様の日曜17時履歴を火木日として比較に利用", ()
   assert.equal(recommendation.matchedRecords.length, 3);
 });
 
-test("17. 三連休中日の旧履歴を日付と時刻から専用グループへ正規化", () => {
+test("17. 三連休中日の旧履歴は保存groupを保持する", () => {
   const [normalized] = normalizeAreaCountRecords([
     makeRecord({
       date: "2026-07-19",
@@ -186,20 +186,20 @@ test("17. 三連休中日の旧履歴を日付と時刻から専用グループ�
       count: 11,
     }),
   ]);
-  assert.equal(normalized.actualWeekdayGroup, "三連休中日");
+  assert.equal(normalized.actualWeekdayGroup, "金土日");
 });
 
 test("18. 新旧形式混在履歴を欠落・増殖なく中央値計算に利用", () => {
   const records = [
     makeRecord({ date: "2026-07-07", actualWeekday: "火", actualWeekdayGroup: "火木", count: 4 }),
     makeRecord({ date: "2026-07-14", actualWeekday: "火", actualWeekdayGroup: "火木日", count: 8 }),
-    makeRecord({ date: "2026-07-09", actualWeekday: "木", actualWeekdayGroup: "火木", count: 6 }),
-    makeRecord({ date: "2026-07-16", actualWeekday: "木", actualWeekdayGroup: "火木日", count: 10 }),
+    makeRecord({ date: "2026-07-06", actualWeekday: "月", actualWeekdayGroup: "月水", count: 6 }),
+    makeRecord({ date: "2026-07-13", actualWeekday: "月", actualWeekdayGroup: "月水", count: 10 }),
   ];
   const normalized = normalizeAreaCountRecords(records);
   assert.equal(normalized.length, records.length);
   assert.equal(new Set(normalized.map((record) => `${record.date}:${record.sessionStartedAt}`)).size, records.length);
-  assert.ok(normalized.every((record) => record.actualWeekdayGroup === "火木日"));
+  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), records.map((record) => record.actualWeekdayGroup));
 
   const recommendation = getAreaCountRecommendation({
     records,

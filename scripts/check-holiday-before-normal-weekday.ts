@@ -103,7 +103,7 @@ function recommendation(params: {
 function normalGroupRecords(discountTime: DiscountTime, count: number): AreaCountRecord[] {
   const dates = discountTime === "15"
     ? ["2026-07-03", "2026-07-04", "2026-07-05"]
-    : ["2026-07-07", "2026-07-09", "2026-07-12"];
+    : discountTime === "17" ? ["2026-07-06", "2026-07-07", "2026-07-12"] : ["2026-07-07", "2026-07-09", "2026-07-12"];
   return dates.map((date) => makeRecord({ date, discountTime, count }));
 }
 
@@ -165,8 +165,8 @@ test("9. 対象日の15時は金土日を比較基準にする", () => {
 });
 
 for (const [number, discountTime] of [[10, "17"], [11, "18"], [12, "19"], [13, "20"]] as const) {
-  test(`${number}. 対象日の${discountTime}時系は火木日を比較基準にする`, () => {
-    assert.equal(getAreaCountComparisonWeekdayGroup({ date: "2026-07-20", weekday: 1, discountTime }), "火木日");
+  test(`${number}. 対象日の${discountTime}時系は時刻別の日曜fallbackを比較基準にする`, () => {
+    assert.equal(getAreaCountComparisonWeekdayGroup({ date: "2026-07-20", weekday: 1, discountTime }), discountTime === "17" ? "日月火" : "火木日");
   });
 }
 
@@ -174,8 +174,8 @@ test("14. 通常の日曜15時は金土日", () => {
   assert.equal(getAreaCountComparisonWeekdayGroup({ date: "2026-07-12", weekday: 0, discountTime: "15" }), "金土日");
 });
 
-test("15. 通常の日曜17時は火木日", () => {
-  assert.equal(getAreaCountComparisonWeekdayGroup({ date: "2026-07-12", weekday: 0, discountTime: "17" }), "火木日");
+test("15. 通常の日曜17時は日月火", () => {
+  assert.equal(getAreaCountComparisonWeekdayGroup({ date: "2026-07-12", weekday: 0, discountTime: "17" }), "日月火");
 });
 
 test("16. 通常の祝前日17時は金土", () => {
@@ -232,7 +232,7 @@ test("23. 対象日の15時履歴は通常の金土日履歴へ混ざらない",
   assert.equal(result.matchedRecords.some((record) => record.date === "2026-07-20"), false);
 });
 
-test("24. 対象日の17時以降履歴は通常の火木日履歴へ混ざらない", () => {
+test("24. 対象日の17時履歴は通常の日月火履歴へ混ざらない", () => {
   const targetHistory = makeRecord({ date: "2026-07-20", discountTime: "17", count: 99, savedGroup: "火木日" });
   const result = recommendation({
     date: "2026-08-11",
@@ -244,7 +244,7 @@ test("24. 対象日の17時以降履歴は通常の火木日履歴へ混ざら�
   assert.equal(result.matchedRecords.some((record) => record.date === "2026-07-20"), false);
 });
 
-test("25. 過去の対象日履歴は旧グループ名でも再分類", () => {
+test("25. 過去の対象日履歴は保存された旧グループ名を保持", () => {
   const oldGroups: ActualWeekdayGroup[] = ["月水", "火木", "火木日", "金土", "金土日"];
   const normalized = normalizeAreaCountRecords(oldGroups.map((savedGroup, index) => makeRecord({
     date: "2026-07-20",
@@ -254,10 +254,10 @@ test("25. 過去の対象日履歴は旧グループ名でも再分類", () => {
     sessionSuffix: `0${index}`,
   })));
   assert.equal(normalized.length, oldGroups.length);
-  assert.ok(normalized.every((record) => record.actualWeekdayGroup === "翌日平日祝日"));
+  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), oldGroups);
 });
 
-test("26. ローカル履歴とSupabase履歴で同じ正規化結果", () => {
+test("26. ローカル履歴とSupabase履歴はそれぞれの保存分類と同じ観測値を保持", () => {
   const local = makeRecord({ date: "2026-07-20", discountTime: "17", count: 8, savedGroup: "月水" });
   const localNormalized = normalizeAreaCountRecords([local])[0];
   const remoteNormalized = normalizeRemoteAreaCountRows([{
@@ -270,15 +270,17 @@ test("26. ローカル履歴とSupabase履歴で同じ正規化結果", () => {
     actual_weekday_group: "金土日",
     count: local.count,
   }])[0];
-  assert.equal(localNormalized?.actualWeekdayGroup, "翌日平日祝日");
-  assert.equal(remoteNormalized?.actualWeekdayGroup, localNormalized?.actualWeekdayGroup);
+  assert.equal(localNormalized?.actualWeekdayGroup, "月水");
+  assert.equal(remoteNormalized?.actualWeekdayGroup, "金土日");
+  assert.equal(remoteNormalized?.actualWeekday, localNormalized?.actualWeekday);
+  assert.equal(remoteNormalized?.count, localNormalized?.count);
 });
 
 test("27. 三連休中日の履歴分類へ影響しない", () => {
   const normalized = normalizeAreaCountRecords([
     makeRecord({ date: "2026-07-19", discountTime: "17", count: 9, savedGroup: "火木日" }),
   ])[0];
-  assert.equal(normalized?.actualWeekdayGroup, "三連休中日");
+  assert.equal(normalized?.actualWeekdayGroup, "火木日");
 });
 
 test("28. 新旧履歴混在時に重複や欠落がない", () => {
@@ -289,7 +291,7 @@ test("28. 新旧履歴混在時に重複や欠落がない", () => {
   const normalized = normalizeAreaCountRecords(mixed);
   assert.equal(normalized.length, 2);
   assert.equal(new Set(normalized.map((record) => record.date)).size, 2);
-  assert.ok(normalized.every((record) => record.actualWeekdayGroup === "翌日平日祝日"));
+  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), mixed.map((record) => record.actualWeekdayGroup));
 });
 
 test("29. 対象日は全値引時刻で専用注意を表示", () => {

@@ -201,6 +201,9 @@ const ACTUAL_WEEKDAYS: ActualWeekdayLabel[] = [
   "土",
 ];
 const ACTUAL_WEEKDAY_GROUPS: ActualWeekdayGroup[] = [
+  "月火",
+  "水木",
+  "日月火",
   "月水",
   "火木",
   "金土日",
@@ -380,7 +383,7 @@ export function normalizeHolidayBeforeNormalWeekdayReference(
     typeof raw.adopted !== "boolean" ||
     !nonNegativeInteger(raw.weekdaySampleSize) ||
     !nonNegativeInteger(raw.requiredSampleSize) ||
-    (raw.fallbackWeekdayGroup !== "金土日" && raw.fallbackWeekdayGroup !== "火木日") ||
+    (raw.fallbackWeekdayGroup !== "金土日" && raw.fallbackWeekdayGroup !== "火木日" && raw.fallbackWeekdayGroup !== "日月火") ||
     !nonNegativeInteger(raw.fallbackSampleSize) ||
     !nonNegativeInteger(raw.sampleSize) ||
     !nonNegativeInteger(raw.shortSampleSize) ||
@@ -639,6 +642,7 @@ function buildAreaCountReference(params: {
   if (comparisonMode === "three_day_holiday_middle") {
     const middleReference = params.basis.threeDayHolidayMiddleReference;
     const adoptedSource = middleReference?.adoptedSource;
+    const sundayFallbackWeekdayGroup = middleReference?.sundayFallbackWeekdayGroup ?? "火木日";
     // Only captured adoption evidence identifies the new standalone Sunday
     // rule. Legacy bases keep their original 火木日/金土 interpretation.
     if (middleReference?.sundayReference?.source === "weekday" &&
@@ -655,12 +659,12 @@ function buildAreaCountReference(params: {
     }
     const groups: ActualWeekdayGroup[] =
       adoptedSource === "both"
-        ? ["火木日", "金土"]
-        : adoptedSource === "火木日" || adoptedSource === "金土"
+        ? [sundayFallbackWeekdayGroup, "金土"]
+        : adoptedSource === "火木日" || adoptedSource === "日月火" || adoptedSource === "金土"
           ? [adoptedSource]
           : hasSufficientHistory
             ? []
-            : ["火木日", "金土"];
+            : [sundayFallbackWeekdayGroup, "金土"];
     return groups.length > 0
       ? {
           ...base,
@@ -699,7 +703,10 @@ function buildAreaCountReference(params: {
   }
 
   const group = comparisonMode === "holiday_before_normal_weekday"
-    ? holidayReference?.fallbackWeekdayGroup ?? (params.discountTime === "15"
+    ? holidayReference?.fallbackWeekdayGroup ??
+      (isActualWeekdayGroup(params.basis.comparisonWeekdayGroup)
+        ? params.basis.comparisonWeekdayGroup
+        : undefined) ?? (params.discountTime === "15"
       ? "金土日"
       : "火木日")
     : comparisonMode === "fallback_group" &&

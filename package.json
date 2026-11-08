@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-61",
+  "version": "2026.8.9-62",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -107,7 +107,8 @@
     "check:global-settings57": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-global-settings57.ts",
     "check:decrease-numbers58": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-decrease-numbers58.ts",
     "check:global-negative60": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-global-negative60.ts",
-    "check:adopted-reference61": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-adopted-reference61.ts"
+    "check:adopted-reference61": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-adopted-reference61.ts",
+    "check:weekday-fallback62": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-weekday-fallback62.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

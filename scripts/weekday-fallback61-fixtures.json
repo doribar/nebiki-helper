@@ -1,0 +1,1001 @@
+{
+  "sourceVersion": "2026.8.9-61",
+  "sourceZipSha256": "dbae2498d81b3380ba015012e3cbf665a5ba083af03ec0699d0fb2943a1e2d88",
+  "description": "Frozen outputs executed against the completed v61 source. Same-weekday comparison fields and actual normal/many rate display; group labels and explanatory text intentionally excluded because v62 changes fallback labels.",
+  "cases": [
+    {
+      "time": "15",
+      "weekday": 0,
+      "target": "2026-11-08",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": false,
+          "sampleSize": 0,
+          "requiredSampleSize": 3,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-18",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-25",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-01",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "0%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "15",
+      "weekday": 1,
+      "target": "2026-11-09",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": false,
+          "sampleSize": 0,
+          "requiredSampleSize": 3,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-05",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-19",
+            14,
+            "normal"
+          ],
+          [
+            "2026-10-26",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "0%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "15",
+      "weekday": 2,
+      "target": "2026-11-10",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": false,
+          "sampleSize": 0,
+          "requiredSampleSize": 3,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-13",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-20",
+            14,
+            "normal"
+          ],
+          [
+            "2026-10-27",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "0%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "15",
+      "weekday": 3,
+      "target": "2026-11-11",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": false,
+          "sampleSize": 0,
+          "requiredSampleSize": 3,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-21",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-28",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-04",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "0%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "15",
+      "weekday": 4,
+      "target": "2026-11-12",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": false,
+          "sampleSize": 0,
+          "requiredSampleSize": 3,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-22",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-29",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-05",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "0%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "15",
+      "weekday": 5,
+      "target": "2026-11-13",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": false,
+          "sampleSize": 0,
+          "requiredSampleSize": 3,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-23",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-30",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-06",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "0%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "15",
+      "weekday": 6,
+      "target": "2026-11-14",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": false,
+          "sampleSize": 0,
+          "requiredSampleSize": 3,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-24",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-31",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-07",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "0%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "17",
+      "weekday": 0,
+      "target": "2026-11-08",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": true,
+          "sampleSize": 3,
+          "requiredSampleSize": 3,
+          "previousDiscountTime": "15",
+          "previousCount": 20,
+          "currentDecreaseRate": 0.5,
+          "medianDecreaseRate": 0.5,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-18",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-25",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-01",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "10%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "17",
+      "weekday": 1,
+      "target": "2026-11-09",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": true,
+          "sampleSize": 3,
+          "requiredSampleSize": 3,
+          "previousDiscountTime": "15",
+          "previousCount": 20,
+          "currentDecreaseRate": 0.5,
+          "medianDecreaseRate": 0.5,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-05",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-19",
+            14,
+            "normal"
+          ],
+          [
+            "2026-10-26",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "10%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "17",
+      "weekday": 2,
+      "target": "2026-11-10",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": true,
+          "sampleSize": 3,
+          "requiredSampleSize": 3,
+          "previousDiscountTime": "15",
+          "previousCount": 20,
+          "currentDecreaseRate": 0.5,
+          "medianDecreaseRate": 0.5,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-13",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-20",
+            14,
+            "normal"
+          ],
+          [
+            "2026-10-27",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "10%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "17",
+      "weekday": 3,
+      "target": "2026-11-11",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": true,
+          "sampleSize": 3,
+          "requiredSampleSize": 3,
+          "previousDiscountTime": "15",
+          "previousCount": 20,
+          "currentDecreaseRate": 0.5,
+          "medianDecreaseRate": 0.5,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-21",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-28",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-04",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "10%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "17",
+      "weekday": 4,
+      "target": "2026-11-12",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": true,
+          "sampleSize": 3,
+          "requiredSampleSize": 3,
+          "previousDiscountTime": "15",
+          "previousCount": 20,
+          "currentDecreaseRate": 0.5,
+          "medianDecreaseRate": 0.5,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-22",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-29",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-05",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "10%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "17",
+      "weekday": 5,
+      "target": "2026-11-13",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": true,
+          "sampleSize": 3,
+          "requiredSampleSize": 3,
+          "previousDiscountTime": "15",
+          "previousCount": 20,
+          "currentDecreaseRate": 0.5,
+          "medianDecreaseRate": 0.5,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-23",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-30",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-06",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "10%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    },
+    {
+      "time": "17",
+      "weekday": 6,
+      "target": "2026-11-14",
+      "expected": {
+        "status": "ready",
+        "sampleSize": 3,
+        "requiredSampleSize": 3,
+        "comparisonMode": "weekday",
+        "medianCount": 14,
+        "shortMedianCount": 14,
+        "longMedianCount": 14,
+        "shortSampleSize": 3,
+        "longSampleSize": 3,
+        "medianDownGuardApplied": false,
+        "smallDifferenceThreshold": 2,
+        "largeDifferenceThreshold": 4,
+        "lowerLargeThreshold": 10,
+        "lowerSmallThreshold": 12,
+        "upperSmallThreshold": 16,
+        "upperLargeThreshold": 18,
+        "baseEvaluation": "few",
+        "suggestedEvaluation": "few",
+        "suggestedJudge": "few",
+        "areaRateAdjustment": -10,
+        "decreaseRecommendation": {
+          "canUse": true,
+          "sampleSize": 3,
+          "requiredSampleSize": 3,
+          "previousDiscountTime": "15",
+          "previousCount": 20,
+          "currentDecreaseRate": 0.5,
+          "medianDecreaseRate": 0.5,
+          "direction": "none"
+        },
+        "matched": [
+          [
+            "2026-10-24",
+            12,
+            "normal"
+          ],
+          [
+            "2026-10-31",
+            14,
+            "normal"
+          ],
+          [
+            "2026-11-07",
+            16,
+            "normal"
+          ]
+        ]
+      },
+      "rate": {
+        "many": {
+          "main": "10%"
+        },
+        "few": {
+          "main": "引かない"
+        },
+        "normal": {
+          "main": "0%"
+        }
+      }
+    }
+  ],
+  "numericCase": {
+    "params": {
+      "records": [
+        {
+          "date": "2026-10-13",
+          "count": 6,
+          "dataSchemaVersion": 3,
+          "appVersion": "2026.8.9-61",
+          "demandCycle": "normal",
+          "sessionStartedAt": "2026-10-13T08:00:00.000Z",
+          "recordedAt": "2026-10-13T08:05:00.000Z",
+          "areaId": "bento_men",
+          "discountTime": "17",
+          "actualWeekday": "火",
+          "actualWeekdayGroup": "火木日"
+        },
+        {
+          "date": "2026-10-20",
+          "count": 6,
+          "dataSchemaVersion": 3,
+          "appVersion": "2026.8.9-61",
+          "demandCycle": "normal",
+          "sessionStartedAt": "2026-10-20T08:00:00.000Z",
+          "recordedAt": "2026-10-20T08:05:00.000Z",
+          "areaId": "bento_men",
+          "discountTime": "17",
+          "actualWeekday": "火",
+          "actualWeekdayGroup": "火木日"
+        },
+        {
+          "date": "2026-10-27",
+          "count": 6,
+          "dataSchemaVersion": 3,
+          "appVersion": "2026.8.9-61",
+          "demandCycle": "normal",
+          "sessionStartedAt": "2026-10-27T08:00:00.000Z",
+          "recordedAt": "2026-10-27T08:05:00.000Z",
+          "areaId": "bento_men",
+          "discountTime": "17",
+          "actualWeekday": "火",
+          "actualWeekdayGroup": "火木日"
+        },
+        {
+          "date": "2026-10-21",
+          "count": 30,
+          "dataSchemaVersion": 3,
+          "appVersion": "2026.8.9-61",
+          "demandCycle": "normal",
+          "sessionStartedAt": "2026-10-21T08:00:00.000Z",
+          "recordedAt": "2026-10-21T08:05:00.000Z",
+          "areaId": "bento_men",
+          "discountTime": "17",
+          "actualWeekday": "水",
+          "actualWeekdayGroup": "月水"
+        },
+        {
+          "date": "2026-10-28",
+          "count": 30,
+          "dataSchemaVersion": 3,
+          "appVersion": "2026.8.9-61",
+          "demandCycle": "normal",
+          "sessionStartedAt": "2026-10-28T08:00:00.000Z",
+          "recordedAt": "2026-10-28T08:05:00.000Z",
+          "areaId": "bento_men",
+          "discountTime": "17",
+          "actualWeekday": "水",
+          "actualWeekdayGroup": "月水"
+        },
+        {
+          "date": "2026-11-04",
+          "count": 30,
+          "dataSchemaVersion": 3,
+          "appVersion": "2026.8.9-61",
+          "demandCycle": "normal",
+          "sessionStartedAt": "2026-11-04T08:00:00.000Z",
+          "recordedAt": "2026-11-04T08:05:00.000Z",
+          "areaId": "bento_men",
+          "discountTime": "17",
+          "actualWeekday": "水",
+          "actualWeekdayGroup": "月水"
+        }
+      ],
+      "areaId": "bento_men",
+      "discountTime": "17",
+      "date": "2026-11-09",
+      "weekday": 1,
+      "count": 10
+    },
+    "expected": {
+      "status": "ready",
+      "comparisonMode": "fallback_group",
+      "medianCount": 30,
+      "suggestedEvaluation": "few",
+      "areaRateAdjustment": -10,
+      "matchedDates": [
+        "2026-10-21",
+        "2026-10-28",
+        "2026-11-04"
+      ]
+    },
+    "rate": {
+      "many": {
+        "main": "10%"
+      },
+      "few": {
+        "main": "引かない"
+      },
+      "normal": {
+        "main": "0%"
+      }
+    }
+  }
+}

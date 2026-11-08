@@ -9,6 +9,7 @@ import {
   buildAreaCountDecisionBasis,
   dedupeLatestAreaCountCalculationRecordsByDateAreaTime,
   getActualWeekdayLabel,
+  getAreaCountComparisonFallbackWeekdayGroup,
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
   getThreeDayHolidayMiddleReferenceDetailLines,
@@ -88,13 +89,13 @@ function record(date: string, count: number, discountTime: DiscountTime = "17", 
 }
 
 function records(params: {
-  sunday?: number[]; tuesdayThursday?: number[]; fridaySaturday?: number[];
+  sunday?: number[]; fallbackPeers?: number[]; fridaySaturday?: number[];
   discountTime?: DiscountTime; before?: string;
 }): AreaCountRecord[] {
   const time = params.discountTime ?? "17";
   return [
     ...dates([0], params.sunday?.length ?? 0, params.before).map((date, i) => record(date, params.sunday![i]!, time, { demandCycle: i % 2 ? "summer" : "normal" })),
-    ...dates([2, 4], params.tuesdayThursday?.length ?? 0, params.before).map((date, i) => record(date, params.tuesdayThursday![i]!, time)),
+    ...dates(time === "17" ? [1, 2] : [2, 4], params.fallbackPeers?.length ?? 0, params.before).map((date, i) => record(date, params.fallbackPeers![i]!, time)),
     ...dates([5, 6], params.fridaySaturday?.length ?? 0, params.before).map((date, i) => record(date, params.fridaySaturday![i]!, time)),
   ];
 }
@@ -110,10 +111,10 @@ function middle(result: AreaCountRecommendation) {
   return result.threeDayHolidayMiddleReference;
 }
 
-const plentiful = (time: DiscountTime = "17") => records({ sunday: [6, 6, 6], tuesdayThursday: Array(80).fill(30), fridaySaturday: [10, 10, 10], discountTime: time });
+const plentiful = (time: DiscountTime = "17") => records({ sunday: [6, 6, 6], fallbackPeers: Array(80).fill(30), fridaySaturday: [10, 10, 10], discountTime: time });
 
 for (const discountTime of ["17", "18", "19", "20"] as const) {
-  test(`${discountTime}: three ordinary Sundays outrank 80 different Tuesday/Thursday counts`, () => {
+  test(`${discountTime}: three ordinary Sundays outrank 80 different fallback-peer counts`, () => {
     const history = plentiful(discountTime);
     const before = copy(history);
     const result = recommend(history, { discountTime });
@@ -123,7 +124,8 @@ for (const discountTime of ["17", "18", "19", "20"] as const) {
     assert.equal(result.baseEvaluation, "slightly_many");
     assert.equal(result.areaRateAdjustment, 5);
     assert.equal(reference.adoptedSource, "both");
-    assert.equal(reference.fireThursdaySundaySampleSize, 83);
+    assert.equal(discountTime === "17" ? reference.sundayMondayTuesdaySampleSize : reference.fireThursdaySundaySampleSize, 83);
+    if (discountTime === "17") assert.equal(reference.fireThursdaySundaySampleSize, undefined);
     assert.equal(reference.fireThursdaySundayMedianCount, undefined);
     assert.equal(reference.fridaySaturdayMedianCount, 10);
     assert.equal(reference.sundayReference!.source, "weekday");
@@ -143,7 +145,7 @@ for (const discountTime of ["17", "18", "19", "20"] as const) {
 test("Saturday middle also compares ordinary Sunday, even with many ordinary Saturdays", () => {
   const date = "2026-03-21";
   assert.equal(isThreeDayHolidayMiddle(date), true);
-  const result = recommend(records({ sunday: [6, 6, 6], tuesdayThursday: Array(40).fill(30), fridaySaturday: Array(30).fill(20), before: date }), { date, weekday: 6 });
+  const result = recommend(records({ sunday: [6, 6, 6], fallbackPeers: Array(40).fill(30), fridaySaturday: Array(30).fill(20), before: date }), { date, weekday: 6 });
   assert.equal(result.actualWeekday, "土");
   assert.equal(result.medianCount, 13);
   assert.equal(middle(result).sundayReference!.medianCount, 6);
@@ -151,14 +153,16 @@ test("Saturday middle also compares ordinary Sunday, even with many ordinary Sat
 });
 
 for (const size of [0, 1, 2]) {
-  test(`Sunday ${size}: fallback combines Tuesday/Thursday/Sunday and Friday/Saturday 50:50`, () => {
-    const result = recommend(records({ sunday: Array(size).fill(30), tuesdayThursday: Array(16).fill(30), fridaySaturday: [10, 10, 10] }));
+  test(`Sunday ${size}: fallback combines Sunday/Monday/Tuesday and Friday/Saturday 50:50`, () => {
+    const result = recommend(records({ sunday: Array(size).fill(30), fallbackPeers: Array(16).fill(30), fridaySaturday: [10, 10, 10] }));
     const reference = middle(result);
     assert.equal(result.medianCount, 20);
     assert.equal(result.baseEvaluation, "few");
     assert.equal(reference.adoptedSource, "both");
-    assert.equal(reference.fireThursdaySundaySampleSize, 16 + size);
-    assert.equal(reference.fireThursdaySundayMedianCount, 30);
+    assert.equal(reference.sundayMondayTuesdaySampleSize, 16 + size);
+    assert.equal(reference.fireThursdaySundaySampleSize, undefined);
+    assert.equal(reference.sundayMondayTuesdayMedianCount, 30);
+    assert.equal(reference.fireThursdaySundayMedianCount, undefined);
     assert.equal(reference.sundayReference!.source, "fallback_group");
     assert.equal(reference.sundayReference!.weekdaySampleSize, size);
     assert.equal(reference.sundayReference!.fallbackReason, "insufficient_sunday_history");
@@ -168,7 +172,7 @@ for (const size of [0, 1, 2]) {
 }
 
 test("Sunday-only valid reference is used at full strength", () => {
-  const result = recommend(records({ sunday: [6, 6, 6], tuesdayThursday: Array(20).fill(99), fridaySaturday: [10, 10] }));
+  const result = recommend(records({ sunday: [6, 6, 6], fallbackPeers: Array(20).fill(99), fridaySaturday: [10, 10] }));
   assert.equal(result.status, "ready");
   assert.equal(result.medianCount, 6);
   assert.equal(middle(result).adoptedSource, "日");
@@ -176,9 +180,9 @@ test("Sunday-only valid reference is used at full strength", () => {
 });
 
 test("Fallback-only valid reference keeps its full median", () => {
-  const result = recommend(records({ sunday: [6, 6], tuesdayThursday: [30, 30, 30], fridaySaturday: [10, 10] }));
+  const result = recommend(records({ sunday: [6, 6], fallbackPeers: [30, 30, 30], fridaySaturday: [10, 10] }));
   assert.equal(result.medianCount, 30);
-  assert.equal(middle(result).adoptedSource, "火木日");
+  assert.equal(middle(result).adoptedSource, "日月火");
   assert.equal(middle(result).sundayReference!.source, "fallback_group");
   assert.equal(middle(result).sundayReference!.adopted, true);
 });
@@ -188,7 +192,7 @@ test("Friday/Saturday-only reference and both-insufficient retain existing statu
   assert.equal(only.medianCount, 10);
   assert.equal(middle(only).adoptedSource, "金土");
   assert.equal(middle(only).sundayReference!.adopted, false);
-  const none = recommend(records({ sunday: [6], tuesdayThursday: [30], fridaySaturday: [10, 10] }));
+  const none = recommend(records({ sunday: [6], fallbackPeers: [30], fridaySaturday: [10, 10] }));
   assert.equal(none.status, "insufficient");
   assert.equal(none.medianCount, undefined);
   assert.equal(middle(none).adoptedSource, "none");
@@ -204,7 +208,7 @@ test("Holiday, holiday eve, middle, long-holiday and Obon Sundays cannot reach S
   assert.ok(actuallySpecial.some(isThreeDayHolidayMiddle));
   assert.ok(actuallySpecial.some(isLongHolidayMiddle));
   assert.ok(actuallySpecial.some(isObonDate));
-  const history = records({ sunday: [6, 6], tuesdayThursday: Array(20).fill(30), fridaySaturday: [10, 10, 10] });
+  const history = records({ sunday: [6, 6], fallbackPeers: Array(20).fill(30), fridaySaturday: [10, 10, 10] });
   for (const date of actuallySpecial) {
     assert.equal(weekday(date), 0);
     history.push(record(date, 999, "17", { actualWeekdayGroup: "火木日" }));
@@ -215,17 +219,17 @@ test("Holiday, holiday eve, middle, long-holiday and Obon Sundays cannot reach S
   assert.equal(result.medianCount, 20);
   // A holiday eve can still belong to the existing Friday/Saturday side.
   // Only the ordinary Sunday side is newly restricted in this release.
-  assert.ok(result.matchedRecords.filter(item => item.actualWeekdayGroup === "火木日").every(item => !actuallySpecial.includes(item.date)));
+  assert.ok(result.matchedRecords.filter(item => getAreaCountComparisonFallbackWeekdayGroup({ date: item.date, weekday: weekday(item.date), discountTime: "17" }) === "日月火").every(item => !actuallySpecial.includes(item.date)));
   history.push(record(dates([0], 3)[0]!, 6));
   const sundayReady = recommend(history);
   assert.equal(middle(sundayReady).sundayReference!.weekdaySampleSize, 3);
   assert.equal(middle(sundayReady).sundayReference!.medianCount, 6);
-  assert.ok(sundayReady.matchedRecords.filter(item => item.actualWeekdayGroup === "火木日").every(item => ordinary(item.date)));
+  assert.ok(sundayReady.matchedRecords.filter(item => item.actualWeekday === "日" && getAreaCountComparisonFallbackWeekdayGroup({ date: item.date, weekday: weekday(item.date), discountTime: "17" }) === "日月火").every(item => ordinary(item.date)));
 });
 
 test("Sunday windows remain 16/52, with same-weekday long-median guard", () => {
   const sundayCounts = [...Array(44).fill(30), ...Array(16).fill(6)];
-  const result = recommend(records({ sunday: sundayCounts, tuesdayThursday: Array(80).fill(99), fridaySaturday: [10, 10, 10] }));
+  const result = recommend(records({ sunday: sundayCounts, fallbackPeers: Array(80).fill(99), fridaySaturday: [10, 10, 10] }));
   const sunday = middle(result).sundayReference!;
   assert.equal(sunday.weekdaySampleSize, 60);
   assert.equal(sunday.sampleSize, 60);
@@ -244,7 +248,7 @@ test("Sunday windows remain 16/52, with same-weekday long-median guard", () => {
 });
 
 test("Legacy manual Tuesday-as-Sunday and captured special calendar do not supply ordinary Sundays", () => {
-  const history = records({ sunday: [6, 6], tuesdayThursday: Array(20).fill(30), fridaySaturday: [10, 10, 10] });
+  const history = records({ sunday: [6, 6], fallbackPeers: Array(20).fill(30), fridaySaturday: [10, 10, 10] });
   const manual = dates([2], 5).map(date => record(date, 99, "17", { actualWeekday: "日", actualWeekdayGroup: "火木日" }));
   const specialDate = dates([0], 3)[0]!;
   const captured = buildSessionAnalysisCalendarContext({ scope: "area_count", date: specialDate, weekday: 0, discountTime: "17", sessionStartedAt: `${specialDate}T08:00:00.000Z`, manualWeekdayOverride: false, areaDecisionBases: [] })!;
@@ -267,7 +271,7 @@ test("Obon exclusion respects captured legacy calendar and pre-rule versions", (
 });
 
 test("Fallback 16/52 still uses short median without guard", () => {
-  const result = recommend(records({ sunday: [6, 6], tuesdayThursday: [...Array(44).fill(30), ...Array(16).fill(6)], fridaySaturday: [10, 10, 10] }));
+  const result = recommend(records({ sunday: [6, 6], fallbackPeers: [...Array(44).fill(30), ...Array(16).fill(6)], fridaySaturday: [10, 10, 10] }));
   const sunday = middle(result).sundayReference!;
   assert.equal(sunday.source, "fallback_group");
   assert.equal(sunday.shortSampleSize, 16);
@@ -289,7 +293,7 @@ test("Unequal population sizes and decimal medians keep an unrounded 50:50 resul
 });
 
 test("Canonical normal/summer duplicates, latest observations and wrong date/area/time do not inflate Sunday minimum", () => {
-  const history = records({ sunday: [6, 6], tuesdayThursday: Array(20).fill(30), fridaySaturday: [10, 10, 10] });
+  const history = records({ sunday: [6, 6], fallbackPeers: Array(20).fill(30), fridaySaturday: [10, 10, 10] });
   const first = history[0]!;
   history.push(copy(first), copy(first), { ...copy(first), demandCycle: "summer" }, { ...copy(first), sessionStartedAt: `${first.date}T08:02:00.000Z`, recordedAt: `${first.date}T08:06:00.000Z`, count: 7 });
   history.push(record(TARGET, 999), record("2026-07-26", 999), { ...record(dates([0], 3)[0]!, 999), areaId: "sushi" }, record(dates([0], 3)[0]!, 999, "18"));
@@ -314,7 +318,7 @@ test("15:00 remains on its prior Friday/Saturday/Sunday reference", () => {
 
 test("Ordinary Sunday, Tuesday, Friday and four-day-holiday rules keep their existing references", () => {
   const sundayDate = "2026-07-12";
-  const history = records({ sunday: [6, 6, 6], tuesdayThursday: Array(20).fill(30), fridaySaturday: [10, 10, 10], before: sundayDate });
+  const history = records({ sunday: [6, 6, 6], fallbackPeers: Array(20).fill(30), fridaySaturday: [10, 10, 10], before: sundayDate });
   const sunday = recommend(history, { date: sundayDate, weekday: 0 });
   assert.equal(sunday.comparisonMode, "weekday");
   assert.equal(sunday.medianCount, 6);
@@ -324,14 +328,14 @@ test("Ordinary Sunday, Tuesday, Friday and four-day-holiday rules keep their exi
   const friday = recommend(history, { date: "2026-07-17", weekday: 5 });
   assert.equal(friday.medianCount, 10);
   for (const result of [sunday, tuesday, friday]) assert.equal(result.threeDayHolidayMiddleReference, undefined);
-  const long = recommend(records({ sunday: [6, 6, 6], tuesdayThursday: Array(20).fill(30), fridaySaturday: [10, 10, 10], before: "2026-05-04" }), { date: "2026-05-04", weekday: 1 });
+  const long = recommend(records({ sunday: [6, 6, 6], fallbackPeers: Array(20).fill(30), fridaySaturday: [10, 10, 10], before: "2026-05-04" }), { date: "2026-05-04", weekday: 1 });
   assert.equal(long.comparisonMode, "fallback_group");
   assert.equal(long.medianCount, 10);
   assert.equal(long.threeDayHolidayMiddleReference, undefined);
 });
 
 test("Captured legacy adopted source and medians are preserved without new Sunday metadata", () => {
-  const legacy = buildAreaCountDecisionBasis({ recommendation: recommend(records({ sunday: [6, 6], tuesdayThursday: Array(20).fill(30), fridaySaturday: [10, 10, 10] })) });
+  const legacy = buildAreaCountDecisionBasis({ recommendation: recommend(records({ sunday: [6, 6], fallbackPeers: Array(20).fill(30), fridaySaturday: [10, 10, 10] })) });
   delete legacy.threeDayHolidayMiddleReference!.sundayReference;
   const before = copy(legacy);
   const normalized = normalizeAreaCountDecisionBasis(copy(legacy));
@@ -481,13 +485,13 @@ test("Review19 temporary 19:00 statistics adopt Sunday while preserving human-on
 test("Calendar metadata preserves Sunday-only, new composite and legacy group adoption", () => {
   const both = buildAreaCountDecisionBasis({ recommendation: recommend(plentiful()) });
   const only = buildAreaCountDecisionBasis({ recommendation: recommend(records({ sunday: [6, 6, 6], fridaySaturday: [10, 10] })) });
-  const fallback = buildAreaCountDecisionBasis({ recommendation: recommend(records({ sunday: [6, 6], tuesdayThursday: Array(16).fill(30), fridaySaturday: [10, 10, 10] })) });
+  const fallback = buildAreaCountDecisionBasis({ recommendation: recommend(records({ sunday: [6, 6], fallbackPeers: Array(16).fill(30), fridaySaturday: [10, 10, 10] })) });
   const legacy = copy(fallback);
-  delete legacy.threeDayHolidayMiddleReference!.sundayReference;
+  legacy.threeDayHolidayMiddleReference = { fireThursdaySundaySampleSize: 18, fridaySaturdaySampleSize: 3, fireThursdaySundayMedianCount: 30, fridaySaturdayMedianCount: 10, adoptedSource: "both" };
   for (const [basis, type, referenceWeekday, groups] of [
     [both, "composite_weekday_and_group", "日", ["金土"]],
     [only, "weekday", "日", []],
-    [fallback, "composite_weekday_groups", null, ["火木日", "金土"]],
+    [fallback, "composite_weekday_groups", null, ["日月火", "金土"]],
     [legacy, "composite_weekday_groups", null, ["火木日", "金土"]],
   ] as const) {
     const context = buildSessionAnalysisCalendarContext({ date: TARGET, weekday: 0, discountTime: "17", sessionStartedAt: `${TARGET}T08:00:00.000Z`, manualWeekdayOverride: false, areaDecisionBases: [{ areaId: AREA, basis }] })!;
@@ -535,7 +539,7 @@ test("Actual RateDisplay TSX renders captured Sunday/fallback/only/insufficient/
   }));
   const fixtures = [
     recommend(plentiful()),
-    recommend(records({ sunday: [6, 6], tuesdayThursday: Array(16).fill(30), fridaySaturday: [10, 10, 10] })),
+    recommend(records({ sunday: [6, 6], fallbackPeers: Array(16).fill(30), fridaySaturday: [10, 10, 10] })),
     recommend(records({ sunday: [6, 6, 6], fridaySaturday: [10, 10] })),
     recommend(records({ sunday: [6, 6], fridaySaturday: [10, 10, 10] })),
     recommend(records({ sunday: [6], fridaySaturday: [10, 10] })),
@@ -558,7 +562,7 @@ test("Actual RateDisplay TSX renders captured Sunday/fallback/only/insufficient/
     assert.deepEqual(copy(basis), before, "render preserves saved evidence");
   }
   assert.match(markup(fixtures[0]), /通常の日曜の記録：3\/3件（採用基準 6個）/);
-  assert.match(markup(fixtures[1]), /通常の日曜の記録が足りないため、火木日へフォールバック/);
+  assert.match(markup(fixtures[1]), /通常の日曜の記録が足りないため、日月火へフォールバック/);
   assert.doesNotMatch(markup(legacy), /通常の日曜の記録：/);
   assert.match(markup(partial), /数値未保存/);
   assert.match(markup(guarded), /日曜の短期中央値：6個（直近16件）/);

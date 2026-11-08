@@ -225,6 +225,9 @@ export type FlowMode = "normal" | "pending";
 export type WeekdayBaseLabel = "日" | "金土" | "火木" | "月水";
 export type ActualWeekdayLabel = "日" | "月" | "火" | "水" | "木" | "金" | "土";
 export type ActualWeekdayGroup =
+  | "月火"
+  | "水木"
+  | "日月火"
   | "月水"
   | "火木"
   | "金土日"
@@ -239,7 +242,7 @@ export type HolidayBeforeNormalWeekdayReference = {
   /** Valid ordinary Sundays before today, after the existing canonical merge. */
   weekdaySampleSize: number;
   requiredSampleSize: number;
-  fallbackWeekdayGroup: "金土日" | "火木日";
+  fallbackWeekdayGroup: "金土日" | "火木日" | "日月火";
   fallbackSampleSize: number;
   sampleSize: number;
   shortSampleSize: number;

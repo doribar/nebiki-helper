@@ -5,6 +5,7 @@ import {
   dedupeLatestAreaCountCalculationRecordsByDateAreaTime,
   dedupeLatestAreaCountRecordsByDateAreaTime,
   evaluationToRateAdjustment,
+  getActualWeekdayGroup,
   getActualWeekdayLabel,
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
@@ -99,7 +100,7 @@ function datesBefore(date: string, day: number, count: number): string[] {
     const value = cursor.toISOString().slice(0, 10);
     // Keep fallback fixtures in the ordinary weekday group. Same-day tests
     // still use the real calendar normalizer and dedicated calendar checks.
-    if (cursor.getUTCDay() === day && getAreaCountFallbackWeekdayGroup({ date: value, weekday: day, discountTime: "17" }) === "月水") dates.push(value);
+    if (cursor.getUTCDay() === day && getAreaCountFallbackWeekdayGroup({ date: value, weekday: day, discountTime: "17" }) === getActualWeekdayGroup(day, "17")) dates.push(value);
   }
   assert.equal(dates.length, count, "could not generate fixture dates");
   return dates.reverse();
@@ -107,6 +108,7 @@ function datesBefore(date: string, day: number, count: number): string[] {
 
 const WEDNESDAYS = datesBefore(TODAY, 3, 60);
 const MONDAYS = datesBefore(TODAY, 1, 60);
+const THURSDAYS = datesBefore(TODAY, 4, 60);
 function recommend(records: AreaCountRecord[], demandCycle: DemandCycle = "normal", patch: Partial<Parameters<typeof getAreaCountRecommendation>[0]> = {}) {
   return getAreaCountRecommendation({ records, demandCycle, areaId: "bento_men", discountTime: "17", date: TODAY, weekday: 3, count: 10, ...patch });
 }
@@ -207,7 +209,7 @@ for (const [short, long, adopted, guarded] of [[10, 30, 28, true], [30, 10, 30, 
 }
 
 test("shared fallback group still uses short without long guard", () => {
-  const result = recommend(MONDAYS.map((date, index) => record(date, index < 44 ? 30 : 10, index % 2 ? "summer" : "normal")), "summer");
+  const result = recommend(THURSDAYS.map((date, index) => record(date, index < 44 ? 30 : 10, index % 2 ? "summer" : "normal")), "summer");
   assert.equal(result.comparisonMode, "fallback_group");
   assert.equal(result.shortSampleSize, 16);
   assert.equal(result.longSampleSize, 52);
@@ -225,14 +227,15 @@ test("mixed-cycle three-day-holiday reference still combines both groups 50:50",
   const result = recommend(records, "summer", { date: "2026-07-19", weekday: 0 });
   assert.equal(result.comparisonMode, "three_day_holiday_middle");
   assert.equal(result.threeDayHolidayMiddleReference?.adoptedSource, "both");
-  assert.equal(result.threeDayHolidayMiddleReference?.fireThursdaySundayMedianCount, 10);
+  assert.equal(result.threeDayHolidayMiddleReference?.sundayMondayTuesdayMedianCount, 10);
+  assert.equal(result.threeDayHolidayMiddleReference?.fireThursdaySundayMedianCount, undefined);
   assert.equal(result.threeDayHolidayMiddleReference?.fridaySaturdayMedianCount, 30);
   assert.equal(result.medianCount, 20);
   assert.doesNotMatch(JSON.stringify(result.detailLines), /今年の夏|前年以前の夏|夏季モード/);
 });
 
 test("fewer than 3 same-weekday records fallback; fewer than 3 in group remain insufficient", () => {
-  const result = recommend([...mixed(WEDNESDAYS.slice(-2), 10), record(MONDAYS.at(-1)!, 10, "summer")]);
+  const result = recommend([...mixed(WEDNESDAYS.slice(-2), 10), record(THURSDAYS.at(-1)!, 10, "summer")]);
   assert.equal(result.status, "ready");
   assert.equal(result.comparisonMode, "fallback_group");
   assert.equal(result.sampleSize, 3);

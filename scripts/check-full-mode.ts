@@ -250,7 +250,7 @@ test("30. schema v3・appVersion・buildIdをアプリ情報に持つ", () => {
   assert.ok(/^2026\.8\.9-/.test(packageVersion));
   assert.ok(version.buildId.length > 0);
 });
-test("31. 通常日の曜日グループを維持", () => assert.equal(getAreaCountComparisonWeekdayGroup({ weekday: 2, discountTime: "17", date: "2026-07-21" }), "火木日"));
+test("31. 通常日の17時の比較グループは日月火", () => assert.equal(getAreaCountComparisonWeekdayGroup({ weekday: 2, discountTime: "17", date: "2026-07-21" }), "日月火"));
 test("32. 祝前日の曜日グループを維持", () => assert.equal(getAreaCountComparisonWeekdayGroup({ weekday: 1, discountTime: "17", date: "2026-11-02" }), "金土"));
 test("33. 三連休中日の専用分類を維持", () => assert.equal(getAreaCountFallbackWeekdayGroup({ weekday: 0, discountTime: "17", date: "2026-07-19" }), "三連休中日"));
 test("34. 一般の祝前日注意を維持", () => assert.equal(shouldShowDayBeforeHolidayNotice({ sessionDate: "2026-11-02", discountTime: "17" }), true));

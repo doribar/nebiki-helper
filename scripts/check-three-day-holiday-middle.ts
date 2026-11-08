@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildAreaCountDecisionBasis,
+  getAreaCountComparisonFallbackWeekdayGroup,
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
   normalizeAreaCountDecisionBasis,
@@ -96,11 +97,11 @@ function datesForGroup(params: {
   while (date < "2026-07-19" && dates.length < params.count) {
     const weekday = weekdayForDate(date);
     if (
-      getAreaCountFallbackWeekdayGroup({
+      getAreaCountComparisonFallbackWeekdayGroup({
         date,
         weekday,
         discountTime: params.discountTime,
-      }) === params.group
+      }) === (params.discountTime === "17" && params.group === "火木日" ? "日月火" : params.group)
     ) {
       dates.push(date);
     }
@@ -214,7 +215,7 @@ test("14. 中日ではない祝前日17時は金土", () => {
   assert.equal(getAreaCountFallbackWeekdayGroup({ date: "2026-11-02", weekday: 1, discountTime: "17" }), "金土");
 });
 
-test("15. 火木日10・金土20なら中間基準は15", () => {
+test("15. 日月火10・金土20なら中間基準は15", () => {
   const recommendation = middleRecommendation({
     discountTime: "17",
     fireThursdaySundayCounts: [10, 10, 10],
@@ -241,7 +242,7 @@ test("16. 小数の中間値を丸めず判定と保存根拠へ渡す", () => {
   assert.equal(normalizedBasis?.lowerSmallThreshold, 8.5);
 });
 
-test("17. 火木日だけ有効なら火木日基準を使用", () => {
+test("17. 日月火だけ有効なら日月火基準を使用", () => {
   const recommendation = middleRecommendation({
     discountTime: "17",
     fireThursdaySundayCounts: [10, 10, 10],
@@ -249,7 +250,7 @@ test("17. 火木日だけ有効なら火木日基準を使用", () => {
   });
   assert.equal(recommendation.status, "ready");
   assert.equal(recommendation.medianCount, 10);
-  assert.equal(recommendation.threeDayHolidayMiddleReference?.adoptedSource, "火木日");
+  assert.equal(recommendation.threeDayHolidayMiddleReference?.adoptedSource, "日月火");
 });
 
 test("18. 金土だけ有効なら金土基準を使用", () => {
@@ -294,7 +295,7 @@ test("21. 新規の三連休中日17時履歴は専用グループで保存", ()
   assert.ok(sqlSource.includes("'三連休中日'"));
 });
 
-test("22. 過去の中日履歴は旧グループ名でも専用グループへ再分類", () => {
+test("22. 過去の中日履歴は保存済み旧グループ名を保持", () => {
   const legacyGroups: ActualWeekdayGroup[] = ["金土", "火木日", "金土日", "火木"];
   const normalized = normalizeAreaCountRecords(
     legacyGroups.map((savedGroup, index) => makeRecord({
@@ -306,10 +307,10 @@ test("22. 過去の中日履歴は旧グループ名でも専用グループへ�
     })),
   );
   assert.equal(normalized.length, legacyGroups.length);
-  assert.ok(normalized.every((record) => record.actualWeekdayGroup === "三連休中日"));
+  assert.deepEqual(normalized.map((record) => record.actualWeekdayGroup), legacyGroups);
 });
 
-test("23. 三連休中日の実績は火木日基準へ混ざらない", () => {
+test("23. 三連休中日の実績は日月火基準へ混ざらない", () => {
   const legacyMiddle = makeRecord({
     date: "2026-03-21",
     discountTime: "17",
@@ -322,7 +323,8 @@ test("23. 三連休中日の実績は火木日基準へ混ざらない", () => {
     fridaySaturdayCounts: [20, 20, 20],
     extraRecords: [legacyMiddle],
   });
-  assert.equal(recommendation.threeDayHolidayMiddleReference?.fireThursdaySundayMedianCount, 10);
+  assert.equal(recommendation.threeDayHolidayMiddleReference?.sundayMondayTuesdayMedianCount, 10);
+  assert.equal(recommendation.threeDayHolidayMiddleReference?.fireThursdaySundayMedianCount, undefined);
   assert.ok(recommendation.matchedRecords.every((record) => record.date !== "2026-03-21"));
 });
 
@@ -361,7 +363,7 @@ test("25. ローカル履歴とSupabase履歴へ同じ正規化を適用", () =>
     actual_weekday_group: "金土",
     count: localRecord.count,
   }]);
-  assert.equal(localNormalized?.actualWeekdayGroup, "三連休中日");
+  assert.equal(localNormalized?.actualWeekdayGroup, "金土");
   assert.equal(remoteNormalized?.actualWeekdayGroup, localNormalized?.actualWeekdayGroup);
 });
 

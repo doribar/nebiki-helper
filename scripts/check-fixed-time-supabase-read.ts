@@ -136,7 +136,7 @@ await test("4. fixed-time uses exactly the normal recommendation algorithm", () 
       applyObonRule: true,
       comparisonMode: "weekday" as const,
       actualWeekday: "木" as const,
-      actualWeekdayGroup: "火木日" as const,
+      actualWeekdayGroup: "水木" as const,
       status: "ready" as const,
     },
     {
@@ -146,7 +146,8 @@ await test("4. fixed-time uses exactly the normal recommendation algorithm", () 
       comparisonMode: "holiday_before_normal_weekday" as const,
       actualWeekday: "月" as const,
       actualWeekdayGroup: "翌日平日祝日" as const,
-      status: "ready" as const,
+      // This fixture has Thursday history only, outside the new Sunday-side group.
+      status: "insufficient" as const,
     },
     {
       date: "2027-08-13",

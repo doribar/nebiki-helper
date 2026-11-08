@@ -190,8 +190,8 @@ test("9/19–24は初日・最終日を除き9/20–22だけを長期連休内�
     ["2026-09-20", true, "long_holiday_middle", "金土"],
     ["2026-09-21", true, "long_holiday_middle", "金土"],
     ["2026-09-22", true, "long_holiday_middle", "金土"],
-    ["2026-09-23", false, "holiday", "火木日"],
-    ["2026-09-24", false, "actual_weekday", "火木日"],
+    ["2026-09-23", false, "holiday", "日月火"],
+    ["2026-09-24", false, "actual_weekday", "水木"],
   ] as const;
   for (const [date, middle, kind, group] of expected) {
     assert.equal(isLongHolidayMiddle(date), middle, date);
@@ -442,20 +442,37 @@ test("productionAnalysisは同じ観測値と判断を持つ新旧calendarContex
 // for the explicitly changed 15:00 holiday/Sunday selection; its contents are
 // checked in check-holiday-sunday-reference52.ts. All prior reference and
 // calculation fields remain pinned; no old checkout is needed for this check.
-const GOLDEN_NON17 = "b0b546a1476a57f4483cc7e169bce952af576141d10cd967b20cbe29c098626f";
+// Re-executed against the completed 61 source (ZIP SHA-256
+// dbae2498d81b3380ba015012e3cbf665a5ba083af03ec0699d0fb2943a1e2d88).
+// The former 64-condition hash included the intentionally changed 15:00 group.
+// All 48 legacy night conditions remain pinned independently below.
+const GOLDEN_NIGHTS = "bedb6fcbafb2ee70bc9cc17b918b06560c60850ac5e1380672364590d34280ab";
 const GOLDEN_RATES = "6627b95b633e13e93beb137abd3ed315fe4167ea38d3ff64ed396f345156ad67";
 const goldenDates = ["2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2028-05-06", "2029-05-05"];
 
-test("非17時のreference・履歴比較・履歴不足条件64条件はbaselineと同一", () => {
+test("旧夜枠reference・履歴比較・履歴不足条件48条件は完成61と同一", () => {
   const values: unknown[] = [];
-  for (const date of goldenDates) for (const demandCycle of ["normal", "summer"] as const) for (const discountTime of ["15", "18", "19", "20"] as const) {
+  for (const date of goldenDates) for (const demandCycle of ["normal", "summer"] as const) for (const discountTime of ["18", "19", "20"] as const) {
     const params = paramsFor(date, discountTime);
     const result = recommendation(date, [], discountTime, demandCycle);
     const semantics = Object.fromEntries(Object.entries(result).filter(([key]) => key !== "summaryText" && key !== "detailLines" && key !== "holidayBeforeNormalWeekdayReference"));
     values.push([params, demandCycle, getIndividualAmountReferenceContext(params), getAreaCountFallbackWeekdayGroup(params), getAreaCountComparisonWeekdayGroup(params), semantics]);
   }
-  assert.equal(values.length, 64);
-  assert.equal(hash(values), GOLDEN_NON17);
+  assert.equal(values.length, 48);
+  assert.equal(hash(values), GOLDEN_NIGHTS);
+});
+
+test("15時16条件は長期連休ルールを広げず、新fallbackと履歴不足を正しく示す", () => {
+  for (const date of goldenDates) for (const demandCycle of ["normal", "summer"] as const) {
+    const params = paramsFor(date, "15"), result = recommendation(date, [], "15", demandCycle);
+    const group = date === "2026-09-24" ? "水木" : "金土日";
+    assert.equal(getAreaCountComparisonWeekdayGroup(params), group, date);
+    assert.equal(result.status, "insufficient"); assert.equal(result.sampleSize, 0); assert.equal(result.requiredSampleSize, 3);
+    assert.equal(result.actualWeekdayGroup, date === "2026-09-23" ? "翌日平日祝日" : group);
+    assert.equal(result.comparisonMode, date === "2026-09-23" ? "holiday_before_normal_weekday" : "fallback_group");
+    assert.equal(result.medianCount, undefined); assert.equal(result.suggestedEvaluation, undefined); assert.equal(result.areaRateAdjustment, undefined);
+    assert.notEqual(getIndividualAmountReferenceContext(params).kind, "long_holiday_middle");
+  }
 });
 
 test("全時刻の率・天候解決・先行率720条件は9-28の実結果と同一", () => {

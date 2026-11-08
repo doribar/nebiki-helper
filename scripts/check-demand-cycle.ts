@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   getActualWeekdayLabel,
+  getAreaCountComparisonFallbackWeekdayGroup,
   getAreaCountFallbackWeekdayGroup,
   getAreaCountRecommendation,
   normalizeAreaCountRecords,
@@ -169,7 +170,7 @@ function collectDates(params: {
     }
     if (
       params.weekdayGroup &&
-      getAreaCountFallbackWeekdayGroup({ date, weekday, discountTime }) !==
+      getAreaCountComparisonFallbackWeekdayGroup({ date, weekday, discountTime }) !==
         params.weekdayGroup
     ) {
       continue;
@@ -183,7 +184,7 @@ function collectDates(params: {
 
 const TARGET_DATE = "2027-07-05";
 const TARGET_WEEKDAY = weekdayForDate(TARGET_DATE);
-const TARGET_GROUP = getAreaCountFallbackWeekdayGroup({
+const TARGET_GROUP = getAreaCountComparisonFallbackWeekdayGroup({
   date: TARGET_DATE,
   weekday: TARGET_WEEKDAY,
   discountTime: "17",
@@ -196,7 +197,7 @@ const CURRENT_YEAR_WEEKDAYS = collectDates({
 });
 const CURRENT_YEAR_GROUP_OTHER_DAYS = collectDates({
   before: TARGET_DATE,
-  weekday: 3,
+  weekday: 2,
   count: 6,
   yearMatches: (year) => year === 2027,
   weekdayGroup: TARGET_GROUP,
@@ -209,7 +210,7 @@ const PRIOR_YEAR_WEEKDAYS = collectDates({
 });
 const PRIOR_YEAR_GROUP_OTHER_DAYS = collectDates({
   before: TARGET_DATE,
-  weekday: 3,
+  weekday: 2,
   count: 10,
   yearMatches: (year) => year < 2027,
   weekdayGroup: TARGET_GROUP,
@@ -671,7 +672,7 @@ test("29. 同曜日の通年ローリング短期・長期へ最大2個ガード
 });
 
 test("30. 通年曜日グループ判定では長期ガードを適用しない", () => {
-  const dates = collectDates({ before: TARGET_DATE, weekday: 3, count: 52, yearMatches: () => true, weekdayGroup: TARGET_GROUP });
+  const dates = collectDates({ before: TARGET_DATE, weekday: 2, count: 52, yearMatches: () => true, weekdayGroup: TARGET_GROUP });
   const records = dates.map((date, index) => makeRecord({ date, count: index < 16 ? 10 : 15, demandCycle: index % 2 ? "summer" : "normal" }));
   const result = recommendation({ records, demandCycle: "summer" });
   assert.equal(result.comparisonMode, "fallback_group");

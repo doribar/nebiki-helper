@@ -432,13 +432,25 @@ test("お盆最終日の翌日平日referenceも祝日当日と同じ", () => {
   assert.equal(
     normalizeRemoteAreaCountRows([buildRemoteAreaCountRow(newRecord)])[0]
       ?.actualWeekdayGroup,
-    "翌日平日祝日",
+    "月水",
   );
   assert.equal(
     normalizeRemoteAreaCountRows([buildRemoteAreaCountRow(oldRecord)])[0]
       ?.actualWeekdayGroup,
     "月水",
   );
+  // Preserve captured labels; comparison still follows the captured/version-aware
+  // Obon rule, rather than trusting a stale saved group.
+  const query = {
+    areaId: "bento_men" as const, discountTime: "17" as const,
+    date: "2027-08-17", weekday: 2, demandCycle: "normal" as const, count: 20,
+  };
+  const newComparison = getAreaCountRecommendation({ ...query, records: [newRecord] });
+  const oldComparison = getAreaCountRecommendation({ ...query, records: [oldRecord] });
+  assert.equal(newComparison.sampleSize, 0);
+  assert.equal(oldComparison.sampleSize, 1);
+  assert.equal(newComparison.actualWeekdayGroup, "日月火");
+  assert.equal(oldComparison.actualWeekdayGroup, "日月火");
 });
 
 test("復元した旧sessionの当時referenceは現行appVersion付きrecordでも不変", () => {

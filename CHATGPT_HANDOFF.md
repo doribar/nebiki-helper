@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-61）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-62）
 
-最終更新: 2026-11-06 JST
+最終更新: 2026-11-07 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,14 +10,14 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-61.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-61.zip` |
-| appVersion | `2026.8.9-61` |
-| buildId | `build-20261106-212958-jst` |
+| ZIP | `nebiki-helper-2026.8.9-62.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-62.zip` |
+| appVersion | `2026.8.9-62` |
+| buildId | `build-20261107-200442-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-61.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-62.md`参照（自己参照回避） |
 
-application rootは`work/adoptedReference61/nebiki-helper`。比較基準は完成60 ZIP `nebiki-helper-2026.8.9-60.zip`（SHA-256 `9d19471c4b1773b6ed86b773eef645689565c4b511b12e147a6133c1ece91755`、build `build-20261105-203915-jst`）。61は値引指示画面の基準案内へ最終採用5段階判定を追加する表示だけの変更。計算・保存・snapshot/exportは60を維持する。詳細は`CHANGE_REPORT_2026.8.9-61.md`。
+application rootは`work/weekdayGroups62/nebiki-helper`。比較基準は完成61 ZIP `nebiki-helper-2026.8.9-61.zip`（SHA-256 `dbae2498d81b3380ba015012e3cbf665a5ba083af03ec0699d0fb2943a1e2d88`、build `build-20261106-212958-jst`）。62は15/17の履歴不足時の代替group選択を変更する。同曜日3件優先を維持し、過去保存labelと現在の比較分類を分離する。詳細は`CHANGE_REPORT_2026.8.9-62.md`。
 
 60の符号付きglobal計算と旧snapshot互換、59注意8項目、58減少率表示、57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
 
@@ -25,7 +25,7 @@ application rootは`work/adoptedReference61/nebiki-helper`。比較基準は完�
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\adoptedReference61\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\weekdayGroups62\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -126,9 +126,17 @@ legacy migrationは次の順で行う。
 - 5段階: `many / slightly_many / normal / slightly_few / few`
 - rate adjustment: `+10 / +5 / 0 / -5 / -10` percentage points
 - 同weekday履歴を優先し、不足時だけ既存weekday groupへfallbackする。
-- groupは月水、火木/火木日、金土日/金土等で時刻により変わる。祝日、祝日前日、三連休中日には専用比較がある。
+- 比較groupは15時:金土日/月火/水木、17時:金土/日月火/水木。旧保存分類と夜枠互換groupは維持。祝日、祝日前日、三連休中日には専用比較がある（下の9-62項）。
 - AreaCount判断用履歴はnormal/summer通年共通。保存metadata、remote cycle別query、setting、cycle別exportは維持。cycle欠損legacy recordは互換上normalとして読み、物理書換えしない。
 - 値引率画面の `中央値判定：○○` はhuman override前のauto。履歴不足を普通へ偽装せず、表示値を再度rate計算へ適用しない。
+
+### 9-62: 15/17の履歴不足時だけ新しい曜日グループを使用
+
+- 通常日は同area/同時刻/同曜日の有効履歴3件以上を優先。不足時だけ15時は金土日・月火・水木、17時は金土・日月火・水木へfallbackする。グループも3件未満なら既存insufficient/manual。木曜加点や中央値の大小を強制する処理はない。通年normal/summer、short16/long52、単独曜日の中央値guard、閾値、減少補正、canonical merge/同日1観測を維持。
+- `getActualWeekdayGroup` / `getAreaCountFallbackWeekdayGroup`は旧保存分類を維持し、`getAreaCountComparisonFallbackWeekdayGroup`を比較用に分離する。過去recordの旧月水/火木/火木日等は保持し、比較時だけ実曜日（欠損時は有効なISO日付）・時刻・既存calendar/versionから分類する。実曜日を確認できない旧データを新15/17groupへ推測投入しない。重複の同順位fingerprintは61の旧分類で並べ、保存ラベル保全が正式観測の選別を変えないようにする。
+- 対象祝日の通常日曜3件優先は維持。不足時のgroupは15金土日/17日月火。三連休中日17時の日曜側も不足時だけ日月火、金土との中央値50:50/片側/両不足は維持。三連休15時、長期連休17時の金土、祝前日/お盆の優先関係、Review19の19時統計と旧夜枠の分類・計算は維持する。
+- 実採用groupはrecommendation/decisionBasis/calendarへ捕捉し、既存のprogress→daily/daySnapshot/finalized→export/remote JSONへ伝播する。新17三連休のoptional `sundayFallbackWeekdayGroup` / `sundayMondayTuesdaySampleSize` / `sundayMondayTuesdayMedianCount`で日月火を表現し、旧`fireThursdaySunday*`へ別の意味の値を入れない。旧metadata欠損は旧火木日のまま。お盆だけの最終日17時にはoptional `comparisonWeekdayGroup`を捕捉し、法定祝日のSunday優先metadataを捏造しない。
+- Supabaseの`actual_weekday_group`列は旧labelのCHECK制約があるため、recordの保存分類は従来どおりSQL許可値を使う。新比較groupは既存`record_details.decisionBasis` / calendar JSON内へ保存し、columnの旧分類を採用根拠と混同しない。新storage key/migration/SQL不要、schema3。過去確定評価・率・snapshot・保存根拠・ラベルを書き換えない。61の基準案内・採用5段階表示、60global計算順、他の業務式は維持。
 
 ### 9-36: AreaCount判断用履歴は通年共通
 
@@ -584,11 +592,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-61` / buildId `build-20261106-212958-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
-- 全check **100/100 PASS**。専用44/44、既存月表示28/28、基準ラベル/quick29/29。SSRと実TSX/実hookのイベント検証で5段階、手動上下、中間評価、両指示段階、時刻境界、旧fallback/未記録、エリア移動/再開と保存不変を確認。
-- TypeScript / production build / PWA generateSW PASS（111modules/precache10）。focused ESLint 0 errors / 0 warnings、full 7 existing errors / 5 existing warnings。60とfile/rule/severity/message比較で新規0、増減なし。既存chunk/Browserslist警告は維持。
-- 実Edge production 360/390×844 **80/80 PASS**（60比較・人工データ/localhost）。文言/独立改行/折返し、5段階、手動操作/長押し、両段階、18時境界、移動/再開、率・保存結果を確認。新規console問題・外部通信・横overflowなし。物理店舗端末、インストール済みPWA、実Supabaseは未確認。SSR/VMと実ブラウザ確認を区別する。
-- src108中1本変更、残り107・SQL9・AGENTS・過去CHANGE69は完成60ZIPとbyte-identical。注意8項目・依存/build方式/schemaを維持。完成ZIPを再openしてCRC・集合・bytes・版情報・dist/PWA・SHAを検査する。
+- appVersion `2026.8.9-62` / buildId `build-20261107-200442-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
+- 全check **101/101 PASS**、専用 **69/69 PASS**。15/17×7所属・同曜日優先の61実出力14条件・新fallback・未知曜日・旧label保全・減少率・中央値guard・祝日/三連休/お盆・snapshot/export/remote互換を確認。
+- 独立比較 **320/320 PASS**（重複同順位245、旧夜枠/captured calendar63、Review19統計12）、SQL列とJSON根拠往復 **3/3 PASS**。本番コード3本変更、他105・SQL9・AGENTS・過去CHANGE70は完成61ZIPとbyte-identical。
+- TypeScript / production build / PWA generateSW PASS（111modules/precache10）。focused ESLint 0 errors / 0 warnings、full 7 existing errors / 5 existing warnings。61とfile/rule/severity/message比較で新規0。既存chunk/Browserslist警告は維持。
+- 実Edge production 360/390×844 **32/32 PASS**（人工データ/localhost）。新group/不足/祝日/三連休/旧保存根拠、61案内、率・snapshot/reloadを確認。アプリconsole問題・外部通信・横overflowなし。実店舗物理端末、インストール済みPWA、実Supabaseは未確認。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -598,7 +606,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存7 errors / 5 warnings（59の9/5から旧helper由来の2 errorsが減少、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全100 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全101 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -620,6 +628,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 実Supabase mutationによる9-19確認。
 
 ## 14. 次セッションが最初に確認するファイル
+
+9-62追加: areaCountHistoryの保存/比較group分離・実曜日選別・旧分類fingerprint・三連休optional根拠、types、analysisMetadata、check-weekday-fallback62.tsと完成61出力fixture。専用SQL列は旧分類、実採用groupはJSON根拠。
 
 9-61追加: RateDisplayScreenの共通基準案内（既存adopted prop/2block/折返し）、Router/pendingの既存採用resolver、check-adopted-reference61.ts、既存月表示/reference-labelチェック。新規計算・保存fieldはない。
 
@@ -650,7 +660,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-61.md`（完成baselineは `CHANGE_REPORT_2026.8.9-60.md`）
+4. `CHANGE_REPORT_2026.8.9-62.md`（完成baselineは `CHANGE_REPORT_2026.8.9-61.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`
