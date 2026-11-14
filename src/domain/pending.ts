@@ -3,8 +3,10 @@ import type {
   AreaCountEvaluation,
   AreaId,
   AreaProgress,
+  DailySessionSnapshot,
   PendingAreaCandidate,
   PendingReason,
+  SessionData,
   SkipTargetOption,
 } from "./types.ts";
 
@@ -199,15 +201,31 @@ export function getNextPriorityPendingCandidate(params: {
   areaProgressMap: Record<AreaId, AreaProgress>;
   referenceAreaId: AreaId;
   normalFlowOrder?: readonly AreaId[];
+  session?: Pick<SessionData, "date" | "discountTime"> | null;
+  /** Canonical archive/current-journal view, read afresh by the completion handler. */
+  previousSessionSnapshots?: readonly DailySessionSnapshot[];
 }): PendingAreaCandidate | null {
   const activeRoute = new Set(params.normalFlowOrder ??
     getAreaRouteFromStoredIds(undefined, Object.keys(params.areaProgressMap)));
+  const session = params.session;
+  // Select the saved operation before inspecting its evaluation. A later
+  // correction without a many-side result must not revive an older result.
+  const previousSession = session?.discountTime === "17"
+    ? params.previousSessionSnapshots?.filter((snapshot) =>
+        snapshot.session.date === session.date &&
+        snapshot.session.discountTime === "15" &&
+        (snapshot.screen === "done" || snapshot.sessionEndReason === "auto_time_transition"),
+      ).toSorted((a, b) => b.capturedAt.localeCompare(a.capturedAt))[0]
+    : undefined;
   const candidates = Object.values(params.areaProgressMap).filter((progress) => {
     if (!isAreaActiveForCurrentWork(progress.areaId) ||
       !activeRoute.has(progress.areaId) ||
       progress.areaId === params.referenceAreaId ||
       progress.status !== "skipped_manual") return false;
-    const evaluation = getAdoptedEvaluation(progress);
+    const previousProgress = previousSession?.areas?.[progress.areaId];
+    const evaluation = getAdoptedEvaluation(progress) ??
+      (previousProgress?.areaId === progress.areaId
+        ? getAdoptedEvaluation(previousProgress) : undefined);
     return evaluation === "many" || evaluation === "slightly_many";
   });
   const picked = sortByDistance(candidates, params.referenceAreaId)[0];

@@ -95,6 +95,7 @@ import {
 } from "../domain/navigationHistory";
 import type { NavigationSnapshot } from "../domain/navigationHistory";
 import {
+  getAdoptedEvaluation,
   getCurrentAreaSkipDecision,
   getNextPendingCandidate,
   getNextPriorityPendingCandidate,
@@ -2634,8 +2635,17 @@ const lateSkipNotice = useMemo(() => {
   }): AppState | null {
     const { prev, updatedMap, referenceAreaId } = params;
     const context = normalizePriorityReturnContext(prev.priorityReturnContext, prev.session);
+    const needsPreviousEvaluation = !isTestMode && prev.session?.discountTime === "17" &&
+      Object.values(updatedMap).some((progress) =>
+        progress.status === "skipped_manual" && progress.areaId !== referenceAreaId &&
+        isAreaActiveForCurrentWork(progress.areaId) &&
+        (prev.normalFlowOrder?.includes(progress.areaId) ?? true) &&
+        getAdoptedEvaluation(progress) === undefined);
     const candidate = getNextPriorityPendingCandidate({ areaProgressMap: updatedMap,
-      referenceAreaId, normalFlowOrder: prev.normalFlowOrder });
+      referenceAreaId, normalFlowOrder: prev.normalFlowOrder, session: prev.session,
+      previousSessionSnapshots: needsPreviousEvaluation && prev.session
+        ? getHistoricalDailySessionSnapshotsForDate(prev.session.date) : [],
+    });
     if (!candidate) return context ? resumeAfterPriority(params) : null;
     return {
       ...prev, session: params.nextSession, timeSwitchNotice: params.timeSwitchNotice,

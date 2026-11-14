@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-62）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-63）
 
-最終更新: 2026-11-07 JST
+最終更新: 2026-11-14 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,14 +10,14 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-62.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-62.zip` |
-| appVersion | `2026.8.9-62` |
-| buildId | `build-20261107-200442-jst` |
+| ZIP | `nebiki-helper-2026.8.9-63.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-63.zip` |
+| appVersion | `2026.8.9-63` |
+| buildId | `build-20261114-135825-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-62.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-63.md`参照（自己参照回避） |
 
-application rootは`work/weekdayGroups62/nebiki-helper`。比較基準は完成61 ZIP `nebiki-helper-2026.8.9-61.zip`（SHA-256 `dbae2498d81b3380ba015012e3cbf665a5ba083af03ec0699d0fb2943a1e2d88`、build `build-20261106-212958-jst`）。62は15/17の履歴不足時の代替group選択を変更する。同曜日3件優先を維持し、過去保存labelと現在の比較分類を分離する。詳細は`CHANGE_REPORT_2026.8.9-62.md`。
+application rootは`work/priorityPrevious63/nebiki-helper`。比較基準は完成62 ZIP `nebiki-helper-2026.8.9-62.zip`（SHA-256 `98a54a90cb42278285c869f5de66a8d2b1b3492c0928e8630ddef63a7bb6655f`、build `build-20261107-200442-jst`）。63は17時未判定の明示スキップについて、同日15時の保存済み最終採用判定を優先復帰の判断材料に追加する。17時の入力・判定・率を15時データで補完しない。詳細は`CHANGE_REPORT_2026.8.9-63.md`。
 
 60の符号付きglobal計算と旧snapshot互換、59注意8項目、58減少率表示、57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
 
@@ -25,7 +25,7 @@ application rootは`work/weekdayGroups62/nebiki-helper`。比較基準は完成6
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\weekdayGroups62\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\priorityPrevious63\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -487,6 +487,15 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-63: 17時未判定の明示スキップは同日15時の採用結果も参照
+
+- 別エリアの全指示を正規完遂した後だけ、現在の対象route内・active・未完了`skipped_manual`・完了したエリア自身以外を候補にする。まず17時の既存`getAdoptedEvaluation`（areaCountEvaluation→保存済みhuman resolved→decision final）を使い、欠損時だけ同業務日/同areaの15時保存snapshotへ同じresolverを使う。採用値many/slightly_manyだけ優先。17normal/slightly_few/fewは15manyより優先して候補外、17many側は15fewでも候補。
+- 15時sourceは既存`getHistoricalDailySessionSnapshotsForDate(session.date)`によるIndexedDB runtime＋当日local journalのcanonical view。doneまたはauto_time_transitionで保存された15時snapshotの最新capturedAtを選んでから評価を読む。訂正後のnormal/few/欠損を避けて古いmanyを探し直さない。保存元の日付/時刻/areaを確認し、欠損areas・不一致areaIdも補完しない。raw auto/base、3段階areaJudge、残数・率から推測せず、raw9を復帰時の時計で解決し直さない。
+- snapshot読出しは17時・通常運用で、eligible明示スキップの17採用値が欠ける場合の完遂操作だけ。render・1段階目・通常完了/17採用値が全て揃う場合に新しい履歴読出しを加えない。固定時計は従来のsource隔離を維持して15 production snapshotを参照せず、own17の既存優先復帰とREAD ONLYを維持する。
+- own17候補と15参照候補を区別せず同じ距離順/同距離area orderで選ぶ。既存priorityReturnContextに通常ルートの続きだけを保持し、候補queue/15判定の複製は保存しない。候補完遂後はlive mapで再選択し、尽きたら通常の続きへ。訂正からの明示returnは既存どおり優先し、戻る/undo/reloadの既存復元を使う。
+- 15時は優先復帰の判断材料だけ。17時mapへ15の残数・判定・率・snapshotをコピーせず、未入力の復帰先は既存area_judge/残数keypadから再開する。15保存snapshotや採用結果が確認できない場合は従来の一般pending/通常ルートの動き。新storage key/永続field/schema変更なし。15時の従来priority、計算式、確定率・履歴・export/同期は非変更。
+
+
 ### 9-61: 値引指示の基準案内に最終採用判定を表示
 
 - `RateDisplayScreen`の共通案内を、上段「11月 金曜日 17時　エリア判定：やや多い」、独立した次行「を基準に考えて」とする。元の各商品量確認文は保持。共通部分なので多い/どちらでもないの両指示段階へ反映される。上段は自然折返しを許可し、overflow-wrap:anywhereで横はみ出しを防ぐ。「エリア判定：評価」だけはnowrapのspanにまとめ、普通などの判定語を途中で分断せず、必要なら欄全体が次行へ回る。
@@ -592,11 +601,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-62` / buildId `build-20261107-200442-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
-- 全check **101/101 PASS**、専用 **69/69 PASS**。15/17×7所属・同曜日優先の61実出力14条件・新fallback・未知曜日・旧label保全・減少率・中央値guard・祝日/三連休/お盆・snapshot/export/remote互換を確認。
-- 独立比較 **320/320 PASS**（重複同順位245、旧夜枠/captured calendar63、Review19統計12）、SQL列とJSON根拠往復 **3/3 PASS**。本番コード3本変更、他105・SQL9・AGENTS・過去CHANGE70は完成61ZIPとbyte-identical。
-- TypeScript / production build / PWA generateSW PASS（111modules/precache10）。focused ESLint 0 errors / 0 warnings、full 7 existing errors / 5 existing warnings。61とfile/rule/severity/message比較で新規0。既存chunk/Browserslist警告は維持。
-- 実Edge production 360/390×844 **32/32 PASS**（人工データ/localhost）。新group/不足/祝日/三連休/旧保存根拠、61案内、率・snapshot/reloadを確認。アプリconsole問題・外部通信・横overflowなし。実店舗物理端末、インストール済みPWA、実Supabaseは未確認。
+- appVersion `2026.8.9-63` / buildId `build-20261114-135825-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
+- 全check **102/102 PASS**、専用 **65/65 PASS**。既存priority pure13/13、flow45/45を変更せず維持。採用値の優先順・同日15source・最新訂正/欠損・距離/通常復帰、実hook/TSXの未入力skip/正規完遂/残数keypad、reload/back/undo/訂正、fixed-time READ ONLYを確認。
+- TypeScript / production build / PWA generateSW PASS（111modules/precache10）。focused ESLint 0 errors / 2 existing warnings、full 7 existing errors / 5 existing warnings。62とfile/rule/severity/message比較で新規0、増減なし。既存chunk/Browserslist警告は維持。
+- 実Edge production 360/390×844 **38/38 PASS**（人工データ/localhost）。未入力skip→別area両指示段階完遂→17残数入力、通常続き、候補混在、17優先、最新15根拠、reload/back/訂正、従来15を確認。アプリconsole問題・外部通信・横overflowなし。実店舗物理端末、インストール済みPWA、実Supabaseは未確認。
+- 本番コードはpending.ts/useNebikiApp.tsの2本のみ変更、他106・SQL9・AGENTS・過去CHANGE71は完成62ZIPとbyte-identical。独立resolver比較970件・source audit PASS。保存field/key/schema/計算式は非変更。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -606,7 +615,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存7 errors / 5 warnings（59の9/5から旧helper由来の2 errorsが減少、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全101 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全102 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -628,6 +637,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 実Supabase mutationによる9-19確認。
 
 ## 14. 次セッションが最初に確認するファイル
+
+9-63追加: pending.tsの任意session/previousSessionSnapshotsと同日15採用fallback、useNebikiAppの完遂時fresh-read/読出しguard、check-priority-previous63.ts。15sourceは既存canonical daily snapshotであり、17stateへコピーしない。
 
 9-62追加: areaCountHistoryの保存/比較group分離・実曜日選別・旧分類fingerprint・三連休optional根拠、types、analysisMetadata、check-weekday-fallback62.tsと完成61出力fixture。専用SQL列は旧分類、実採用groupはJSON根拠。
 
@@ -660,7 +671,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-62.md`（完成baselineは `CHANGE_REPORT_2026.8.9-61.md`）
+4. `CHANGE_REPORT_2026.8.9-63.md`（完成baselineは `CHANGE_REPORT_2026.8.9-62.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`
