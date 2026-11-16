@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-63）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-65）
 
-最終更新: 2026-11-14 JST
+最終更新: 2026-11-17 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,14 +10,14 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-63.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-63.zip` |
-| appVersion | `2026.8.9-63` |
-| buildId | `build-20261114-135825-jst` |
+| ZIP | `nebiki-helper-2026.8.9-65.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-65.zip` |
+| appVersion | `2026.8.9-65` |
+| buildId | `build-20261117-074248-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-63.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-65.md`参照（自己参照回避） |
 
-application rootは`work/priorityPrevious63/nebiki-helper`。比較基準は完成62 ZIP `nebiki-helper-2026.8.9-62.zip`（SHA-256 `98a54a90cb42278285c869f5de66a8d2b1b3492c0928e8630ddef63a7bb6655f`、build `build-20261107-200442-jst`）。63は17時未判定の明示スキップについて、同日15時の保存済み最終採用判定を優先復帰の判断材料に追加する。17時の入力・判定・率を15時データで補完しない。詳細は`CHANGE_REPORT_2026.8.9-63.md`。
+application rootは`work/seasonalReference65/nebiki-helper`。比較基準は完成64 ZIP `nebiki-helper-2026.8.9-64.zip`（SHA-256 `710810219e74c57f82c31d75d3b4726089cbf954fce8d3569a3a8281035a4dd7`、build `build-20261116-222511-jst`）。ユーザーの追加回答により、通常9エリアに従来の夏商品・秋商品の減少率比較も残す。減少率は64と同じ参考情報のみで、自動補正は復活させない。秋商品の一時無効化は維持。詳細は`CHANGE_REPORT_2026.8.9-65.md`。
 
 60の符号付きglobal計算と旧snapshot互換、59注意8項目、58減少率表示、57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
 
@@ -25,7 +25,7 @@ application rootは`work/priorityPrevious63/nebiki-helper`。比較基準は完�
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\priorityPrevious63\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\seasonalReference65\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -121,6 +121,8 @@ legacy migrationは次の順で行う。
 
 ### median / weekday group
 
+現行17時の減少率は9-64の参考情報のみ。以下の過去版で「維持」と記した減少補正の説明は導入当時の記録であり、新17時の自動1段補正は行わない。
+
 - rule: `area_count_median_v1`
 - 必要sample: 最低3件
 - 5段階: `many / slightly_many / normal / slightly_few / few`
@@ -132,7 +134,7 @@ legacy migrationは次の順で行う。
 
 ### 9-62: 15/17の履歴不足時だけ新しい曜日グループを使用
 
-- 通常日は同area/同時刻/同曜日の有効履歴3件以上を優先。不足時だけ15時は金土日・月火・水木、17時は金土・日月火・水木へfallbackする。グループも3件未満なら既存insufficient/manual。木曜加点や中央値の大小を強制する処理はない。通年normal/summer、short16/long52、単独曜日の中央値guard、閾値、減少補正、canonical merge/同日1観測を維持。
+- 通常日は同area/同時刻/同曜日の有効履歴3件以上を優先。不足時だけ15時は金土日・月火・水木、17時は金土・日月火・水木へfallbackする。グループも3件未満なら既存insufficient/manual。木曜加点や中央値の大小を強制する処理はない。通年normal/summer、short16/long52、単独曜日の中央値guard、閾値、canonical merge/同日1観測を維持。減少率は9-64から参考情報のみ。
 - `getActualWeekdayGroup` / `getAreaCountFallbackWeekdayGroup`は旧保存分類を維持し、`getAreaCountComparisonFallbackWeekdayGroup`を比較用に分離する。過去recordの旧月水/火木/火木日等は保持し、比較時だけ実曜日（欠損時は有効なISO日付）・時刻・既存calendar/versionから分類する。実曜日を確認できない旧データを新15/17groupへ推測投入しない。重複の同順位fingerprintは61の旧分類で並べ、保存ラベル保全が正式観測の選別を変えないようにする。
 - 対象祝日の通常日曜3件優先は維持。不足時のgroupは15金土日/17日月火。三連休中日17時の日曜側も不足時だけ日月火、金土との中央値50:50/片側/両不足は維持。三連休15時、長期連休17時の金土、祝前日/お盆の優先関係、Review19の19時統計と旧夜枠の分類・計算は維持する。
 - 実採用groupはrecommendation/decisionBasis/calendarへ捕捉し、既存のprogress→daily/daySnapshot/finalized→export/remote JSONへ伝播する。新17三連休のoptional `sundayFallbackWeekdayGroup` / `sundayMondayTuesdaySampleSize` / `sundayMondayTuesdayMedianCount`で日月火を表現し、旧`fireThursdaySunday*`へ別の意味の値を入れない。旧metadata欠損は旧火木日のまま。お盆だけの最終日17時にはoptional `comparisonWeekdayGroup`を捕捉し、法定祝日のSunday優先metadataを捏造しない。
@@ -143,7 +145,7 @@ legacy migrationは次の順で行う。
 - `getAreaCountRecommendation()` はnormal/summer両方の履歴を参照する。過去日と当日の取得、減り方の前時刻lookupからcycle filterを外し、summerの当年short/前年以前long分離も廃止した。両cycleとも同一比較条件の直近16件をshort、直近52件をlongへ使う。履歴の並びは従来normalと同じrecordedAt順で、当日・未来日は過去中央値へ入れない。
 - 同曜日3件以上を優先し、未満なら現行group、groupも3件未満ならinsufficient。混在normal2+summer2なら同曜日4件。short < longの場合だけ `max(short, long-2)` を採用し、group fallbackはguardなし。三連休の50/50合成、4日以上連休内部17時の比較先、Obon/calendarは維持する。
 - 新しい `dedupeLatestAreaCountCalculationRecordsByDateAreaTime()` は計算時だけ同一営業日・area・時刻を1観測へ寄せる。保存identity内の既存canonical mergeを再利用し、recordedAt、sessionStartedAt、richness、deterministic fingerprintで正式な観測を選ぶ。3件以上の同identityコピーも入力順で結果が変わらないようraw copyを安定順序へ並べてからmergeする。異なる保存identity間でmetadataを補完せず、選んだ観測自身のcycle/decisionを保持する。入力と保存済みrecordは書き換えない。
-- 減り方補正の過去時刻間sampleと当日前時刻は通年のcanonical観測から取得。対象area、20ポイント差、1段補正は維持する。20:30の参照中央値も同じ母集団を使うが、30/40/50型、40/50型、all50、個数別の業務ruleは非変更。
+- 減り方補正の過去時刻間sampleと当日前時刻は通年のcanonical観測から取得。20ポイント差は維持する。新17時の対象は通常9エリア＋従来の夏商品・秋商品（9-65）であり、自動1段補正は廃止。旧補正は旧19時純粋計算と保存済み根拠の互換だけに残す。20:30の参照中央値も同じ母集団を使うが、30/40/50型、40/50型、all50、個数別の業務ruleは非変更。
 - `buildReview19HistoryStatistics()` へ渡す過去Review19由来の一時AreaCountも両cycleを含め、各recordの元cycleを保持する。この一時recordは保存しない。結果は引き続き履歴統計だけで、廃止済みautoEvaluationを生成しない。正式なhuman raw9、tap-toggle、完了、JSON形式、productionAnalysisの判定定義は非変更。
 - 保存・archive・remote identity・Supabase `demand_cycle`・session/snapshot/Review19/rateDecisionSnapshot/exportはnormal/summer metadataを維持する。remoteは従来のcycle別2queryをmemory mergeする方式で、production local-first/失敗時継続/fixed-time READ ONLYは非変更。明示cycle指定のpure export builderは維持する。Review19設定の全件出力は9-41から両cycleを1ファイルにまとめる。
 - 履歴説明は「同じ曜日の記録」「短期中央値」「長期中央値」等の共通文言。夏の手動残数noteは「残数基準で手動判定します。」、mode ON/OFF確認は共通履歴を使う旨へ変更。基準表示は9-39で営業月表示となるが、human even解決・summer17 dry快適上限-10%・7/1〜9/30 gate/lockは維持する。
@@ -151,7 +153,7 @@ legacy migrationは次の順で行う。
 ### 9-37: 履歴前処理の再利用・17時early-next継続・季節商品
 
 - AreaCountは `prepareAreaCountCalculationPopulation()` でnormalize/canonical化・area/time索引を履歴変更時だけ作る。hookは `[areaCountRecords]` のuseMemo、recommendation callbackはarea/date/time/weekday/cycle等の明示依存useCallback、AreaJudgeはcount/callbackをuseMemoする。30秒clock、電卓表示等の同条件renderで全履歴を再構築しない。
-- prepared populationは呼出側が明示的に渡す不変snapshot。内部索引はprivate WeakMap、返す選択履歴は独立clone。従来のpreparedなし呼出は毎回freshに計算し、入力配列のin-place変更にも対応する。保存のcycle-aware canonical merge、通年計算時の1観測化、16/52・3件・group/long guard・decrease・20:30の意味は変更しない。
+- prepared populationは呼出側が明示的に渡す不変snapshot。内部索引はprivate WeakMap、返す選択履歴は独立clone。従来のpreparedなし呼出は毎回freshに計算し、入力配列のin-place変更にも対応する。保存のcycle-aware canonical merge、通年計算時の1観測化、16/52・3件・group/long guard・20:30の意味は変更しない。decreaseは9-64から新17時の参考情報として扱う。
 - Review19履歴も `prepareReview19HistoryPopulation()` へまとめて準備し、local/remote arrayが置き換わったときだけmemory mergeと前処理を再実行する。統計だけを返し、廃止済みの5段階auto判定は復活させない。archive/outbox/localStorage/Supabaseの責務は変更しない。
 - 9-37当時の17→18:30 early-nextは9-49で通常経路から撤去。17sessionは18:00以降もeffectiveRateDiscountTime="17"、late_plus5。15sessionは16:00以降late_plus5。旧early snapshot/skip記録は互換読込を維持するが、新15/17の率・次枠予約へ適用しない。時計だけで確定済みarea snapshotを書き換えない。
 - `ryomi` のIDは維持し、master表示名は「夏商品」。9-37で `autumn`「秋商品」を独立IDとして追加したが、9-55では現在の作業だけ一時無効化した。6〜9月はryomiを含む12、10〜5月は11。ID/name/type・旧10〜11月12エリアの保存証拠は保持。無効化はarea.tsの1か所で指定し、解除日/自動復活/UI toggleはない。
@@ -174,7 +176,9 @@ legacy migrationは次の順で行う。
 - 直後の7番目は、−10％が複数該当しても最初に1回、その後は該当項目ごとに＋10％、上限は商品別補正前の表示値引率＋10ポイント、と案内する。
 - 商品ごとの手作業向けの文言。既存太字の `emphasis` を使い、アスタリスクは表示しない。やや不人気の10個以上・大小パック条件を含む他6項目の本文・太字・相対順は保持する。自動計算・表示率・保存/同期は非変更。
 
-### 9-58: 17時の15→17減少率を数値で表示
+### 9-58: 17時の15→17減少率を数値で表示（旧仕様の記録）
+
+以下は導入時の説明。9-64以降は比較不能を推測しない表示・参考情報のみの方式を優先し、比較対象は9-65の通常9エリア＋夏商品・秋商品とする。取消/復元操作は撤去した。旧保存値の読取互換だけを維持する。
 
 - 17時のAreaJudge/RateDisplay/AutoSkipNotice/AutoSkipCount共通パネルに、15時N個→17時M個、減少率xx.x％（既存分類）、履歴中央値xx.x％を表示する。15時/旧夜枠へ新しい時刻間数値を出さない。率は `(N-M)/N` の未丸め値、表示時だけ100倍して小数1桁にする。±20pt分類は既存raw directionから読み、表示値で再判定しない。
 - 保存済みdecreaseAdjustmentのpreviousCount/currentDecreaseRate/medianDecreaseRateを優先。保存比較元が0/不正、または率しか保存されていない場合は新しい観測で穴埋めせず算出不可。raw canUse=trueで中央値だけ未保存なら既存分類を保持して「履歴中央値：未保存」。履歴不足と旧metadata欠損を混同しない。
@@ -183,7 +187,9 @@ legacy migrationは次の順で行う。
 - AreaJudgeは入力確定前に保存済みcount/basis、確定後にその入力の既存recommendationを表示する。area/session keyでremountし別areaの送信済みdraftが一瞬混ざることを防ぐ。AutoSkipCountは編集中countを表示し、保存countと異なれば旧capture率を流用しない。既存calculator draft保存・正式確定処理は変更しない。
 - 追加製造による補正取消/復元でもraw rate/median/directionは不変。既存Back/undoのsnapshot復元は維持し、古いcountへ戻る場合はそのcountと根拠を一緒に戻す。新しい表示用state/key/保存fieldは作らずderived contextだけを使う。対象・canUse・分類・率計算・過去データ・export/同期は変更しない。
 
-### 9-40: エリア残数・減少率表示と追加製造例外
+### 9-40: エリア残数・減少率表示と追加製造例外（旧互換の説明）
+
+以下の自動補正・取消操作・旧対象一覧は9-64の新規判定には使わない。過去の保存根拠の意味を読むための記録であり、現行UI/actionは廃止済み。現行は上記9-64を参照。
 
 - AreaJudge、RateDisplay（多い/どちらでもない/注意事項）、AutoSkipNotice、AutoSkipCount、FinalTimeの同一エリア画面で `AreaCountStatusPanel` を使う。値は現在の `areaProgressMap[currentAreaId].areaCount`。AreaJudgeの入力確定後は既存count draftとmemo済みrecommendationを使い、残数用の重複state/keyを追加しない。未知の数を捏造しない。
 - 減少率は保存済みdecisionBasisまたは既存recommendationのraw decreaseから表示。`canUse=false` は従来の簡易表示では判定なし（58の17時数値表示では対象外/履歴不足/比較元なしを区別）、`more_few` は良い、`none` は普通、`more_many` は悪い。比較は中央値±20pt、履歴最低3件。17時だけ、厳密な20pt境界の浮動小数点誤差をNumber.EPSILONで吸収する。19:30の判定式/結果は旧仕様を維持する。
@@ -487,6 +493,26 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-65: 季節商品も減少率の比較対象として継続
+
+- 64完成後の追加回答「季節商品も従来の比較対象として残す」を反映。通常9エリアにryomi（夏商品）とautumn（秋商品）を加え、同じ15→17ペア/採用履歴/最大16件/最低3件/15時正数/未丸め±20ポイントで参考比較する。コロッケ系とフライ・鶏惣菜は当日率のみ、legacy balance_bentoは比較対象外のまま。
+- 参考情報mode=reference_only_v1/applied:falseを維持。良い/普通/悪いによる自動段階補正、取消/復元操作を復活させない。残数判定・率・manual/quick・63優先復帰は不変。
+- 季節商品の作業対象月と秋商品の一時無効化（55）は非変更。autumnの比較定義/履歴互換を残すことは、秋商品を通常作業へ復活させる意味ではない。
+- 旧保存値や64で中央値を記録していない季節商品の根拠は、再読込だけで補完・再計算しない。新規判定/明示再判定から比較を取得する。過去CHANGE/完成64ZIPは当時の記録として不変。
+
+### 9-64: 15→17時の減少率は参考情報のみ
+
+以下は64完成時点の説明。比較対象から季節商品を外す部分だけは9-65で変更し、現行は通常9エリア＋従来の夏商品・秋商品。参考情報化・自動補正廃止・保存互換の方式は維持する。
+
+- 新17時判定では、残数中央値の5段階をそのまま自動採用する。減少率の良い/悪いで1段階動かさない。quick/manualは残数だけによる元自動判定から操作する。最終採用値は従来どおりareaCountEvaluation等へ保存し、63の優先復帰はその値だけを使う。
+- 新しい履歴比較対象は指定の9エリア: 弁当・麺類/天ぷら/焼鳥/中華・魚惣菜/おにぎり/寿司/太巻・中巻/いなり/細巻き。コロッケ系/フライ・鶏惣菜は当日15→17の数値だけ表示し中央値なし。季節商品の旧保存根拠は保持するが、新規比較の対象はこの9だけ。追加製造の有無を推測して履歴を削らない。
+- 既存の採用履歴、正式観測/canonical、同日15/17ペア、直近最大16、最低3、15時正数、未丸めの±20ポイント/17時EPSを維持。mode=reference_only_v1でもcanUseは「比較可能」の意味であり、自動補正可能の意味ではない。
+- AreaCountDecisionBasis.decreaseAdjustmentへoptional mode:"reference_only_v1"/applied:falseを明示。previousCount/currentDecreaseRate/medianDecreaseRate/direction/sample等は比較根拠として既存state→snapshot/daily/day/finalized/export/remote JSONへ伝播する。新storage key/migration/SQL/schema変更はない。
+- 共通パネルは当日推移・率・中央値と、独立した減少率判定を表示する。良い=緑badge/枠、悪い=赤badge/枠、普通=通常表示。増加は負の率と（増加）を残し、履歴比較の良い/悪いも別に表示/強調する。売れ行きの良し悪しと断定しない。履歴不足/比較元なし/15時0/不正/中央値未保存/比較対象外は分け、比較不能を良い/普通/悪いに推測しない。
+- 取消/復元ボタン・callback・public actionと、入力時の旧suppression再適用接続を撤去。過去のsuppressed/reason/directionは読取互換のため保持し、当時の補正は「過去の保存時」としてだけ説明する。純粋な旧互換helperは残すが現行hookから呼ばない。
+- 旧確定結果・途中状態は、render/reload/再開だけで採用値や確定率を変えない。mode/applied欠損を新方式として補完しない。新判定、残数訂正後の再判定、明示manual/quickから新方式を使う。旧quickがbaseEvaluationを旧補正後autoで上書きしていた場合は、保存済みcount+medianから既存残数閾値で元baselineを読む。曖昧で確認できない旧quickは非表示にしfull manualを残す。時計で保存済み中間評価を解決し直さない。
+
+
 ### 9-63: 17時未判定の明示スキップは同日15時の採用結果も参照
 
 - 別エリアの全指示を正規完遂した後だけ、現在の対象route内・active・未完了`skipped_manual`・完了したエリア自身以外を候補にする。まず17時の既存`getAdoptedEvaluation`（areaCountEvaluation→保存済みhuman resolved→decision final）を使い、欠損時だけ同業務日/同areaの15時保存snapshotへ同じresolverを使う。採用値many/slightly_manyだけ優先。17normal/slightly_few/fewは15manyより優先して候補外、17many側は15fewでも候補。
@@ -601,11 +627,12 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-63` / buildId `build-20261114-135825-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
-- 全check **102/102 PASS**、専用 **65/65 PASS**。既存priority pure13/13、flow45/45を変更せず維持。採用値の優先順・同日15source・最新訂正/欠損・距離/通常復帰、実hook/TSXの未入力skip/正規完遂/残数keypad、reload/back/undo/訂正、fixed-time READ ONLYを確認。
-- TypeScript / production build / PWA generateSW PASS（111modules/precache10）。focused ESLint 0 errors / 2 existing warnings、full 7 existing errors / 5 existing warnings。62とfile/rule/severity/message比較で新規0、増減なし。既存chunk/Browserslist警告は維持。
-- 実Edge production 360/390×844 **38/38 PASS**（人工データ/localhost）。未入力skip→別area両指示段階完遂→17残数入力、通常続き、候補混在、17優先、最新15根拠、reload/back/訂正、従来15を確認。アプリconsole問題・外部通信・横overflowなし。実店舗物理端末、インストール済みPWA、実Supabaseは未確認。
-- 本番コードはpending.ts/useNebikiApp.tsの2本のみ変更、他106・SQL9・AGENTS・過去CHANGE71は完成62ZIPとbyte-identical。独立resolver比較970件・source audit PASS。保存field/key/schema/計算式は非変更。
+- appVersion `2026.8.9-65` / buildId `build-20261117-074248-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
+- 全check **104/104 PASS**、季節商品専用 **38/38 PASS**。夏/秋、normal/summer、良い/普通/悪い/増加、16件/最低3/欠損/0、手動/quick、marker・保存/export、秋無効化を確認。64の32件と旧データ互換を維持。
+- TypeScript / production build / PWA generateSW PASS（110modules/precache10）。full lint 7 existing errors / 5 existing warnings、focused 0 errors / 0 warnings。64とfile/rule/severity/message比較で新規0。
+- 独立source監査PASS。非季節7200件の実64同値、季節reference480件・他時刻72件・不足8件、旧/新保存根拠6経路、季節gate12か月を検証。
+- 実Edge 360/390×844 **32/32 PASS**。人工データ/localhost/制御時計で夏商品比較と手動操作、再読込、秋無効化と旧秋履歴の保全を確認。実店舗端末・インストール済みPWA更新・実Supabaseは未確認。
+- 本番コードはareaCountHistory.tsの対象集合とコメントのみ変更。src108中、他107本・SQL9本・AGENTS・過去CHANGE73本は完成64ZIPとbyte-identical。schema3、保存構造/キー・依存・DB変更なし。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -615,7 +642,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存7 errors / 5 warnings（59の9/5から旧helper由来の2 errorsが減少、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全102 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全104 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -637,6 +664,10 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 実Supabase mutationによる9-19確認。
 
 ## 14. 次セッションが最初に確認するファイル
+
+9-65追加: areaCountHistory.tsのDECREASE_COMPARISON_AREA_IDSへryomi/autumnを継続対象として追加。check-seasonal-reference65.tsと既存64/area-decreaseテスト。秋商品の作業無効化は非変更。
+
+9-64追加: areaCountHistoryのreference_only_v1/9エリア/17自動補正廃止、areaEvaluationAdjustmentの残数baseline、areaDecreaseDisplay/共通パネルの独立比較表示、hookの取消接続撤去と明示再判定、check-decrease-reference64.ts。旧mode欠損を新方式で補完しない。
 
 9-63追加: pending.tsの任意session/previousSessionSnapshotsと同日15採用fallback、useNebikiAppの完遂時fresh-read/読出しguard、check-priority-previous63.ts。15sourceは既存canonical daily snapshotであり、17stateへコピーしない。
 
@@ -671,7 +702,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-63.md`（完成baselineは `CHANGE_REPORT_2026.8.9-62.md`）
+4. `CHANGE_REPORT_2026.8.9-65.md`（完成baselineは `CHANGE_REPORT_2026.8.9-64.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`

@@ -139,7 +139,6 @@ function assertPublicHookContract(): void {
       "markBentoJudgeGuideShown",
       "judgeCurrentArea",
       "applyAreaEvaluationAdjustment",
-  "toggleCurrentAreaDecreaseAdjustmentSuppression",
       "getCurrentAreaCountRecommendation",
       "skipCurrentArea",
       "chooseSkipTargetArea",

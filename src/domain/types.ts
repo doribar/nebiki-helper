@@ -1010,7 +1010,6 @@ export type UseNebikiAppActions = {
     stapleItemCount?: number | null,
     humanEvaluationSelection?: HumanEvaluationSelection,
   ) => Promise<void>;
-  toggleCurrentAreaDecreaseAdjustmentSuppression: () => Promise<void>;
   applyAreaEvaluationAdjustment: (direction: HumanEvaluationAdjustment["direction"]) => Promise<void>;
   getCurrentAreaCountRecommendation: (count: number) => AreaCountRecommendation;
   skipCurrentArea: () => void;

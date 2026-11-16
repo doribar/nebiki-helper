@@ -6,7 +6,6 @@ import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import {
-  canSuppressAreaCountDecreaseAdjustment,
   setAreaCountDecreaseAdjustmentSuppressed,
   type AreaCountDecisionBasis,
   type AreaCountRecommendation,
@@ -71,6 +70,7 @@ const shared = {
   weekdayText: "土曜日", timeText: "17時", areaName: "弁当・麺",
   basisGuide: { referenceText: "10月の土曜日の17時を基準に考えて", referenceConditionLabel: "10月・土曜日・17時" },
   onGoBack: noop, onReturnHome: noop, onSkip: noop,
+  decreaseDisplayContext: { areaId: "bento_men" as AreaId, discountTime: "17" as DiscountTime, previousCount: 50 },
 };
 function basis(direction: "more_many" | "more_few" | "none" = "more_many", canUse = true): AreaCountDecisionBasis {
   return {
@@ -86,7 +86,8 @@ function rateMarkup(patch: Partial<React.ComponentProps<typeof Rate>> = {}) {
   return renderToStaticMarkup(React.createElement(Rate, {
     ...shared, discountTime: "17", areaCount: 20, areaCountDecisionBasis: basis(),
     rateDisplay: rates(), onNextArea: noop, ...patch,
-  }));
+    decreaseDisplayContext: patch.decreaseDisplayContext ?? { areaId: "bento_men", discountTime: patch.discountTime ?? "17", previousCount: 50 },
+  })).replace(/<\/?span[^>]*>/g, "");
 }
 
 function routedApp(areaId: AreaId = "bento_men", discountTime: DiscountTime = "17", screen: ScreenName = "rate_display"): UseNebikiAppResult {
@@ -106,6 +107,7 @@ function routedApp(areaId: AreaId = "bento_men", discountTime: DiscountTime = "1
     derived: {
       ...shared, demandCycle: "normal", currentAreaName: areaId, rateDisplay: rates(),
       areaCountAssistEnabled: true,
+      areaCountDecreaseDisplayContext: { areaId, discountTime, previousCount: 50 },
       finalGuide: { count1: { main: "30%" }, count2: { main: "40%" }, count3OrMore: { main: "50%" }, score: 0, scoreThreshold: 3, scoreBreakdown: { weekdayShiftPoints: 0, rateBonusPoints: 0 } },
     } as unknown as UseNebikiAppResult["derived"],
     actions: {
@@ -119,7 +121,7 @@ function routedApp(areaId: AreaId = "bento_men", discountTime: DiscountTime = "1
   };
 }
 function routedMarkup(app: UseNebikiAppResult, testNow?: Date) {
-  return renderToStaticMarkup(React.createElement(Router, { app, testNow }));
+  return renderToStaticMarkup(React.createElement(Router, { app, testNow })).replace(/<\/?span[^>]*>/g, "");
 }
 
 type Props = Record<string, unknown>;
@@ -199,44 +201,43 @@ const test = (name: string, run: () => void) => tests.push({ name, run });
 test("SSR count and assessment are paired directly below ScreenHeader", () => {
   const markup = rateMarkup();
   assert.match(markup, /エリア残数：20個/);
-  assert.match(markup, /減少率：悪い/);
+  assert.match(markup, /減少率判定：悪い/);
   assert.ok(markup.indexOf("現在のエリア残数と減少率") < markup.indexOf("各商品の量が"));
   assert.match(markup, /flex-wrap:wrap/);
 });
 test("raw recommendation direction supplies all three labels; incomparable is not ordinary", () => {
-  for (const [direction, canUse, expected] of [["more_many", true, "悪い"], ["more_few", true, "良い"], ["none", true, "普通"], ["none", false, "判定なし"], ["more_many", false, "判定なし"]] as const) {
-    assert.match(rateMarkup({ areaCountDecisionBasis: basis(direction, canUse) }), new RegExp(`減少率：${expected}`));
+  for (const [direction, canUse, expected] of [["more_many", true, "悪い"], ["more_few", true, "良い"], ["none", true, "普通"], ["none", false, "履歴不足"], ["more_many", false, "履歴不足"]] as const) {
+    assert.match(rateMarkup({ areaCountDecisionBasis: basis(direction, canUse) }), new RegExp(`減少率判定：${expected}`));
   }
-  assert.match(rateMarkup({ areaCountDecisionBasis: undefined }), /減少率：判定なし/);
+  assert.match(rateMarkup({ areaCountDecisionBasis: undefined }), /減少率判定：履歴不足/);
 });
 test("unknown/invalid counts do not invent a remaining-count display; zero is known", () => {
   for (const areaCount of [undefined, null, -1, NaN, Infinity, 1.5]) assert.doesNotMatch(rateMarkup({ areaCount }), /エリア残数：/);
   assert.match(rateMarkup({ areaCount: 0 }), /エリア残数：0個/);
 });
-test("only eligible 17-time bad comparison renders suppression control", () => {
-  const targets: AreaId[] = ["bento_men", "tempura", "onigiri", "inari", "hosomaki", "ryomi", "autumn", "yakitori"];
-  const excluded: AreaId[] = ["croquette", "fry_chicken", "chuka_fish", "sushi", "futomaki_chumaki"];
-  for (const areaId of [...targets, ...excluded]) {
-    for (const discountTime of ["17", "19"] as const) {
-      for (const [direction, canUse] of [["more_many", true], ["more_few", true], ["none", true], ["none", false]] as const) {
-        const raw = basis(direction, canUse);
-        const eligible = canSuppressAreaCountDecreaseAdjustment({ areaId, discountTime, basis: raw });
-        const markup = rateMarkup({ discountTime, areaCountDecisionBasis: raw, onToggleDecreaseAdjustmentSuppression: eligible ? noop : undefined });
-        assert.equal(markup.includes("追加製造あり・補正を取り消す"), targets.includes(areaId) && discountTime === "17" && direction === "more_many" && canUse);
-      }
+test("neither legacy nor reference comparisons render retired suppression controls", () => {
+  const all: AreaId[] = ["bento_men", "tempura", "onigiri", "inari", "hosomaki", "ryomi", "autumn", "yakitori", "croquette", "fry_chicken", "chuka_fish", "sushi", "futomaki_chumaki"];
+  for (const areaId of all) for (const discountTime of ["17", "19"] as const) for (const direction of ["more_many", "more_few", "none"] as const) {
+    const raw = basis(direction);
+    for (const mode of [undefined, "reference_only_v1"] as const) {
+      raw.decreaseAdjustment!.mode = mode;
+      const markup = rateMarkup({ discountTime, areaCountDecisionBasis: raw, decreaseDisplayContext: { areaId, discountTime, previousCount: 50 } });
+      assert.doesNotMatch(markup, /追加製造あり・補正を取り消す|補正を戻す/);
+      assert.equal(raw.decreaseAdjustment!.direction, direction);
     }
   }
 });
+
 test("fixed-time callback absence and defensive 19:30 guard hide the button", () => {
   assert.doesNotMatch(rateMarkup({ onToggleDecreaseAdjustmentSuppression: undefined }), /追加製造あり・補正を取り消す/);
   assert.doesNotMatch(rateMarkup({ discountTime: "19", onToggleDecreaseAdjustmentSuppression: noop }), /追加製造あり・補正を取り消す/);
   const raw19 = basis(); raw19.decreaseAdjustment!.previousDiscountTime = "18";
   const markup19 = rateMarkup({ discountTime: "19", areaCountDecisionBasis: raw19 });
-  assert.match(markup19, /減少率：悪い/); assert.doesNotMatch(markup19, /追加製造あり・補正を取り消す/);
+  assert.match(markup19, /減少率判定：判定なし/); assert.doesNotMatch(markup19, /追加製造あり・補正を取り消す/);
 });
 test("rate instructions and lower notices keep the same current-area count and raw assessment", () => {
   const markup = rateMarkup();
-  assert.match(markup, /エリア残数：20個/); assert.match(markup, /減少率：悪い/); assert.match(markup, /注意事項/);
+  assert.match(markup, /エリア残数：20個/); assert.match(markup, /減少率判定：悪い/); assert.match(markup, /注意事項/);
   assert.match(markup, /多い商品を30%/); assert.doesNotMatch(markup, />OK<\/button>/);
 });
 test("actual AreaJudge keypad completion transitions to RateDisplay with count 20", () => {
@@ -291,17 +292,19 @@ test("count correction and next-area/reload use the latest current-area progress
     areaCountDecisionBasis: recovered.progress[recovered.areaId]?.areaCountDecisionBasis, rateDisplay: rates(), onNextArea: noop }));
   assert.match(reloaded.text(), /エリア残数：7個/); assert.doesNotMatch(reloaded.text(), /エリア残数：(20|18)個/); reloaded.close();
 });
-test("suppression click keeps bad raw assessment through both steps and restoration", () => {
+test("legacy saved suppression and pure restoration remain readable through both rate steps without controls", () => {
   let currentBasis = basis(); const raw = { ...currentBasis.decreaseAdjustment };
-  const toggle = () => { const next = setAreaCountDecreaseAdjustmentSuppressed({ areaId: "bento_men", discountTime: "17", basis: currentBasis, suppressed: currentBasis.decreaseAdjustment?.suppressed !== true }); assert.ok(next); currentBasis = next; };
+  currentBasis = setAreaCountDecreaseAdjustmentSuppressed({ areaId: "bento_men", discountTime: "17", basis: currentBasis, suppressed: true })!;
   const fixture = new ComponentFixture(() => React.createElement(Rate, { ...shared, discountTime: "17", areaCount: 20,
-    areaCountDecisionBasis: currentBasis, rateDisplay: rates(), onToggleDecreaseAdjustmentSuppression: toggle, onNextArea: noop }));
-  fixture.click("追加製造あり・補正を取り消す");
-  assert.match(fixture.text(), /減少率：悪い/); assert.match(fixture.text(), /減少率補正：取り消し済み/); assert.equal(currentBasis.finalEvaluation, "normal");
-  fixture.click("終わった"); assert.match(fixture.text(), /どちらでもない商品を20%/); assert.match(fixture.text(), /減少率補正：取り消し済み/);
-  fixture.click("補正を戻す"); assert.match(fixture.text(), /減少率：悪い/); assert.equal(currentBasis.finalEvaluation, "slightly_many");
+    areaCountDecisionBasis: currentBasis, rateDisplay: rates(), onNextArea: noop }));
+  assert.match(fixture.text(), /減少率判定：悪い/); assert.match(fixture.text(), /過去の保存時の減少率補正：取り消し済み/); assert.equal(currentBasis.finalEvaluation, "normal");
+  assert.doesNotMatch(fixture.text(), /追加製造あり・補正を取り消す|補正を戻す/);
+  fixture.click("終わった"); assert.match(fixture.text(), /どちらでもない商品を20%/); assert.match(fixture.text(), /過去の保存時の減少率補正：取り消し済み/);
+  currentBasis = setAreaCountDecreaseAdjustmentSuppressed({ areaId: "bento_men", discountTime: "17", basis: currentBasis, suppressed: false })!;
+  fixture.render(); assert.match(fixture.text(), /減少率判定：悪い/); assert.equal(currentBasis.finalEvaluation, "slightly_many");
   assert.deepEqual(currentBasis.decreaseAdjustment, raw); fixture.close();
 });
+
 test("AreaJudge manual phase derives newly entered count and recommendation instead of stale basis", () => {
   sessionStorage.clear(); let recommendations = 0;
   const getAreaCountRecommendation = (count: number): AreaCountRecommendation => {
@@ -312,10 +315,10 @@ test("AreaJudge manual phase derives newly entered count and recommendation inst
   const fixture = new ComponentFixture(() => React.createElement(Judge, { ...shared, areaId: "bento_men", calculatorDraftScope: "manual-18",
     areaCount: 20, areaCountDecisionBasis: basis(), areaCountAssistEnabled: true, getAreaCountRecommendation, onJudge: noop }));
   fixture.click("1"); fixture.click("8"); fixture.click("完了");
-  assert.match(fixture.text(), /エリア残数：18個/); assert.match(fixture.text(), /減少率：判定なし/); assert.doesNotMatch(fixture.text(), /減少率：悪い/);
+  assert.match(fixture.text(), /エリア残数：18個/); assert.match(fixture.text(), /減少率判定：履歴不足/); assert.doesNotMatch(fixture.text(), /減少率判定：悪い/);
   const calls = recommendations; fixture.render(); assert.equal(recommendations, calls, "status display reuses existing memoized recommendation"); fixture.close();
 });
-test("AreaJudge retains saved suppression only when the newly entered raw comparison is still bad", () => {
+test("AreaJudge new submitted count never presents the prior saved suppression as a current action", () => {
   for (const direction of ["more_many", "more_few", "none"] as const) {
     sessionStorage.clear();
     const previous = basis(); previous.decreaseAdjustment!.suppressed = true;
@@ -329,8 +332,8 @@ test("AreaJudge retains saved suppression only when the newly entered raw compar
       areaCount: 20, areaCountDecisionBasis: previous, areaCountAssistEnabled: true, getAreaCountRecommendation, onJudge: noop }));
     fixture.click("1"); fixture.click("8"); fixture.click("完了");
     assert.match(fixture.text(), /エリア残数：18個/);
-    assert.equal(fixture.text().includes("減少率補正：取り消し済み"), direction === "more_many");
-    assert.match(fixture.text(), new RegExp(`減少率：${direction === "more_many" ? "悪い" : direction === "more_few" ? "良い" : "普通"}`));
+    assert.equal(fixture.text().includes("過去の保存時の減少率補正：取り消し済み"), false);
+    assert.match(fixture.text(), new RegExp(`減少率判定：${direction === "more_many" ? "悪い" : direction === "more_few" ? "良い" : "普通"}`));
     assert.doesNotMatch(fixture.text(), /追加製造あり・補正を取り消す|補正を戻す/);
     fixture.close();
   }
@@ -347,7 +350,7 @@ test("actual AppRouter routes canonical current-area progress across active coun
   for (const screen of ["area_judge", "rate_display", "auto_skip_notice", "auto_skip_count"] as const) {
     const app = routedApp("bento_men", "17", screen);
     let markup = routedMarkup(app);
-    assert.match(markup, /エリア残数：20個/); assert.match(markup, /減少率：悪い/);
+    assert.match(markup, /エリア残数：20個/); assert.match(markup, /減少率判定：悪い/);
     app.state.areaProgressMap.bento_men.areaCount = 18;
     markup = routedMarkup(app); assert.match(markup, /エリア残数：18個/); assert.doesNotMatch(markup, /エリア残数：20個/);
     app.state.currentAreaId = "onigiri";
@@ -363,7 +366,7 @@ test("actual AppRouter never renders the retired final-time operation, including
   assert.equal(routedMarkup(app, new Date("2026-10-03T11:30:00.000Z")), "");
   assert.equal(app.state.areaProgressMap.bento_men.areaCount, 20);
 });
-test("actual AppRouter owns area/time eligibility and fixed-time suppression callback guard", () => {
+test("actual AppRouter hides retired suppression controls in every area/time and fixed-time mode", () => {
   const targets: AreaId[] = ["bento_men", "tempura", "onigiri", "inari", "hosomaki", "ryomi", "autumn", "yakitori"];
   for (const areaId of [...targets, "croquette", "fry_chicken", "chuka_fish", "sushi", "futomaki_chumaki"] as AreaId[]) {
     for (const discountTime of ["17", "19"] as const) {
@@ -371,7 +374,7 @@ test("actual AppRouter owns area/time eligibility and fixed-time suppression cal
       if (discountTime === "19") app.state.areaProgressMap[areaId].areaCountDecisionBasis!.decreaseAdjustment!.previousDiscountTime = "18";
       for (const direction of ["more_many", "more_few", "none"] as const) {
         app.state.areaProgressMap[areaId].areaCountDecisionBasis!.decreaseAdjustment!.direction = direction;
-        const expected = targets.includes(areaId) && discountTime === "17" && direction === "more_many";
+        const expected = false;
         assert.equal(routedMarkup(app).includes("追加製造あり・補正を取り消す"), expected);
         assert.doesNotMatch(routedMarkup(app, new Date("2026-10-03T08:00:00.000Z")), /追加製造あり・補正を取り消す|補正を戻す/);
       }

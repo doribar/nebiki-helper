@@ -17,14 +17,14 @@ import {
   setAreaCountDecreaseAdjustmentSuppressed,
   type AreaCountRecord,
 } from "../src/domain/areaCountHistory.ts";
-import { getAreaEvaluationQuickAdjustments } from "../src/domain/areaEvaluationAdjustment.ts";
+import { getAreaEvaluationQuickAdjustments, getAreaEvaluationQuickAdjustmentBase } from "../src/domain/areaEvaluationAdjustment.ts";
 import { buildAnalysisWeatherContext, buildSessionAnalysisCalendarContext } from "../src/domain/analysisMetadata.ts";
 import { getCurrentDataVersionInfo } from "../src/domain/dataVersion.ts";
 import { normalizeDemandCycle } from "../src/domain/demandCycle.ts";
 import { createHumanEvaluationSelection, resolveHumanEvaluationForDiscount } from "../src/domain/humanEvaluation.ts";
 import { createDefaultHourlyForecasts } from "../src/domain/hourlyWeather.ts";
 import { cloneAppState, createNavigationSnapshot, popNavigationHistory, type NavigationSnapshot } from "../src/domain/navigationHistory.ts";
-import { retainAreaProgressInNavigationSnapshot, retainSuppressedDecreaseRecommendation } from "../src/hooks/nebikiApp/decreaseSuppression.ts";
+import { retainAreaProgressInNavigationSnapshot } from "../src/hooks/nebikiApp/decreaseSuppression.ts";
 import { createInitialState } from "../src/hooks/nebikiApp/stateNormalization.ts";
 import type { AppState, AreaCountEvaluation, AreaId, DemandCycle, DiscountTime, HumanEvaluationAdjustment, HumanEvaluationSelection, SessionDraft } from "../src/domain/types.ts";
 
@@ -109,7 +109,7 @@ function harness(options: {
     suppressHistoryPushRef: { current: false }, remoteAreaCountHistoryRef: { current: [] as AreaCountRecord[] },
     applyObonRule: true,
     getRuntimeNow: () => new Date(Date.parse(`${DATE}T${time === "15" ? "06" : "08"}:10:00.000Z`) + clockCalls++),
-    getAreaEvaluationQuickAdjustments, createHumanEvaluationSelection, resolveHumanEvaluationForDiscount,
+    getAreaEvaluationQuickAdjustments, getAreaEvaluationQuickAdjustmentBase, createHumanEvaluationSelection, resolveHumanEvaluationForDiscount,
     normalizeDemandCycle, buildAreaCountDecisionBasis, buildSessionAnalysisCalendarContext,
     buildAnalysisWeatherContext, getCurrentDataVersionInfo, getActualWeekdayLabel,
     getAreaCountFallbackWeekdayGroup, isAreaCountAssistTarget, mergeAreaCountRecordCollections,
@@ -118,7 +118,7 @@ function harness(options: {
     getAreaCountRateAdjustment: evaluationToRateAdjustment,
     getCurrentAreaCountRecommendation: (newCount: number) => {
       recommendationCalls += 1;
-      return retainSuppressedDecreaseRecommendation({ recommendation: rawRecommendation(newCount), previousBasis: context.state.areaProgressMap[areaId]?.areaCountDecisionBasis, areaId, discountTime: time });
+      return rawRecommendation(newCount);
     },
     createUndoSnapshot: () => snapshot(context.state),
     setUndoSnapshot: (value: NavigationSnapshot | null | ((previous: NavigationSnapshot | null) => NavigationSnapshot | null)) => { context.undoSnapshot = typeof value === "function" ? value(context.undoSnapshot) : value; },
@@ -139,11 +139,10 @@ function harness(options: {
     window: { confirm: () => true },
   };
   Object.defineProperty(context, "currentAreaProgress", { get: () => context.state.currentAreaId ? context.state.areaProgressMap[context.state.currentAreaId] : undefined });
-  const code = ["applyAreaJudgeSelection", "judgeCurrentArea", "retainCurrentAreaNavigationProgress", "toggleCurrentAreaDecreaseAdjustmentSuppression", "applyAreaEvaluationAdjustment", "goBackOneScreen", "undoLastAction"].map(actionDeclaration).join("\n");
-  const actions = runInNewContext(ts.transpileModule(`${code}\n({toggle:toggleCurrentAreaDecreaseAdjustmentSuppression, judge:judgeCurrentArea, quick:applyAreaEvaluationAdjustment, back:goBackOneScreen, undo:undoLastAction});`, {
+  const code = ["applyAreaJudgeSelection", "judgeCurrentArea", "applyAreaEvaluationAdjustment", "goBackOneScreen", "undoLastAction"].map(actionDeclaration).join("\n");
+  const actions = runInNewContext(ts.transpileModule(`${code}\n({judge:judgeCurrentArea, quick:applyAreaEvaluationAdjustment, back:goBackOneScreen, undo:undoLastAction});`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText, context) as {
-    toggle: () => Promise<void>;
     judge: (judge: "normal", count: number, manual?: AreaCountEvaluation, staple?: number | null, human?: HumanEvaluationSelection) => Promise<void>;
     quick: (direction: HumanEvaluationAdjustment["direction"]) => Promise<void>;
     back: () => void; undo: () => void;
@@ -151,249 +150,121 @@ function harness(options: {
   return { context, attempts, writes, actions, rawRecommendation, get syncCalls() { return syncCalls; }, get recommendationCalls() { return recommendationCalls; } };
 }
 
-function adopted(value: ReturnType<typeof harness>, expected: AreaCountEvaluation, suppressed: boolean) {
+
+function adopted(value: ReturnType<typeof harness>, expected: AreaCountEvaluation) {
   const progress = value.context.state.areaProgressMap[value.context.state.currentAreaId!];
-  assert.equal(progress.areaCountEvaluation, expected);
-  assert.equal(progress.areaRateAdjustment, evaluationToRateAdjustment(expected));
+  assert.equal(progress.areaCountEvaluation, expected); assert.equal(progress.areaRateAdjustment, evaluationToRateAdjustment(expected));
   assert.equal(progress.areaCountDecisionBasis?.finalEvaluation, expected);
-  assert.equal(progress.areaCountDecisionBasis?.decreaseAdjustment?.suppressed === true, suppressed);
-  assert.equal(progress.areaCountDecisionBasis?.decreaseAdjustment?.direction, "more_many");
-  if (suppressed) assert.equal(progress.areaCountDecisionBasis?.decreaseAdjustment?.suppressionReason, "additional_production");
-  const latest = value.writes.at(-1);
-  if (latest) {
-    assert.equal(latest.suggestedEvaluation, expected);
-    assert.equal(latest.decisionBasis?.finalEvaluation, expected);
-    assert.equal(latest.decisionBasis?.decreaseAdjustment?.suppressed === true, suppressed);
-  }
+  assert.equal(progress.areaCountDecisionBasis?.decreaseAdjustment?.mode, "reference_only_v1");
+  assert.equal(progress.areaCountDecisionBasis?.decreaseAdjustment?.applied, false);
+  assert.equal(progress.areaCountDecisionBasis?.decreaseAdjustment?.suppressed, undefined);
+  const latest = value.writes.at(-1); if (latest) { assert.equal(latest.suggestedEvaluation, expected); assert.equal(latest.decisionBasis?.finalEvaluation, expected); }
+}
+function seedLegacy(h: ReturnType<typeof harness>, suppressed = false) {
+  const p = h.context.currentAreaProgress, basis = p.areaCountDecisionBasis!;
+  delete basis.decreaseAdjustment!.mode; delete basis.decreaseAdjustment!.applied;
+  basis.finalEvaluation = suppressed ? "normal" : "slightly_many"; basis.areaRateAdjustment = suppressed ? 0 : 5;
+  if (suppressed) { basis.decreaseAdjustment!.suppressed = true; basis.decreaseAdjustment!.suppressionReason = "additional_production"; }
+  p.areaCountEvaluation = basis.finalEvaluation; p.areaRateAdjustment = basis.areaRateAdjustment;
+  return json(p);
 }
 
-test("real toggle cancels/restores/repeats from saved raw base without calculating history", async () => {
-  const h = harness();
-  const initial = json(h.context.currentAreaProgress.areaCountDecisionBasis!.decreaseAdjustment);
-  for (let iteration = 0; iteration < 3; iteration += 1) {
-    await h.actions.toggle();
-    adopted(h, "normal", true);
-    const { suppressed, suppressionReason, ...raw } = json(h.context.currentAreaProgress.areaCountDecisionBasis!.decreaseAdjustment!);
-    assert.equal(suppressed, true);
-    assert.equal(suppressionReason, "additional_production");
-    assert.deepEqual(raw, initial);
-    await h.actions.toggle();
-    adopted(h, "slightly_many", false);
-    assert.deepEqual(json(h.context.currentAreaProgress.areaCountDecisionBasis!.decreaseAdjustment), initial);
-  }
-  assert.equal(h.writes.length, 6);
-  assert.equal(h.recommendationCalls, 0);
+test("retired hook toggle and navigation rewrite actions are absent", () => {
+  assert.doesNotMatch(hookSource, /function toggleCurrentAreaDecreaseAdjustmentSuppression|function retainCurrentAreaNavigationProgress/);
 });
-
-test("real toggle changes only the current AreaCount record and preserves other objects", async () => {
-  const h = harness();
-  const previousState = h.context.state;
-  const previousRecords = h.context.areaCountRecords;
-  const identity = getAreaCountRecordIdentity(previousRecords.at(-1)!);
-  const siblings = previousRecords.filter((item) => getAreaCountRecordIdentity(item) !== identity);
-  await h.actions.toggle();
-  assert.notEqual(h.context.areaCountRecords, previousRecords);
-  assert.equal(h.context.areaCountRecords.length, previousRecords.length);
-  for (const record of siblings) assert.equal(h.context.areaCountRecords.find((candidate) => getAreaCountRecordIdentity(candidate) === getAreaCountRecordIdentity(record)), record);
-  assert.equal(h.context.state.areaProgressMap.tempura, previousState.areaProgressMap.tempura);
-  assert.equal(h.context.state.session, previousState.session);
-  assert.equal(h.context.state.finalTimeStep, previousState.finalTimeStep);
-  assert.equal(h.recommendationCalls, 0);
-});
-
-test("toggle selects saved metadata from its cycle-aware identity", async () => {
-  const h = harness();
-  const current = { ...h.context.areaCountRecords.at(-1)!, comfortPoint: 17 };
-  const opposite = { ...current, demandCycle: "summer" as const, comfortPoint: 99 };
-  h.context.areaCountRecords = [opposite, ...h.context.areaCountRecords.slice(0, -1), current];
-  await h.actions.toggle();
-  assert.equal(h.writes.at(-1)?.demandCycle, "normal");
-  assert.equal(h.writes.at(-1)?.comfortPoint, 17);
-  assert.equal(h.context.areaCountRecords.find((candidate) => getAreaCountRecordIdentity(candidate) === getAreaCountRecordIdentity(opposite)), opposite);
-});
-
-test("slightly-few base cancels normal correction and restores exactly once", async () => {
-  const h = harness({ medianCount: 24 });
-  assert.equal(h.context.currentAreaProgress.areaCountEvaluation, "normal");
-  await h.actions.toggle();
-  adopted(h, "slightly_few", true);
-  await h.actions.toggle();
-  adopted(h, "normal", false);
-});
-
-test("cancel then quick lower retains metadata, restore preserves human, opposite quick uses original", async () => {
-  const h = harness();
-  await h.actions.toggle();
-  await h.actions.quick("lower");
-  adopted(h, "slightly_few", true);
-  assert.equal(h.context.currentAreaProgress.areaCountEvaluationSource, "manual");
-  assert.equal(h.context.currentAreaProgress.humanEvaluationDetails?.automaticEvaluation, "normal");
+test("bad-reference automatic adoption is residual only and quick lower/higher never accumulates", async () => {
+  const h = harness(); adopted(h, "normal");
+  for (let n = 0; n < 3; n++) { await h.actions.quick("lower"); adopted(h, "slightly_few"); await h.actions.quick("higher"); adopted(h, "slightly_many"); }
   assert.equal(h.context.currentAreaProgress.humanEvaluationDetails?.evaluationAdjustment?.originalEvaluation, "normal");
   assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.baseEvaluation, "normal");
-  await h.actions.toggle();
-  adopted(h, "slightly_few", false);
-  await h.actions.quick("higher");
-  adopted(h, "slightly_many", false);
-  assert.equal(h.context.currentAreaProgress.humanEvaluationDetails?.evaluationAdjustment?.originalEvaluation, "normal");
 });
-
-test("quick before cancel preserves the existing quick base/original/final semantics", async () => {
-  const h = harness();
-  await h.actions.quick("lower");
-  adopted(h, "normal", false);
-  assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.baseEvaluation, "slightly_many");
-  const human = json(h.context.currentAreaProgress.humanEvaluationDetails);
-  await h.actions.toggle();
-  adopted(h, "normal", true);
-  assert.deepEqual(json(h.context.currentAreaProgress.humanEvaluationDetails), human);
-  await h.actions.toggle();
-  adopted(h, "normal", false);
-  await h.actions.quick("higher");
-  adopted(h, "many", false);
-  assert.equal(h.context.currentAreaProgress.humanEvaluationDetails?.evaluationAdjustment?.originalEvaluation, "slightly_many");
-});
-
-test("cancel then quick then real undo restores prior automatic state and cancellation", async () => {
-  const h = harness();
-  await h.actions.toggle();
-  const cancelled = json(h.context.state);
-  await h.actions.quick("lower");
-  adopted(h, "slightly_few", true);
-  h.actions.undo();
-  assert.deepEqual(json(h.context.state), cancelled);
-  assert.equal(h.context.currentAreaProgress.areaCountEvaluation, "normal");
-  assert.equal(h.context.currentAreaProgress.humanEvaluationDetails, undefined);
-  assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.suppressed, true);
-});
-
-test("all nine explicit human observations retain their final/resolution through cancel and restore", async () => {
-  for (let score = 1; score <= 9; score += 1) {
-    const h = harness({ cycle: score % 2 ? "normal" : "summer" });
-    const index = Math.floor((score - 1) / 2);
-    const selection = createHumanEvaluationSelection(EVALUATIONS[index], score % 2 ? undefined : EVALUATIONS[index + 1]);
-    assert.ok(selection);
-    await h.actions.judge("normal", 20, undefined, undefined, selection);
-    const human = json(h.context.currentAreaProgress.humanEvaluationDetails);
-    const final = h.context.currentAreaProgress.areaCountEvaluation!;
-    await h.actions.toggle();
-    adopted(h, final, true);
-    assert.deepEqual(json(h.context.currentAreaProgress.humanEvaluationDetails), human);
-    await h.actions.toggle();
-    adopted(h, final, false);
-    assert.deepEqual(json(h.context.currentAreaProgress.humanEvaluationDetails), human);
+test("legacy prior correction and cancellation both use residual quick baseline without restoring the old layer", async () => {
+  for (const suppressed of [false, true]) {
+    const h = harness(); seedLegacy(h, suppressed); await h.actions.quick("lower"); adopted(h, "slightly_few");
+    assert.equal(h.context.currentAreaProgress.humanEvaluationDetails?.automaticEvaluation, "normal");
+    await h.actions.quick("higher"); adopted(h, "slightly_many");
   }
 });
-
-test("legacy basis missing optional source/final keeps authoritative manual progress", async () => {
-  for (const missingField of ["evaluationSource", "finalEvaluation"] as const) {
-    const h = harness();
-    const selection = createHumanEvaluationSelection("few")!;
+test("quick changes only the current cycle-aware AreaCount identity and preserves other observations", async () => {
+  const h = harness(), before = json(h.context.areaCountRecords), original = h.context.state;
+  const current = { ...h.context.areaCountRecords.at(-1)!, comfortPoint: 17 }, opposite = { ...current, demandCycle: "summer" as const, comfortPoint: 99 };
+  h.context.areaCountRecords = [opposite, ...h.context.areaCountRecords.slice(0, -1), current];
+  await h.actions.quick("lower");
+  assert.equal(h.writes.at(-1)?.demandCycle, "normal");
+  assert.deepEqual(json(h.context.areaCountRecords.filter(row => row.date !== DATE)).sort((a,b) => getAreaCountRecordIdentity(a).localeCompare(getAreaCountRecordIdentity(b))), before.filter(row => row.date !== DATE).sort((a,b) => getAreaCountRecordIdentity(a).localeCompare(getAreaCountRecordIdentity(b))));
+  assert.equal(h.context.state.areaProgressMap.tempura, original.areaProgressMap.tempura);
+  assert.equal(h.context.state.session, original.session); assert.equal(h.context.state.finalTimeStep, original.finalTimeStep);
+  assert.equal(h.context.areaCountRecords.find(row => getAreaCountRecordIdentity(row) === getAreaCountRecordIdentity(opposite))?.comfortPoint, 99);
+});
+test("slightly-few residual base keeps its own quick choices despite bad reference", async () => {
+  const h = harness({ medianCount: 24 }); adopted(h, "slightly_few");
+  await h.actions.quick("lower"); adopted(h, "few"); await h.actions.quick("higher"); adopted(h, "normal");
+});
+test("real undo restores new reference automatic state and raw evidence", async () => {
+  const h = harness(), initial = json(h.context.state); await h.actions.quick("lower"); adopted(h, "slightly_few"); h.actions.undo(); assert.deepEqual(json(h.context.state), initial);
+});
+test("undo restores an old absent-mode adoption exactly after an explicit new quick", async () => {
+  const h = harness(); seedLegacy(h, true); const initial = json(h.context.state);
+  await h.actions.quick("higher"); adopted(h, "slightly_many"); h.actions.undo(); assert.deepEqual(json(h.context.state), initial);
+});
+test("all nine explicit human observations preserve human raw9 and resolution in both demand cycles", async () => {
+  for (let score = 1; score <= 9; score++) {
+    const h = harness({ cycle: score % 2 ? "normal" : "summer" }), index = Math.floor((score - 1) / 2);
+    const selection = createHumanEvaluationSelection(EVALUATIONS[index], score % 2 ? undefined : EVALUATIONS[index + 1])!;
+    const expected = resolveHumanEvaluationForDiscount({ selection, demandCycle: score % 2 ? "normal" : "summer", sessionDiscountTime: "17", nowMs: new Date(`${DATE}T08:10:00.000Z`).getTime(), evaluatedAt: `${DATE}T08:10:00.000Z` });
     await h.actions.judge("normal", 20, undefined, undefined, selection);
-    delete h.context.currentAreaProgress.areaCountDecisionBasis![missingField];
-    const human = json(h.context.currentAreaProgress.humanEvaluationDetails);
-    await h.actions.toggle();
-    adopted(h, "few", true);
-    assert.deepEqual(json(h.context.currentAreaProgress.humanEvaluationDetails), human);
-    await h.actions.toggle();
-    adopted(h, "few", false);
+    adopted(h, expected.resolvedEvaluation); assert.equal(h.context.currentAreaProgress.humanEvaluationDetails?.humanEvaluationScore9, score);
+    assert.equal(h.context.currentAreaProgress.humanEvaluationDetails?.automaticEvaluation, "normal");
   }
 });
-
-test("corrected count retains cancellation, uses new raw base/rate, back shows corrected count", async () => {
-  const h = harness();
-  await h.actions.toggle();
-  h.context.state = { ...h.context.state, screen: "area_judge" };
-  await h.actions.judge("normal", 18);
-  adopted(h, "slightly_few", true);
-  assert.equal(h.context.currentAreaProgress.areaCount, 18);
-  assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.baseEvaluation, "slightly_few");
+test("all five manual final choices override residual and reference without altering raw decrease", async () => {
+  for (const evaluation of EVALUATIONS) { const h = harness(); const direction = h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.direction;
+    await h.actions.judge("normal", 20, evaluation); adopted(h, evaluation); assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.direction, direction); }
+});
+test("rejudging a legacy saved result without an explicit manual choice replaces only its new adoption", async () => {
+  const h = harness(); seedLegacy(h); await h.actions.judge("normal", 20); adopted(h, "normal");
+});
+test("correcting a legacy suppressed count uses the new count and no suppression metadata", async () => {
+  const h = harness(); seedLegacy(h, true); h.context.state = { ...h.context.state, screen: "area_judge" }; await h.actions.judge("normal", 18);
+  adopted(h, "slightly_few"); assert.equal(h.context.currentAreaProgress.areaCount, 18);
   assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.currentDecreaseRate, 0.1);
-  h.actions.back();
-  assert.equal(h.context.currentAreaProgress.areaCount, 18);
-  assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.suppressed, true);
-  h.context.state = { ...h.context.state, screen: "rate_display" };
-  await h.actions.toggle();
-  adopted(h, "normal", false);
 });
-
-test("count correction undo retains the prior cancelled count and automatic evaluation", async () => {
-  const h = harness();
-  await h.actions.toggle();
-  h.context.state = { ...h.context.state, screen: "area_judge" };
-  const previous = json(h.context.state);
-  await h.actions.judge("normal", 18);
-  h.actions.undo();
-  assert.deepEqual(json(h.context.state), previous);
-  assert.equal(h.context.currentAreaProgress.areaCount, 20);
-  assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.suppressed, true);
+test("count correction undo restores the old count, saved adopted result and metadata atomically", async () => {
+  const h = harness(); seedLegacy(h, true); h.context.state = { ...h.context.state, screen: "area_judge" }; const before = json(h.context.state);
+  await h.actions.judge("normal", 18); h.actions.undo(); assert.deepEqual(json(h.context.state), before);
 });
-
-test("count change to ordinary decrease drops inapplicable exception rather than changing raw direction", async () => {
-  const h = harness();
-  await h.actions.toggle();
-  await h.actions.judge("normal", 1);
-  assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.direction, "none");
-  assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.suppressed, undefined);
-  assert.equal(h.context.currentAreaProgress.areaCountEvaluation, "few");
+test("ordinary count changes preserve the raw classification and residual evaluation", async () => {
+  const h = harness(); await h.actions.judge("normal", 1); adopted(h, "few"); assert.equal(h.context.currentAreaProgress.areaCountDecisionBasis?.decreaseAdjustment?.direction, "none");
 });
-
-test("local-first write failure leaves canonical state/history/navigation untouched", async () => {
-  const h = harness({ failSave: true });
-  const previousState = h.context.state;
-  const previousRecords = h.context.areaCountRecords;
-  const previousNavigation = h.context.screenHistoryRef.current;
-  const previousRender = h.context.previousRenderRef.current;
-  await h.actions.toggle();
-  assert.equal(h.attempts.length, 1);
-  assert.equal(h.writes.length, 0);
-  assert.equal(h.syncCalls, 0);
-  assert.equal(h.context.state, previousState);
-  assert.equal(h.context.areaCountRecords, previousRecords);
-  assert.equal(h.context.screenHistoryRef.current, previousNavigation);
-  assert.equal(h.context.previousRenderRef.current, previousRender);
+test("back restores the existing atomic navigation snapshot without special suppression retention", async () => {
+  const h = harness(), target = json(h.context.screenHistoryRef.current.at(-1)!.state); await h.actions.judge("normal", 18); h.actions.back(); assert.deepEqual(json(h.context.state), target);
 });
-
-test("fixed mode, other time/area, good/normal and other screen actions do nothing", async () => {
-  for (const options of [
-    { fixed: true }, { time: "19" as const }, { time: "18" as const },
-    { areaId: "sushi" as const }, { screen: "area_judge" as const },
-    { count: 1, previous: 100 }, { count: 4, previous: 20 },
-  ]) {
-    const h = harness(options);
-    const previousState = h.context.state;
-    const previousRecords = h.context.areaCountRecords;
-    await h.actions.toggle();
-    assert.equal(h.attempts.length, 0);
-    assert.equal(h.context.state, previousState);
-    assert.equal(h.context.areaCountRecords, previousRecords);
+test("local-first write failure leaves canonical state/history unchanged and does not sync", async () => {
+  const h = harness({ failSave: true }), state = h.context.state, records = h.context.areaCountRecords, navigation = h.context.screenHistoryRef.current;
+  await h.actions.quick("lower"); assert.equal(h.attempts.length, 1); assert.equal(h.writes.length, 0); assert.equal(h.syncCalls, 0);
+  assert.equal(h.context.state, state); assert.equal(h.context.areaCountRecords, records); assert.equal(h.context.screenHistoryRef.current, navigation);
+});
+test("fixed mode and other screens keep quick actions read-only", async () => {
+  for (const options of [{ fixed: true }, { screen: "area_judge" as const }]) {
+    const h = harness(options), state = h.context.state, records = h.context.areaCountRecords;
+    await h.actions.quick("lower"); assert.equal(h.attempts.length, 0); assert.equal(h.context.state, state); assert.equal(h.context.areaCountRecords, records);
   }
 });
-
-test("navigation retention changes only same-area/same-session references and no old inputs", () => {
-  const h = harness();
-  const state = h.context.state;
-  const basis = setAreaCountDecreaseAdjustmentSuppressed({ areaId: AREA, discountTime: "17", basis: state.areaProgressMap[AREA].areaCountDecisionBasis!, suppressed: true })!;
-  const progress = { ...state.areaProgressMap[AREA], areaCountDecisionBasis: basis, areaCountEvaluation: basis.finalEvaluation, areaRateAdjustment: basis.areaRateAdjustment };
-  const old = snapshot({ ...state, screen: "area_judge" });
-  const before = json(old);
-  const retained = retainAreaProgressInNavigationSnapshot(old, state, AREA, progress);
-  assert.notEqual(retained, old);
-  assert.equal(retained.state.areaProgressMap[AREA], progress);
-  assert.equal(retained.state.areaProgressMap.tempura, old.state.areaProgressMap.tempura);
-  assert.deepEqual(json(old), before);
-  for (const patch of [
-    { currentAreaId: "tempura" as const }, { screen: "start" as const },
-    { session: { ...state.session!, discountTime: "19" as const } },
-    { session: { ...state.session!, date: "2026-09-09" } },
-    { session: { ...state.session!, startedAt: `${DATE}T08:01:00.000Z` } },
-  ]) {
-    const other = snapshot({ ...state, ...patch });
-    assert.equal(retainAreaProgressInNavigationSnapshot(other, state, AREA, progress), other);
+test("legacy saved metadata missing optional source/final survives normalization without added marker", () => {
+  for (const field of ["evaluationSource", "finalEvaluation"] as const) {
+    const h = harness(); seedLegacy(h, true); delete h.context.currentAreaProgress.areaCountDecisionBasis![field];
+    const row = { ...h.context.areaCountRecords.at(-1)!, decisionBasis: h.context.currentAreaProgress.areaCountDecisionBasis };
+    const recovered = normalizeAreaCountRecords([row])[0].decisionBasis!; assert.equal(recovered[field], undefined);
+    assert.equal(recovered.decreaseAdjustment?.suppressed, true); assert.equal(Object.hasOwn(recovered.decreaseAdjustment!, "mode"), false);
   }
 });
-
-for (const item of tests) {
-  await item.run();
-  console.log(`PASS ${item.name}`);
-}
-console.log(`Decrease suppression flow checks passed: ${tests.length}/${tests.length}`);
+test("legacy navigation helper remains immutable and limited to same-area/same-session references", () => {
+  const h = harness(); seedLegacy(h, true); const state = h.context.state, progress = { ...state.areaProgressMap[AREA] };
+  const old = snapshot({ ...state, screen: "area_judge" }), before = json(old), retained = retainAreaProgressInNavigationSnapshot(old, state, AREA, progress);
+  assert.notEqual(retained, old); assert.equal(retained.state.areaProgressMap[AREA], progress); assert.deepEqual(json(old), before);
+  for (const patch of [{ currentAreaId: "tempura" as const }, { screen: "start" as const }, { session: { ...state.session!, date: "2026-09-09" } }]) {
+    const other = snapshot({ ...state, ...patch }); assert.equal(retainAreaProgressInNavigationSnapshot(other, state, AREA, progress), other);
+  }
+});
+for (const item of tests) { await item.run(); console.log(`PASS ${item.name}`); }
+console.log(`Decrease suppression compatibility/new reference flow checks passed: ${tests.length}/${tests.length}`);

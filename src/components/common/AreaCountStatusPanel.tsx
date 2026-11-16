@@ -1,21 +1,16 @@
-import {
-  getDecreaseRateAssessment,
-  type AreaCountDecisionBasis,
-} from "../../domain/areaCountHistory.ts";
+import type { AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
 import { getAreaDecreaseDisplay, type AreaDecreaseDisplayContext } from "../../domain/areaDecreaseDisplay.ts";
 
 type AreaCountStatusPanelProps = {
   areaCount?: number | null;
   decreaseAdjustment?: AreaCountDecisionBasis["decreaseAdjustment"] | null;
   decreaseDisplayContext?: AreaDecreaseDisplayContext | null;
-  onToggleDecreaseAdjustmentSuppression?: () => void;
 };
 
 export function AreaCountStatusPanel({
   areaCount,
   decreaseAdjustment,
   decreaseDisplayContext,
-  onToggleDecreaseAdjustmentSuppression,
 }: AreaCountStatusPanelProps) {
   if (
     typeof areaCount !== "number" ||
@@ -23,27 +18,28 @@ export function AreaCountStatusPanel({
     areaCount < 0
   ) return null;
 
-  const assessment = getDecreaseRateAssessment(decreaseAdjustment);
   const decreaseDisplay = decreaseDisplayContext
     ? getAreaDecreaseDisplay({ ...decreaseDisplayContext, areaCount, decreaseAdjustment })
     : null;
-  const hasAdjustment = decreaseAdjustment?.canUse === true &&
-    decreaseAdjustment.direction !== "none";
-  const canToggleSuppression = onToggleDecreaseAdjustmentSuppression &&
+  const assessment = decreaseDisplay?.assessmentText ?? "判定なし";
+  const highlight = assessment === "良い" ? "good" : assessment === "悪い" ? "bad" : undefined;
+  const highlightColor = highlight === "good" ? "#1b5e20" : "#991b1b";
+  const hasHistoricalAdjustment = decreaseAdjustment?.mode === undefined &&
     decreaseAdjustment?.canUse === true &&
-    decreaseAdjustment.direction === "more_many" &&
-    decreaseAdjustment.previousDiscountTime === "15";
+    decreaseAdjustment.direction !== "none";
 
   return (
     <section
       aria-label="現在のエリア残数と減少率"
       aria-live="polite"
+      data-decrease-assessment={assessment}
+      data-decrease-highlight={highlight}
       style={{
-        border: "1px solid #cbd5e1",
+        border: highlight ? `2px solid ${highlightColor}` : "1px solid #cbd5e1",
         borderRadius: 10,
         padding: "9px 11px",
         marginBottom: 12,
-        background: "#f8fafc",
+        background: highlight === "good" ? "#edf7ee" : highlight === "bad" ? "#fff1f2" : "#f8fafc",
         color: "#334155",
         fontSize: 14,
         lineHeight: 1.6,
@@ -52,48 +48,41 @@ export function AreaCountStatusPanel({
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 16px", fontWeight: 800 }}>
         <div>エリア残数：{areaCount}個</div>
-        {!decreaseDisplay ? <div>減少率：{assessment}</div> : null}
       </div>
       {decreaseDisplay ? (
         <div style={{ fontWeight: 800 }}>
           <div>{decreaseDisplay.transitionText}</div>
-          <div>減少率：{decreaseDisplay.rateText}（{decreaseDisplay.assessmentText}）</div>
+          <div>減少率：{decreaseDisplay.rateText}{decreaseDisplay.isIncrease ? "（増加）" : ""}</div>
           {decreaseDisplay.medianText ? <div>{decreaseDisplay.medianText}</div> : null}
-          {decreaseDisplay.contextText ? <div>減少率補正：{decreaseDisplay.contextText}</div> : null}
+          {decreaseDisplay.statusText ? <div>{decreaseDisplay.statusText}</div> : null}
         </div>
       ) : null}
-      {hasAdjustment ? (
+      <div style={{ marginTop: 2, fontWeight: 800 }}>
+        減少率判定：
+        <span
+          data-decrease-badge={highlight}
+          style={highlight ? {
+            display: "inline-block",
+            padding: "0 8px",
+            borderRadius: 999,
+            border: `1px solid ${highlightColor}`,
+            background: highlight === "good" ? "#dcfce7" : "#fee2e2",
+            color: highlightColor,
+            fontWeight: 900,
+          } : undefined}
+        >
+          {assessment}
+        </span>
+      </div>
+      {hasHistoricalAdjustment ? (
         <div style={{ marginTop: 4 }}>
-          減少率補正：
+          過去の保存時の減少率補正：
           {decreaseAdjustment.suppressed === true
             ? "取り消し済み"
             : decreaseAdjustment.direction === "more_many"
               ? "1段階多い側"
               : "1段階少ない側"}
         </div>
-      ) : null}
-      {canToggleSuppression ? (
-        <button
-          type="button"
-          onClick={onToggleDecreaseAdjustmentSuppression}
-          style={{
-            width: "100%",
-            minHeight: 44,
-            marginTop: 8,
-            padding: "8px 10px",
-            border: "1px solid #94a3b8",
-            borderRadius: 10,
-            background: "#fff",
-            color: "#334155",
-            fontSize: 14,
-            fontWeight: 800,
-            cursor: "pointer",
-          }}
-        >
-          {decreaseAdjustment.suppressed === true
-            ? "補正を戻す"
-            : "追加製造あり・補正を取り消す"}
-        </button>
       ) : null}
     </section>
   );

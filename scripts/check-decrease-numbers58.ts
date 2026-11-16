@@ -150,8 +150,8 @@ class AppFixture {
 function invoke(node: HostNode) { assert.ok(!node.props.disabled); return (node.props.onClick as () => void | Promise<void>)(); }
 function clean() { assert.equal(timeouts.size, 0); assert.equal(windowEvents.count("focus"), 0); assert.equal(documentEvents.count("visibilitychange"), 0); setRuntimeNowOverride(null); documentFixture.hidden = false; }
 
-const TARGETS: AreaId[] = ["bento_men", "tempura", "onigiri", "inari", "hosomaki", "ryomi", "autumn", "yakitori"];
-const EXCLUDED: AreaId[] = ["croquette", "fry_chicken", "chuka_fish", "sushi", "futomaki_chumaki", "balance_bento"];
+const TARGETS: AreaId[] = ["bento_men", "tempura", "yakitori", "chuka_fish", "onigiri", "sushi", "futomaki_chumaki", "inari", "hosomaki"];
+const EXCLUDED: AreaId[] = ["croquette", "fry_chicken", "balance_bento"];
 const HISTORY_DATES = ["2026-08-18", "2026-08-25", "2026-09-01"];
 type Decrease = NonNullable<AreaCountDecisionBasis["decreaseAdjustment"]>;
 function decrease(patch: Partial<Decrease> = {}): Decrease {
@@ -232,7 +232,7 @@ await test("excluded areas show measured percentages without acquiring median co
     const before = structuredClone(rec), saved = buildAreaCountDecisionBasis({ recommendation: rec });
     assert.equal(rec.decreaseRecommendation?.canUse, false);
     const display = getAreaDecreaseDisplay({ areaId, discountTime: "17", areaCount: 50, previousCount: 100, decreaseAdjustment: saved.decreaseAdjustment });
-    assert.ok(display); assert.equal(display.rateText, "50.0％"); assert.equal(display.assessmentText, "補正対象外"); assert.equal(display.medianText, undefined);
+    assert.ok(display); assert.equal(display.rateText, "50.0％"); assert.equal(display.assessmentText, "比較対象外"); assert.equal(display.medianText, undefined);
     assert.deepEqual(rec, before, "display never changes canUse, evaluation or adjustment");
   }
 });
@@ -245,7 +245,7 @@ await test("zero current count is a complete decrease and negative rate is an ex
   const zero = getAreaDecreaseDisplay({ areaId: AREA, discountTime: "17", areaCount: 0, previousCount: 22 });
   assert.equal(zero?.rateText, "100.0％"); assert.equal(zero?.transitionText, "15時22個 → 17時0個");
   const increase = getAreaDecreaseDisplay({ areaId: AREA, discountTime: "17", areaCount: 29, previousCount: 22 });
-  assert.equal(increase?.rateText, "−31.8％"); assert.equal(increase?.assessmentText, "増加"); assert.equal(increase?.isIncrease, true);
+  assert.equal(increase?.rateText, "−31.8％"); assert.equal(increase?.assessmentText, "履歴不足"); assert.equal(increase?.isIncrease, true);
   assertCleanDisplay(JSON.stringify([zero, increase]));
 });
 await test("previous missing, invalid or zero cannot fabricate a percentage", () => {
@@ -272,11 +272,11 @@ await test("legacy captured rate without its comparison count is unavailable and
   const display = getAreaDecreaseDisplay({ areaId: AREA, discountTime: "17", areaCount: 20, previousCount: 100, decreaseAdjustment: captured });
   assert.equal(display?.rateText, "算出不可"); assert.equal(display?.assessmentText, "算出不可"); assert.equal(display?.transitionText, "15時不明 → 17時20個");
 });
-await test("legacy ready evidence preserves raw classification and explicitly marks an unsaved median", () => {
-  for (const [direction, expected] of [["more_many", "悪い"], ["more_few", "良い"], ["none", "普通"]] as const) {
+await test("legacy incomplete median evidence remains explicitly unavailable without a guessed classification", () => {
+  for (const direction of ["more_many", "more_few", "none"] as const) {
     for (const medianDecreaseRate of [undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
       const display = getAreaDecreaseDisplay({ areaId: AREA, discountTime: "17", areaCount: 50, decreaseAdjustment: decrease({ direction, medianDecreaseRate }) });
-      assert.equal(display?.rateText, "50.0％"); assert.equal(display?.assessmentText, expected); assert.equal(display?.medianText, "履歴中央値：未保存"); assertCleanDisplay(JSON.stringify(display));
+      assert.equal(display?.rateText, "50.0％"); assert.equal(display?.assessmentText, medianDecreaseRate === undefined ? "中央値未保存" : "中央値不正"); assert.equal(display?.medianText, medianDecreaseRate === undefined ? "履歴中央値：未保存" : "履歴中央値：不正"); assertCleanDisplay(JSON.stringify(display));
     }
   }
 });
@@ -313,19 +313,19 @@ await test("full hook and routed operational screens retain the adopted pair ove
     assert.equal(value.app.derived.areaCountDecreaseDisplayContext?.previousCount, 22);
   } finally { value.close(); }
 });
-await test("real suppressed count correction submits a new pair and returning retains its saved evidence", async () => {
+await test("new reference count correction submits a new pair and back restores the prior atomic snapshot", async () => {
   const rows = history(AREA, 22, 11, 22), adopted = getAreaCountRecommendation({ records: rows, areaId: AREA, discountTime: "17", count: 20, date: DATE, weekday: 2, demandCycle: "normal" });
   const raw = sessionState({ count: 20, savedBasis: buildAreaCountDecisionBasis({ recommendation: adopted, evaluationSource: "history", finalEvaluation: adopted.suggestedEvaluation, areaRateAdjustment: adopted.areaRateAdjustment }) });
   const value = await mounted({ raw, records: rows });
   try {
-    await value.click("追加製造あり・補正を取り消す");
+    assert.doesNotMatch(value.text(), /追加製造あり・補正を取り消す|補正を戻す/);
     await value.act(() => value.app.actions.startAreaCountCorrection(AREA));
     assert.equal(value.app.state.screen, "area_judge");
     await value.click("電卓を1文字削除"); await value.click("電卓を1文字削除"); await value.click("1"); await value.click("8"); await value.click("完了");
     assert.equal(value.app.state.areaProgressMap[AREA].areaCount, 18);
     assert.match(value.panelText(), /15時22個 → 17時18個/); assert.match(value.panelText(), /18\.2％/); assert.match(value.panelText(), /履歴中央値：50\.0％/);
     assert.equal(value.app.state.areaProgressMap[AREA].areaCountDecisionBasis?.decreaseAdjustment?.currentDecreaseRate, (22 - 18) / 22);
-    await value.act(() => value.app.actions.goBackOneScreen()); assert.match(value.panelText(), /17時18個/); assert.doesNotMatch(value.panelText(), /17時20個/);
+    await value.act(() => value.app.actions.goBackOneScreen()); assert.match(value.panelText(), /17時20個/); assert.doesNotMatch(value.panelText(), /17時18個/);
   } finally { value.close(); }
 });
 await test("ordinary correction and history back preserve the existing atomic count and basis restoration", async () => {
@@ -363,19 +363,19 @@ await test("AreaJudge real submitted phase cannot carry the prior area's input i
     assert.match(value.panelText(), /15時33個 → 17時7個/); assert.match(value.panelText(), /78\.8％/); assert.match(value.panelText(), /履歴中央値：62\.5％/); assert.doesNotMatch(value.panelText(), /17時20個|9\.1％/);
   } finally { value.close(); }
 });
-await test("real suppression and restore keep the raw percentage, transition and median through both rate steps", async () => {
-  const rows = history(AREA, 100), adopted = getAreaCountRecommendation({ records: rows, areaId: AREA, discountTime: "17", count: 70, date: DATE, weekday: 2, demandCycle: "normal" });
-  const raw = sessionState({ count: 70, savedBasis: buildAreaCountDecisionBasis({ recommendation: adopted, evaluationSource: "history", finalEvaluation: adopted.suggestedEvaluation, areaRateAdjustment: adopted.areaRateAdjustment }) });
-  const value = await mounted({ raw, records: rows });
+await test("legacy saved suppression keeps raw percentage, transition and median through both rate steps without actions", async () => {
+  const saved = basis({ previousCount: 100, currentDecreaseRate: 0.3, medianDecreaseRate: 0.5, direction: "more_many", suppressed: true, suppressionReason: "additional_production" });
+  const raw = sessionState({ count: 70, savedBasis: saved });
+  const value = await mounted({ raw, records: history(AREA, 999) });
   try {
-    const rawEvidence = json(value.app.state.areaProgressMap[AREA].areaCountDecisionBasis?.decreaseAdjustment);
-    await value.click("追加製造あり・補正を取り消す");
-    assert.match(value.panelText(), /15時100個 → 17時70個/); assert.match(value.panelText(), /30\.0％/); assert.match(value.panelText(), /履歴中央値：50\.0％/); assert.match(value.panelText(), /取り消し済み/);
-    await value.click("終わった"); assert.match(value.panelText(), /30\.0％/);
-    await value.click("補正を戻す"); assert.deepEqual(value.app.state.areaProgressMap[AREA].areaCountDecisionBasis?.decreaseAdjustment, rawEvidence);
-    assert.match(value.panelText(), /30\.0％/); assert.match(value.panelText(), /履歴中央値：50\.0％/);
+    const evidence = json(value.app.state.areaProgressMap[AREA].areaCountDecisionBasis?.decreaseAdjustment), rates = json(value.app.derived.rateDisplay);
+    assert.match(value.panelText(), /15時100個 → 17時70個/); assert.match(value.panelText(), /30\.0％/); assert.match(value.panelText(), /履歴中央値：50\.0％/); assert.match(value.panelText(), /過去の保存時の減少率補正：取り消し済み/);
+    assert.doesNotMatch(value.text(), /追加製造あり・補正を取り消す|補正を戻す/);
+    await value.click("終わった"); assert.match(value.panelText(), /30\.0％/); assert.deepEqual(json(value.app.derived.rateDisplay), rates);
+    assert.deepEqual(value.app.state.areaProgressMap[AREA].areaCountDecisionBasis?.decreaseAdjustment, evidence);
   } finally { value.close(); }
 });
+
 await test("reload restores saved display values rather than recalculating from changed historical observations", async () => {
   const raw = sessionState({ count: 20, savedBasis: basis({ previousCount: 99, currentDecreaseRate: 0.123456789, medianDecreaseRate: 0.456789, direction: "more_many" }) });
   let value = await mounted({ raw, records: history(AREA, 22) });
@@ -390,7 +390,7 @@ await test("routed excluded area displays the actual pair while keeping its save
   const value = await mounted({ raw: sessionState({ areaId, count: 29, savedBasis }), records: rows });
   try {
     const progress = json(value.app.state.areaProgressMap[areaId]), rates = json(value.app.derived.rateDisplay);
-    assert.match(value.panelText(), /15時22個 → 17時29個/); assert.match(value.panelText(), /−31\.8％/); assert.match(value.panelText(), /増加/); assert.match(value.panelText(), /補正対象外/);
+    assert.match(value.panelText(), /15時22個 → 17時29個/); assert.match(value.panelText(), /−31\.8％/); assert.match(value.panelText(), /増加/); assert.match(value.panelText(), /比較対象外/);
     assert.doesNotMatch(value.panelText(), /履歴中央値|取り消す/); assert.equal(value.app.state.areaProgressMap[areaId].areaCountDecisionBasis?.decreaseAdjustment?.canUse, false);
     await value.click("終わった"); assert.deepEqual(json(value.app.state.areaProgressMap[areaId]), progress); assert.deepEqual(json(value.app.derived.rateDisplay), rates);
   } finally { value.close(); }

@@ -1,4 +1,5 @@
 import { buildMedianEvaluationDisplay } from "./medianEvaluationPresentation.ts";
+import { getEvaluationFromCount } from "./areaCountHistory.ts";
 import type {
   AreaCountEvaluation,
   AreaProgress,
@@ -51,6 +52,37 @@ export function createAreaEvaluationQuickAdjustment(
   };
 }
 
+/** Derive a quick-action baseline without rewriting the saved adopted result. */
+export function getAreaEvaluationQuickAdjustmentBase(params: {
+  discountTime: DiscountTime;
+  progress?: AreaProgress;
+}): AreaCountEvaluation | undefined {
+  const progress = params.progress;
+  const basis = progress?.areaCountDecisionBasis;
+  if (!basis || basis.recommendationStatus !== "ready") return undefined;
+  if (params.discountTime === "17") {
+    if (basis.decreaseAdjustment?.mode === "reference_only_v1") return basis.baseEvaluation;
+    // An old quick action could overwrite baseEvaluation with the already
+    // decrease-shifted automatic result. Its captured median still recovers
+    // the original residual-only evaluation, including the clamped endpoints.
+    if (typeof progress?.areaCount === "number" && Number.isFinite(progress.areaCount) &&
+        typeof basis.medianCount === "number" && Number.isFinite(basis.medianCount) &&
+        basis.medianCount >= 0) {
+      return getEvaluationFromCount({
+        count: progress.areaCount,
+        referenceCount: basis.medianCount,
+      }).evaluation;
+    }
+    if (progress?.humanEvaluationDetails?.evaluationAdjustment &&
+        basis.decreaseAdjustment?.canUse && basis.decreaseAdjustment.direction !== "none") {
+      return undefined;
+    }
+    if (basis.baseEvaluation) return basis.baseEvaluation;
+  }
+  const automatic = buildMedianEvaluationDisplay(progress);
+  return automatic?.status === "ready" ? automatic.evaluation : undefined;
+}
+
 /** 保存済みの元の履歴自動判定を基準にする。採用判定から累積させない。 */
 export function getAreaEvaluationQuickAdjustments(params: {
   screen: ScreenName;
@@ -69,8 +101,8 @@ export function getAreaEvaluationQuickAdjustments(params: {
     return [];
   }
 
-  const automatic = buildMedianEvaluationDisplay(params.progress);
-  if (automatic?.status !== "ready") return [];
+  const automaticEvaluation = getAreaEvaluationQuickAdjustmentBase(params);
+  if (!automaticEvaluation) return [];
 
   return (["higher", "lower"] as const).flatMap((direction) => {
     if (direction === "lower"
@@ -78,7 +110,7 @@ export function getAreaEvaluationQuickAdjustments(params: {
       return [];
     }
     const adjustment = createAreaEvaluationQuickAdjustment(
-      automatic.evaluation,
+      automaticEvaluation,
       direction,
     );
     return adjustment ? [adjustment] : [];

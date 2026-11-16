@@ -43,8 +43,8 @@ import type { AreaCountEvaluation, AreaId, DiscountTime, SessionDraft } from "..
 const TODAY = "2026-09-08";
 const AT = `${TODAY}T08:10:00.000Z`;
 const DATES = ["2026-08-18", "2026-08-25", "2026-09-01"];
-const TARGETS: AreaId[] = ["bento_men", "tempura", "onigiri", "inari", "hosomaki", "ryomi", "autumn", "yakitori"];
-const EXCLUSIONS: AreaId[] = ["croquette", "fry_chicken", "chuka_fish", "sushi", "futomaki_chumaki", "balance_bento"];
+const TARGETS: AreaId[] = ["bento_men", "tempura", "yakitori", "chuka_fish", "onigiri", "sushi", "futomaki_chumaki", "inari", "hosomaki", "ryomi", "autumn"];
+const EXCLUSIONS: AreaId[] = ["croquette", "fry_chicken", "balance_bento"];
 const checks: { name: string; run: () => void }[] = [];
 const test = (name: string, run: () => void) => checks.push({ name, run });
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -84,10 +84,14 @@ function basisFor(base: AreaCountEvaluation = "normal") {
   const recommendation = recommend({ medianCount, medianPrevious: medianCount * 2, count: 70 });
   assert.equal(recommendation.baseEvaluation, base);
   assert.equal(recommendation.decreaseRecommendation?.direction, "more_many");
-  return {
-    recommendation,
-    basis: buildAreaCountDecisionBasis({ recommendation, evaluationSource: "history", finalEvaluation: recommendation.suggestedEvaluation, areaRateAdjustment: recommendation.areaRateAdjustment }),
-  };
+  // Explicit pre-64 saved fixture: legacy helper behavior remains supported,
+  // whereas a newly calculated 17 recommendation is reference-only.
+  const basis = buildAreaCountDecisionBasis({ recommendation, evaluationSource: "history" });
+  delete basis.decreaseAdjustment!.mode; delete basis.decreaseAdjustment!.applied;
+  const order: AreaCountEvaluation[] = ["few", "slightly_few", "normal", "slightly_many", "many"];
+  const finalEvaluation = order[Math.min(4, order.indexOf(base) + 1)];
+  basis.finalEvaluation = finalEvaluation; basis.areaRateAdjustment = evaluationToRateAdjustment(finalEvaluation);
+  return { recommendation: { ...recommendation, suggestedEvaluation: finalEvaluation, areaRateAdjustment: basis.areaRateAdjustment }, basis };
 }
 
 function toggle(basis: AreaCountDecisionBasis, suppressed: boolean) {
@@ -109,14 +113,17 @@ function assertSuppressed(basis: AreaCountDecisionBasis | undefined) {
 }
 
 for (const areaId of TARGETS) {
-  test(`17:00 includes ${areaId} and allows bad correction cancellation`, () => {
+  test(`17:00 includes ${areaId} as reference without applying or cancelling correction`, () => {
     const recommendation = recommend({ areaId });
     assert.equal(recommendation.status, "ready");
     assert.equal(recommendation.decreaseRecommendation?.canUse, true);
     assert.equal(recommendation.decreaseRecommendation?.previousDiscountTime, "15");
     assert.equal(getDecreaseRateAssessment(recommendation.decreaseRecommendation), "悪い");
     const basis = buildAreaCountDecisionBasis({ recommendation });
-    assert.equal(canSuppressAreaCountDecreaseAdjustment({ areaId, discountTime: "17", basis }), true);
+    assert.equal(basis.decreaseAdjustment?.mode, "reference_only_v1");
+    assert.equal(basis.decreaseAdjustment?.applied, false);
+    assert.equal(recommendation.suggestedEvaluation, recommendation.baseEvaluation);
+    assert.equal(canSuppressAreaCountDecreaseAdjustment({ areaId, discountTime: "17", basis }), false);
   });
 }
 for (const areaId of EXCLUSIONS) {
@@ -125,8 +132,7 @@ for (const areaId of EXCLUSIONS) {
     assert.equal(recommendation.status, "ready");
     assert.equal(recommendation.decreaseRecommendation?.canUse, false);
     assert.equal(getDecreaseRateAssessment(recommendation.decreaseRecommendation), "判定なし");
-    // A raw bad basis from another area cannot make an excluded area eligible.
-    assert.equal(canSuppressAreaCountDecreaseAdjustment({ areaId, discountTime: "17", basis: basisFor().basis }), false);
+    assert.equal(canSuppressAreaCountDecreaseAdjustment({ areaId, discountTime: "17", basis: buildAreaCountDecisionBasis({ recommendation }) }), false);
   });
 }
 test("internal seasonal IDs and current names remain compatible", () => {
@@ -134,6 +140,12 @@ test("internal seasonal IDs and current names remain compatible", () => {
   assert.equal(LEGACY_AREA_MASTERS.find((area) => area.id === "autumn")?.name, "秋商品");
   assert.equal(LEGACY_AREA_MASTERS.find((area) => area.id === "yakitori")?.name, "焼鳥");
   assert.deepEqual([...ALL_AREA_IDS].sort(), [...TARGETS, ...EXCLUSIONS].sort());
+});
+test("legacy absent-mode saved bases retain the original eight-area pure suppression contract", () => {
+  const oldTargets: AreaId[] = ["bento_men", "tempura", "onigiri", "inari", "hosomaki", "ryomi", "autumn", "yakitori"];
+  for (const areaId of ALL_AREA_IDS) {
+    assert.equal(canSuppressAreaCountDecreaseAdjustment({ areaId, discountTime: "17", basis: basisFor().basis }), oldTargets.includes(areaId));
+  }
 });
 
 test("18:30 never uses decrease, while 19:30 still uses all known areas", () => {
@@ -165,14 +177,15 @@ for (const [decreasePercent, direction, assessment] of [
     assert.equal(recommendation.decreaseRecommendation?.medianDecreaseRate, 0.5);
     assert.equal(recommendation.decreaseRecommendation?.direction, direction);
     assert.equal(getDecreaseRateAssessment(recommendation.decreaseRecommendation), assessment);
-    assert.equal(canSuppressAreaCountDecreaseAdjustment({ areaId: "bento_men", discountTime: "17", basis: buildAreaCountDecisionBasis({ recommendation }) }), direction === "more_many");
+    assert.equal(canSuppressAreaCountDecreaseAdjustment({ areaId: "bento_men", discountTime: "17", basis: buildAreaCountDecisionBasis({ recommendation }) }), false);
   });
 }
-test("17:00 binary equality 40%→60% receives the existing one-step correction", () => {
+test("17:00 binary equality 40%→60% keeps raw good reference without one-step correction", () => {
   const recommendation = recommend({ medianCount: 60, count: 40 });
   assert.equal(recommendation.decreaseRecommendation?.medianDecreaseRate, 0.4);
   assert.equal(recommendation.decreaseRecommendation?.currentDecreaseRate, 0.6);
   assert.equal(recommendation.decreaseRecommendation?.direction, "more_few");
+  assert.equal(recommendation.suggestedEvaluation, recommendation.baseEvaluation);
 });
 test("the equality tolerance does not classify a genuine sub-20pt difference", () => {
   for (const count of [3_000_000_001, 6_999_999_999]) {

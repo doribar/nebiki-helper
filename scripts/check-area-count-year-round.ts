@@ -348,14 +348,15 @@ test("decrease pairs and current prior-time observation use both cycles", () => 
 });
 
 for (const [count, direction] of [[7, "more_many"], [5, "none"], [3, "more_few"]] as const) {
-  test(`decrease still applies at a 20-point gap: current ${count}/10 -> ${direction}`, () => {
+  test(`decrease reference still classifies a 20-point gap: current ${count}/10 -> ${direction}`, () => {
     const result = recommend(decreaseHistory(), "summer", { count });
     assert.equal(result.decreaseRecommendation?.direction, direction);
     const base = result.baseEvaluation;
     const final = result.suggestedEvaluation;
     const evaluations = ["few", "slightly_few", "normal", "slightly_many", "many"];
-    const offset = direction === "more_many" ? 1 : direction === "more_few" ? -1 : 0;
-    assert.equal(evaluations.indexOf(final!), Math.max(0, Math.min(4, evaluations.indexOf(base!) + offset)));
+    assert.equal(evaluations.indexOf(final!), evaluations.indexOf(base!));
+    assert.equal(result.decreaseRecommendation?.mode, "reference_only_v1");
+    assert.equal(result.decreaseRecommendation?.applied, false);
   });
 }
 
@@ -374,7 +375,7 @@ test("decrease dedupes historical cycles and selects current official prior-time
 });
 
 test("decrease preserves area/time eligibility and missing/nonpositive previous safeguards", () => {
-  for (const areaId of ["sushi", "fry_chicken"] as const satisfies readonly AreaId[]) {
+  for (const areaId of ["croquette", "fry_chicken"] as const satisfies readonly AreaId[]) {
     const result = recommend(decreaseHistory(5, 10, TODAY, { areaId }), "normal", { areaId });
     assert.equal(result.decreaseRecommendation?.canUse, false);
   }

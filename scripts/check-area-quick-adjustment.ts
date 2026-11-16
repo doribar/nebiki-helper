@@ -10,6 +10,7 @@ import {
   createAreaEvaluationQuickAdjustment,
   getAreaEvaluationLowerQuickAdjustmentDelayMs,
   getAreaEvaluationQuickAdjustments,
+  getAreaEvaluationQuickAdjustmentBase,
 } from "../src/domain/areaEvaluationAdjustment.ts";
 import {
   buildAreaCountDecisionBasis,
@@ -67,6 +68,7 @@ function recommendation(evaluation: AreaCountEvaluation, cycle: DemandCycle = "n
     matchedRecords: [], actualWeekday: "火", actualWeekdayGroup: "火木", comparisonMode: "weekday",
     medianCount: 24, baseEvaluation: evaluation, suggestedEvaluation: evaluation,
     areaRateAdjustment: evaluationToRateAdjustment(evaluation), summaryText: evaluationText(evaluation), detailLines: [],
+    decreaseRecommendation: { canUse: false, sampleSize: 0, requiredSampleSize: 3, direction: "none", detailLines: [], mode: "reference_only_v1", applied: false },
   };
 }
 
@@ -157,6 +159,7 @@ test("insufficient, disabled, missing recommendation/count and unknown auto have
   assert.deepEqual(choices(absentCount), []);
   const unknownAuto = fixture();
   unknownAuto.areaProgressMap[AREA].areaCountEvaluationSource = "manual";
+  delete unknownAuto.areaProgressMap[AREA].areaCountDecisionBasis!.baseEvaluation;
   assert.deepEqual(choices(unknownAuto), []);
 });
 
@@ -196,7 +199,7 @@ function actionHarness(original: AreaCountEvaluation, options: {
     originalRecommendation.decreaseRecommendation = {
       canUse: true, sampleSize: 3, requiredSampleSize: 3, previousDiscountTime: "15",
       previousCount: 48, currentDecreaseRate: 0.5, medianDecreaseRate: 0.2,
-      direction: "more_few", detailLines: [],
+      direction: "more_few", detailLines: [], mode: "reference_only_v1", applied: false,
     };
   }
   const context = {
@@ -207,6 +210,7 @@ function actionHarness(original: AreaCountEvaluation, options: {
     applyObonRule: true,
     getRuntimeNow: () => new Date(`${DATE}T${state.session!.discountTime === "15" ? "06" : "08"}:10:00.000Z`),
     getAreaEvaluationQuickAdjustments,
+    getAreaEvaluationQuickAdjustmentBase,
     createHumanEvaluationSelection,
     resolveHumanEvaluationForDiscount,
     normalizeDemandCycle,
@@ -285,7 +289,7 @@ test("repeated lower and opposite higher are always relative to original auto no
   assert.equal(harness.context.areaCountRecords.length, 1, "same observation canonical identity is retained");
 });
 
-test("quick after decrease correction keeps original auto as base without changing decrease evidence", async () => {
+test("quick after decrease reference keeps residual auto as base without changing decrease evidence", async () => {
   const harness = actionHarness("normal", { decreaseBase: "slightly_many" });
   await harness.apply("lower");
   assertAdopted(harness.context.state, harness.writes[0], createAreaEvaluationQuickAdjustment("normal", "lower")!);

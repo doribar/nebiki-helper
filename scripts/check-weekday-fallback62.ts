@@ -61,7 +61,7 @@ function rate(result: AreaCountRecommendation, time: "15" | "17", date = "2026-1
 }
 function projection(result: AreaCountRecommendation) {
   const fields = ["status", "sampleSize", "requiredSampleSize", "comparisonMode", "medianCount", "shortMedianCount", "longMedianCount", "shortSampleSize", "longSampleSize", "medianDownGuardApplied", "smallDifferenceThreshold", "largeDifferenceThreshold", "lowerLargeThreshold", "lowerSmallThreshold", "upperSmallThreshold", "upperLargeThreshold", "baseEvaluation", "suggestedEvaluation", "suggestedJudge", "areaRateAdjustment", "decreaseRecommendation"] as const;
-  return copy(Object.fromEntries(fields.map(key => [key, key === "decreaseRecommendation" && result[key] ? Object.fromEntries(Object.entries(result[key]!).filter(([name]) => name !== "detailLines")) : result[key]]).concat([["matched", result.matchedRecords.map(item => [item.date, item.count, item.demandCycle])]])));
+  return copy(Object.fromEntries(fields.map(key => [key, key === "decreaseRecommendation" && result[key] ? Object.fromEntries(Object.entries(result[key]!).filter(([name]) => !["detailLines", "mode", "applied"].includes(name))) : result[key]]).concat([["matched", result.matchedRecords.map(item => [item.date, item.count, item.demandCycle])]])));
 }
 
 for (const time of ["15", "17"] as const) for (let day = 0; day < 7; day++) {
@@ -87,6 +87,7 @@ for (const fixture of baseline.cases) test(`${fixture.time}/${fixture.weekday}: 
   if (fixture.time === "17") records.push(...records.map(item => record(item.date, 28, "15")), record(fixture.target, 20, "15"));
   const before = copy(records), result = recommend(records, { date: fixture.target, weekday: fixture.weekday, discountTime: fixture.time });
   assert.deepEqual(projection(result), fixture.expected);
+  if (fixture.time === "17") { assert.equal(result.decreaseRecommendation?.mode, "reference_only_v1"); assert.equal(result.decreaseRecommendation?.applied, false); }
   assert.deepEqual(rate(result, fixture.time, fixture.target, fixture.weekday), fixture.rate);
   assert.deepEqual(recommend([], { date: fixture.target, weekday: fixture.weekday, discountTime: fixture.time, preparedPopulation: prepareAreaCountCalculationPopulation(records) }), result);
   assert.deepEqual(records, before);
@@ -173,7 +174,7 @@ test("new fallback windows remain 16/52 and use short median without the weekday
   const result = recommend(records); assert.equal(result.comparisonMode, "fallback_group");
   assert.deepEqual([result.shortSampleSize, result.longSampleSize, result.shortMedianCount, result.longMedianCount, result.medianCount, result.medianDownGuardApplied], [16, 52, 6, 30, 6, false]);
 });
-test("decrease pairs use exactly the new fallback population and preserve the 20-point correction", () => {
+test("decrease pairs use exactly the new fallback population and preserve the 20-point raw classification", () => {
   const records = [...history([2], 6), ...history([3], 30)];
   records.push(...records.map(item => record(item.date, weekday(item.date) === 2 ? 30 : 60, "15")), record("2026-11-09", 20, "15"));
   const result = recommend(records); assert.equal(result.baseEvaluation, "many"); assert.equal(result.decreaseRecommendation?.sampleSize, 3);

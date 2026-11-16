@@ -24,12 +24,14 @@ export type AreaDecreaseDisplay = {
     | "良い"
     | "普通"
     | "悪い"
-    | "増加"
     | "履歴不足"
-    | "補正対象外"
+    | "中央値未保存"
+    | "中央値不正"
+    | "比較データ不正"
+    | "比較対象外"
     | "比較元なし"
     | "算出不可";
-  contextText?: "履歴不足" | "補正対象外";
+  statusText?: string;
   isIncrease: boolean;
 };
 
@@ -50,7 +52,8 @@ function formatPercent(rate: number): string {
 /**
  * Present only the supplied decision and the current 15→17 count pair. Saved
  * pair evidence takes priority over a later history lookup, including invalid
- * evidence. Neither a displayed rate nor a rounded value can enable correction.
+ * evidence. The assessment comes from the captured raw direction, never the
+ * rounded percentage. This reference display does not change an evaluation.
  */
 export function getAreaDecreaseDisplay(params: {
   discountTime: DiscountTime | null | undefined;
@@ -73,9 +76,10 @@ export function getAreaDecreaseDisplay(params: {
       ? undefined
       : params.previousCount;
   const previousCount = isCount(previousValue) ? previousValue : undefined;
-  const invalidPrevious = previousValue !== undefined &&
-    (!isCount(previousValue) || previousValue === 0);
-  const currentDecreaseRate = invalidPrevious || previousCount === undefined
+  const invalidPrevious = previousValue !== undefined && !isCount(previousValue);
+  const zeroPrevious = previousCount === 0;
+  const invalidRate = hasCapturedRate && !isDisplayableRate(decrease?.currentDecreaseRate);
+  const currentDecreaseRate = invalidPrevious || zeroPrevious || previousCount === undefined
     ? undefined
     : hasCapturedRate
       ? isDisplayableRate(decrease?.currentDecreaseRate)
@@ -84,26 +88,59 @@ export function getAreaDecreaseDisplay(params: {
       : previousCount !== undefined && previousCount > 0
         ? (previousCount - params.areaCount) / previousCount
         : undefined;
-  const eligible = isAreaCountDecreaseComparisonEligible(params);
-  const hasDecision = eligible && decrease?.canUse === true;
-  const medianDecreaseRate = hasDecision && isDisplayableRate(decrease.medianDecreaseRate)
+  // Keep explicitly captured seasonal evidence readable without treating those
+  // areas as eligible for a newly calculated comparison.
+  const hasLegacySeasonalDecision = decrease?.mode === undefined &&
+    decrease?.canUse === true && decrease.previousDiscountTime === "15" &&
+    (params.areaId === "ryomi" || params.areaId === "autumn");
+  const eligible = isAreaCountDecreaseComparisonEligible(params) || hasLegacySeasonalDecision;
+  const hasCapturedDecision = eligible && decrease?.canUse === true;
+  const hasValidPreviousTime = decrease?.previousDiscountTime === undefined ||
+    decrease.previousDiscountTime === "15";
+  const hasValidDirection = decrease?.direction === "more_many" ||
+    decrease?.direction === "more_few" || decrease?.direction === "none";
+  const hasValidMedian = isDisplayableRate(decrease?.medianDecreaseRate);
+  const hasDecision = hasCapturedDecision && hasValidPreviousTime &&
+    hasValidDirection && hasValidMedian && currentDecreaseRate !== undefined;
+  const medianDecreaseRate = hasCapturedDecision && hasValidPreviousTime && hasValidMedian
     ? decrease.medianDecreaseRate
     : undefined;
-  const unavailableAssessment = invalidPrevious || hasCapturedRate
+  const unavailableAssessment = invalidPrevious || zeroPrevious || hasCapturedRate
     ? "算出不可" as const
     : "比較元なし" as const;
   const isIncrease = currentDecreaseRate !== undefined && currentDecreaseRate < 0;
   const capturedAssessment = getDecreaseRateAssessment(decrease);
   const comparisonAssessment = !eligible
-    ? "補正対象外" as const
-    : hasDecision && capturedAssessment !== "判定なし"
-      ? capturedAssessment
-      : "履歴不足" as const;
+    ? "比較対象外" as const
+    : !hasCapturedDecision
+      ? "履歴不足" as const
+      : !hasValidPreviousTime || !hasValidDirection
+        ? "比較データ不正" as const
+        : decrease.medianDecreaseRate === undefined
+          ? "中央値未保存" as const
+          : !hasValidMedian
+            ? "中央値不正" as const
+            : hasDecision && capturedAssessment !== "判定なし"
+              ? capturedAssessment
+              : "比較データ不正" as const;
   const assessmentText = currentDecreaseRate === undefined
     ? unavailableAssessment
-    : isIncrease
-      ? "増加" as const
-      : comparisonAssessment;
+    : comparisonAssessment;
+  const statusText = currentDecreaseRate !== undefined
+    ? hasCapturedDecision && !hasValidPreviousTime
+      ? "保存された比較元時刻が15時ではないため比較不可"
+      : hasCapturedDecision && !hasValidDirection
+        ? "保存された減少率判定が不正なため比較不可"
+        : undefined
+    : invalidPrevious
+      ? "15時残数が不正なため算出不可"
+      : zeroPrevious
+        ? "15時残数が0個のため算出不可"
+        : invalidRate
+          ? "保存された減少率が不正なため算出不可"
+          : hasCapturedRate
+            ? "保存された15時残数がないため算出不可"
+            : "15時残数がないため比較元なし";
 
   return {
     previousCount,
@@ -117,14 +154,16 @@ export function getAreaDecreaseDisplay(params: {
     ...(eligible && currentDecreaseRate !== undefined
       ? {
           medianText: medianDecreaseRate === undefined
-            ? hasDecision ? "履歴中央値：未保存" : "履歴中央値：履歴不足"
+            ? !hasCapturedDecision
+              ? "履歴中央値：履歴不足"
+              : decrease.medianDecreaseRate === undefined
+                ? "履歴中央値：未保存"
+                : hasValidMedian ? "履歴中央値：比較不可" : "履歴中央値：不正"
             : `履歴中央値：${formatPercent(medianDecreaseRate)}`,
         }
       : {}),
     assessmentText,
-    ...(isIncrease && (comparisonAssessment === "補正対象外" || comparisonAssessment === "履歴不足")
-      ? { contextText: comparisonAssessment }
-      : {}),
+    ...(statusText ? { statusText } : {}),
     isIncrease,
   };
 }

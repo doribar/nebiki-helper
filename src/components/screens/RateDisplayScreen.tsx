@@ -61,7 +61,6 @@ type RateDisplayScreenProps = {
   adoptedAreaEvaluation?: AreaCountEvaluation;
   areaCountDecisionBasis?: AreaCountDecisionBasis;
   decreaseDisplayContext?: AreaDecreaseDisplayContext | null;
-  onToggleDecreaseAdjustmentSuppression?: () => void;
   rateDisplay: RateDisplayData | null;
   rateDisplayBeforeGlobalAdjustment?: RateDisplayData | null;
   globalDiscountAdjustmentPercent?: GlobalDiscountAdjustmentPercent;
@@ -302,7 +301,6 @@ export function RateDisplayScreen({
   adoptedAreaEvaluation,
   areaCountDecisionBasis,
   decreaseDisplayContext,
-  onToggleDecreaseAdjustmentSuppression,
   rateDisplay,
   rateDisplayBeforeGlobalAdjustment = null,
   globalDiscountAdjustmentPercent = 0,
@@ -380,7 +378,6 @@ export function RateDisplayScreen({
     adoptedAreaEvaluation,
     areaCountDecisionBasis?.finalEvaluation,
     areaCountDecisionBasis?.areaRateAdjustment,
-    areaCountDecisionBasis?.decreaseAdjustment?.suppressed,
     humanEvaluationDetails,
   ]);
   const previousRateInstructionContextRef = useRef({
@@ -497,8 +494,6 @@ export function RateDisplayScreen({
         areaCount={areaCount}
         decreaseAdjustment={areaCountDecisionBasis?.decreaseAdjustment}
         decreaseDisplayContext={decreaseDisplayContext}
-        onToggleDecreaseAdjustmentSuppression={discountTime === "17"
-          ? onToggleDecreaseAdjustmentSuppression : undefined}
       />
 
       {areaCountDecisionBasis?.comparisonMode === "three_day_holiday_middle" &&

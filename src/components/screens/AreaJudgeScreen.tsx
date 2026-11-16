@@ -320,16 +320,9 @@ export function AreaJudgeScreen({
   );
   const isAreaCountReady = areaCountRecommendation?.status === "ready";
   const canUseManualJudge = !areaCountAssistEnabled || parsedAreaCount !== null;
-  const rawDecreaseAdjustment = areaCountSubmitted
+  const displayedDecreaseAdjustment = areaCountSubmitted
     ? areaCountRecommendation?.decreaseRecommendation
     : areaCountDecisionBasis?.decreaseAdjustment;
-  const displayedDecreaseAdjustment = areaCountSubmitted &&
-    areaCountDecisionBasis?.decreaseAdjustment?.suppressed === true &&
-    rawDecreaseAdjustment?.canUse === true &&
-    rawDecreaseAdjustment.direction === "more_many" &&
-    rawDecreaseAdjustment.previousDiscountTime === "15"
-      ? { ...rawDecreaseAdjustment, suppressed: true }
-      : rawDecreaseAdjustment;
   const correctionAreaCounts =
     areaCountSubmitted && parsedAreaCount !== null
       ? editableAreaCounts.some((item) => item.areaId === areaId)

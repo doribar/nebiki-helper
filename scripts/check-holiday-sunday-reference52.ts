@@ -230,19 +230,19 @@ test("three-day middle still adopts 50:50 Sunday 6 / Friday-Saturday 10 at media
   assert.equal(result.comparisonMode, "three_day_holiday_middle"); assert.equal(result.holidayBeforeNormalWeekdayReference, undefined); assert.equal(result.medianCount, 8);
   assert.equal(result.threeDayHolidayMiddleReference?.sundayReference?.source, "weekday"); assert.equal(result.threeDayHolidayMiddleReference?.adoptedSource, "both");
 });
-test("decrease correction pairs exactly the adopted Sunday population", () => {
+test("decrease reference pairs exactly the adopted Sunday population", () => {
   const history = plentiful();
   history.push(...history.map(item => record(item.date, weekday(item.date) === 0 ? 12 : 150, "15")), record(TARGET, 20, "15"));
   const result = recommend(history, { count: 10 });
   assert.equal(evidence(result).source, "weekday"); assert.equal(result.decreaseRecommendation?.sampleSize, 3); assert.equal(result.decreaseRecommendation?.medianDecreaseRate, 0.5);
   assert.equal(result.decreaseRecommendation?.currentDecreaseRate, 0.5); assert.equal(result.decreaseRecommendation?.direction, "none"); assert.equal(result.suggestedEvaluation, "many");
 });
-test("decrease correction falls back to the selected group when Sunday has only two pairs", () => {
+test("decrease reference falls back to the selected group when Sunday has only two pairs", () => {
   const history = records({ sunday: [6, 6], other: Array(20).fill(30) });
   history.push(...history.map(item => record(item.date, weekday(item.date) === 0 ? 12 : 150, "15")), record(TARGET, 20, "15"));
   const result = recommend(history);
   assert.equal(evidence(result).source, "fallback_group"); assert.equal(result.decreaseRecommendation?.sampleSize, 16); assert.equal(result.decreaseRecommendation?.medianDecreaseRate, 0.8);
-  assert.equal(result.decreaseRecommendation?.direction, "more_many"); assert.equal(result.baseEvaluation, "few"); assert.equal(result.suggestedEvaluation, "slightly_few"); assert.equal(result.areaRateAdjustment, -5);
+  assert.equal(result.decreaseRecommendation?.direction, "more_many"); assert.equal(result.baseEvaluation, "few"); assert.equal(result.suggestedEvaluation, "few"); assert.equal(result.areaRateAdjustment, -10); assert.equal(result.decreaseRecommendation?.mode, "reference_only_v1");
 });
 test("missing Sunday pairs cannot borrow excluded Tuesday/Thursday pairs", () => {
   const history = plentiful(), sunday = history.filter(item => weekday(item.date) === 0);

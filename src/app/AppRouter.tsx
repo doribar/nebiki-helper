@@ -11,7 +11,6 @@ import { Review19Screen } from "../components/screens/Review19Screen";
 import { Review19DoneScreen } from "../components/screens/Review19DoneScreen";
 import { buildMedianEvaluationDisplay } from "../domain/medianEvaluationPresentation.ts";
 import { isSummerModeAvailable } from "../domain/demandCycle.ts";
-import { canSuppressAreaCountDecreaseAdjustment } from "../domain/areaCountHistory.ts";
 import {
   getAreaEvaluationLowerQuickAdjustmentDelayMs,
   getAreaEvaluationQuickAdjustments,
@@ -183,11 +182,6 @@ export function AppRouter({ app, testNow, onOpenSettings }: AppRouterProps) {
             ? getAdoptedEvaluation(state.areaProgressMap[state.currentAreaId]) : undefined}
           areaCountDecisionBasis={state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined}
           decreaseDisplayContext={derived.areaCountDecreaseDisplayContext}
-          onToggleDecreaseAdjustmentSuppression={!(testNow instanceof Date) && canSuppressAreaCountDecreaseAdjustment({
-            areaId: state.currentAreaId,
-            discountTime: state.session.discountTime,
-            basis: state.currentAreaId ? state.areaProgressMap[state.currentAreaId]?.areaCountDecisionBasis : undefined,
-          }) ? actions.toggleCurrentAreaDecreaseAdjustmentSuppression : undefined}
           rateDisplay={derived.rateDisplay}
           rateDisplayBeforeGlobalAdjustment={
             derived.rateDisplayBeforeGlobalAdjustment

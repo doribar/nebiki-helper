@@ -74,6 +74,10 @@ export type AreaCountDecisionBasis = {
   finalEvaluation?: AreaCountEvaluation;
   areaRateAdjustment?: AreaRateAdjustment;
   decreaseAdjustment?: {
+    /** Missing preserves the automatic-correction meaning of legacy evidence. */
+    mode?: "reference_only_v1";
+    /** New reference comparisons never alter the residual-count evaluation. */
+    applied?: false;
     canUse: boolean;
     sampleSize: number;
     requiredSampleSize: number;
@@ -82,7 +86,7 @@ export type AreaCountDecisionBasis = {
     currentDecreaseRate?: number;
     medianDecreaseRate?: number;
     direction: DecreaseAdjustmentDirection;
-    /** Missing/false keeps the raw automatic correction. New writes use true only. */
+    /** Legacy cancellation evidence, retained without changing saved adoption. */
     suppressed?: boolean;
     suppressionReason?: "additional_production";
   };
@@ -123,6 +127,8 @@ export type AreaCountRecord = {
 type DecreaseAdjustmentDirection = "more_many" | "more_few" | "none";
 
 type DecreaseRecommendation = {
+  mode?: "reference_only_v1";
+  applied?: false;
   canUse: boolean;
   sampleSize: number;
   requiredSampleSize: number;
@@ -199,27 +205,37 @@ const LONG_REFERENCE_RECORDS = 52;
 const MEDIAN_DOWN_GUARD_MAX_DROP = 2;
 const DECREASE_RATE_THRESHOLD = 0.2;
 
-// 15→17時の減り方比較を使える、追加製造が基本的にないエリア。
-// フライ鶏惣菜・中華魚惣菜・寿司・太巻中巻は追加製造があり得るため含めない。
-const NO_AFTERNOON_ADD_AREA_IDS = new Set<AreaId>([
+// 新規15→17時の減少率は、通常9エリアと従来の季節商品で比較する参考情報。
+const DECREASE_COMPARISON_AREA_IDS = new Set<AreaId>([
   "bento_men",
   "tempura",
+  "yakitori",
+  "chuka_fish",
   "onigiri",
+  "sushi",
+  "futomaki_chumaki",
   "inari",
   "hosomaki",
+  "ryomi",
+  "autumn",
+]);
+
+// 旧保存根拠を扱うpure helper専用。新しい比較対象で過去の意味を変えない。
+const LEGACY_DECREASE_ADJUSTMENT_AREA_IDS = new Set<AreaId>([
+  "bento_men", "tempura", "onigiri", "inari", "hosomaki",
   "ryomi",
   "autumn",
   "yakitori",
 ]);
 
-/** Whether the existing business rule permits a 15→17 decrease correction. */
+/** Whether a new 15→17 reference may compare against a historical median. */
 export function isAreaCountDecreaseComparisonEligible(params: {
   areaId: AreaId | null | undefined;
   discountTime: DiscountTime | null | undefined;
 }): boolean {
   return Boolean(
     params.discountTime === "17" &&
-    params.areaId && NO_AFTERNOON_ADD_AREA_IDS.has(params.areaId),
+    params.areaId && DECREASE_COMPARISON_AREA_IDS.has(params.areaId),
   );
 }
 
@@ -244,7 +260,8 @@ export function canSuppressAreaCountDecreaseAdjustment(params: {
 }): boolean {
   return Boolean(
     params.discountTime === "17" &&
-    params.areaId && NO_AFTERNOON_ADD_AREA_IDS.has(params.areaId) &&
+    params.areaId && LEGACY_DECREASE_ADJUSTMENT_AREA_IDS.has(params.areaId) &&
+    params.basis?.decreaseAdjustment?.mode !== "reference_only_v1" &&
     params.basis?.recommendationStatus === "ready" &&
     isAreaCountEvaluation(params.basis.baseEvaluation) &&
     params.basis.decreaseAdjustment?.canUse &&
@@ -895,6 +912,10 @@ export function normalizeAreaCountDecisionBasis(
       isDecreaseAdjustmentDirection(rawDecrease.direction)
     ) {
       decreaseAdjustment = {
+        ...(rawDecrease.mode === "reference_only_v1"
+          ? { mode: rawDecrease.mode }
+          : {}),
+        ...(rawDecrease.applied === false ? { applied: false as const } : {}),
         canUse: rawDecrease.canUse,
         sampleSize: decreaseSampleSize,
         requiredSampleSize: decreaseRequiredSampleSize,
@@ -1012,6 +1033,8 @@ export function buildAreaCountDecisionBasis(params: {
     areaRateAdjustment: params.areaRateAdjustment,
     decreaseAdjustment: decrease
       ? {
+          ...(decrease.mode === "reference_only_v1" ? { mode: decrease.mode } : {}),
+          ...(decrease.applied === false ? { applied: false as const } : {}),
           canUse: decrease.canUse,
           sampleSize: decrease.sampleSize,
           requiredSampleSize: decrease.requiredSampleSize,
@@ -1456,7 +1479,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function getEvaluationFromCount(params: {
+export function getEvaluationFromCount(params: {
   count: number;
   referenceCount: number;
 }): {
@@ -1533,7 +1556,7 @@ function getPreviousDiscountTimeForDecrease(params: {
   discountTime: DiscountTime;
 }): AreaCountDiscountTime | null {
   if (params.discountTime === "17") {
-    return NO_AFTERNOON_ADD_AREA_IDS.has(params.areaId) ? "15" : null;
+    return "15";
   }
 
   // 18時30分はバラ商品をパック化して値引対象へ加えるため、17時との単純な減少率比較はしない。
@@ -2062,6 +2085,10 @@ function getDecreaseRecommendation(params: {
   count: number;
 }): DecreaseRecommendation {
   const requiredSampleSize = REQUIRED_SAMPLE_SIZE;
+  const referenceOnly = params.discountTime === "17";
+  const referenceEvidence = referenceOnly
+    ? { mode: "reference_only_v1" as const, applied: false as const }
+    : {};
   const previousDiscountTime = getPreviousDiscountTimeForDecrease({
     areaId: params.areaId,
     discountTime: params.discountTime,
@@ -2069,6 +2096,7 @@ function getDecreaseRecommendation(params: {
 
   if (!previousDiscountTime) {
     return {
+      ...referenceEvidence,
       canUse: false,
       sampleSize: 0,
       requiredSampleSize,
@@ -2085,16 +2113,34 @@ function getDecreaseRecommendation(params: {
 
   if (!previousRecord || previousRecord.count <= 0) {
     return {
+      ...referenceEvidence,
       canUse: false,
       sampleSize: 0,
       requiredSampleSize,
       previousDiscountTime,
+      ...(referenceOnly && previousRecord ? { previousCount: previousRecord.count } : {}),
       direction: "none",
-      detailLines: ["減り方補正：前回時刻の残数がないため使いません。"],
+      detailLines: [referenceOnly
+        ? "減少率：15時の残数がないか0個のため算出できません。"
+        : "減り方補正：前回時刻の残数がないため使いません。"],
     };
   }
 
   const currentDecreaseRate = (previousRecord.count - params.count) / previousRecord.count;
+
+  if (referenceOnly && !isAreaCountDecreaseComparisonEligible(params)) {
+    return {
+      ...referenceEvidence,
+      canUse: false,
+      sampleSize: 0,
+      requiredSampleSize,
+      previousDiscountTime,
+      previousCount: previousRecord.count,
+      currentDecreaseRate,
+      direction: "none",
+      detailLines: ["減少率は当日の参考情報として表示し、履歴中央値とは比較しません。"],
+    };
+  }
 
   const historicalRates = params.referenceCurrentRecords.flatMap((record): number[] => {
     if (record.date === params.date) return [];
@@ -2111,6 +2157,7 @@ function getDecreaseRecommendation(params: {
 
   if (historicalRates.length < requiredSampleSize) {
     return {
+      ...referenceEvidence,
       canUse: false,
       sampleSize: historicalRates.length,
       requiredSampleSize,
@@ -2119,7 +2166,9 @@ function getDecreaseRecommendation(params: {
       currentDecreaseRate,
       direction: "none",
       detailLines: [
-        `減り方補正：過去データ ${historicalRates.length}/${requiredSampleSize}件のため、今回は補正なし。`,
+        referenceOnly
+          ? `減少率の比較：過去データ ${historicalRates.length}/${requiredSampleSize}件のため履歴不足。自動判定には反映しません。`
+          : `減り方補正：過去データ ${historicalRates.length}/${requiredSampleSize}件のため、今回は補正なし。`,
       ],
     };
   }
@@ -2138,6 +2187,7 @@ function getDecreaseRecommendation(params: {
   const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 
   return {
+    ...referenceEvidence,
     canUse: true,
     sampleSize: historicalRates.length,
     requiredSampleSize,
@@ -2149,7 +2199,9 @@ function getDecreaseRecommendation(params: {
     detailLines: [
       `減り方：前回${previousRecord.count}個 → 今回${params.count}個（${formatPercent(currentDecreaseRate)}減）`,
       `過去の減り方中央値：${formatPercent(medianDecreaseRate)}減（同条件${historicalRates.length}件）`,
-      direction === "more_many"
+      referenceOnly
+        ? `減少率の比較：${getDecreaseRateAssessment({ canUse: true, direction })}（参考情報。自動判定には反映しません）。`
+        : direction === "more_many"
         ? "過去より減りが悪いため、1段階多い側へ補正。"
         : direction === "more_few"
         ? "過去より減りが良いため、1段階少ない側へ補正。"
@@ -2296,6 +2348,16 @@ export function getAreaCountRecommendation(params: {
     discountTime === "17" && !holidayReference
     ? { comparisonWeekdayGroup }
     : {};
+  const decreaseRecommendation = discountTime !== "20"
+    ? getDecreaseRecommendation({
+        records: preparedData.recordsByObservation,
+        referenceCurrentRecords: matchedRecords,
+        date,
+        areaId,
+        discountTime,
+        count,
+      })
+    : undefined;
 
   if (!reference.hasValidReference) {
     const middleReference = reference.threeDayHolidayMiddleReference;
@@ -2312,6 +2374,7 @@ export function getAreaCountRecommendation(params: {
       comparisonMode,
       threeDayHolidayMiddleReference: middleReference,
       ...(holidayReference ? { holidayBeforeNormalWeekdayReference: holidayReference } : {}),
+      ...(discountTime === "17" ? { decreaseRecommendation } : {}),
       summaryText: `過去データ ${matchedRecords.length}/${requiredSampleSize}件`,
       detailLines: comparisonMode === "three_day_holiday_middle" && middleReference
         ? [
@@ -2451,19 +2514,10 @@ export function getAreaCountRecommendation(params: {
     };
   }
 
-  const decreaseRecommendation = getDecreaseRecommendation({
-    records: preparedData.recordsByObservation,
-    referenceCurrentRecords: matchedRecords,
-    date,
-    areaId,
-    discountTime,
-    count,
-  });
-
   let suggestedEvaluation = baseEvaluationInfo.evaluation;
-  if (decreaseRecommendation.direction === "more_many") {
+  if (discountTime !== "17" && decreaseRecommendation?.direction === "more_many") {
     suggestedEvaluation = scoreToEvaluation(getEvaluationScore(suggestedEvaluation) + 1);
-  } else if (decreaseRecommendation.direction === "more_few") {
+  } else if (discountTime !== "17" && decreaseRecommendation?.direction === "more_few") {
     suggestedEvaluation = scoreToEvaluation(getEvaluationScore(suggestedEvaluation) - 1);
   }
 
@@ -2508,7 +2562,7 @@ export function getAreaCountRecommendation(params: {
       `やや多い：${baseEvaluationInfo.upperSmallThreshold}個以上 / 多い：${baseEvaluationInfo.upperLargeThreshold}個以上`,
       `今回：${count}個`,
       `残数判定：${evaluationText(baseEvaluationInfo.evaluation)}`,
-      ...decreaseRecommendation.detailLines,
+      ...(decreaseRecommendation?.detailLines ?? []),
     ],
   };
 }
