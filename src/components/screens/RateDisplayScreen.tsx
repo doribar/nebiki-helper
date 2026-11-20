@@ -27,6 +27,7 @@ import { useSwipeToSkip } from "../../hooks/useSwipeToSkip";
 import { getFinalTimeInstructionSteps } from "../../domain/discount";
 import { AreaCountCorrectionPanel } from "../common/AreaCountCorrectionPanel.tsx";
 import { evaluationText, getHolidayBeforeNormalWeekdayReferenceDetailLines, getThreeDayHolidayMiddleReferenceDetailLines, type AreaCountDecisionBasis } from "../../domain/areaCountHistory.ts";
+import { getAreaCountBoundaryHint } from "../../domain/areaCountBoundaryHint.ts";
 import { AreaCountStatusPanel } from "../common/AreaCountStatusPanel.tsx";
 import type { AreaDecreaseDisplayContext } from "../../domain/areaDecreaseDisplay.ts";
 import { getHumanEvaluationRangeLabel } from "../../domain/humanEvaluation.ts";
@@ -342,6 +343,12 @@ export function RateDisplayScreen({
   const manyColor = "#ff0000";
   const normalColor = "#008000";
   const productAmountReferenceText = basisGuide.referenceConditionLabel.replaceAll("・", " ");
+  const areaCountBoundaryHint = getAreaCountBoundaryHint({
+    discountTime,
+    areaCount,
+    areaCountDecisionBasis,
+    adoptedEvaluation: adoptedAreaEvaluation,
+  });
   const skipTargetGroups = [
     {
       label: "スキップしたエリア",
@@ -796,6 +803,14 @@ export function RateDisplayScreen({
                   エリア判定：{adoptedAreaEvaluation ? evaluationText(adoptedAreaEvaluation) : "未記録"}
                 </span>
               </div>
+              {areaCountBoundaryHint ? (
+                <div
+                  data-area-count-boundary-hint
+                  style={{ color: "#475569", fontSize: 14, lineHeight: 1.5 }}
+                >
+                  {areaCountBoundaryHint}
+                </div>
+              ) : null}
               <div>を基準に考えて</div>
               {showManyInstructionOnly ? (
                 <>

@@ -1,7 +1,7 @@
 {
   "name": "nebiki-helper",
   "private": true,
-  "version": "2026.8.9-65",
+  "version": "2026.8.9-66",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -111,7 +111,8 @@
     "check:weekday-fallback62": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-weekday-fallback62.ts",
     "check:priority-previous63": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-priority-previous63.ts",
     "check:decrease-reference64": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-decrease-reference64.ts",
-    "check:seasonal-reference65": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-seasonal-reference65.ts"
+    "check:seasonal-reference65": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-seasonal-reference65.ts",
+    "check:area-count-boundary66": "node --experimental-strip-types --import ./scripts/register-ts-loader.mjs scripts/check-area-count-boundary66.ts"
   },
   "dependencies": {
     "react": "^19.2.4",

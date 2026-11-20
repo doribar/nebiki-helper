@@ -1,6 +1,6 @@
-# 値引ヘルパー 現行引継ぎ（2026.8.9-65）
+# 値引ヘルパー 現行引継ぎ（2026.8.9-66）
 
-最終更新: 2026-11-17 JST
+最終更新: 2026-11-20 JST
 
 この文書は、過去の会話を知らない新しいCodexセッションへ、現在の実装状態を渡すためのメモである。恒久的な開発ルールとリリース規則は先に `AGENTS.md` を読む。実コード・型・test・最新変更報告を優先する。
 
@@ -10,14 +10,14 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ZIP | `nebiki-helper-2026.8.9-65.zip` |
-| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-65.zip` |
-| appVersion | `2026.8.9-65` |
-| buildId | `build-20261117-074248-jst` |
+| ZIP | `nebiki-helper-2026.8.9-66.zip` |
+| 成果物workspace root相対path | `outputs/nebiki-helper-2026.8.9-66.zip` |
+| appVersion | `2026.8.9-66` |
+| buildId | `build-20261120-212236-jst` |
 | dataSchemaVersion | `3` |
-| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-65.md`参照（自己参照回避） |
+| SHA-256 | ZIP外の`.zip.sha256` / `RELEASE_REPORT_2026.8.9-66.md`参照（自己参照回避） |
 
-application rootは`work/seasonalReference65/nebiki-helper`。比較基準は完成64 ZIP `nebiki-helper-2026.8.9-64.zip`（SHA-256 `710810219e74c57f82c31d75d3b4726089cbf954fce8d3569a3a8281035a4dd7`、build `build-20261116-222511-jst`）。ユーザーの追加回答により、通常9エリアに従来の夏商品・秋商品の減少率比較も残す。減少率は64と同じ参考情報のみで、自動補正は復活させない。秋商品の一時無効化は維持。詳細は`CHANGE_REPORT_2026.8.9-65.md`。
+application rootは`work/areaBoundary66/nebiki-helper`。比較基準は完成65 ZIP `nebiki-helper-2026.8.9-65.zip`（SHA-256 `8daf07d484bc0f3635b0619c3c8b39cc3a54b8d3115783c0d525c8ad0e9f4423`、build `build-20261117-074248-jst`）。66は15時・17時の個別値引率画面に、残数が1個違う場合の自動判定の変化だけを補足する。詳細は`CHANGE_REPORT_2026.8.9-66.md`。
 
 60の符号付きglobal計算と旧snapshot互換、59注意8項目、58減少率表示、57当日global設定、56最終manyのlate15二段階、55秋商品除外/優先復帰、Done取消線/色、52祝日日曜優先、51時計、50lower期限、49夜枠撤去/Review19、46快適補正、48三連休、schema3/SQL/AGENTS/build方式を保持する。
 
@@ -25,7 +25,7 @@ application rootは`work/seasonalReference65/nebiki-helper`。比較基準は完
 
 この作業場所には有効なGit repositoryがない。
 
-- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\seasonalReference65\nebiki-helper`
+- `Get-Location`: `C:\Users\s0a6g\Documents\Codex\2026-09-05\codex-1-agents-md-agents-override-5\work\areaBoundary66\nebiki-helper`
 - application root直下に `.git` なし。
 - 作業workspace root、作業copy親、application rootの `git rev-parse --show-toplevel` はいずれも `fatal: not a git repository`。
 - branch、git status、recent commitは取得不能。
@@ -493,6 +493,14 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 11. そのほかの現行UX
 
+### 9-66: 残数が前後1個で変わる自動判定を表示
+
+- 15時・17時の個別値引率画面では、現在エリアの保存済み中央値・しきい値・残数による判定根拠がそろう場合に、既存 `getEvaluationFromCount` で現在残数と有効な前後1個を同じ中央値で評価する。変化する候補だけを少ない個数から並べる。0個の下側は対象外。履歴不足・根拠欠損・矛盾がある場合は表示しない。
+- 最終採用判定の行の直下に小さな補足を表示する。両指示段階とも同じ根拠を使う。最終採用判定と残数による自動判定が異なるときは、境界補足内に自動判定を明記する。補足なしの場合は要素を作らない。
+- `areaCountBoundaryHint.ts` は表示用の純粋関数。既存ルール・同じ基準との一致を確認してから表示し、再訪時に閲覧中の履歴を使って基準を取り直さない。`AppRouter` がすでに渡す現在エリアの残数・根拠・採用判定を `RateDisplayScreen` で使用する。
+- 減少率の参考表示、季節商品、手動調整、指示段階・時刻境界、率計算、完了一覧、保存済み判定・履歴、schema3を維持する。
+
+
 ### 9-65: 季節商品も減少率の比較対象として継続
 
 - 64完成後の追加回答「季節商品も従来の比較対象として残す」を反映。通常9エリアにryomi（夏商品）とautumn（秋商品）を加え、同じ15→17ペア/採用履歴/最大16件/最低3件/15時正数/未丸め±20ポイントで参考比較する。コロッケ系とフライ・鶏惣菜は当日率のみ、legacy balance_bentoは比較対象外のまま。
@@ -627,12 +635,11 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 ## 12. 最新releaseの検証結果
 
-- appVersion `2026.8.9-65` / buildId `build-20261117-074248-jst` / schema3。完成ZIP・SHAは§1、詳細は今回CHANGE/ZIP外RELEASE_REPORT/ZIP_VALIDATION。
-- 全check **104/104 PASS**、季節商品専用 **38/38 PASS**。夏/秋、normal/summer、良い/普通/悪い/増加、16件/最低3/欠損/0、手動/quick、marker・保存/export、秋無効化を確認。64の32件と旧データ互換を維持。
-- TypeScript / production build / PWA generateSW PASS（110modules/precache10）。full lint 7 existing errors / 5 existing warnings、focused 0 errors / 0 warnings。64とfile/rule/severity/message比較で新規0。
-- 独立source監査PASS。非季節7200件の実64同値、季節reference480件・他時刻72件・不足8件、旧/新保存根拠6経路、季節gate12か月を検証。
-- 実Edge 360/390×844 **32/32 PASS**。人工データ/localhost/制御時計で夏商品比較と手動操作、再読込、秋無効化と旧秋履歴の保全を確認。実店舗端末・インストール済みPWA更新・実Supabaseは未確認。
-- 本番コードはareaCountHistory.tsの対象集合とコメントのみ変更。src108中、他107本・SQL9本・AGENTS・過去CHANGE73本は完成64ZIPとbyte-identical。schema3、保存構造/キー・依存・DB変更なし。
+- appVersion `2026.8.9-66`、buildId `build-20261120-212236-jst`、schema3。ZIPとSHAは§1を参照。
+- 全check **105/105 PASS**、境界補足専用 **16/16 PASS**。指定の25／41／40個、手動修正、0、両側、根拠不足、両指示段階、エリア切替を検証。
+- TypeScript、production build、PWA generateSW PASS（111 modules、precache10）。full lintは65と同じ既存7 errors／5 warnings。変更範囲は0 errors／0 warnings、新規0件。
+- 実Edge 360／390pxで **18/18 PASS**。人工データと制御時計を使用。実店舗の端末、インストール済みPWAの更新、実Supabaseは未確認。
+- 本番差分は画面1本と表示用ヘルパー1本。ルーターを含む他107ソース、SQL9本、AGENTS.md、過去変更報告74本は65と同一。
 
 ## 13. 既知課題、検討中だが未実装の案
 
@@ -642,7 +649,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 
 - 減り方の厳密な20ポイント境界のbinary誤差（40%→60%等）は9-40で17時だけ修正。19:30では従来の比較/境界結果を維持する。9-36通年化時点の計算自体は当時非変更だった。
 - full project ESLintに既存7 errors / 5 warnings（59の9/5から旧helper由来の2 errorsが減少、新規0）。
-- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全104 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
+- `README.md` はrelease年表を含み、一部に9-16以前のlocal retention説明、legacy文章表現、現在の全105 checkより少ないcheck一覧が残る。現行判断は `AGENTS.md`、この文書、`package.json`、実コード、最新CHANGE REPORTを優先。
 - 実Supabase mutation、インストール済みPWA実機、実端末の長時間バックグラウンド復帰は未確認。
 - 9-17大量storage/360日検証は自動fixtureで、同規模の実端末再検証ではない。
 
@@ -664,6 +671,8 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 - 実Supabase mutationによる9-19確認。
 
 ## 14. 次セッションが最初に確認するファイル
+
+9-66では `src/domain/areaCountBoundaryHint.ts`、`RateDisplayScreen.tsx`、`scripts/check-area-count-boundary66.ts` を参照。
 
 9-65追加: areaCountHistory.tsのDECREASE_COMPARISON_AREA_IDSへryomi/autumnを継続対象として追加。check-seasonal-reference65.tsと既存64/area-decreaseテスト。秋商品の作業無効化は非変更。
 
@@ -702,7 +711,7 @@ DB migration、SQL、RLS、grant、trigger、service role、client DELETE機能�
 1. `AGENTS.md`
 2. `CHATGPT_HANDOFF.md`
 3. `package.json`
-4. `CHANGE_REPORT_2026.8.9-65.md`（完成baselineは `CHANGE_REPORT_2026.8.9-64.md`）
+4. `CHANGE_REPORT_2026.8.9-66.md`（完成baselineは `CHANGE_REPORT_2026.8.9-65.md`）
 5. `src/domain/dataVersion.ts`
 6. `src/domain/types.ts`
 7. `src/app/App.tsx`、`src/app/AppRouter.tsx`
